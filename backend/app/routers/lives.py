@@ -1,7 +1,8 @@
 from math import ceil
 
 from fastapi import APIRouter, HTTPException, Query
-from psycopg2 import Error
+from psycopg2 import Error, OperationalError
+from psycopg2.errors import QueryCanceled
 
 from app.db import get_db_connection
 
@@ -66,6 +67,12 @@ def get_lives(
 
                 cur.execute(LIVES_PAGE_QUERY, (page_size, offset))
                 rows = cur.fetchall()
+    except QueryCanceled as exc:
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     except Error as exc:
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 

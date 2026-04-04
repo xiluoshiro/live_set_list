@@ -56,7 +56,8 @@ function App() {
         }
       } catch (error) {
         if (canceled) return;
-        const message = error instanceof Error ? error.message : "未知错误";
+        const rawMessage = error instanceof Error ? error.message : "未知错误";
+        const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
         setLoadError(message);
         setItems([]);
         setServerTotal(0);
