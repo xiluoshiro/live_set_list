@@ -13,12 +13,33 @@ type LiveRow = {
 };
 type TabKey = "favorites" | "all" | "console";
 type FavoriteMap = Record<number, boolean>;
+type DetailRow = {
+  index: number;
+  track: string;
+  duration: string;
+  arrangement: string;
+  note: string;
+};
+
+function buildDetailMockRows(seed: number): DetailRow[] {
+  return Array.from({ length: 20 }, (_, idx) => {
+    const n = idx + 1;
+    return {
+      index: n,
+      track: `Mock 曲目 ${seed}-${n}`,
+      duration: `${3 + (n % 4)}:${String((n * 7) % 60).padStart(2, "0")}`,
+      arrangement: n % 2 === 0 ? "完整编排" : "简版编排",
+      note: n % 3 === 0 ? "含过门" : "-",
+    };
+  });
+}
 
 function App() {
   const [pageSize, setPageSize] = useState<15 | 20>(20);
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState<TabKey>("favorites");
   const [activeRow, setActiveRow] = useState<LiveRow | null>(null);
+  const [detailFullscreen, setDetailFullscreen] = useState(false);
   const [favorites, setFavorites] = useState<FavoriteMap>({});
   const [items, setItems] = useState<LiveRow[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
@@ -124,6 +145,11 @@ function App() {
       ...prev,
       [id]: !(prev[id] ?? true),
     }));
+  };
+
+  const closeDetailModal = () => {
+    setActiveRow(null);
+    setDetailFullscreen(false);
   };
 
   return (
@@ -263,29 +289,81 @@ function App() {
       </section>
 
       {activeRow && (
-        <div className="modal-mask" onClick={() => setActiveRow(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{activeRow.liveTitle}</h2>
-            <p>
+        <div className="modal-mask" onClick={closeDetailModal}>
+          <div
+            className={`modal ${detailFullscreen ? "fullscreen" : ""}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h2>{activeRow.liveTitle}</h2>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="modal-action-btn fullscreen"
+                  title={detailFullscreen ? "退出全屏" : "全屏"}
+                  aria-label={detailFullscreen ? "退出全屏" : "全屏"}
+                  onClick={() => setDetailFullscreen((v) => !v)}
+                >
+                  <span className="modal-action-glyph fullscreen">
+                    {detailFullscreen ? "❐" : "⛶"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="modal-action-btn close"
+                  title="关闭"
+                  aria-label="关闭"
+                  onClick={closeDetailModal}
+                >
+                  <span className="modal-action-glyph close">✕</span>
+                </button>
+              </div>
+            </div>
+            <p className="detail-row">
               <strong>日期：</strong>
-              {activeRow.liveDate}
+              <span>{activeRow.liveDate}</span>
             </p>
-            <p>
-              <strong>图标数量：</strong>
-              {activeRow.icons.length}
+            <p className="detail-row">
+              <strong>乐队：</strong>
+              <span>{activeRow.icons.length}</span>
             </p>
-            <p>
+            <p className="detail-row">
               <strong>链接：</strong>
-              {activeRow.url ? (
-                <a href={activeRow.url} target="_blank" rel="noreferrer">
-                  {activeRow.url}
-                </a>
-              ) : (
-                <span>-</span>
-              )}
+              <span>
+                {activeRow.url ? (
+                  <a href={activeRow.url} target="_blank" rel="noreferrer">
+                    {activeRow.url}
+                  </a>
+                ) : (
+                  "-"
+                )}
+              </span>
             </p>
-            <p>{activeRow.description}</p>
-            <button onClick={() => setActiveRow(null)}>关闭</button>
+
+            <div className="detail-table-wrap">
+              <table className="detail-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>曲目</th>
+                    <th>时长</th>
+                    <th>编排</th>
+                    <th>备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {buildDetailMockRows(activeRow.liveId).map((row) => (
+                    <tr key={`${activeRow.liveId}-${row.index}`}>
+                      <td>{row.index}</td>
+                      <td>{row.track}</td>
+                      <td>{row.duration}</td>
+                      <td>{row.arrangement}</td>
+                      <td>{row.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
