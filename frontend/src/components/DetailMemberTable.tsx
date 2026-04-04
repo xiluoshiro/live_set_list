@@ -15,6 +15,9 @@ type MemberStatusTableProps = {
   seed?: number;
 };
 
+const BAND_FALLBACK_COLORS = ["#5b7cfa", "#00a4a6", "#f59f00", "#e8590c", "#6c5ce7", "#2b8a3e"];
+const bandIconExistsCache = new Map<string, boolean>();
+
 const BASE_ROWS: Omit<LiveDetailRow, "row_id">[] = [
   {
     song_name: "春日序曲",
@@ -205,6 +208,72 @@ const BASE_ROWS: Omit<LiveDetailRow, "row_id">[] = [
   },
 ];
 
+function getBandFallbackChar(bandName: string): string {
+  const trimmed = bandName.trim();
+  if (trimmed === "") return "?";
+  return [...trimmed][0]?.toUpperCase() ?? "?";
+}
+
+function getBandFallbackColor(bandName: string): string {
+  const text = bandName.trim() || "unknown";
+  let hash = 0;
+  for (let idx = 0; idx < text.length; idx += 1) {
+    hash = (hash * 31 + text.charCodeAt(idx)) >>> 0;
+  }
+  return BAND_FALLBACK_COLORS[hash % BAND_FALLBACK_COLORS.length];
+}
+
+function getBandIconSrc(bandId: number | null): string | null {
+  if (typeof bandId !== "number" || bandId < 1) return null;
+  return `/icons/Band_${bandId}.svg`;
+}
+
+function BandTile({ member }: { member: LiveDetailBandMember }) {
+  const iconSrc = getBandIconSrc(member.band_id);
+  const [useFallback, setUseFallback] = useState<boolean>(() => {
+    if (!iconSrc) return true;
+    return bandIconExistsCache.get(iconSrc) === false;
+  });
+
+  useEffect(() => {
+    if (!iconSrc) {
+      setUseFallback(true);
+      return;
+    }
+    setUseFallback(bandIconExistsCache.get(iconSrc) === false);
+  }, [iconSrc]);
+
+  const tileClassName = useFallback ? "band-tile no-status" : member.is_full ? "band-tile full" : "band-tile partial";
+
+  return (
+    <span className={tileClassName} title={`${member.band_name} 已参加 ${member.present_count} 人`}>
+      {useFallback || !iconSrc ? (
+        <span
+          className="band-fallback-icon"
+          style={{ backgroundColor: getBandFallbackColor(member.band_name) }}
+          aria-label={member.band_name}
+          title={member.band_name}
+        >
+          {getBandFallbackChar(member.band_name)}
+        </span>
+      ) : (
+        <img
+          src={iconSrc}
+          alt={member.band_name}
+          className="band-tile-icon"
+          onLoad={() => {
+            bandIconExistsCache.set(iconSrc, true);
+          }}
+          onError={() => {
+            bandIconExistsCache.set(iconSrc, false);
+            setUseFallback(true);
+          }}
+        />
+      )}
+    </span>
+  );
+}
+
 function getOrderedBandMembers(members: LiveDetailBandMember[]): LiveDetailBandMember[] {
   return [...members].sort((a, b) => {
     const aPartial = !a.is_full;
@@ -378,21 +447,7 @@ export function MemberStatusTable({ rows, loading = false, error = null, seed = 
                       >
                         <span className={`console-band-grid ${bandCount > 5 ? "grid-two" : "grid-one"}`}>
                           {orderedMembers.map((member, idx) => (
-                            <span
-                              key={`${row.row_id}-${member.band_name}-${idx}`}
-                              className={`band-tile ${member.is_full ? "full" : "partial"}`}
-                              title={`${member.band_name} 已参加 ${member.present_count} 人`}
-                            >
-                              {typeof member.band_id === "number" && member.band_id > 0 ? (
-                                <img
-                                  src={`/icons/Band_${member.band_id}.svg`}
-                                  alt={member.band_name}
-                                  className="band-tile-icon"
-                                />
-                              ) : (
-                                <span className="band-tile-fallback">?</span>
-                              )}
-                            </span>
+                            <BandTile key={`${row.row_id}-${member.band_name}-${idx}`} member={member} />
                           ))}
                         </span>
                       </button>
@@ -499,17 +554,7 @@ export function MemberStatusTable({ rows, loading = false, error = null, seed = 
               {getOrderedBandMembers(bandDetailRow.band_members).map((member, idx) => (
                 <div key={`${bandDetailRow.row_id}-${member.band_name}-${idx}`} className="console-band-card">
                   <div className="console-band-card-head">
-                    <span className={`band-tile ${member.is_full ? "full" : "partial"}`}>
-                      {typeof member.band_id === "number" && member.band_id > 0 ? (
-                        <img
-                          src={`/icons/Band_${member.band_id}.svg`}
-                          alt={member.band_name}
-                          className="band-tile-icon"
-                        />
-                      ) : (
-                        <span className="band-tile-fallback">?</span>
-                      )}
-                    </span>
+                    <BandTile member={member} />
                     <strong>{member.band_name}</strong>
                   </div>
                   <p className="console-band-members">参加队员：{member.present_members.join(" / ")}</p>

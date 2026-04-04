@@ -127,5 +127,42 @@ describe("MemberStatusTable", () => {
     await user.click(screen.getByRole("button", { name: "键盘支援:远程连线" }));
     expect(screen.getByText("其他成员明细")).toBeInTheDocument();
   });
+
+  test("band_id 不在 1-12 时使用首字符兜底图标且不显示满员状态条", () => {
+    // 测试点：无对应图标文件时，回退“首字符+底色”，并移除 full/partial 状态样式。
+    render(
+      <MemberStatusTable
+        rows={[
+          {
+            row_id: "M1",
+            song_name: "测试曲",
+            band_members: [
+              {
+                band_id: 99,
+                band_name: "UnknownBand",
+                present_members: ["A"],
+                present_count: 1,
+                total_count: 5,
+                is_full: false,
+              },
+            ],
+            other_members: [],
+            comments: [],
+          },
+        ]}
+      />,
+    );
+
+    const icon = screen.getByRole("img", { name: "UnknownBand" });
+    fireEvent.error(icon);
+
+    expect(screen.queryByRole("img", { name: "UnknownBand" })).not.toBeInTheDocument();
+    const fallback = screen.getByLabelText("UnknownBand");
+    expect(fallback).toHaveTextContent("U");
+    const tile = fallback.closest(".band-tile");
+    expect(tile).toHaveClass("no-status");
+    expect(tile).not.toHaveClass("full");
+    expect(tile).not.toHaveClass("partial");
+  });
 });
 
