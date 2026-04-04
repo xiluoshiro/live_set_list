@@ -215,6 +215,13 @@ function buildMockRows(seed: number): ConsoleRow[] {
   });
 }
 
+function estimateOtherPopoverHeight(itemCount: number): number {
+  const titleHeight = 26;
+  const rowHeight = 26;
+  const padding = 18;
+  return Math.min(220, Math.max(92, titleHeight + itemCount * rowHeight + padding));
+}
+
 export function MemberStatusTable({ seed }: { seed: number }) {
   const rows = useMemo(() => buildMockRows(seed), [seed]);
   const [bandDetailRow, setBandDetailRow] = useState<ConsoleRow | null>(null);
@@ -311,17 +318,30 @@ export function MemberStatusTable({ seed }: { seed: number }) {
                             type="button"
                             className="other-more-btn"
                             onClick={(event) => {
-                              // Anchor floating panel near +N button while keeping it inside viewport.
+                              // Prefer opening upward when near viewport bottom, then clamp inside viewport.
                               const rect = event.currentTarget.getBoundingClientRect();
                               const width = 320;
+                              const height = estimateOtherPopoverHeight(row.otherMembers.length);
+                              const viewportPadding = 12;
+                              const offset = 6;
                               const clampedLeft = Math.min(
-                                Math.max(12, rect.left),
-                                window.innerWidth - width - 12,
+                                Math.max(viewportPadding, rect.left),
+                                window.innerWidth - width - viewportPadding,
+                              );
+                              const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+                              const spaceAbove = rect.top - viewportPadding;
+                              const openUp = spaceBelow < height + offset && spaceAbove > spaceBelow;
+                              const preferredTop = openUp
+                                ? rect.top - offset - height
+                                : rect.bottom + offset;
+                              const clampedTop = Math.min(
+                                Math.max(viewportPadding, preferredTop),
+                                window.innerHeight - height - viewportPadding,
                               );
                               setOtherPopover((prev) =>
                                 prev?.rowId === row.id
                                   ? null
-                                  : { rowId: row.id, left: clampedLeft, top: rect.bottom + 6 },
+                                  : { rowId: row.id, left: clampedLeft, top: clampedTop },
                               );
                             }}
                           >
