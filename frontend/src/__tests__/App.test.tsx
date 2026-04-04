@@ -3,13 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import App from "../App";
-import { getLives, type LivesResponse } from "../api";
+import { getLiveDetail, getLives, type LiveDetailResponse, type LivesResponse } from "../api";
 
 vi.mock("../api", () => ({
   getLives: vi.fn(),
+  getLiveDetail: vi.fn(),
 }));
 
 const getLivesMock = vi.mocked(getLives);
+const getLiveDetailMock = vi.mocked(getLiveDetail);
 
 function makeItems(count: number, startId = 1, withUrl = true) {
   return Array.from({ length: count }, (_, idx) => {
@@ -41,6 +43,38 @@ function makeResponse(params: {
       total: params.total,
       total_pages: params.totalPages,
     },
+  };
+}
+
+function makeDetailResponse(params: {
+  liveId: number;
+  rowCount?: number;
+  url?: string | null;
+}): LiveDetailResponse {
+  const rowCount = params.rowCount ?? 20;
+  return {
+    live_id: params.liveId,
+    live_date: "2026-03-28",
+    live_title: `示例 Live 名称 ${params.liveId}`,
+    bands: [1, 2],
+    band_names: ["Band 1", "Band 2"],
+    url: params.url === undefined ? `https://example.com/live/${params.liveId}` : params.url,
+    detail_rows: Array.from({ length: rowCount }, (_, idx) => ({
+      row_id: `M${idx + 1}`,
+      song_name: `曲目 ${idx + 1}`,
+      band_members: [
+        {
+          band_id: 1,
+          band_name: "Band 1",
+          present_members: ["A", "B", "C", "D", "E"],
+          present_count: 5,
+          total_count: 5,
+          is_full: true,
+        },
+      ],
+      other_members: [],
+      comments: idx % 2 === 0 ? ["短版"] : [],
+    })),
   };
 }
 
@@ -76,6 +110,10 @@ describe("App", () => {
   beforeEach(() => {
     localStorage.clear();
     getLivesMock.mockReset();
+    getLiveDetailMock.mockReset();
+    getLiveDetailMock.mockImplementation(async (liveId: number) =>
+      makeDetailResponse({ liveId, rowCount: 20 }),
+    );
   });
 
   test("默认进入收藏页，且不显示收藏列", () => {
@@ -235,9 +273,13 @@ describe("App", () => {
     expect(screen.getByRole("columnheader", { name: "乐队成员" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "其他成员" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "备注" })).toBeInTheDocument();
+
     const detailTable = container.querySelector(".detail-member-table-wrap .console-table");
     expect(detailTable).not.toBeNull();
-    expect(within(detailTable as HTMLElement).getAllByRole("row")).toHaveLength(21);
+    await waitFor(() => {
+      expect(within(detailTable as HTMLElement).getAllByRole("row")).toHaveLength(21);
+    });
+    expect(getLiveDetailMock).toHaveBeenCalledWith(1);
   });
 
   test("详情弹窗支持全屏切换并可点遮罩关闭", async () => {
@@ -287,6 +329,7 @@ describe("App", () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20, withUrl: false }),
     );
+    getLiveDetailMock.mockResolvedValueOnce(makeDetailResponse({ liveId: 1, url: null }));
     const user = userEvent.setup();
     render(<App />);
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());

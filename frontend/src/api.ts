@@ -21,6 +21,38 @@ export type LivesResponse = {
   };
 };
 
+export type LiveDetailBandMember = {
+  band_id: number | null;
+  band_name: string;
+  present_members: string[];
+  present_count: number;
+  total_count: number;
+  is_full: boolean;
+};
+
+export type LiveDetailOtherMember = {
+  key: string;
+  value: string[];
+};
+
+export type LiveDetailRow = {
+  row_id: string;
+  song_name: string;
+  band_members: LiveDetailBandMember[];
+  other_members: LiveDetailOtherMember[];
+  comments: string[];
+};
+
+export type LiveDetailResponse = {
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  bands: number[];
+  band_names: string[];
+  url: string | null;
+  detail_rows: LiveDetailRow[];
+};
+
 const BASE_URL = "http://localhost:8000";
 const REQUEST_TIMEOUT_MS = 10000;
 
@@ -57,4 +89,12 @@ export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesRe
     throw new Error(`Request failed: ${response.status}`);
   }
   return (await response.json()) as LivesResponse;
+}
+
+export async function getLiveDetail(liveId: number): Promise<LiveDetailResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/lives/${liveId}`);
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+  return (await response.json()) as LiveDetailResponse;
 }

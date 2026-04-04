@@ -282,6 +282,12 @@
   height: 15px;
 }
 
+.band-tile-fallback {
+  font-size: 12px;
+  color: #5f6e8c;
+  line-height: 1;
+}
+
 .other-cell {
   display: inline-flex;
   align-items: center;
@@ -299,6 +305,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.other-tag-btn {
+  border: none;
+  cursor: pointer;
+  text-align: left;
 }
 
 .other-more {
