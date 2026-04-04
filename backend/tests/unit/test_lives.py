@@ -1,7 +1,8 @@
 from unittest.mock import MagicMock, call, patch
 
 from fastapi.testclient import TestClient
-from psycopg2 import Error
+from psycopg2 import Error, OperationalError
+from psycopg2.errors import QueryCanceled
 
 from app.main import app
 from app.routers.lives import (
@@ -275,3 +276,108 @@ def test_get_live_details_batch_invalid_live_id_returns_400():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "all live_ids must be >= 1"
+
+
+def test_get_live_details_batch_empty_live_ids_returns_422():
+    # 测试点：live_ids 为空数组应触发请求体验证错误（min_length=1）。
+    client = TestClient(app)
+    response = client.post("/api/lives/details:batch", json={"live_ids": []})
+
+    assert response.status_code == 422
+
+
+def test_get_live_details_batch_live_ids_over_limit_returns_422():
+    # 测试点：live_ids 超过上限（100）应触发请求体验证错误（max_length=100）。
+    client = TestClient(app)
+    response = client.post("/api/lives/details:batch", json={"live_ids": list(range(1, 102))})
+
+    assert response.status_code == 422
+
+
+def test_get_live_details_batch_all_missing_returns_empty_items():
+    # 测试点：当所有 live_id 都不存在时，items 为空且 missing_live_ids 返回去重后的请求顺序。
+    conn, _ = _build_batch_detail_connection_mock([], [])
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post("/api/lives/details:batch", json={"live_ids": [999, 1000, 999]})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"] == []
+    assert payload["missing_live_ids"] == [999, 1000]
+
+
+def test_get_live_details_batch_query_timeout_returns_504():
+    # 测试点：数据库查询超时（QueryCanceled）应映射为 504。
+    with patch("app.routers.lives.get_db_connection", side_effect=QueryCanceled("statement timeout")):
+        client = TestClient(app)
+        response = client.post("/api/lives/details:batch", json={"live_ids": [1, 2]})
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "Database query timeout"
+
+
+def test_get_live_details_batch_connection_timeout_returns_504():
+    # 测试点：数据库连接超时（timeout expired）应映射为 504。
+    with patch("app.routers.lives.get_db_connection", side_effect=OperationalError("timeout expired")):
+        client = TestClient(app)
+        response = client.post("/api/lives/details:batch", json={"live_ids": [1, 2]})
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "Database connection timeout"
+
+
+def test_get_live_details_batch_db_error_returns_500():
+    # 测试点：其他数据库异常应返回 500，且保留错误语义。
+    with patch("app.routers.lives.get_db_connection", side_effect=Error("db down")):
+        client = TestClient(app)
+        response = client.post("/api/lives/details:batch", json={"live_ids": [1]})
+
+    assert response.status_code == 500
+    assert "Database error" in response.json()["detail"]
+
+
+def test_get_live_details_batch_normalizes_band_and_other_members():
+    # 测试点：批量接口应过滤非法 band_members 项，并规范化 other_members 字段。
+    header_rows = [
+        (1, "2026-03-28", "Live 1", [1], ["Poppin'Party"], None),
+    ]
+    detail_rows = [
+        (
+            1,
+            "M1",
+            "Song X",
+            [
+                123,
+                {"band_id": "not-int", "band_name": "Afterglow", "present_members": "Ran"},
+                {"band_id": 1, "band_name": None, "present_members": ["A", "B"]},
+            ],
+            {"嘉宾": "[\"Alice\", \"Bob\"]", "支援": "\"Solo\""},
+            False,
+        ),
+    ]
+    conn, _ = _build_batch_detail_connection_mock(header_rows, detail_rows)
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post("/api/lives/details:batch", json={"live_ids": [1]})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["missing_live_ids"] == []
+
+    row = payload["items"][0]["detail_rows"][0]
+    assert row["band_members"] == [
+        {
+            "band_id": None,
+            "band_name": "Afterglow",
+            "present_members": ["Ran"],
+            "present_count": 1,
+            "total_count": 5,
+            "is_full": False,
+        }
+    ]
+    other_member_map = {item["key"]: item["value"] for item in row["other_members"]}
+    assert other_member_map["嘉宾"] == ["Alice", "Bob"]
+    assert other_member_map["支援"] == ["Solo"]
