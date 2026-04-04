@@ -171,4 +171,67 @@ describe("api cache behavior", () => {
     await getLiveDetail(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  test("getLiveDetailsBatch 会跳过已缓存详情，仅请求缺失项", async () => {
+    // 测试点：batch 预读应复用 detail 缓存，避免重复请求已缓存 live_id。
+    fetchMock
+      .mockResolvedValueOnce(
+        makeJsonResponse({
+          live_id: 1,
+          live_date: "2026-03-01",
+          live_title: "Detail 1",
+          bands: [1],
+          band_names: ["Band A"],
+          url: null,
+          detail_rows: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeJsonResponse({
+          items: [
+            {
+              live_id: 2,
+              live_date: "2026-03-02",
+              live_title: "Detail 2",
+              bands: [2],
+              band_names: ["Band B"],
+              url: null,
+              detail_rows: [],
+            },
+          ],
+          missing_live_ids: [],
+        }),
+      );
+    const { getLiveDetail, getLiveDetailsBatch } = await import("../api");
+
+    await getLiveDetail(1);
+    await getLiveDetailsBatch([1, 2]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondCall = fetchMock.mock.calls[1];
+    expect(secondCall[0]).toContain("/api/lives/details:batch");
+    const body = JSON.parse((secondCall[1] as RequestInit).body as string) as { live_ids: number[] };
+    expect(body.live_ids).toEqual([2]);
+  });
+
+  test("getLiveDetailsBatch 超过100条时会自动分片请求", async () => {
+    // 测试点：批量预读遵循后端 live_ids<=100 的契约约束。
+    fetchMock
+      .mockResolvedValueOnce(makeJsonResponse({ items: [], missing_live_ids: [] }))
+      .mockResolvedValueOnce(makeJsonResponse({ items: [], missing_live_ids: [] }));
+    const { getLiveDetailsBatch } = await import("../api");
+    const ids = Array.from({ length: 101 }, (_, idx) => idx + 1);
+
+    await getLiveDetailsBatch(ids);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const firstBody = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string) as {
+      live_ids: number[];
+    };
+    const secondBody = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string) as {
+      live_ids: number[];
+    };
+    expect(firstBody.live_ids).toHaveLength(100);
+    expect(secondBody.live_ids).toEqual([101]);
+  });
 });
