@@ -22,9 +22,25 @@ export type LivesResponse = {
 };
 
 const BASE_URL = "http://localhost:8000";
+const REQUEST_TIMEOUT_MS = 10000;
+
+async function fetchWithTimeout(input: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Request timeout");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 export async function checkDbHealth(): Promise<DbHealthResponse> {
-  const response = await fetch(`${BASE_URL}/api/health/db`);
+  const response = await fetchWithTimeout(`${BASE_URL}/api/health/db`);
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
@@ -36,7 +52,7 @@ export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesRe
     page: String(page),
     page_size: String(pageSize),
   });
-  const response = await fetch(`${BASE_URL}/api/lives?${query.toString()}`);
+  const response = await fetchWithTimeout(`${BASE_URL}/api/lives?${query.toString()}`);
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
