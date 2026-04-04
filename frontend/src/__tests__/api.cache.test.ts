@@ -234,4 +234,135 @@ describe("api cache behavior", () => {
     expect(firstBody.live_ids).toHaveLength(100);
     expect(secondBody.live_ids).toEqual([101]);
   });
+
+  test("getLiveDetailsBatch 会去重并过滤非法 live_id", async () => {
+    // 测试点：batch 请求前要做输入清洗，避免把非法/重复 ID 发给后端。
+    fetchMock.mockResolvedValueOnce(makeJsonResponse({ items: [], missing_live_ids: [] }));
+    const { getLiveDetailsBatch } = await import("../api");
+
+    await getLiveDetailsBatch([0, 2, 2, -1, 3.14, 3, 3, 1]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string) as { live_ids: number[] };
+    expect(body.live_ids).toEqual([2, 3, 1]);
+  });
+
+  test("getLiveDetailsBatch 全部命中详情缓存时不发起请求", async () => {
+    // 测试点：若目标详情都在缓存中，batch 应直接短路返回。
+    fetchMock
+      .mockResolvedValueOnce(
+        makeJsonResponse({
+          live_id: 1,
+          live_date: "2026-03-01",
+          live_title: "Detail 1",
+          bands: [1],
+          band_names: ["Band A"],
+          url: null,
+          detail_rows: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeJsonResponse({
+          live_id: 2,
+          live_date: "2026-03-02",
+          live_title: "Detail 2",
+          bands: [2],
+          band_names: ["Band B"],
+          url: null,
+          detail_rows: [],
+        }),
+      );
+    const { getLiveDetail, getLiveDetailsBatch } = await import("../api");
+
+    await getLiveDetail(1);
+    await getLiveDetail(2);
+    const payload = await getLiveDetailsBatch([1, 2, 1]);
+
+    expect(payload).toEqual({ items: [], missing_live_ids: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("getLiveDetailsBatch 会跳过 inFlight 的详情请求", async () => {
+    // 测试点：已在 in-flight 的 live_id 不应再进入 batch 请求，避免重复打后端。
+    const d = deferred<Response>();
+    fetchMock
+      .mockReturnValueOnce(d.promise)
+      .mockResolvedValueOnce(
+        makeJsonResponse({
+          items: [
+            {
+              live_id: 2,
+              live_date: "2026-03-02",
+              live_title: "Detail 2",
+              bands: [2],
+              band_names: ["Band B"],
+              url: null,
+              detail_rows: [],
+            },
+          ],
+          missing_live_ids: [],
+        }),
+      );
+    const { getLiveDetail, getLiveDetailsBatch } = await import("../api");
+
+    const detailPromise = getLiveDetail(1);
+    const payload = await getLiveDetailsBatch([1, 2]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const batchBody = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string) as {
+      live_ids: number[];
+    };
+    expect(batchBody.live_ids).toEqual([2]);
+    expect(payload.items.map((item) => item.live_id)).toEqual([2]);
+
+    d.resolve(
+      makeJsonResponse({
+        live_id: 1,
+        live_date: "2026-03-01",
+        live_title: "Detail 1",
+        bands: [1],
+        band_names: ["Band A"],
+        url: null,
+        detail_rows: [],
+      }),
+    );
+    await detailPromise;
+  });
+
+  test("getLiveDetailsBatch 返回的详情会写入 detail 缓存", async () => {
+    // 测试点：batch 预读后，单条详情读取应直接命中缓存。
+    fetchMock.mockResolvedValueOnce(
+      makeJsonResponse({
+        items: [
+          {
+            live_id: 9,
+            live_date: "2026-03-09",
+            live_title: "Detail 9",
+            bands: [1],
+            band_names: ["Band A"],
+            url: null,
+            detail_rows: [],
+          },
+        ],
+        missing_live_ids: [],
+      }),
+    );
+    const { getLiveDetail, getLiveDetailsBatch } = await import("../api");
+
+    await getLiveDetailsBatch([9]);
+    const detail = await getLiveDetail(9);
+
+    expect(detail.live_id).toBe(9);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("getLiveDetailsBatch 请求超时会抛出 Request timeout", async () => {
+    // 测试点：batch API 的超时应统一映射为 Request timeout。
+    fetchMock.mockRejectedValueOnce(new DOMException("The operation was aborted.", "AbortError"));
+    const { getLiveDetailsBatch } = await import("../api");
+
+    await expect(getLiveDetailsBatch([1, 2])).rejects.toThrow("Request timeout");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/lives/details:batch");
+  });
 });
