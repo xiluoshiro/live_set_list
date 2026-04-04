@@ -445,6 +445,19 @@ describe("App", () => {
     expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2, 3]);
   });
 
+  test("批量详情预读超时不影响主列表渲染", async () => {
+    // 测试点：POST /api/lives/details:batch 超时后，页面主流程仍应正常展示列表。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 3, totalPages: 1, itemCount: 3 }),
+    );
+    getLiveDetailsBatchMock.mockRejectedValueOnce(new Error("Request timeout"));
+    render(<App />);
+
+    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2, 3]));
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    expect(screen.queryByText(/数据加载失败/)).not.toBeInTheDocument();
+  });
+
   test("切换标签会触发当前页详情预读", async () => {
     // 测试点：收藏/全量切换时，应对当前页再次触发 batch 预读。
     getLivesMock.mockResolvedValue(
