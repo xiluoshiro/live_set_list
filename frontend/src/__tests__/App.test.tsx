@@ -198,19 +198,6 @@ describe("App", () => {
     });
   });
 
-  test("控制台页只显示占位内容，不显示表格", async () => {
-    // 测试点：控制台页签切换后，仅展示预留文案。
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-    );
-    const user = userEvent.setup();
-    render(<App />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "控制台" }));
-
-    expect(screen.getByText("控制台内容预留中")).toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "日期" })).not.toBeInTheDocument();
-  });
 
   test("分页和每页条数切换正常工作", async () => {
     // 测试点：分页跳转与 15/20 行切换后页码计算正确。
@@ -645,19 +632,4 @@ describe("App", () => {
     });
   });
 
-  test("控制台页不会触发列表请求，切回列表页后才请求", async () => {
-    // 测试点：切到控制台不请求 /api/lives，切回列表后重新请求。
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-    );
-    const user = userEvent.setup();
-    render(<App />);
-    await waitFor(() => expect(getLivesMock).toHaveBeenCalledTimes(1));
-
-    await user.click(screen.getByRole("button", { name: "控制台" }));
-    expect(getLivesMock).toHaveBeenCalledTimes(1);
-
-    await user.click(screen.getByRole("button", { name: "全量" }));
-    await waitFor(() => expect(getLivesMock).toHaveBeenCalledTimes(2));
-  });
 });

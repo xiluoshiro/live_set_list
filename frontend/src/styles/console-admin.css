@@ -1,0 +1,85 @@
+.console-admin {
+  padding: 16px 20px 24px;
+}
+
+.console-admin h3 {
+  margin: 0 0 8px;
+  color: #1f2d4d;
+  font-size: 18px;
+}
+
+.console-admin-hint {
+  margin: 0 0 12px;
+  color: #5d6f96;
+  font-size: 13px;
+}
+
+.console-admin-modes {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.console-mode-btn {
+  border: 1px solid #d6dff4;
+  background: #f7f9ff;
+  color: #345;
+  border-radius: 10px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.console-mode-btn.active {
+  background: #0f62fe;
+  color: #fff;
+  border-color: #0f62fe;
+}
+
+.console-admin-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.console-admin-table th,
+.console-admin-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #edf1fb;
+  border-right: 1px solid rgba(208, 216, 231, 0.45);
+  text-align: left;
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.console-admin-table th:last-child,
+.console-admin-table td:last-child {
+  border-right: none;
+}
+
+.console-admin-table thead th {
+  background: #f5f8ff;
+  color: #2d3d61;
+}
+
+.console-admin-table input {
+  width: 100%;
+  border: 1px solid #ccd6ed;
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.console-submit-btn {
+  border: none;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: #0f62fe;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.console-band-icon {
+  width: 18px;
+  height: 18px;
+}

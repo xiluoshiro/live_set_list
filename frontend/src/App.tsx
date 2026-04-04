@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
+import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { MemberStatusTable } from "./components/DetailMemberTable";
 import { getLiveDetail, getLives, type LiveDetailResponse, type LiveItem } from "./api";
 import { prefetchCurrentPageDetails, scheduleIdleNextPagePrefetch } from "./prefetch/liveDetailsPrefetch";
@@ -332,7 +333,7 @@ function App() {
             </footer>
           </>
         ) : (
-          <section className="console-empty">控制台内容预留中</section>
+          <ConsoleInsertPanel />
         )}
       </section>
 
