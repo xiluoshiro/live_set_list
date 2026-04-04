@@ -55,6 +55,11 @@ export type LiveDetailResponse = {
   detail_rows: LiveDetailRow[];
 };
 
+export type LiveDetailsBatchResponse = {
+  items: LiveDetailResponse[];
+  missing_live_ids: number[];
+};
+
 const BASE_URL = "http://localhost:8000";
 const REQUEST_TIMEOUT_MS = 10000;
 const LIVES_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -62,6 +67,7 @@ const DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 const LIVES_CACHE_MAX = 20;
 const DETAIL_CACHE_MAX = 100;
 const DETAIL_REQUEST_DEBOUNCE_MS = 300;
+const DETAIL_BATCH_MAX_IDS = 100;
 
 const livesCache = new LruRequestCache<LivesResponse>(LIVES_CACHE_MAX);
 const detailCache = new LruRequestCache<LiveDetailResponse>(DETAIL_CACHE_MAX);
@@ -75,11 +81,11 @@ function detailCacheKey(liveId: number): string {
   return `detail:${liveId}`;
 }
 
-async function fetchWithTimeout(input: string): Promise<Response> {
+async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(input, { signal: controller.signal });
+    return await fetch(input, { ...init, signal: controller.signal });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error("Request timeout");
@@ -116,6 +122,20 @@ async function fetchLiveDetailRemote(liveId: number): Promise<LiveDetailResponse
     throw new Error(`Request failed: ${response.status}`);
   }
   return (await response.json()) as LiveDetailResponse;
+}
+
+async function fetchLiveDetailsBatchRemote(liveIds: number[]): Promise<LiveDetailsBatchResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/lives/details:batch`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ live_ids: liveIds }),
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+  return (await response.json()) as LiveDetailsBatchResponse;
 }
 
 export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
@@ -169,4 +189,64 @@ export async function getLiveDetail(liveId: number): Promise<LiveDetailResponse>
   detailRecentRequest.setRecent(liveId, requestPromise);
   detailCache.setInFlight(key, requestPromise);
   return requestPromise;
+}
+
+function normalizeLiveIds(liveIds: number[]): number[] {
+  const deduped: number[] = [];
+  const seen = new Set<number>();
+  liveIds.forEach((id) => {
+    if (!Number.isInteger(id) || id < 1 || seen.has(id)) return;
+    seen.add(id);
+    deduped.push(id);
+  });
+  return deduped;
+}
+
+function chunkArray<T>(items: T[], chunkSize: number): T[][] {
+  if (items.length === 0) return [];
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    chunks.push(items.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+export async function getLiveDetailsBatch(liveIds: number[]): Promise<LiveDetailsBatchResponse> {
+  const normalized = normalizeLiveIds(liveIds);
+  if (normalized.length === 0) {
+    return {
+      items: [],
+      missing_live_ids: [],
+    };
+  }
+
+  const needFetch = normalized.filter((liveId) => {
+    const key = detailCacheKey(liveId);
+    const hasFresh = detailCache.getFresh(key, DETAIL_CACHE_TTL_MS) !== undefined;
+    if (hasFresh) return false;
+    const hasInFlight = detailCache.getInFlight(key) !== undefined;
+    return !hasInFlight;
+  });
+
+  if (needFetch.length === 0) {
+    return {
+      items: [],
+      missing_live_ids: [],
+    };
+  }
+
+  const chunks = chunkArray(needFetch, DETAIL_BATCH_MAX_IDS);
+  const merged: LiveDetailsBatchResponse = {
+    items: [],
+    missing_live_ids: [],
+  };
+  for (const chunk of chunks) {
+    const payload = await fetchLiveDetailsBatchRemote(chunk);
+    payload.items.forEach((item) => {
+      detailCache.setData(detailCacheKey(item.live_id), item);
+      merged.items.push(item);
+    });
+    merged.missing_live_ids.push(...payload.missing_live_ids);
+  }
+  return merged;
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
 import { MemberStatusTable } from "./components/DetailMemberTable";
 import { getLiveDetail, getLives, type LiveDetailResponse, type LiveItem } from "./api";
+import { prefetchCurrentPageDetails, scheduleIdleNextPagePrefetch } from "./prefetch/liveDetailsPrefetch";
 import "./styles/index.css";
 
 type LiveRow = {
@@ -30,6 +31,7 @@ function App() {
   const [detailData, setDetailData] = useState<LiveDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const listEnabled = tab !== "console";
 
   const toLiveRow = (item: LiveItem): LiveRow => ({
     liveId: item.live_id,
@@ -43,7 +45,7 @@ function App() {
   });
 
   useEffect(() => {
-    if (tab === "console") return;
+    if (!listEnabled) return;
     let canceled = false;
 
     const fetchLives = async () => {
@@ -75,7 +77,7 @@ function App() {
     return () => {
       canceled = true;
     };
-  }, [page, pageSize, tab]);
+  }, [page, pageSize, listEnabled]);
 
   useEffect(() => {
     const raw = localStorage.getItem("live-favorites-map");
@@ -91,6 +93,28 @@ function App() {
   useEffect(() => {
     localStorage.setItem("live-favorites-map", JSON.stringify(favorites));
   }, [favorites]);
+
+  useEffect(() => {
+    if (tab === "console") return;
+    if (items.length === 0) return;
+    const currentPage = Math.min(page, serverTotalPages);
+    // 标签切换或分页后，先预读当前页详情，再空闲预读下一页。
+    void prefetchCurrentPageDetails(
+      items.map((row) => ({
+        live_id: row.liveId,
+        live_date: row.liveDate,
+        live_title: row.liveTitle,
+        bands: row.icons,
+        url: row.url,
+      })),
+    ).catch(() => undefined);
+    const cancelIdlePrefetch = scheduleIdleNextPagePrefetch({
+      page: currentPage,
+      pageSize,
+      totalPages: serverTotalPages,
+    });
+    return cancelIdlePrefetch;
+  }, [items, page, pageSize, serverTotalPages, tab]);
 
   useEffect(() => {
     if (!activeRow) {

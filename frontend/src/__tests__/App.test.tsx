@@ -3,15 +3,23 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import App from "../App";
-import { getLiveDetail, getLives, type LiveDetailResponse, type LivesResponse } from "../api";
+import {
+  getLiveDetail,
+  getLiveDetailsBatch,
+  getLives,
+  type LiveDetailResponse,
+  type LivesResponse,
+} from "../api";
 
 vi.mock("../api", () => ({
   getLives: vi.fn(),
   getLiveDetail: vi.fn(),
+  getLiveDetailsBatch: vi.fn(),
 }));
 
 const getLivesMock = vi.mocked(getLives);
 const getLiveDetailMock = vi.mocked(getLiveDetail);
+const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
 
 function makeItems(count: number, startId = 1, withUrl = true) {
   return Array.from({ length: count }, (_, idx) => {
@@ -108,12 +116,18 @@ function getPageInfo(): { page: number; totalPages: number } {
 
 describe("App", () => {
   beforeEach(() => {
+    (window as Window & { requestIdleCallback?: unknown; cancelIdleCallback?: unknown }).requestIdleCallback =
+      undefined;
+    (window as Window & { requestIdleCallback?: unknown; cancelIdleCallback?: unknown }).cancelIdleCallback =
+      undefined;
     localStorage.clear();
     getLivesMock.mockReset();
     getLiveDetailMock.mockReset();
+    getLiveDetailsBatchMock.mockReset();
     getLiveDetailMock.mockImplementation(async (liveId: number) =>
       makeDetailResponse({ liveId, rowCount: 20 }),
     );
+    getLiveDetailsBatchMock.mockResolvedValue({ items: [], missing_live_ids: [] });
   });
 
   test("默认进入收藏页，且不显示收藏列", () => {
@@ -420,6 +434,31 @@ describe("App", () => {
     await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(1, 15));
   });
 
+  test("首次加载后会对当前页触发批量详情预读", async () => {
+    // 测试点：首页加载完成后，使用当前页 live_id 列表调用 batch 详情接口。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 3, totalPages: 1, itemCount: 3 }),
+    );
+    render(<App />);
+
+    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledTimes(1));
+    expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2, 3]);
+  });
+
+  test("切换标签会触发当前页详情预读", async () => {
+    // 测试点：收藏/全量切换时，应对当前页再次触发 batch 预读。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 3, totalPages: 1, itemCount: 3 }),
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2, 3]));
+    await user.click(screen.getByRole("button", { name: "全量" }));
+    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledTimes(2));
+    expect(getLiveDetailsBatchMock).toHaveBeenLastCalledWith([1, 2, 3]);
+  });
+
   test("翻页会触发对应页码请求", async () => {
     // 测试点：点击下一页/上一页会触发 page 参数变化。
     getLivesMock
@@ -441,6 +480,48 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "上一页" }));
     await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(1, 20));
+  });
+
+  test("翻页后会对新页数据触发批量详情预读", async () => {
+    // 测试点：翻页成功后，batch 预读应切换到新页的 live_id 列表。
+    getLivesMock
+      .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 2, startId: 1 }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({ page: 2, pageSize: 20, total: 47, totalPages: 3, itemCount: 2, startId: 21 }),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2]));
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([21, 22]));
+  });
+
+  test("浏览器空闲时会预读下一页列表与详情", async () => {
+    // 测试点：支持 requestIdleCallback 时，当前页后会在空闲阶段预读下一页。
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    idleWindow.requestIdleCallback = vi.fn((callback: IdleRequestCallback) => {
+      callback({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
+      return 1;
+    });
+    idleWindow.cancelIdleCallback = vi.fn();
+
+    getLivesMock
+      .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 20, total: 40, totalPages: 2, itemCount: 2, startId: 1 }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({ page: 2, pageSize: 20, total: 40, totalPages: 2, itemCount: 2, startId: 21 }),
+      );
+    render(<App />);
+
+    await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(2, 20));
+    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([21, 22]));
   });
 
   test("分页总计与总页数以后端返回为准", async () => {
