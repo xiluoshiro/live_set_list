@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
-import { MemberStatusTable } from "./components/DetailMemberMockTable";
+import { MemberStatusTable } from "./components/DetailMemberTable";
 import { getLiveDetail, getLives, type LiveDetailResponse, type LiveItem } from "./api";
 import "./styles/index.css";
 
