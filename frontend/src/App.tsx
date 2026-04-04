@@ -1,23 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
+import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
 import "./styles.css";
 
 type LiveRow = {
   id: number;
   date: string;
   liveName: string;
-  icons: { src: string; alt: string }[];
+  icons: BandIconInput[];
   url: string;
   description: string;
 };
 type TabKey = "favorites" | "all" | "console";
 type FavoriteMap = Record<number, boolean>;
-
-const ICON_POOL = [
-  { src: "/icons/mic.svg", alt: "麦克风" },
-  { src: "/icons/equalizer.svg", alt: "均衡器" },
-  { src: "/icons/cd.svg", alt: "唱片" },
-  { src: "/icons/ticket.svg", alt: "票券" },
-];
 
 const MOCK_ROWS: LiveRow[] = Array.from({ length: 47 }, (_, idx) => {
   const i = idx + 1;
@@ -26,7 +20,7 @@ const MOCK_ROWS: LiveRow[] = Array.from({ length: 47 }, (_, idx) => {
     id: i,
     date: `2026-03-${String((i % 28) + 1).padStart(2, "0")}`,
     liveName: `示例 Live 名称 ${i} - 预留长度展示（可支持到 61 字符）`,
-    icons: Array.from({ length: iconCount }, (_, n) => ICON_POOL[n % ICON_POOL.length]),
+    icons: Array.from({ length: iconCount }, (_, n) => ((n % BAND_ICON_COUNT) + 1).toString()),
     url: `https://example.com/live/${i}`,
     description: `这是第 ${i} 条 live 的占位详情。后续可替换为接口返回内容。`,
   };
@@ -175,18 +169,8 @@ function App() {
                           {row.liveName}
                         </button>
                       </td>
-                      <td title={`${row.icons.length} 个图标`}>
-                        <div className="icons-cell">
-                          {row.icons.map((icon, index) => (
-                            <img
-                              key={`${row.id}-${icon.src}-${index}`}
-                              src={icon.src}
-                              alt={icon.alt}
-                              className="icon-img"
-                              loading="lazy"
-                            />
-                          ))}
-                        </div>
+                      <td className="band-cell" title={`${row.icons.length} 个图标`}>
+                        <BandIconsCell icons={row.icons} rowId={row.id} />
                       </td>
                       <td>
                         <a

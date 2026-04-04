@@ -102,7 +102,7 @@ thead th {
 tbody td {
   padding: 12px 14px;
   border-bottom: 1px solid #eef2fb;
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 tbody tr:hover {
@@ -206,17 +206,26 @@ tbody tr:hover {
 
 .icons-cell {
   white-space: nowrap;
-  overflow-x: auto;
+  overflow-x: scroll;
   overflow-y: hidden;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
-  min-height: 28px;
+  height: 32px;
   max-width: 118px;
-  padding-bottom: 2px;
+  width: 118px;
+  padding-top: 4px;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   scrollbar-gutter: stable;
+}
+
+.icons-cell-wrap {
+  position: relative;
+  width: 118px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
 }
 
 .icon-img {
@@ -225,7 +234,7 @@ tbody tr:hover {
   flex: 0 0 auto;
 }
 
-.icons-cell:hover {
+.icons-cell-wrap.has-overflow .icons-cell:hover {
   scrollbar-color: #cfd5df transparent;
 }
 
@@ -242,14 +251,31 @@ tbody tr:hover {
   border-radius: 999px;
 }
 
-.icons-cell:hover::-webkit-scrollbar-thumb {
+.icons-cell-wrap.has-overflow .icons-cell:hover::-webkit-scrollbar-thumb {
   background: #cfd5df;
+}
+
+.icons-cell-wrap.no-overflow .icons-cell {
+  overflow-x: hidden;
 }
 
 .icons-cell::-webkit-scrollbar-button {
   display: none;
   width: 0;
   height: 0;
+}
+
+.icons-overflow-hint {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  line-height: 1;
+  padding-left: 6px;
+  background: transparent;
+  color: #8f9ab0;
+  opacity: 0.65;
+  pointer-events: none;
 }
 
 a {
