@@ -209,6 +209,93 @@ describe("App", () => {
     expect(screen.queryByRole("heading", { name: firstLiveName })).not.toBeInTheDocument();
   });
 
+  test("详情弹窗格式正确：头部动作、基础信息、详情表格", async () => {
+    // 测试点：验证弹窗的新布局结构是否完整。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+
+    // 头部动作按钮
+    expect(screen.getByRole("button", { name: "全屏" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关闭" })).toBeInTheDocument();
+
+    // 基础信息行
+    expect(screen.getByText("日期：")).toBeInTheDocument();
+    expect(screen.getByText("乐队：")).toBeInTheDocument();
+    expect(screen.getByText("链接：")).toBeInTheDocument();
+
+    // 详情表格结构
+    expect(screen.getByRole("columnheader", { name: "#" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "曲目" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "时长" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "编排" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "备注" })).toBeInTheDocument();
+    const detailTable = container.querySelector(".detail-table");
+    expect(detailTable).not.toBeNull();
+    expect(within(detailTable as HTMLElement).getAllByRole("row")).toHaveLength(21);
+  });
+
+  test("详情弹窗支持全屏切换并可点遮罩关闭", async () => {
+    // 测试点：验证全屏状态切换样式和遮罩关闭交互。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+    await user.click(screen.getByRole("button", { name: "全屏" }));
+    expect(screen.getByRole("button", { name: "退出全屏" })).toBeInTheDocument();
+    expect(container.querySelector(".modal.fullscreen")).not.toBeNull();
+
+    const mask = container.querySelector(".modal-mask") as HTMLElement;
+    await user.click(mask);
+    expect(screen.queryByRole("button", { name: "退出全屏" })).not.toBeInTheDocument();
+  });
+
+  test("详情弹窗右上角按钮样式类名正确", async () => {
+    // 测试点：看护右上角“全屏/关闭”按钮的样式类，避免回归改坏。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+
+    const fullscreenBtn = screen.getByRole("button", { name: "全屏" });
+    const closeBtn = screen.getByRole("button", { name: "关闭" });
+
+    expect(fullscreenBtn).toHaveClass("modal-action-btn", "fullscreen");
+    expect(closeBtn).toHaveClass("modal-action-btn", "close");
+
+    const fullscreenGlyph = within(fullscreenBtn).getByText("⛶");
+    const closeGlyph = within(closeBtn).getByText("✕");
+    expect(fullscreenGlyph).toHaveClass("modal-action-glyph", "fullscreen");
+    expect(closeGlyph).toHaveClass("modal-action-glyph", "close");
+  });
+
+  test("详情弹窗在 url 为空时显示 '-' 占位", async () => {
+    // 测试点：详情弹窗链接字段空值兜底显示。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20, withUrl: false }),
+    );
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+    expect(screen.getByText("链接：")).toBeInTheDocument();
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+  });
+
   test("URL 列使用链接图标并携带正确链接", () => {
     // 测试点：URL 列展示为 🔗，并指向对应详情地址。
     getLivesMock.mockResolvedValue(
