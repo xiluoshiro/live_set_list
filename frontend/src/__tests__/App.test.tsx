@@ -229,6 +229,42 @@ describe("App", () => {
     expect(pageInfoAfterResize.totalPages).toBe(Math.ceil(total / 15));
   });
 
+  test("翻页后主表仍保持固定布局，避免列间距抖动", async () => {
+    // 测试点：第一页到下一页（超长标题）后，表格仍为 fixed 布局，列宽分配不受内容长度影响。
+    const page1 = makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 });
+    const page2Items = makeItems(20, 21, true).map((item) => ({
+      ...item,
+      live_title: `超长标题${"非常长".repeat(30)}-${item.live_id}`,
+    }));
+    const page2: LivesResponse = {
+      items: page2Items,
+      pagination: {
+        page: 2,
+        page_size: 20,
+        total: 47,
+        total_pages: 3,
+      },
+    };
+
+    getLivesMock.mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+
+    const firstTable = screen.getByRole("table");
+    expect(getComputedStyle(firstTable).tableLayout).toBe("fixed");
+
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(async () => {
+      const longTitleButtons = await screen.findAllByRole("button", { name: /超长标题/ });
+      expect(longTitleButtons.length).toBeGreaterThan(0);
+    });
+
+    const secondTable = screen.getByRole("table");
+    expect(getComputedStyle(secondTable).tableLayout).toBe("fixed");
+  });
+
   test("点击 live 名称打开详情弹窗并可关闭", async () => {
     // 测试点：详情查看路径（打开/关闭）可用。
     getLivesMock.mockResolvedValue(
