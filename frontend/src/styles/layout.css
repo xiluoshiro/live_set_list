@@ -1,0 +1,100 @@
+.page {
+  min-height: 100vh;
+  padding: 32px 20px;
+}
+
+.panel {
+  max-width: 1100px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(30, 47, 90, 0.12);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e8ecf6;
+  background: #f9fbff;
+}
+
+.panel-head h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #42516d;
+  font-size: 14px;
+}
+
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar select {
+  border: 1px solid #ced8ef;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: #fff;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px 8px;
+}
+
+.console-empty {
+  padding: 20px;
+  color: #4e5f83;
+}
+
+.tab-btn {
+  border: 1px solid #d6dff4;
+  background: #f7f9ff;
+  color: #345;
+  border-radius: 10px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  background: #0f62fe;
+  color: #fff;
+  border-color: #0f62fe;
+}
+
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px 18px;
+}
+
+.pager button {
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #0f62fe;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+@media (max-width: 800px) {
+  .panel-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

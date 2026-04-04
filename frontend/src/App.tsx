@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
+import { MemberStatusTable } from "./components/DetailMemberMockTable";
 import { getLives, type LiveItem } from "./api";
-import "./styles.css";
+import "./styles/index.css";
 
 type LiveRow = {
   liveId: number;
@@ -11,28 +12,9 @@ type LiveRow = {
   url: string | null;
   description: string;
 };
+
 type TabKey = "favorites" | "all" | "console";
 type FavoriteMap = Record<number, boolean>;
-type DetailRow = {
-  index: number;
-  track: string;
-  duration: string;
-  arrangement: string;
-  note: string;
-};
-
-function buildDetailMockRows(seed: number): DetailRow[] {
-  return Array.from({ length: 20 }, (_, idx) => {
-    const n = idx + 1;
-    return {
-      index: n,
-      track: `Mock 曲目 ${seed}-${n}`,
-      duration: `${3 + (n % 4)}:${String((n * 7) % 60).padStart(2, "0")}`,
-      arrangement: n % 2 === 0 ? "完整编排" : "简版编排",
-      note: n % 3 === 0 ? "含过门" : "-",
-    };
-  });
-}
 
 function App() {
   const [pageSize, setPageSize] = useState<15 | 20>(20);
@@ -109,7 +91,6 @@ function App() {
     localStorage.setItem("live-favorites-map", JSON.stringify(favorites));
   }, [favorites]);
 
-  // 收藏状态默认 true，保证当前阶段“收藏页=全量页”。
   const isFavorite = (id: number) => favorites[id] ?? true;
   const rows = useMemo(() => {
     if (tab === "favorites") {
@@ -121,7 +102,6 @@ function App() {
     return [];
   }, [favorites, items, tab]);
 
-  // 分页总数以服务端为准，确保下一页/总计和数据库一致。
   const total = serverTotal;
   const totalPages = serverTotalPages;
   const safePage = Math.min(page, totalPages);
@@ -137,7 +117,6 @@ function App() {
     setPage(1);
   };
 
-  // 仅在“全量”页提供收藏开关，收藏页不展示该列。
   const showFavoriteColumn = tab === "all";
 
   const toggleFavorite = (id: number) => {
@@ -341,28 +320,7 @@ function App() {
             </p>
 
             <div className="detail-table-wrap">
-              <table className="detail-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>曲目</th>
-                    <th>时长</th>
-                    <th>编排</th>
-                    <th>备注</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {buildDetailMockRows(activeRow.liveId).map((row) => (
-                    <tr key={`${activeRow.liveId}-${row.index}`}>
-                      <td>{row.index}</td>
-                      <td>{row.track}</td>
-                      <td>{row.duration}</td>
-                      <td>{row.arrangement}</td>
-                      <td>{row.note}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <MemberStatusTable seed={activeRow.liveId} />
             </div>
           </div>
         </div>
