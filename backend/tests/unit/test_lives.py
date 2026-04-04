@@ -4,7 +4,14 @@ from fastapi.testclient import TestClient
 from psycopg2 import Error
 
 from app.main import app
-from app.routers.lives import BAND_ID_LOOKUP_QUERY, LIVE_DETAIL_HEADER_QUERY, LIVE_DETAIL_ROWS_QUERY, LIVES_PAGE_QUERY
+from app.routers.lives import (
+    BAND_ID_LOOKUP_QUERY,
+    BATCH_LIVE_DETAIL_HEADERS_QUERY,
+    BATCH_LIVE_DETAIL_ROWS_QUERY,
+    LIVE_DETAIL_HEADER_QUERY,
+    LIVE_DETAIL_ROWS_QUERY,
+    LIVES_PAGE_QUERY,
+)
 
 
 def _build_connection_mock(count_value: int, rows: list[tuple]):
@@ -28,6 +35,18 @@ def _build_detail_connection_mock(
     conn.cursor.return_value.__enter__.return_value = cursor
     cursor.fetchone.return_value = header_row
     cursor.fetchall.side_effect = [detail_rows, band_lookup_rows]
+    return conn, cursor
+
+
+def _build_batch_detail_connection_mock(
+    header_rows: list[tuple],
+    detail_rows: list[tuple],
+):
+    conn = MagicMock()
+    cursor = MagicMock()
+    conn.__enter__.return_value = conn
+    conn.cursor.return_value.__enter__.return_value = cursor
+    cursor.fetchall.side_effect = [header_rows, detail_rows]
     return conn, cursor
 
 
@@ -202,3 +221,57 @@ def test_get_live_detail_invalid_id_returns_400():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "live_id must be >= 1"
+
+
+def test_get_live_details_batch_success_and_partial_missing():
+    # 测试点：批量详情接口应支持去重、保序、部分缺失，并一次性聚合返回详情。
+    header_rows = [
+        (1, "2026-03-28", "Live 1", [1], ["Poppin'Party"], None),
+        (2, "2026-03-27", "Live 2", [2], ["Afterglow"], None),
+    ]
+    detail_rows = [
+        (
+            2,
+            "A1",
+            "Song A",
+            [{"band_id": 2, "band_name": "Afterglow", "present_members": ["A", "B", "C", "D", "E"]}],
+            {"嘉宾": "Guest A"},
+            True,
+        ),
+        (
+            1,
+            "B1",
+            "Song B",
+            [{"band_id": 1, "band_name": "Poppin'Party", "present_members": ["A", "B", "C", "D"]}],
+            None,
+            False,
+        ),
+    ]
+    conn, cursor = _build_batch_detail_connection_mock(header_rows, detail_rows)
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post("/api/lives/details:batch", json={"live_ids": [2, 999, 2, 1]})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["missing_live_ids"] == [999]
+    assert [item["live_id"] for item in payload["items"]] == [2, 1]
+
+    first_item = payload["items"][0]
+    assert first_item["detail_rows"][0]["comments"] == ["短版"]
+    assert first_item["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["Guest A"]}]
+    second_item = payload["items"][1]
+    assert second_item["detail_rows"][0]["comments"] == []
+
+    assert cursor.execute.call_args_list[0] == call(BATCH_LIVE_DETAIL_HEADERS_QUERY, ([2, 999, 1],))
+    assert cursor.execute.call_args_list[1] == call(BATCH_LIVE_DETAIL_ROWS_QUERY, ([2, 999, 1],))
+
+
+def test_get_live_details_batch_invalid_live_id_returns_400():
+    # 测试点：批量详情中的任一 live_id 非法时，接口应直接返回 400。
+    client = TestClient(app)
+    response = client.post("/api/lives/details:batch", json={"live_ids": [1, 0, 2]})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "all live_ids must be >= 1"

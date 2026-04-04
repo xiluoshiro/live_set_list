@@ -127,7 +127,41 @@
 - `band_members[].is_full` 建议按 `present_count >= 5` 计算（当前约定固定满员人数为 5）
 - `other_members`、`comments` 允许为空数组，不建议返回 `null`
 
-## 3. 错误响应约定
+## 3. 批量获取 Live 详情（用于首屏预读）
+
+`POST /api/lives/details:batch`
+
+### 请求体
+
+```json
+{
+  "live_ids": [123, 124, 125]
+}
+```
+
+- `live_ids` (number[], required)
+说明: 需要批量查询详情的 `live_id` 列表。
+约束: 长度 `1..100`；每个值必须为正整数（`>=1`）。
+处理: 后端会按请求顺序去重后查询。
+
+### Response
+
+- `items`: 成功命中的详情列表，单项结构与 `GET /api/lives/{id}` 完全一致。
+- `missing_live_ids`: 未命中的 `live_id` 列表（例如已删除或不存在）。
+
+### 参数与字段校验规则
+
+- `live_ids` 为空时返回 `422`（请求体校验失败）
+- `live_ids` 任一元素 `< 1` 时返回 `400`
+- 允许部分成功，缺失项放入 `missing_live_ids`，接口整体仍返回 `200`
+
+### 推荐调用方式
+
+- 首页加载时先调 `GET /api/lives?page=1&page_size=20`
+- 再取列表中的 `live_id` 批量调用本接口
+- 前端将 `items` 写入详情缓存，用户点击行时优先命中缓存
+
+## 4. 错误响应约定
 
 推荐统一错误结构:
 
@@ -144,10 +178,11 @@
 
 - `400`: 参数错误（如 `page_size` 非法）
 - `404`: 资源不存在（如 `id` 不存在）
+- `422`: 请求体结构不合法（如缺少 `live_ids` 或数组为空）
 - `504`: 超时（数据库连接超时或查询超时）
 - `500`: 服务器内部错误
 
-## 4. 备注
+## 5. 备注
 
 - 当前前端收藏状态使用 `localStorage`，不依赖后端收藏接口。
 - 当前前端需要 `pagination.total` 与 `pagination.total_pages` 来驱动分页显示。
