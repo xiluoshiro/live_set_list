@@ -8,6 +8,11 @@ table {
   min-width: 980px;
 }
 
+.table-with-fav,
+.table-no-fav {
+  table-layout: fixed;
+}
+
 thead th {
   text-align: left;
   padding: 12px 14px;
