@@ -277,9 +277,27 @@
   box-shadow: inset 0 -2px 0 #d7832f;
 }
 
+.band-tile.no-status {
+  box-shadow: none;
+}
+
 .band-tile-icon {
   width: 15px;
   height: 15px;
+}
+
+.band-fallback-icon {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  user-select: none;
 }
 
 .band-tile-fallback {
