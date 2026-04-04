@@ -229,13 +229,13 @@ describe("App", () => {
     expect(screen.getByText("乐队：")).toBeInTheDocument();
     expect(screen.getByText("链接：")).toBeInTheDocument();
 
-    // 详情表格结构
-    expect(screen.getByRole("columnheader", { name: "#" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "曲目" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "时长" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "编排" })).toBeInTheDocument();
+    // 详情表格结构（已替换为独立的 5 列成员状态表）
+    expect(screen.getByRole("columnheader", { name: "编号" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "曲目名称" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "乐队成员" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "其他成员" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "备注" })).toBeInTheDocument();
-    const detailTable = container.querySelector(".detail-table");
+    const detailTable = container.querySelector(".detail-member-table-wrap .console-table");
     expect(detailTable).not.toBeNull();
     expect(within(detailTable as HTMLElement).getAllByRole("row")).toHaveLength(21);
   });
