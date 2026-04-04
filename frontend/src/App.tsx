@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
 import { MemberStatusTable } from "./components/DetailMemberMockTable";
-import { getLives, type LiveItem } from "./api";
+import { getLiveDetail, getLives, type LiveDetailResponse, type LiveItem } from "./api";
 import "./styles/index.css";
 
 type LiveRow = {
@@ -10,7 +10,6 @@ type LiveRow = {
   liveTitle: string;
   icons: BandIconInput[];
   url: string | null;
-  description: string;
 };
 
 type TabKey = "favorites" | "all" | "console";
@@ -28,6 +27,9 @@ function App() {
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [detailData, setDetailData] = useState<LiveDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const toLiveRow = (item: LiveItem): LiveRow => ({
     liveId: item.live_id,
@@ -38,7 +40,6 @@ function App() {
         ? item.bands
         : Array.from({ length: 1 }, (_, n) => ((n % BAND_ICON_COUNT) + 1).toString()),
     url: item.url,
-    description: `Live ID ${item.live_id} 的详情内容待后端补充。`,
   });
 
   useEffect(() => {
@@ -91,6 +92,42 @@ function App() {
     localStorage.setItem("live-favorites-map", JSON.stringify(favorites));
   }, [favorites]);
 
+  useEffect(() => {
+    if (!activeRow) {
+      setDetailData(null);
+      setDetailLoading(false);
+      setDetailError(null);
+      return;
+    }
+
+    let canceled = false;
+    const fetchDetail = async () => {
+      setDetailLoading(true);
+      setDetailError(null);
+      setDetailData(null);
+      try {
+        const data = await getLiveDetail(activeRow.liveId);
+        if (!canceled) {
+          setDetailData(data);
+        }
+      } catch (error) {
+        if (canceled) return;
+        const rawMessage = error instanceof Error ? error.message : "未知错误";
+        const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
+        setDetailError(message);
+      } finally {
+        if (!canceled) {
+          setDetailLoading(false);
+        }
+      }
+    };
+
+    fetchDetail();
+    return () => {
+      canceled = true;
+    };
+  }, [activeRow?.liveId]);
+
   const isFavorite = (id: number) => favorites[id] ?? true;
   const rows = useMemo(() => {
     if (tab === "favorites") {
@@ -129,7 +166,15 @@ function App() {
   const closeDetailModal = () => {
     setActiveRow(null);
     setDetailFullscreen(false);
+    setDetailData(null);
+    setDetailLoading(false);
+    setDetailError(null);
   };
+  const bandNamesText = detailData
+    ? detailData.band_names.filter((name) => name.trim() !== "").join(" / ") || "-"
+    : detailLoading
+      ? "加载中..."
+      : "-";
 
   return (
     <main className="page">
@@ -274,7 +319,7 @@ function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-head">
-              <h2>{activeRow.liveTitle}</h2>
+              <h2>{detailData?.live_title ?? activeRow.liveTitle}</h2>
               <div className="modal-actions">
                 <button
                   type="button"
@@ -300,18 +345,18 @@ function App() {
             </div>
             <p className="detail-row">
               <strong>日期：</strong>
-              <span>{activeRow.liveDate}</span>
+              <span>{detailData?.live_date ?? activeRow.liveDate}</span>
             </p>
             <p className="detail-row">
               <strong>乐队：</strong>
-              <span>{activeRow.icons.length}</span>
+              <span>{bandNamesText}</span>
             </p>
             <p className="detail-row">
               <strong>链接：</strong>
               <span>
-                {activeRow.url ? (
-                  <a href={activeRow.url} target="_blank" rel="noreferrer">
-                    {activeRow.url}
+                {(detailData?.url ?? activeRow.url) ? (
+                  <a href={detailData?.url ?? activeRow.url ?? "#"} target="_blank" rel="noreferrer">
+                    {detailData?.url ?? activeRow.url}
                   </a>
                 ) : (
                   "-"
@@ -320,7 +365,12 @@ function App() {
             </p>
 
             <div className="detail-table-wrap">
-              <MemberStatusTable seed={activeRow.liveId} />
+              <MemberStatusTable
+                rows={detailData?.detail_rows}
+                loading={detailLoading}
+                error={detailError}
+                seed={activeRow.liveId}
+              />
             </div>
           </div>
         </div>

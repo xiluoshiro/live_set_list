@@ -86,4 +86,45 @@ describe("MemberStatusTable", () => {
       value: originalInnerHeight,
     });
   });
+
+  test("其他成员 value 为空时标签不显示冒号", () => {
+    // 测试点：other_member.value 为 [] 时，标签仅显示 key，不带 ':'。
+    render(
+      <MemberStatusTable
+        rows={[
+          {
+            row_id: "M1",
+            song_name: "测试曲",
+            band_members: [],
+            other_members: [{ key: "键盘支援", value: [] }],
+            comments: [],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "键盘支援" })).toBeInTheDocument();
+    expect(screen.queryByText("键盘支援:")).not.toBeInTheDocument();
+  });
+
+  test("没有 +N 时点击其他成员标签也可打开明细", async () => {
+    // 测试点：仅 1-2 个其他成员时，点击标签同样可展开浮层。
+    const user = userEvent.setup();
+    render(
+      <MemberStatusTable
+        rows={[
+          {
+            row_id: "M1",
+            song_name: "测试曲",
+            band_members: [],
+            other_members: [{ key: "键盘支援", value: ["远程连线"] }],
+            comments: [],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "键盘支援:远程连线" }));
+    expect(screen.getByText("其他成员明细")).toBeInTheDocument();
+  });
 });
