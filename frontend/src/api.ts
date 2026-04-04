@@ -1,3 +1,5 @@
+import { LruRequestCache, RecentPromiseDebouncer } from "./cache/queryCache";
+
 export type DbHealthResponse = {
   ok: boolean;
   result: number | null;
@@ -55,6 +57,23 @@ export type LiveDetailResponse = {
 
 const BASE_URL = "http://localhost:8000";
 const REQUEST_TIMEOUT_MS = 10000;
+const LIVES_CACHE_TTL_MS = 15 * 60 * 1000;
+const DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
+const LIVES_CACHE_MAX = 20;
+const DETAIL_CACHE_MAX = 100;
+const DETAIL_REQUEST_DEBOUNCE_MS = 300;
+
+const livesCache = new LruRequestCache<LivesResponse>(LIVES_CACHE_MAX);
+const detailCache = new LruRequestCache<LiveDetailResponse>(DETAIL_CACHE_MAX);
+const detailRecentRequest = new RecentPromiseDebouncer<number, LiveDetailResponse>();
+
+function livesCacheKey(page: number, pageSize: 15 | 20): string {
+  return `lives:${page}:${pageSize}`;
+}
+
+function detailCacheKey(liveId: number): string {
+  return `detail:${liveId}`;
+}
 
 async function fetchWithTimeout(input: string): Promise<Response> {
   const controller = new AbortController();
@@ -79,7 +98,7 @@ export async function checkDbHealth(): Promise<DbHealthResponse> {
   return (await response.json()) as DbHealthResponse;
 }
 
-export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
+async function fetchLivesRemote(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
   const query = new URLSearchParams({
     page: String(page),
     page_size: String(pageSize),
@@ -91,10 +110,63 @@ export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesRe
   return (await response.json()) as LivesResponse;
 }
 
-export async function getLiveDetail(liveId: number): Promise<LiveDetailResponse> {
+async function fetchLiveDetailRemote(liveId: number): Promise<LiveDetailResponse> {
   const response = await fetchWithTimeout(`${BASE_URL}/api/lives/${liveId}`);
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
   return (await response.json()) as LiveDetailResponse;
+}
+
+export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
+  const requestedKey = livesCacheKey(page, pageSize);
+  const fresh = livesCache.getFresh(requestedKey, LIVES_CACHE_TTL_MS);
+  if (fresh !== undefined) {
+    return fresh;
+  }
+  const inFlight = livesCache.getInFlight(requestedKey);
+  if (inFlight) return inFlight;
+
+  const requestPromise = fetchLivesRemote(page, pageSize)
+    .then((payload) => {
+      const updatedAt = Date.now();
+      livesCache.setData(requestedKey, payload, updatedAt);
+      const canonicalKey = livesCacheKey(payload.pagination.page, pageSize);
+      if (canonicalKey !== requestedKey) {
+        livesCache.setData(canonicalKey, payload, updatedAt);
+      }
+      return payload;
+    })
+    .finally(() => {
+      livesCache.clearInFlightIfMatch(requestedKey, requestPromise);
+    });
+
+  livesCache.setInFlight(requestedKey, requestPromise);
+  return requestPromise;
+}
+
+export async function getLiveDetail(liveId: number): Promise<LiveDetailResponse> {
+  const key = detailCacheKey(liveId);
+  const fresh = detailCache.getFresh(key, DETAIL_CACHE_TTL_MS);
+  if (fresh !== undefined) {
+    return fresh;
+  }
+  const inFlight = detailCache.getInFlight(key);
+  if (inFlight) return inFlight;
+
+  const recent = detailRecentRequest.getRecent(liveId, DETAIL_REQUEST_DEBOUNCE_MS);
+  if (recent) return recent;
+
+  const requestPromise = fetchLiveDetailRemote(liveId)
+    .then((payload) => {
+      detailCache.setData(key, payload);
+      return payload;
+    })
+    .finally(() => {
+      detailCache.clearInFlightIfMatch(key, requestPromise);
+    });
+
+  detailRecentRequest.setRecent(liveId, requestPromise);
+  detailCache.setInFlight(key, requestPromise);
+  return requestPromise;
 }
