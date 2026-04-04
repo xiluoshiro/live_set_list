@@ -77,6 +77,7 @@
   "live_date": "2026-03-28",
   "live_title": "示例 Live 名称",
   "bands": [1, 2, 3],
+  "band_names": ["Poppin'Party", "Afterglow", "Roselia"],
   "url": "https://example.com/live/123",
   "detail_rows": [
     {
@@ -93,7 +94,7 @@
         }
       ],
       "other_members": [
-        { "key": "键盘支援", "value": "远程连线" }
+        { "key": "键盘支援", "value": ["远程连线"] }
       ],
       "comments": ["短版"]
     }
@@ -107,13 +108,14 @@
 - `live_date`: 日期
 - `live_title`: 标题
 - `bands`: 乐队总数（前端可直接取 `bands.length`）
+- `band_names`: 顶部乐队名称列表（从 `band_member` 的 key 去重聚合）
 - `url`: 链接
 
 5 列详情表字段:
 - `detail_rows[].row_id`: 编号
 - `detail_rows[].song_name`: 曲目名称
 - `detail_rows[].band_members`: 乐队成员（图标、满员状态、二级弹窗“参加队员”）
-- `detail_rows[].other_members`: 其他成员（主表预览 + `+N` 浮层）
+- `detail_rows[].other_members`: 其他成员（`{key, value:string[]}`，主表预览 + `+N` 浮层）
 - `detail_rows[].comments`: 备注（短标签）
 
 ### 参数与字段校验规则
@@ -122,7 +124,7 @@
 - `bands` 建议为去重后的 `number[]`，取值范围建议为 `1..12`
 - `detail_rows` 建议按 `row_id ASC` 返回，且 `row_id` 在同一 `live_id` 下唯一
 - `band_members[].present_count` 必须 `<= total_count`
-- `band_members[].is_full` 建议与 `present_count === total_count` 保持一致
+- `band_members[].is_full` 建议按 `present_count >= 5` 计算（当前约定固定满员人数为 5）
 - `other_members`、`comments` 允许为空数组，不建议返回 `null`
 
 ## 3. 错误响应约定

@@ -1,4 +1,6 @@
+import json
 from math import ceil
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from psycopg2 import Error, OperationalError
@@ -44,6 +46,120 @@ LIVES_PAGE_QUERY = f"""
 ORDER BY l.live_date DESC, l.id DESC
 LIMIT %s OFFSET %s
 """
+
+LIVE_DETAIL_HEADER_QUERY = """
+SELECT
+    l.id AS live_id,
+    l.live_date,
+    l.live_title,
+    COALESCE(
+        (
+            SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
+            FROM live_setlist stl
+            JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
+                ON jsonb_typeof(stl.band_member) = 'object'
+            JOIN band_attrs ba
+                ON ba.band_name = k.band_name
+            WHERE stl.live_id = l.id
+        ),
+        ARRAY[]::int[]
+    ) AS bands,
+    COALESCE(
+        (
+            SELECT array_agg(x.band_name ORDER BY x.band_name)
+            FROM (
+                SELECT DISTINCT
+                    k.band_name AS band_name
+                FROM live_setlist stl
+                JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
+                    ON jsonb_typeof(stl.band_member) = 'object'
+                WHERE stl.live_id = l.id
+            ) x
+        ),
+        ARRAY[]::text[]
+    ) AS band_names,
+    NULL::text AS url
+FROM live_attrs l
+WHERE l.id = %s
+"""
+
+LIVE_DETAIL_ROWS_QUERY = """
+SELECT
+    concat(stl.segment_type, stl.sub_order)::text AS row_id,
+    s.song_name,
+    stl.band_member,
+    stl.other_member,
+    stl.is_short
+FROM live_setlist stl
+JOIN song_list s
+    ON s.id = stl.song_id
+WHERE stl.live_id = %s
+ORDER BY stl.absolute_order
+"""
+
+BAND_ID_LOOKUP_QUERY = """
+SELECT
+    ba.id,
+    ba.band_name
+FROM band_attrs ba
+WHERE ba.band_name = ANY(%s)
+"""
+
+DEFAULT_BAND_TOTAL_COUNT = 5
+
+
+def _ensure_json_object(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _to_string_list(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(item) for item in raw]
+    if isinstance(raw, tuple):
+        return [str(item) for item in raw]
+    return [str(raw)]
+
+
+def _to_string_array(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(item) for item in raw]
+    if isinstance(raw, tuple):
+        return [str(item) for item in raw]
+    if isinstance(raw, str):
+        stripped = raw.strip()
+        # 兼容 value 存成 JSON 字符串数组的情况，例如 "[\"a\", \"b\"]"
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                parsed = json.loads(stripped)
+                if isinstance(parsed, list):
+                    return [str(item) for item in parsed]
+            except json.JSONDecodeError:
+                pass
+        # 兼容双引号包裹的字符串字面量，例如 "\"xxx\""
+        if len(stripped) >= 2 and stripped[0] == '"' and stripped[-1] == '"':
+            try:
+                parsed = json.loads(stripped)
+                if isinstance(parsed, str):
+                    return [parsed]
+            except json.JSONDecodeError:
+                pass
+        return [raw]
+    if isinstance(raw, (int, float, bool)):
+        return [str(raw)]
+    return [json.dumps(raw, ensure_ascii=False)]
 
 
 @router.get("")
@@ -95,4 +211,108 @@ def get_lives(
             "total": total,
             "total_pages": total_pages,
         },
+    }
+
+
+@router.get("/{live_id}")
+def get_live_detail(live_id: int):
+    if live_id < 1:
+        raise HTTPException(status_code=400, detail="live_id must be >= 1")
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(LIVE_DETAIL_HEADER_QUERY, (live_id,))
+                header_row = cur.fetchone()
+                if not header_row:
+                    raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
+
+                cur.execute(LIVE_DETAIL_ROWS_QUERY, (live_id,))
+                raw_rows = cur.fetchall()
+
+                parsed_rows: list[tuple[str, str, dict[str, Any], dict[str, Any], bool]] = []
+                all_band_names: set[str] = set()
+                for row in raw_rows:
+                    row_id, song_name, band_member_raw, other_member_raw, is_short = row
+                    band_member_obj = _ensure_json_object(band_member_raw)
+                    other_member_obj = _ensure_json_object(other_member_raw)
+                    all_band_names.update(str(k) for k in band_member_obj.keys())
+                    parsed_rows.append(
+                        (
+                            str(row_id),
+                            str(song_name),
+                            band_member_obj,
+                            other_member_obj,
+                            bool(is_short),
+                        )
+                    )
+
+                band_name_to_id: dict[str, int] = {}
+                if all_band_names:
+                    ordered_band_names = sorted(all_band_names)
+                    cur.execute(BAND_ID_LOOKUP_QUERY, (ordered_band_names,))
+                    band_lookup_rows = cur.fetchall()
+                    band_name_to_id = {
+                        str(band_name): int(band_id)
+                        for band_id, band_name in band_lookup_rows
+                        if band_name is not None
+                    }
+    except QueryCanceled as exc:
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+    bands = [int(v) for v in (header_row[3] or []) if isinstance(v, int)]
+    detail_rows = []
+    for row_id, song_name, band_member_obj, other_member_obj, is_short in parsed_rows:
+        band_members = []
+        for band_name, present_members_raw in band_member_obj.items():
+            present_members = _to_string_list(present_members_raw)
+            present_count = len(present_members)
+            band_members.append(
+                {
+                    "band_id": band_name_to_id.get(str(band_name)),
+                    "band_name": str(band_name),
+                    "present_members": present_members,
+                    "present_count": present_count,
+                    "total_count": DEFAULT_BAND_TOTAL_COUNT,
+                    "is_full": present_count >= DEFAULT_BAND_TOTAL_COUNT,
+                }
+            )
+
+        band_members.sort(
+            key=lambda item: (
+                item["band_id"] is None,
+                item["band_id"] if item["band_id"] is not None else 10**9,
+                item["band_name"],
+            )
+        )
+
+        other_members = [{"key": str(key), "value": _to_string_array(value)} for key, value in other_member_obj.items()]
+        other_members.sort(key=lambda item: item["key"])
+
+        comments: list[str] = ["短版"] if is_short else []
+
+        detail_rows.append(
+            {
+                "row_id": row_id,
+                "song_name": song_name,
+                "band_members": band_members,
+                "other_members": other_members,
+                "comments": comments,
+            }
+        )
+
+    return {
+        "live_id": int(header_row[0]),
+        "live_date": header_row[1],
+        "live_title": str(header_row[2]),
+        "bands": bands,
+        "band_names": [str(v) for v in (header_row[4] or [])],
+        "url": header_row[5],
+        "detail_rows": detail_rows,
     }
