@@ -132,7 +132,7 @@ describe("App", () => {
   test("乐队列渲染图标单元格", () => {
     // 测试点：乐队列应渲染图标容器与 SVG 图标。
     render(<App />);
-    const firstBandCell = screen.getAllByTitle(/个图标/)[0];
+    const firstBandCell = screen.getAllByTitle(/支乐队/)[0];
     const bandIcons = within(firstBandCell).getAllByRole("img", { name: /Band \d+/ });
     expect(bandIcons.length).toBeGreaterThan(0);
     bandIcons.forEach((icon) => {
