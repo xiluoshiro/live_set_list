@@ -32,9 +32,9 @@
 {
   "items": [
     {
-      "id": 123,
-      "date": "2026-03-28",
-      "live_name": "示例 Live 名称",
+      "live_id": 123,
+      "live_date": "2026-03-28",
+      "live_title": "示例 Live 名称",
       "bands": [1, 2, "Band_3"],
       "url": "https://example.com/live/123"
     }
@@ -50,8 +50,8 @@
 
 ### 字段映射（对应前端 4 列）
 
-- `date`: 日期列
-- `live_name`: Live 名称列
+- `live_date`: 日期列
+- `live_title`: Live 名称列
 - `bands`: 乐队图标列（前端映射为 `Band_1.svg` ~ `Band_12.svg`）
 - `url`: URL 列（前端以 `🔗` 展示）
 
@@ -73,9 +73,9 @@
 
 ```json
 {
-  "id": 123,
-  "date": "2026-03-28",
-  "live_name": "示例 Live 名称",
+  "live_id": 123,
+  "live_date": "2026-03-28",
+  "live_title": "示例 Live 名称",
   "bands": [1, 2, 3],
   "url": "https://example.com/live/123",
   "description": "详情描述文本"
