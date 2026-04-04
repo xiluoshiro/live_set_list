@@ -41,14 +41,14 @@ tbody tr:hover {
 
 .table-with-fav th:nth-child(2),
 .table-with-fav td:nth-child(2) {
-  width: 140px;
+  width: 110px;
   white-space: nowrap;
 }
 
 .table-with-fav th:nth-child(3),
 .table-with-fav td:nth-child(3) {
-  width: 560px;
-  min-width: 500px;
+  width: 620px;
+  min-width: 560px;
 }
 
 .table-with-fav th:nth-child(4),
@@ -66,14 +66,14 @@ tbody tr:hover {
 
 .table-no-fav th:nth-child(1),
 .table-no-fav td:nth-child(1) {
-  width: 140px;
+  width: 110px;
   white-space: nowrap;
 }
 
 .table-no-fav th:nth-child(2),
 .table-no-fav td:nth-child(2) {
-  width: 560px;
-  min-width: 500px;
+  width: 620px;
+  min-width: 560px;
 }
 
 .table-no-fav th:nth-child(3),
