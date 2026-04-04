@@ -1,30 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
+import { getLives, type LiveItem } from "./api";
 import "./styles.css";
 
 type LiveRow = {
-  id: number;
-  date: string;
-  liveName: string;
+  liveId: number;
+  liveDate: string;
+  liveTitle: string;
   icons: BandIconInput[];
-  url: string;
+  url: string | null;
   description: string;
 };
 type TabKey = "favorites" | "all" | "console";
 type FavoriteMap = Record<number, boolean>;
-
-const MOCK_ROWS: LiveRow[] = Array.from({ length: 47 }, (_, idx) => {
-  const i = idx + 1;
-  const iconCount = (i % 10) + 1;
-  return {
-    id: i,
-    date: `2026-03-${String((i % 28) + 1).padStart(2, "0")}`,
-    liveName: `示例 Live 名称 ${i} - 预留长度展示（可支持到 61 字符）`,
-    icons: Array.from({ length: iconCount }, (_, n) => ((n % BAND_ICON_COUNT) + 1).toString()),
-    url: `https://example.com/live/${i}`,
-    description: `这是第 ${i} 条 live 的占位详情。后续可替换为接口返回内容。`,
-  };
-});
 
 function App() {
   const [pageSize, setPageSize] = useState<15 | 20>(20);
@@ -32,6 +20,57 @@ function App() {
   const [tab, setTab] = useState<TabKey>("favorites");
   const [activeRow, setActiveRow] = useState<LiveRow | null>(null);
   const [favorites, setFavorites] = useState<FavoriteMap>({});
+  const [items, setItems] = useState<LiveRow[]>([]);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverTotalPages, setServerTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const toLiveRow = (item: LiveItem): LiveRow => ({
+    liveId: item.live_id,
+    liveDate: item.live_date,
+    liveTitle: item.live_title,
+    icons:
+      item.bands && item.bands.length > 0
+        ? item.bands
+        : Array.from({ length: 1 }, (_, n) => ((n % BAND_ICON_COUNT) + 1).toString()),
+    url: item.url,
+    description: `Live ID ${item.live_id} 的详情内容待后端补充。`,
+  });
+
+  useEffect(() => {
+    if (tab === "console") return;
+    let canceled = false;
+
+    const fetchLives = async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const data = await getLives(page, pageSize);
+        if (canceled) return;
+        setItems(data.items.map(toLiveRow));
+        setServerTotal(data.pagination.total);
+        setServerTotalPages(data.pagination.total_pages);
+        if (data.pagination.page !== page) {
+          setPage(data.pagination.page);
+        }
+      } catch (error) {
+        if (canceled) return;
+        const message = error instanceof Error ? error.message : "未知错误";
+        setLoadError(message);
+        setItems([]);
+        setServerTotal(0);
+        setServerTotalPages(1);
+      } finally {
+        if (!canceled) setLoading(false);
+      }
+    };
+
+    fetchLives();
+    return () => {
+      canceled = true;
+    };
+  }, [page, pageSize, tab]);
 
   useEffect(() => {
     const raw = localStorage.getItem("live-favorites-map");
@@ -48,27 +87,23 @@ function App() {
     localStorage.setItem("live-favorites-map", JSON.stringify(favorites));
   }, [favorites]);
 
-  // TODO: 后端接口适配后，用接口数据替换 MOCK_ROWS
   // 收藏状态默认 true，保证当前阶段“收藏页=全量页”。
   const isFavorite = (id: number) => favorites[id] ?? true;
   const rows = useMemo(() => {
     if (tab === "favorites") {
-      return MOCK_ROWS.filter((row) => isFavorite(row.id));
+      return items.filter((row) => isFavorite(row.liveId));
     }
     if (tab === "all") {
-      return MOCK_ROWS;
+      return items;
     }
     return [];
-  }, [favorites, tab]);
+  }, [favorites, items, tab]);
 
-  const total = rows.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // 分页总数以服务端为准，确保下一页/总计和数据库一致。
+  const total = serverTotal;
+  const totalPages = serverTotalPages;
   const safePage = Math.min(page, totalPages);
-
-  const pagedRows = useMemo(() => {
-    const start = (safePage - 1) * pageSize;
-    return rows.slice(start, start + pageSize);
-  }, [pageSize, rows, safePage]);
+  const pagedRows = rows;
 
   const handlePageSizeChange = (value: 15 | 20) => {
     setPageSize(value);
@@ -146,48 +181,59 @@ function App() {
                 </thead>
                 <tbody>
                   {pagedRows.map((row) => (
-                    <tr key={row.id}>
+                    <tr key={row.liveId}>
                       {showFavoriteColumn && (
                         <td className="fav-col-cell">
                           <button
-                            className={`star-btn ${isFavorite(row.id) ? "is-fav" : ""}`}
-                            onClick={() => toggleFavorite(row.id)}
-                            title={isFavorite(row.id) ? "取消收藏" : "加入收藏"}
-                            aria-label={isFavorite(row.id) ? "取消收藏" : "加入收藏"}
+                            className={`star-btn ${isFavorite(row.liveId) ? "is-fav" : ""}`}
+                            onClick={() => toggleFavorite(row.liveId)}
+                            title={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
+                            aria-label={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
                           >
                             ★
                           </button>
                         </td>
                       )}
-                      <td>{row.date}</td>
+                      <td>{row.liveDate}</td>
                       <td>
                         <button
                           className="name-btn"
                           onClick={() => setActiveRow(row)}
-                          title={row.liveName}
+                          title={row.liveTitle}
                         >
-                          {row.liveName}
+                          {row.liveTitle}
                         </button>
                       </td>
-                      <td className="band-cell" title={`${row.icons.length} 个图标`}>
-                        <BandIconsCell icons={row.icons} rowId={row.id} />
+                      <td className="band-cell" title={`${row.icons.length} 支乐队`}>
+                        <BandIconsCell icons={row.icons} rowId={row.liveId} />
                       </td>
                       <td>
-                        <a
-                          href={row.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="url-icon-link"
-                        >
-                          🔗
-                        </a>
+                        {row.url ? (
+                          <a
+                            href={row.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="url-icon-link"
+                          >
+                            🔗
+                          </a>
+                        ) : (
+                          <span>-</span>
+                        )}
                       </td>
                     </tr>
                   ))}
-                  {pagedRows.length === 0 && (
+                  {loadError && (
                     <tr>
                       <td colSpan={showFavoriteColumn ? 5 : 4} className="empty-cell">
-                        当前没有可展示的数据
+                        数据加载失败: {loadError}
+                      </td>
+                    </tr>
+                  )}
+                  {!loadError && pagedRows.length === 0 && (
+                    <tr>
+                      <td colSpan={showFavoriteColumn ? 5 : 4} className="empty-cell">
+                        {loading ? "加载中..." : "当前没有可展示的数据"}
                       </td>
                     </tr>
                   )}
@@ -218,10 +264,10 @@ function App() {
       {activeRow && (
         <div className="modal-mask" onClick={() => setActiveRow(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{activeRow.liveName}</h2>
+            <h2>{activeRow.liveTitle}</h2>
             <p>
               <strong>日期：</strong>
-              {activeRow.date}
+              {activeRow.liveDate}
             </p>
             <p>
               <strong>图标数量：</strong>
@@ -229,9 +275,13 @@ function App() {
             </p>
             <p>
               <strong>链接：</strong>
-              <a href={activeRow.url} target="_blank" rel="noreferrer">
-                {activeRow.url}
-              </a>
+              {activeRow.url ? (
+                <a href={activeRow.url} target="_blank" rel="noreferrer">
+                  {activeRow.url}
+                </a>
+              ) : (
+                <span>-</span>
+              )}
             </p>
             <p>{activeRow.description}</p>
             <button onClick={() => setActiveRow(null)}>关闭</button>
