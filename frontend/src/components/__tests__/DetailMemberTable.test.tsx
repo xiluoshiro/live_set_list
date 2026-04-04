@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+﻿import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
-import { MemberStatusTable } from "../DetailMemberMockTable";
+import { MemberStatusTable } from "../DetailMemberTable";
 
 describe("MemberStatusTable", () => {
   test("详情表格表头为 5 列：编号/曲目名称/乐队成员/其他成员/备注", () => {
@@ -128,3 +128,4 @@ describe("MemberStatusTable", () => {
     expect(screen.getByText("其他成员明细")).toBeInTheDocument();
   });
 });
+
