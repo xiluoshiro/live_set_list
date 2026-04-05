@@ -224,6 +224,32 @@ def test_get_live_detail_invalid_id_returns_400():
     assert response.json()["detail"] == "live_id must be >= 1"
 
 
+def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
+    # 测试点：band_names 顺序与 bands（band_id 升序）一致，未映射 band_id 的名称置于末尾。
+    header_row = (
+        88,
+        "2026-03-28",
+        "Live 88",
+        [30, 10, 20],
+        ["未映射A", "Band20", "Band10", "未映射B", "Band30"],
+        None,
+    )
+    detail_rows = [
+        ("M1", "Song 1", {"Band30": ["A"], "Band10": ["B"], "Band20": ["C"]}, None, False),
+    ]
+    band_lookup_rows = [(10, "Band10"), (20, "Band20"), (30, "Band30")]
+    conn, _ = _build_detail_connection_mock(header_row, detail_rows, band_lookup_rows)
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.get("/api/lives/88")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["bands"] == [10, 20, 30]
+    assert payload["band_names"] == ["Band10", "Band20", "Band30", "未映射A", "未映射B"]
+
+
 def test_get_live_details_batch_success_and_partial_missing():
     # 测试点：批量详情接口应支持去重、保序、部分缺失，并一次性聚合返回详情。
     header_rows = [
@@ -267,6 +293,44 @@ def test_get_live_details_batch_success_and_partial_missing():
 
     assert cursor.execute.call_args_list[0] == call(BATCH_LIVE_DETAIL_HEADERS_QUERY, ([2, 999, 1],))
     assert cursor.execute.call_args_list[1] == call(BATCH_LIVE_DETAIL_ROWS_QUERY, ([2, 999, 1],))
+
+
+def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
+    # 测试点：批量详情中 band_names 也遵循 bands 升序，且未映射名称统一后置。
+    header_rows = [
+        (
+            8,
+            "2026-03-30",
+            "Live 8",
+            [30, 10, 20],
+            ["未映射A", "Band20", "Band10", "未映射B", "Band30"],
+            None,
+        ),
+    ]
+    detail_rows = [
+        (
+            8,
+            "A1",
+            "Song A",
+            [
+                {"band_id": 20, "band_name": "Band20", "present_members": ["A"]},
+                {"band_id": 30, "band_name": "Band30", "present_members": ["B"]},
+                {"band_id": 10, "band_name": "Band10", "present_members": ["C"]},
+            ],
+            None,
+            False,
+        )
+    ]
+    conn, _ = _build_batch_detail_connection_mock(header_rows, detail_rows)
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post("/api/lives/details:batch", json={"live_ids": [8]})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"][0]["bands"] == [10, 20, 30]
+    assert payload["items"][0]["band_names"] == ["Band10", "Band20", "Band30", "未映射A", "未映射B"]
 
 
 def test_get_live_details_batch_invalid_live_id_returns_400():

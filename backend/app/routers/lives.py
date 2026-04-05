@@ -288,12 +288,61 @@ def _to_string_array(raw: Any) -> list[str]:
     return [json.dumps(raw, ensure_ascii=False)]
 
 
+def _normalize_band_ids(raw: Any) -> list[int]:
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return sorted({int(v) for v in raw if isinstance(v, int)})
+
+
+def _order_band_names_by_bands(
+    bands: list[int],
+    raw_band_names: Any,
+    band_name_to_id: dict[str, int] | None = None,
+) -> list[str]:
+    if not isinstance(raw_band_names, (list, tuple)):
+        return []
+
+    # 去重并保持原始出现顺序，避免重复 band_name 污染展示。
+    deduped_names: list[str] = []
+    seen_names: set[str] = set()
+    for raw_name in raw_band_names:
+        name = str(raw_name)
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+        deduped_names.append(name)
+
+    if not deduped_names or not band_name_to_id:
+        return deduped_names
+
+    mapped_groups: dict[int, list[str]] = {}
+    unmapped_names: list[str] = []
+    for name in deduped_names:
+        band_id = band_name_to_id.get(name)
+        if isinstance(band_id, int):
+            mapped_groups.setdefault(band_id, []).append(name)
+        else:
+            unmapped_names.append(name)
+
+    ordered_names: list[str] = []
+    for band_id in bands:
+        ordered_names.extend(sorted(mapped_groups.pop(band_id, [])))
+
+    # 容错：若存在可映射但不在 bands 中的 id，仍按 band_id 升序拼接到已映射尾部。
+    for band_id in sorted(mapped_groups):
+        ordered_names.extend(sorted(mapped_groups[band_id]))
+
+    # 规则：未映射到 band_id 的名称放在末尾。
+    ordered_names.extend(unmapped_names)
+    return ordered_names
+
+
 def _build_live_detail_payload(
     header_row: tuple[Any, ...],
     parsed_rows: list[ParsedDetailRow],
     band_name_to_id: dict[str, int],
 ) -> dict[str, Any]:
-    bands = [int(v) for v in (header_row[3] or []) if isinstance(v, int)]
+    bands = _normalize_band_ids(header_row[3])
     detail_rows = []
     for row_id, song_name, band_member_obj, other_member_obj, is_short in parsed_rows:
         band_members = []
@@ -339,7 +388,7 @@ def _build_live_detail_payload(
         "live_date": header_row[1],
         "live_title": str(header_row[2]),
         "bands": bands,
-        "band_names": [str(v) for v in (header_row[4] or [])],
+        "band_names": _order_band_names_by_bands(bands, header_row[4], band_name_to_id),
         "url": header_row[5],
         "detail_rows": detail_rows,
     }
@@ -462,6 +511,7 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(...)):
                 raw_rows = cur.fetchall()
 
                 parsed_rows_by_live_id: dict[int, list[dict[str, Any]]] = {}
+                band_name_to_id_by_live_id: dict[int, dict[str, int]] = {}
                 for row in raw_rows:
                     live_id, row_id, song_name, band_members_raw, other_member_raw, is_short = row
                     band_members_arr = _ensure_json_array(band_members_raw)
@@ -472,14 +522,17 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(...)):
                         band_name_raw = band_item.get("band_name")
                         if band_name_raw is None:
                             continue
+                        band_name = str(band_name_raw)
                         band_id_raw = band_item.get("band_id")
                         band_id = int(band_id_raw) if isinstance(band_id_raw, int) else None
+                        if band_id is not None:
+                            band_name_to_id_by_live_id.setdefault(int(live_id), {})[band_name] = band_id
                         present_members = _to_string_list(band_item.get("present_members"))
                         present_count = len(present_members)
                         band_members.append(
                             {
                                 "band_id": band_id,
-                                "band_name": str(band_name_raw),
+                                "band_name": band_name,
                                 "present_members": present_members,
                                 "present_count": present_count,
                                 "total_count": DEFAULT_BAND_TOTAL_COUNT,
@@ -533,8 +586,12 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(...)):
                         "live_id": int(header_row[0]),
                         "live_date": header_row[1],
                         "live_title": str(header_row[2]),
-                        "bands": [int(v) for v in (header_row[3] or []) if isinstance(v, int)],
-                        "band_names": [str(v) for v in (header_row[4] or [])],
+                        "bands": _normalize_band_ids(header_row[3]),
+                        "band_names": _order_band_names_by_bands(
+                            _normalize_band_ids(header_row[3]),
+                            header_row[4],
+                            band_name_to_id_by_live_id.get(live_id, {}),
+                        ),
                         "url": header_row[5],
                         "detail_rows": detail_rows,
                     }
