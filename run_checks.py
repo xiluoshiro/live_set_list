@@ -72,7 +72,7 @@ def run_frontend_checks() -> int:
             print(f"命令失败，退出码: {code}")
             return code
 
-    print("检查完成：typecheck + test 全部通过。")
+    print("前端检查完成：typecheck + test 全部通过。")
     return 0
 
 
