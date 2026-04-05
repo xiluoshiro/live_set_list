@@ -8,6 +8,9 @@ ROOT = Path(__file__).resolve().parent
 FRONTEND_DIR = ROOT / "frontend"
 BACKEND_DIR = ROOT / "backend"
 
+CheckStep = tuple[str, str, list[str], Path, int]
+CheckFailure = tuple[str, str, int]
+
 
 def npm_command() -> str:
     return "npm.cmd" if os.name == "nt" else "npm"
@@ -31,49 +34,93 @@ def run_step(label: str, args: list[str], cwd: Path, retries: int = 0) -> int:
     return completed.returncode
 
 
-def run_backend_checks() -> int:
+def build_backend_steps() -> tuple[list[CheckStep], list[CheckFailure]]:
+    steps: list[CheckStep] = []
+    failures: list[CheckFailure] = []
     if not BACKEND_DIR.exists():
         print("backend 目录不存在。")
-        return 1
+        failures.append(("backend", "目录检查", 1))
+        return steps, failures
 
     python_path = backend_python()
     if not python_path.exists():
         print("未找到 backend/.venv 的 Python。请先在 backend 目录创建并安装依赖。")
-        return 1
+        failures.append(("backend", "Python 环境检查", 1))
+        return steps, failures
 
-    steps: list[tuple[list[str], int]] = [
-        ([str(python_path), "-m", "mypy", "--config-file", "mypy.ini"], 0),
-        ([str(python_path), "-m", "pytest", "tests/unit", "-q"], 0),
-    ]
+    steps.extend(
+        [
+            ("backend", "mypy", [str(python_path), "-m", "mypy", "--config-file", "mypy.ini"], BACKEND_DIR, 0),
+            ("backend", "pytest tests/unit", [str(python_path), "-m", "pytest", "tests/unit", "-q"], BACKEND_DIR, 0),
+        ]
+    )
+    return steps, failures
 
-    for step, retries in steps:
-        code = run_step("backend", step, BACKEND_DIR, retries=retries)
+
+def build_frontend_steps() -> tuple[list[CheckStep], list[CheckFailure]]:
+    steps: list[CheckStep] = []
+    failures: list[CheckFailure] = []
+    if not FRONTEND_DIR.exists():
+        print("frontend 目录不存在。")
+        failures.append(("frontend", "目录检查", 1))
+        return steps, failures
+
+    steps.extend(
+        [
+            ("frontend", "typecheck", [npm_command(), "run", "typecheck"], FRONTEND_DIR, 0),
+            ("frontend", "test", [npm_command(), "run", "test"], FRONTEND_DIR, 1),
+        ]
+    )
+    return steps, failures
+
+
+def run_check_steps(steps: list[CheckStep]) -> list[CheckFailure]:
+    failures: list[CheckFailure] = []
+    for label, step_name, command, cwd, retries in steps:
+        code = run_step(label, command, cwd, retries=retries)
         if code != 0:
-            print(f"命令失败，退出码: {code}")
-            return code
+            print(f"{label} 检查失败：{step_name}，退出码: {code}", flush=True)
+            failures.append((label, step_name, code))
+    return failures
 
-    print("后端检查完成：mypy + pytest tests/unit 全部通过。")
-    return 0
+
+def print_summary(target: str, failures: list[CheckFailure]) -> int:
+    if not failures:
+        if target == "backend":
+            print("后端检查完成：mypy + pytest tests/unit 全部通过。")
+        elif target == "frontend":
+            print("前端检查完成：typecheck + test 全部通过。")
+        else:
+            print("全部检查通过：backend + frontend 所有用例均成功。")
+        return 0
+
+    print("检查完成：存在失败项。")
+    for label, step_name, code in failures:
+        print(f"- {label} / {step_name} 失败，退出码: {code}")
+    return 1
+
+
+def run_backend_checks() -> int:
+    steps, failures = build_backend_steps()
+    failures.extend(run_check_steps(steps))
+    return print_summary("backend", failures)
 
 
 def run_frontend_checks() -> int:
-    if not FRONTEND_DIR.exists():
-        print("frontend 目录不存在。")
-        return 1
+    steps, failures = build_frontend_steps()
+    failures.extend(run_check_steps(steps))
+    return print_summary("frontend", failures)
 
-    steps: list[tuple[list[str], int]] = [
-        ([npm_command(), "run", "typecheck"], 0),
-        ([npm_command(), "run", "test"], 1),
-    ]
 
-    for step, retries in steps:
-        code = run_step("frontend", step, FRONTEND_DIR, retries=retries)
-        if code != 0:
-            print(f"命令失败，退出码: {code}")
-            return code
-
-    print("前端检查完成：typecheck + test 全部通过。")
-    return 0
+def run_all_checks() -> int:
+    failures: list[CheckFailure] = []
+    backend_steps, backend_failures = build_backend_steps()
+    frontend_steps, frontend_failures = build_frontend_steps()
+    failures.extend(backend_failures)
+    failures.extend(run_check_steps(backend_steps))
+    failures.extend(frontend_failures)
+    failures.extend(run_check_steps(frontend_steps))
+    return print_summary("all", failures)
 
 
 def parse_args() -> argparse.Namespace:
@@ -93,10 +140,7 @@ def main() -> int:
     if args.target == "frontend":
         return run_frontend_checks()
     if args.target == "all":
-        backend_code = run_backend_checks()
-        if backend_code != 0:
-            return backend_code
-        return run_frontend_checks()
+        return run_all_checks()
     return 1
 
 
