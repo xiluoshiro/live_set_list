@@ -60,6 +60,24 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest tests\unit -q
 ```
 
+说明：
+
+- 当前 `mypy` 会检查 `app + tests`
+- 其中也包含 `tests/integration`
+
+### 后端集成测试（连接测试库）
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m mypy --config-file mypy.ini
+.\.venv\Scripts\python.exe -m pytest tests\integration -q
+```
+
+说明：
+
+- integration 用例会连接 `live_statistic_test`
+- 每条测试前会自动导入基础 seed 数据
+
 ### 前端接口测试
 
 ```powershell
@@ -82,8 +100,10 @@ python run_checks.py <arguments>
 ```
 
 - `frontend`：只运行前端 `typecheck + test`
-- `backend`：运行后端 `mypy + pytest tests/unit`
-- `all`：先运行后端 `mypy + pytest`，再运行前端 `typecheck + test`
+- `backend-unit`：运行后端 `mypy(app + tests) + pytest tests/unit`
+- `backend-integration`：运行后端 `mypy(app + tests) + pytest tests/integration`
+- `backend`：运行后端 `mypy(app + tests) + pytest tests/unit + pytest tests/integration`
+- `all`：先运行后端完整检查，再运行前端 `typecheck + test`
 
 ## 数据库版本控制
 
