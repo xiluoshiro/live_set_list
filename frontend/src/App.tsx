@@ -18,6 +18,25 @@ type LiveRow = {
 type TabKey = "favorites" | "all" | "console";
 type FavoriteMap = Record<number, boolean>;
 
+function formatTimedLabel(value: string | null | undefined): string {
+  const raw = value?.trim();
+  if (!raw) return "-";
+
+  const match = raw.match(/^(\d{2}:\d{2})(?::\d{2})?(?:([+-]\d{2})(?::?(\d{2}))?)?$/);
+  if (!match) return raw;
+
+  const [, timePart, offsetHour, offsetMinute] = match;
+  if (!offsetHour) return timePart;
+
+  const normalizedOffset = `${offsetHour}:${offsetMinute ?? "00"}`;
+  const timezoneLabelMap: Record<string, string> = {
+    "+08:00": "CN",
+    "+09:00": "JP",
+  };
+  const timezoneLabel = timezoneLabelMap[normalizedOffset] ?? `UTC${normalizedOffset}`;
+  return `${timePart}(${timezoneLabel})`;
+}
+
 function App() {
   const { resolvedTheme, setMode: setThemeMode } = useTheme();
   const [pageSize, setPageSize] = useState<15 | 20>(20);
@@ -203,8 +222,9 @@ function App() {
       ? "加载中..."
       : "-";
   const venueText = detailData?.venue?.trim() ? detailData.venue : "-";
-  const openingTimeText = detailData?.opening_time?.trim() ? detailData.opening_time : "-";
-  const startTimeText = detailData?.start_time?.trim() ? detailData.start_time : "-";
+  const openingTimeText = formatTimedLabel(detailData?.opening_time);
+  const startTimeText = formatTimedLabel(detailData?.start_time);
+  const detailUrl = detailData?.url ?? activeRow?.url ?? null;
   const toggleTheme = () => {
     setThemeMode(resolvedTheme === "dark" ? "light" : "dark");
   };
@@ -361,7 +381,18 @@ function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-head">
-              <h2>{detailData?.live_title ?? activeRow.liveTitle}</h2>
+              <h2>
+                {detailUrl ? (
+                  <a href={detailUrl} target="_blank" rel="noreferrer" className="detail-title-link">
+                    <span>{detailData?.live_title ?? activeRow.liveTitle}</span>
+                    <span className="detail-title-link-icon" aria-hidden="true">
+                      🔗
+                    </span>
+                  </a>
+                ) : (
+                  detailData?.live_title ?? activeRow.liveTitle
+                )}
+              </h2>
               <div className="modal-actions">
                 <button
                   type="button"
@@ -385,37 +416,27 @@ function App() {
                 </button>
               </div>
             </div>
-            <p className="detail-row">
-              <strong>日期：</strong>
-              <span>{detailData?.live_date ?? activeRow.liveDate}</span>
-            </p>
+            <div className="detail-meta-line">
+              <p className="detail-inline-item detail-inline-item-date">
+                <strong>日期：</strong>
+                <span>{detailData?.live_date ?? activeRow.liveDate}</span>
+              </p>
+              <p className="detail-inline-item">
+                <strong>开场：</strong>
+                <span>{openingTimeText}</span>
+              </p>
+              <p className="detail-inline-item">
+                <strong>开演：</strong>
+                <span>{startTimeText}</span>
+              </p>
+              <p className="detail-inline-item detail-inline-item-venue">
+                <strong>场地：</strong>
+                <span>{venueText}</span>
+              </p>
+            </div>
             <p className="detail-row">
               <strong>乐队：</strong>
               <span>{bandNamesText}</span>
-            </p>
-            <p className="detail-row">
-              <strong>场地：</strong>
-              <span>{venueText}</span>
-            </p>
-            <p className="detail-row">
-              <strong>开场：</strong>
-              <span>{openingTimeText}</span>
-            </p>
-            <p className="detail-row">
-              <strong>开演：</strong>
-              <span>{startTimeText}</span>
-            </p>
-            <p className="detail-row">
-              <strong>链接：</strong>
-              <span>
-                {(detailData?.url ?? activeRow.url) ? (
-                  <a href={detailData?.url ?? activeRow.url ?? "#"} target="_blank" rel="noreferrer">
-                    {detailData?.url ?? activeRow.url}
-                  </a>
-                ) : (
-                  "-"
-                )}
-              </span>
             </p>
 
             <div className="detail-table-wrap">

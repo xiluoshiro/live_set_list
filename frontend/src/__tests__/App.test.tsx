@@ -65,8 +65,8 @@ function makeDetailResponse(params: {
     live_date: "2026-03-28",
     live_title: `示例 Live 名称 ${params.liveId}`,
     venue: "测试场地",
-    opening_time: "17:00",
-    start_time: "18:00",
+    opening_time: "17:00:00+08:00",
+    start_time: "18:00:00+09:00",
     bands: [1, 2],
     band_names: ["Band 1", "Band 2"],
     url: params.url === undefined ? `https://example.com/live/${params.liveId}` : params.url,
@@ -303,7 +303,14 @@ describe("App", () => {
     // 基础信息行
     expect(screen.getByText("日期：")).toBeInTheDocument();
     expect(screen.getByText("乐队：")).toBeInTheDocument();
-    expect(screen.getByText("链接：")).toBeInTheDocument();
+    expect(screen.getByText("开场：")).toBeInTheDocument();
+    expect(screen.getByText("开演：")).toBeInTheDocument();
+    expect(screen.getByText("场地：")).toBeInTheDocument();
+    expect(screen.getByText("17:00(CN)")).toBeInTheDocument();
+    expect(screen.getByText("18:00(JP)")).toBeInTheDocument();
+    expect(screen.getByText("测试场地")).toBeInTheDocument();
+    const titleLink = screen.getByRole("link", { name: /示例 Live 名称 1/i });
+    expect(titleLink).toHaveAttribute("href", "https://example.com/live/1");
 
     // 详情表格结构（已替换为独立的 5 列成员状态表）
     expect(screen.getByRole("columnheader", { name: "编号" })).toBeInTheDocument();
@@ -318,6 +325,33 @@ describe("App", () => {
       expect(within(detailTable as HTMLElement).getAllByRole("row")).toHaveLength(21);
     });
     expect(getLiveDetailMock).toHaveBeenCalledWith(1);
+  });
+
+  test("详情弹窗信息区使用统一的对齐结构", async () => {
+    // 测试点：日期/开场/开演/场地应共用同一套 inline 信息项结构，避免标签列再次错位。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+
+    const metaLine = container.querySelector(".detail-meta-line");
+    expect(metaLine).not.toBeNull();
+    const metaItems = Array.from(metaLine?.querySelectorAll("p") ?? []);
+    expect(metaItems).toHaveLength(4);
+    metaItems.forEach((item) => expect(item).toHaveClass("detail-inline-item"));
+
+    const dateRow = screen.getByText("日期：").closest("p");
+    const openingRow = screen.getByText("开场：").closest("p");
+    const venueRow = screen.getByText("场地：").closest("p");
+
+    expect(dateRow).toHaveClass("detail-inline-item", "detail-inline-item-date");
+    expect(openingRow).toHaveClass("detail-inline-item");
+    expect(venueRow).toHaveClass("detail-inline-item", "detail-inline-item-venue");
+    expect(screen.getByText("乐队：").closest("p")).toHaveClass("detail-row");
   });
 
   test("详情弹窗支持全屏切换并可点遮罩关闭", async () => {
@@ -362,8 +396,8 @@ describe("App", () => {
     expect(closeGlyph).toHaveClass("modal-action-glyph", "close");
   });
 
-  test("详情弹窗在 url 为空时显示 '-' 占位", async () => {
-    // 测试点：详情弹窗链接字段空值兜底显示。
+  test("详情弹窗在 url 为空时标题不渲染超链接", async () => {
+    // 测试点：详情弹窗没有 url 时，标题保持普通文本，不显示标题链接。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20, withUrl: false }),
     );
@@ -373,8 +407,8 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
-    expect(screen.getByText("链接：")).toBeInTheDocument();
-    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /示例 Live 名称 1/i })).not.toBeInTheDocument();
   });
 
   test("URL 列使用链接图标并携带正确链接", () => {
