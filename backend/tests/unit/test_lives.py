@@ -268,6 +268,54 @@ def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
     assert payload["band_names"] == ["Band10", "Band20", "Band30", "未映射A", "未映射B"]
 
 
+def test_get_live_detail_new_fields_and_total_count_fallback_rules():
+    # 测试点：新增 header 非空字段映射正确，bands/band_names 归一化，且 total_count 边界值与回退规则正确。
+    header_row = (
+        66,
+        "2026-04-01",
+        "Live 66",
+        "K Arena Yokohama",
+        "00:00",
+        "23:59",
+        [3, 1, 3, 2],
+        ["Band2", "未映射", "Band1", "Band1", "Band3"],
+        "https://example.com/live/66?from=test",
+    )
+    detail_rows = [
+        (
+            "M1",
+            "Song 1",
+            {"Band3": ["A", "B"], "Band1": ["C"], "Band2": ["H", "I", "J", "K"]},
+            None,
+            False,
+        )
+    ]
+    band_lookup_rows = [(1, "Band1", 1), (2, "Band2", 0), (3, "Band3", 7)]
+    conn, _ = _build_detail_connection_mock(header_row, detail_rows, band_lookup_rows)
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.get("/api/lives/66")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["venue"] == "K Arena Yokohama"
+    assert payload["opening_time"] == "00:00"
+    assert payload["start_time"] == "23:59"
+    assert payload["url"] == "https://example.com/live/66?from=test"
+    assert payload["bands"] == [1, 2, 3]
+    assert payload["band_names"] == ["Band1", "Band2", "Band3", "未映射"]
+
+    band_members = payload["detail_rows"][0]["band_members"]
+    assert [item["band_name"] for item in band_members] == ["Band1", "Band2", "Band3"]
+    assert band_members[0]["total_count"] == 1
+    assert band_members[0]["is_full"] is True
+    assert band_members[1]["total_count"] == 5
+    assert band_members[1]["is_full"] is False
+    assert band_members[2]["total_count"] == 7
+    assert band_members[2]["is_full"] is False
+
+
 def test_get_live_details_batch_success_and_partial_missing():
     # 测试点：批量详情接口应支持去重、保序、部分缺失，并一次性聚合返回详情。
     header_rows = [
@@ -358,6 +406,61 @@ def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
     payload = response.json()
     assert payload["items"][0]["bands"] == [10, 20, 30]
     assert payload["items"][0]["band_names"] == ["Band10", "Band20", "Band30", "未映射A", "未映射B"]
+
+
+def test_get_live_details_batch_new_fields_and_total_count_fallback_rules():
+    # 测试点：批量详情新增 header 非空字段映射正确，bands/band_names 归一化，且 total_count 边界值与回退规则正确。
+    header_rows = [
+        (
+            66,
+            "2026-04-01",
+            "Live 66",
+            "幕张メッセ",
+            "00:00",
+            "23:59",
+            [3, 1, 3, 2],
+            ["Band2", "未映射", "Band1", "Band1", "Band3"],
+            "https://example.com/live/66?batch=true",
+        )
+    ]
+    detail_rows = [
+        (
+            66,
+            "M1",
+            "Song 1",
+            [
+                {"band_id": 3, "band_name": "Band3", "total_count": 0, "present_members": ["A", "B"]},
+                {"band_id": 1, "band_name": "Band1", "total_count": 1, "present_members": ["C"]},
+                {"band_id": 2, "band_name": "Band2", "total_count": 6, "present_members": ["H", "I", "J", "K", "L", "M"]},
+            ],
+            None,
+            False,
+        )
+    ]
+    conn, _ = _build_batch_detail_connection_mock(header_rows, detail_rows)
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post("/api/lives/details:batch", json={"live_ids": [66]})
+
+    assert response.status_code == 200
+    payload = response.json()
+    item = payload["items"][0]
+    assert item["venue"] == "幕张メッセ"
+    assert item["opening_time"] == "00:00"
+    assert item["start_time"] == "23:59"
+    assert item["url"] == "https://example.com/live/66?batch=true"
+    assert item["bands"] == [1, 2, 3]
+    assert item["band_names"] == ["Band1", "Band2", "Band3", "未映射"]
+
+    band_members = item["detail_rows"][0]["band_members"]
+    assert [band["band_name"] for band in band_members] == ["Band1", "Band2", "Band3"]
+    assert band_members[0]["total_count"] == 1
+    assert band_members[0]["is_full"] is True
+    assert band_members[1]["total_count"] == 6
+    assert band_members[1]["is_full"] is True
+    assert band_members[2]["total_count"] == 5
+    assert band_members[2]["is_full"] is False
 
 
 def test_get_live_details_batch_invalid_live_id_returns_400():
