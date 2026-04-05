@@ -145,8 +145,18 @@ def test_get_lives_empty_result_returns_page_1_and_empty_items():
 
 
 def test_get_live_detail_success_maps_rows_and_rules():
-    # 测试点：详情接口正确映射 band_members/other_members/comments，并应用 is_full>=5 规则。
-    header_row = (40, "2026-03-28", "Live 40", [1, 2], ["Poppin'Party", "Afterglow"], None)
+    # 测试点：详情接口正确映射 band_members/other_members/comments，并使用数据库 total_count 计算 is_full。
+    header_row = (
+        40,
+        "2026-03-28",
+        "Live 40",
+        "武道馆",
+        "17:00",
+        "18:00",
+        [1, 2],
+        ["Poppin'Party", "Afterglow"],
+        "https://example.com/live/40",
+    )
     detail_rows = [
         (
             "M1",
@@ -157,7 +167,7 @@ def test_get_live_detail_success_maps_rows_and_rules():
         ),
         ("EN1", "Song 2", {"Unknown Band": ["Solo"]}, None, False),
     ]
-    band_lookup_rows = [(1, "Poppin'Party"), (2, "Afterglow")]
+    band_lookup_rows = [(1, "Poppin'Party", 5), (2, "Afterglow", 6)]
     conn, cursor = _build_detail_connection_mock(header_row, detail_rows, band_lookup_rows)
 
     with patch("app.routers.lives.get_db_connection", return_value=conn):
@@ -169,9 +179,12 @@ def test_get_live_detail_success_maps_rows_and_rules():
 
     assert payload["live_id"] == 40
     assert payload["live_title"] == "Live 40"
+    assert payload["venue"] == "武道馆"
+    assert payload["opening_time"] == "17:00"
+    assert payload["start_time"] == "18:00"
     assert payload["bands"] == [1, 2]
     assert payload["band_names"] == ["Poppin'Party", "Afterglow"]
-    assert payload["url"] is None
+    assert payload["url"] == "https://example.com/live/40"
     assert len(payload["detail_rows"]) == 2
 
     first_row = payload["detail_rows"][0]
@@ -190,12 +203,14 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert first_row_bands[0]["is_full"] is True
     assert first_row_bands[1]["band_name"] == "Afterglow"
     assert first_row_bands[1]["present_count"] == 4
+    assert first_row_bands[1]["total_count"] == 6
     assert first_row_bands[1]["is_full"] is False
 
     second_row = payload["detail_rows"][1]
     assert second_row["comments"] == []
     assert second_row["other_members"] == []
     assert second_row["band_members"][0]["band_id"] is None
+    assert second_row["band_members"][0]["total_count"] == 5
     assert second_row["band_members"][0]["is_full"] is False
 
     assert cursor.execute.call_args_list[0] == call(LIVE_DETAIL_HEADER_QUERY, (40,))
@@ -230,14 +245,17 @@ def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
         88,
         "2026-03-28",
         "Live 88",
+        "有明竞技场",
+        "16:00",
+        "17:00",
         [30, 10, 20],
         ["未映射A", "Band20", "Band10", "未映射B", "Band30"],
-        None,
+        "https://example.com/live/88",
     )
     detail_rows = [
         ("M1", "Song 1", {"Band30": ["A"], "Band10": ["B"], "Band20": ["C"]}, None, False),
     ]
-    band_lookup_rows = [(10, "Band10"), (20, "Band20"), (30, "Band30")]
+    band_lookup_rows = [(10, "Band10", 5), (20, "Band20", 5), (30, "Band30", 5)]
     conn, _ = _build_detail_connection_mock(header_row, detail_rows, band_lookup_rows)
 
     with patch("app.routers.lives.get_db_connection", return_value=conn):
@@ -253,15 +271,15 @@ def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
 def test_get_live_details_batch_success_and_partial_missing():
     # 测试点：批量详情接口应支持去重、保序、部分缺失，并一次性聚合返回详情。
     header_rows = [
-        (1, "2026-03-28", "Live 1", [1], ["Poppin'Party"], None),
-        (2, "2026-03-27", "Live 2", [2], ["Afterglow"], None),
+        (1, "2026-03-28", "Live 1", "场地 1", "16:30", "17:30", [1], ["Poppin'Party"], "https://example.com/live/1"),
+        (2, "2026-03-27", "Live 2", "场地 2", "17:00", "18:00", [2], ["Afterglow"], "https://example.com/live/2"),
     ]
     detail_rows = [
         (
             2,
             "A1",
             "Song A",
-            [{"band_id": 2, "band_name": "Afterglow", "present_members": ["A", "B", "C", "D", "E"]}],
+            [{"band_id": 2, "band_name": "Afterglow", "total_count": 6, "present_members": ["A", "B", "C", "D", "E"]}],
             {"嘉宾": "Guest A"},
             True,
         ),
@@ -269,7 +287,7 @@ def test_get_live_details_batch_success_and_partial_missing():
             1,
             "B1",
             "Song B",
-            [{"band_id": 1, "band_name": "Poppin'Party", "present_members": ["A", "B", "C", "D"]}],
+            [{"band_id": 1, "band_name": "Poppin'Party", "total_count": 5, "present_members": ["A", "B", "C", "D"]}],
             None,
             False,
         ),
@@ -286,8 +304,14 @@ def test_get_live_details_batch_success_and_partial_missing():
     assert [item["live_id"] for item in payload["items"]] == [2, 1]
 
     first_item = payload["items"][0]
+    assert first_item["venue"] == "场地 2"
+    assert first_item["opening_time"] == "17:00"
+    assert first_item["start_time"] == "18:00"
+    assert first_item["url"] == "https://example.com/live/2"
     assert first_item["detail_rows"][0]["comments"] == ["短版"]
     assert first_item["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["Guest A"]}]
+    assert first_item["detail_rows"][0]["band_members"][0]["total_count"] == 6
+    assert first_item["detail_rows"][0]["band_members"][0]["is_full"] is False
     second_item = payload["items"][1]
     assert second_item["detail_rows"][0]["comments"] == []
 
@@ -302,9 +326,12 @@ def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
             8,
             "2026-03-30",
             "Live 8",
+            "场地 8",
+            "15:00",
+            "16:00",
             [30, 10, 20],
             ["未映射A", "Band20", "Band10", "未映射B", "Band30"],
-            None,
+            "https://example.com/live/8",
         ),
     ]
     detail_rows = [
@@ -313,9 +340,9 @@ def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
             "A1",
             "Song A",
             [
-                {"band_id": 20, "band_name": "Band20", "present_members": ["A"]},
-                {"band_id": 30, "band_name": "Band30", "present_members": ["B"]},
-                {"band_id": 10, "band_name": "Band10", "present_members": ["C"]},
+                {"band_id": 20, "band_name": "Band20", "total_count": 5, "present_members": ["A"]},
+                {"band_id": 30, "band_name": "Band30", "total_count": 5, "present_members": ["B"]},
+                {"band_id": 10, "band_name": "Band10", "total_count": 5, "present_members": ["C"]},
             ],
             None,
             False,
@@ -405,7 +432,7 @@ def test_get_live_details_batch_db_error_returns_500():
 def test_get_live_details_batch_normalizes_band_and_other_members():
     # 测试点：批量接口应过滤非法 band_members 项，并规范化 other_members 字段。
     header_rows = [
-        (1, "2026-03-28", "Live 1", [1], ["Poppin'Party"], None),
+        (1, "2026-03-28", "Live 1", "场地 1", "16:30", "17:30", [1], ["Poppin'Party"], "https://example.com/live/1"),
     ]
     detail_rows = [
         (
@@ -414,8 +441,8 @@ def test_get_live_details_batch_normalizes_band_and_other_members():
             "Song X",
             [
                 123,
-                {"band_id": "not-int", "band_name": "Afterglow", "present_members": "Ran"},
-                {"band_id": 1, "band_name": None, "present_members": ["A", "B"]},
+                {"band_id": "not-int", "band_name": "Afterglow", "total_count": "not-int", "present_members": "Ran"},
+                {"band_id": 1, "band_name": None, "total_count": 5, "present_members": ["A", "B"]},
             ],
             {"嘉宾": "[\"Alice\", \"Bob\"]", "支援": "\"Solo\""},
             False,

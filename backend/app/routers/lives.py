@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 from math import ceil
 from typing import Any
 
@@ -12,6 +13,14 @@ from app.db import get_db_connection
 router = APIRouter(prefix="/api/lives", tags=["lives"])
 
 ALLOWED_PAGE_SIZE = {15, 20}
+
+BAND_TOTAL_COUNT_SQL = """
+CASE
+    WHEN ba.band_members IS NULL THEN NULL
+    WHEN jsonb_typeof(to_jsonb(ba.band_members)) = 'array' THEN jsonb_array_length(to_jsonb(ba.band_members))
+    ELSE length(ba.band_members::text)
+END
+"""
 
 LIVES_BASE_QUERY = """
 SELECT
@@ -53,6 +62,9 @@ SELECT
     l.id AS live_id,
     l.live_date,
     l.live_title,
+    COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
+    to_jsonb(l) ->> 'opening_time' AS opening_time,
+    to_jsonb(l) ->> 'start_time' AS start_time,
     COALESCE(
         (
             SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
@@ -85,8 +97,10 @@ SELECT
         ),
         ARRAY[]::text[]
     ) AS band_names,
-    NULL::text AS url
+    to_jsonb(l) ->> 'url' AS url
 FROM live_attrs l
+LEFT JOIN venue_list v
+    ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
 WHERE l.id = %s
 """
 
@@ -109,6 +123,9 @@ SELECT
     l.id AS live_id,
     l.live_date,
     l.live_title,
+    COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
+    to_jsonb(l) ->> 'opening_time' AS opening_time,
+    to_jsonb(l) ->> 'start_time' AS start_time,
     COALESCE(
         (
             SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
@@ -141,12 +158,14 @@ SELECT
         ),
         ARRAY[]::text[]
     ) AS band_names,
-    NULL::text AS url
+    to_jsonb(l) ->> 'url' AS url
 FROM live_attrs l
+LEFT JOIN venue_list v
+    ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
 WHERE l.id = ANY(%s)
 """
 
-BATCH_LIVE_DETAIL_ROWS_QUERY = """
+BATCH_LIVE_DETAIL_ROWS_QUERY = f"""
 WITH row_base AS (
     SELECT
         stl.live_id,
@@ -170,6 +189,7 @@ SELECT
             jsonb_build_object(
                 'band_id', ba.id,
                 'band_name', kv.key,
+                'total_count', {BAND_TOTAL_COUNT_SQL},
                 'present_members',
                 CASE
                     WHEN jsonb_typeof(kv.value) = 'array' THEN kv.value
@@ -187,7 +207,7 @@ FROM row_base rb
 LEFT JOIN LATERAL jsonb_each(
     CASE
         WHEN jsonb_typeof(rb.band_member) = 'object' THEN rb.band_member
-        ELSE '{}'::jsonb
+        ELSE '{{}}'::jsonb
     END
 ) kv(key, value) ON true
 LEFT JOIN band_attrs ba
@@ -202,10 +222,11 @@ GROUP BY
 ORDER BY rb.live_id, rb.absolute_order
 """
 
-BAND_ID_LOOKUP_QUERY = """
+BAND_ID_LOOKUP_QUERY = f"""
 SELECT
     ba.id,
-    ba.band_name
+    ba.band_name,
+    {BAND_TOTAL_COUNT_SQL} AS total_count
 FROM band_attrs ba
 WHERE ba.band_name = ANY(%s)
 """
@@ -294,10 +315,21 @@ def _normalize_band_ids(raw: Any) -> list[int]:
     return sorted({int(v) for v in raw if isinstance(v, int)})
 
 
+def _normalize_total_count(raw: Any) -> int:
+    if isinstance(raw, int) and raw > 0:
+        return raw
+    return DEFAULT_BAND_TOTAL_COUNT
+
+
+def _other_member_sort_key(item: dict[str, Any]) -> str:
+    key = item.get("key")
+    return str(key) if key is not None else ""
+
+
 def _order_band_names_by_bands(
     bands: list[int],
     raw_band_names: Any,
-    band_name_to_id: dict[str, int] | None = None,
+    band_name_to_id: Mapping[str, int | None] | None = None,
 ) -> list[str]:
     if not isinstance(raw_band_names, (list, tuple)):
         return []
@@ -340,23 +372,30 @@ def _order_band_names_by_bands(
 def _build_live_detail_payload(
     header_row: tuple[Any, ...],
     parsed_rows: list[ParsedDetailRow],
-    band_name_to_id: dict[str, int],
+    band_meta_by_name: dict[str, dict[str, int | None]],
 ) -> dict[str, Any]:
-    bands = _normalize_band_ids(header_row[3])
+    bands = _normalize_band_ids(header_row[6])
+    band_name_to_id = {
+        band_name: band_meta["band_id"]
+        for band_name, band_meta in band_meta_by_name.items()
+        if isinstance(band_meta.get("band_id"), int)
+    }
     detail_rows = []
     for row_id, song_name, band_member_obj, other_member_obj, is_short in parsed_rows:
         band_members = []
         for band_name, present_members_raw in band_member_obj.items():
+            band_meta = band_meta_by_name.get(str(band_name), {})
             present_members = _to_string_list(present_members_raw)
             present_count = len(present_members)
+            total_count = _normalize_total_count(band_meta.get("total_count"))
             band_members.append(
                 {
-                    "band_id": band_name_to_id.get(str(band_name)),
+                    "band_id": band_meta.get("band_id"),
                     "band_name": str(band_name),
                     "present_members": present_members,
                     "present_count": present_count,
-                    "total_count": DEFAULT_BAND_TOTAL_COUNT,
-                    "is_full": present_count >= DEFAULT_BAND_TOTAL_COUNT,
+                    "total_count": total_count,
+                    "is_full": present_count >= total_count,
                 }
             )
 
@@ -369,7 +408,7 @@ def _build_live_detail_payload(
         )
 
         other_members = [{"key": str(key), "value": _to_string_array(value)} for key, value in other_member_obj.items()]
-        other_members.sort(key=lambda item: item["key"])
+        other_members.sort(key=_other_member_sort_key)
 
         comments: list[str] = ["短版"] if is_short else []
 
@@ -387,9 +426,12 @@ def _build_live_detail_payload(
         "live_id": int(header_row[0]),
         "live_date": header_row[1],
         "live_title": str(header_row[2]),
+        "venue": header_row[3],
+        "opening_time": header_row[4],
+        "start_time": header_row[5],
         "bands": bands,
-        "band_names": _order_band_names_by_bands(bands, header_row[4], band_name_to_id),
-        "url": header_row[5],
+        "band_names": _order_band_names_by_bands(bands, header_row[7], band_name_to_id),
+        "url": header_row[8],
         "detail_rows": detail_rows,
     }
 
@@ -420,18 +462,21 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
             )
         )
 
-    band_name_to_id: dict[str, int] = {}
+    band_meta_by_name: dict[str, dict[str, int | None]] = {}
     if all_band_names:
         ordered_band_names = sorted(all_band_names)
         cur.execute(BAND_ID_LOOKUP_QUERY, (ordered_band_names,))
         band_lookup_rows = cur.fetchall()
-        band_name_to_id = {
-            str(band_name): int(band_id)
-            for band_id, band_name in band_lookup_rows
+        band_meta_by_name = {
+            str(band_name): {
+                "band_id": int(band_id) if isinstance(band_id, int) else None,
+                "total_count": int(total_count) if isinstance(total_count, int) else None,
+            }
+            for band_id, band_name, total_count in band_lookup_rows
             if band_name is not None
         }
 
-    return _build_live_detail_payload(header_row, parsed_rows, band_name_to_id)
+    return _build_live_detail_payload(header_row, parsed_rows, band_meta_by_name)
 
 
 @router.get("")
@@ -529,14 +574,15 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(...)):
                             band_name_to_id_by_live_id.setdefault(int(live_id), {})[band_name] = band_id
                         present_members = _to_string_list(band_item.get("present_members"))
                         present_count = len(present_members)
+                        total_count = _normalize_total_count(band_item.get("total_count"))
                         band_members.append(
                             {
                                 "band_id": band_id,
                                 "band_name": band_name,
                                 "present_members": present_members,
                                 "present_count": present_count,
-                                "total_count": DEFAULT_BAND_TOTAL_COUNT,
-                                "is_full": present_count >= DEFAULT_BAND_TOTAL_COUNT,
+                                "total_count": total_count,
+                                "is_full": present_count >= total_count,
                             }
                         )
 
@@ -570,7 +616,7 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(...)):
                             {"key": str(key), "value": _to_string_array(value)}
                             for key, value in parsed_row["other_member_obj"].items()
                         ]
-                        other_members.sort(key=lambda item: item["key"])
+                        other_members.sort(key=_other_member_sort_key)
                         comments: list[str] = ["短版"] if parsed_row["is_short"] else []
                         detail_rows.append(
                             {
@@ -586,13 +632,16 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(...)):
                         "live_id": int(header_row[0]),
                         "live_date": header_row[1],
                         "live_title": str(header_row[2]),
-                        "bands": _normalize_band_ids(header_row[3]),
+                        "venue": header_row[3],
+                        "opening_time": header_row[4],
+                        "start_time": header_row[5],
+                        "bands": _normalize_band_ids(header_row[6]),
                         "band_names": _order_band_names_by_bands(
-                            _normalize_band_ids(header_row[3]),
-                            header_row[4],
+                            _normalize_band_ids(header_row[6]),
+                            header_row[7],
                             band_name_to_id_by_live_id.get(live_id, {}),
                         ),
-                        "url": header_row[5],
+                        "url": header_row[8],
                         "detail_rows": detail_rows,
                     }
                     items.append(detail)
