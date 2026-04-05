@@ -16,20 +16,20 @@ table {
 thead th {
   text-align: left;
   padding: 12px 14px;
-  background: #f4f7ff;
-  color: #2e3a57;
+  background: var(--surface-table-head);
+  color: var(--text-table-head);
   font-size: 14px;
-  border-bottom: 1px solid #e4eaf8;
+  border-bottom: 1px solid var(--border-table-head);
 }
 
 tbody td {
   padding: 12px 14px;
-  border-bottom: 1px solid #eef2fb;
+  border-bottom: 1px solid var(--border-table-row);
   vertical-align: middle;
 }
 
 tbody tr:hover {
-  background: #f9fbff;
+  background: var(--surface-table-hover);
 }
 
 .table-with-fav th:nth-child(1),
@@ -92,7 +92,7 @@ tbody tr:hover {
 .name-btn {
   border: none;
   background: none;
-  color: #0c4dc9;
+  color: var(--text-link);
   padding: 0;
   cursor: pointer;
   font: inherit;
@@ -116,15 +116,15 @@ tbody tr:hover {
   background: transparent;
   font-size: 18px;
   line-height: 1;
-  color: #ffffff;
-  text-shadow: 0 0 0 #8ea0c8, 0 0 2px rgba(64, 80, 120, 0.9);
+  color: var(--star-empty);
+  text-shadow: 0 0 0 var(--star-empty-shadow-main), 0 0 2px var(--star-empty-shadow-glow);
   cursor: pointer;
   padding: 0;
 }
 
 .star-btn.is-fav {
-  color: #ffd34d;
-  text-shadow: 0 0 1px #7b6300;
+  color: var(--star-filled);
+  text-shadow: 0 0 1px var(--star-filled-shadow);
 }
 
 .icons-cell {
@@ -158,7 +158,7 @@ tbody tr:hover {
 }
 
 .icons-cell-wrap.has-overflow .icons-cell:hover {
-  scrollbar-color: #cfd5df transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .icons-cell::-webkit-scrollbar {
@@ -175,7 +175,7 @@ tbody tr:hover {
 }
 
 .icons-cell-wrap.has-overflow .icons-cell:hover::-webkit-scrollbar-thumb {
-  background: #cfd5df;
+  background: var(--scrollbar-thumb);
 }
 
 .icons-cell-wrap.no-overflow .icons-cell {
@@ -196,7 +196,7 @@ tbody tr:hover {
   line-height: 1;
   padding-left: 6px;
   background: transparent;
-  color: #8f9ab0;
+  color: var(--icon-hint);
   opacity: 0.65;
   pointer-events: none;
 }
@@ -213,12 +213,12 @@ tbody tr:hover {
 }
 
 .url-icon-link:hover {
-  background: #edf3ff;
+  background: var(--surface-chip-hover);
   text-decoration: none;
 }
 
 .empty-cell {
-  color: #5e6f92;
+  color: var(--text-muted);
   text-align: center;
   padding: 28px 16px;
 }

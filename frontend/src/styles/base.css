@@ -5,12 +5,12 @@
 body {
   margin: 0;
   font-family: "Segoe UI", "PingFang SC", sans-serif;
-  background: linear-gradient(180deg, #eef3ff 0%, #f8fbff 100%);
-  color: #172033;
+  background: linear-gradient(180deg, var(--bg-body-start) 0%, var(--bg-body-end) 100%);
+  color: var(--text-main);
 }
 
 a {
-  color: #0c4dc9;
+  color: var(--text-link);
   text-decoration: none;
 }
 
