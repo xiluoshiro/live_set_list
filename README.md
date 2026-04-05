@@ -66,6 +66,13 @@ cd frontend
 npm run test
 ```
 
+### 前端类型检查
+
+```powershell
+cd frontend
+npm run typecheck
+```
+
 ## 开发路线图（TODO）
 
 - [x] 初始化前后端工程骨架

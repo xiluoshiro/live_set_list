@@ -19,9 +19,9 @@ type LiveInsertTabProps = {
   otherMemberMenuPos: Position | null;
   songModalRowKey: number | null;
   bandMemberTriggerRefs: MutableRefObject<Record<number, HTMLButtonElement | null>>;
-  bandMemberMenuRef: RefObject<HTMLDivElement | null>;
+  bandMemberMenuRef: RefObject<HTMLDivElement>;
   otherMemberTriggerRefs: MutableRefObject<Record<number, HTMLButtonElement | null>>;
-  otherMemberMenuRef: RefObject<HTMLDivElement | null>;
+  otherMemberMenuRef: RefObject<HTMLDivElement>;
   onSelectedLiveIdChange: (liveId: number) => void;
   onUpdateSetlistSongName: (rowKey: number, value: string) => void;
   onSetSongModalRowKey: (rowKey: number | null) => void;

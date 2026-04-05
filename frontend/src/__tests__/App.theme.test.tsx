@@ -23,14 +23,13 @@ type MatchMediaController = {
 function installMatchMedia(initialDark: boolean): MatchMediaController {
   let isDark = initialDark;
   const listeners = new Set<(event: MediaQueryListEvent) => void>();
-  const mqlInstances: MediaQueryList[] = [];
 
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     writable: true,
     value: vi.fn((query: string): MediaQueryList => {
       const mql: MediaQueryList = {
-        matches: isDark,
+        get matches() { return isDark; },
         media: query,
         onchange: null,
         addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
@@ -51,7 +50,6 @@ function installMatchMedia(initialDark: boolean): MatchMediaController {
         },
         dispatchEvent: () => true,
       };
-      mqlInstances.push(mql);
       return mql;
     }),
   });
@@ -59,9 +57,6 @@ function installMatchMedia(initialDark: boolean): MatchMediaController {
   return {
     setDark: (dark: boolean) => {
       isDark = dark;
-      mqlInstances.forEach((mql) => {
-        mql.matches = dark;
-      });
       const event = { matches: dark, media: "(prefers-color-scheme: dark)" } as MediaQueryListEvent;
       listeners.forEach((listener) => listener(event));
     },
@@ -209,3 +204,4 @@ describe("App dark mode", () => {
     expect(screen.getByRole("button", { name: "切换到浅色模式" })).toBeInTheDocument();
   });
 });
+

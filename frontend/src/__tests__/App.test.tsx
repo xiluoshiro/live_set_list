@@ -116,10 +116,8 @@ function getPageInfo(): { page: number; totalPages: number } {
 
 describe("App", () => {
   beforeEach(() => {
-    (window as Window & { requestIdleCallback?: unknown; cancelIdleCallback?: unknown }).requestIdleCallback =
-      undefined;
-    (window as Window & { requestIdleCallback?: unknown; cancelIdleCallback?: unknown }).cancelIdleCallback =
-      undefined;
+    Reflect.deleteProperty(window, "requestIdleCallback");
+    Reflect.deleteProperty(window, "cancelIdleCallback");
     localStorage.clear();
     getLivesMock.mockReset();
     getLiveDetailMock.mockReset();

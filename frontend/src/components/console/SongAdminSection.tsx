@@ -11,8 +11,8 @@ type SongAdminSectionProps = {
   songCover: boolean;
   songBandOpen: boolean;
   songBandMenuPos: Position | null;
-  songBandTriggerRef: RefObject<HTMLButtonElement | null>;
-  songBandMenuRef: RefObject<HTMLDivElement | null>;
+  songBandTriggerRef: RefObject<HTMLButtonElement>;
+  songBandMenuRef: RefObject<HTMLDivElement>;
   onSongNameChange: (value: string) => void;
   onSongCoverChange: (checked: boolean) => void;
   onOpenSongBandMenu: () => void;
