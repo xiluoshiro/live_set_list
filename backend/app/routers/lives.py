@@ -67,13 +67,19 @@ SELECT
     ) AS bands,
     COALESCE(
         (
-            SELECT array_agg(x.band_name ORDER BY x.band_name)
+            SELECT array_agg(
+                x.band_name
+                ORDER BY (x.band_id IS NULL), x.band_id, x.band_name
+            )
             FROM (
                 SELECT DISTINCT
-                    k.band_name AS band_name
+                    k.band_name AS band_name,
+                    ba.id AS band_id
                 FROM live_setlist stl
                 JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
                     ON jsonb_typeof(stl.band_member) = 'object'
+                LEFT JOIN band_attrs ba
+                    ON ba.band_name = k.band_name
                 WHERE stl.live_id = l.id
             ) x
         ),
@@ -104,27 +110,40 @@ SELECT
     l.live_date,
     l.live_title,
     COALESCE(
-        array_agg(DISTINCT ba.id ORDER BY ba.id)
-            FILTER (WHERE ba.id IS NOT NULL),
+        (
+            SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
+            FROM live_setlist stl
+            JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
+                ON jsonb_typeof(stl.band_member) = 'object'
+            JOIN band_attrs ba
+                ON ba.band_name = k.band_name
+            WHERE stl.live_id = l.id
+        ),
         ARRAY[]::int[]
     ) AS bands,
     COALESCE(
-        array_agg(DISTINCT k.band_name ORDER BY k.band_name)
-            FILTER (WHERE k.band_name IS NOT NULL),
+        (
+            SELECT array_agg(
+                x.band_name
+                ORDER BY (x.band_id IS NULL), x.band_id, x.band_name
+            )
+            FROM (
+                SELECT DISTINCT
+                    k.band_name AS band_name,
+                    ba.id AS band_id
+                FROM live_setlist stl
+                JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
+                    ON jsonb_typeof(stl.band_member) = 'object'
+                LEFT JOIN band_attrs ba
+                    ON ba.band_name = k.band_name
+                WHERE stl.live_id = l.id
+            ) x
+        ),
         ARRAY[]::text[]
     ) AS band_names,
     NULL::text AS url
 FROM live_attrs l
-LEFT JOIN live_setlist stl
-    ON stl.live_id = l.id
-LEFT JOIN LATERAL (
-    SELECT jsonb_object_keys(stl.band_member) AS band_name
-    WHERE jsonb_typeof(stl.band_member) = 'object'
-) k ON true
-LEFT JOIN band_attrs ba
-    ON ba.band_name = k.band_name
 WHERE l.id = ANY(%s)
-GROUP BY l.id, l.live_date, l.live_title
 """
 
 BATCH_LIVE_DETAIL_ROWS_QUERY = """

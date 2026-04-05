@@ -122,6 +122,7 @@
 
 - `id` 必须为正整数（`>= 1`）
 - `bands` 建议为去重后的 `number[]`，取值范围建议为 `1..12`
+- `band_names` 返回顺序应与 `bands`（`band_id` 升序）一致；未映射到 `band_id` 的名称放在末尾
 - `detail_rows` 建议按 `row_id ASC` 返回，且 `row_id` 在同一 `live_id` 下唯一
 - `band_members[].present_count` 必须 `<= total_count`
 - `band_members[].is_full` 建议按 `present_count >= 5` 计算（当前约定固定满员人数为 5）
