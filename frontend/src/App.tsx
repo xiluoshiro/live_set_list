@@ -4,6 +4,7 @@ import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { MemberStatusTable } from "./components/DetailMemberTable";
 import { getLiveDetail, getLives, type LiveDetailResponse, type LiveItem } from "./api";
 import { prefetchCurrentPageDetails, scheduleIdleNextPagePrefetch } from "./prefetch/liveDetailsPrefetch";
+import { useTheme } from "./theme/ThemeProvider";
 import "./styles/index.css";
 
 type LiveRow = {
@@ -18,6 +19,7 @@ type TabKey = "favorites" | "all" | "console";
 type FavoriteMap = Record<number, boolean>;
 
 function App() {
+  const { resolvedTheme, setMode: setThemeMode } = useTheme();
   const [pageSize, setPageSize] = useState<15 | 20>(20);
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState<TabKey>("favorites");
@@ -200,6 +202,9 @@ function App() {
     : detailLoading
       ? "加载中..."
       : "-";
+  const toggleTheme = () => {
+    setThemeMode(resolvedTheme === "dark" ? "light" : "dark");
+  };
 
   return (
     <main className="page">
@@ -239,6 +244,15 @@ function App() {
             onClick={() => handleTabChange("console")}
           >
             控制台
+          </button>
+          <button
+            type="button"
+            className="theme-icon-btn"
+            onClick={toggleTheme}
+            aria-label={resolvedTheme === "dark" ? "切换到浅色模式" : "切换到夜间模式"}
+            title={resolvedTheme === "dark" ? "切换到浅色模式" : "切换到夜间模式"}
+          >
+            {resolvedTheme === "dark" ? "☀" : "🌙"}
           </button>
         </nav>
 

@@ -6,9 +6,9 @@
 .panel {
   max-width: 1100px;
   margin: 0 auto;
-  background: #ffffff;
+  background: var(--surface-1);
   border-radius: 14px;
-  box-shadow: 0 12px 28px rgba(30, 47, 90, 0.12);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
 }
 
@@ -18,8 +18,8 @@
   align-items: center;
   gap: 16px;
   padding: 18px 20px;
-  border-bottom: 1px solid #e8ecf6;
-  background: #f9fbff;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-head);
 }
 
 .panel-head h1 {
@@ -31,7 +31,7 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  color: #42516d;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -42,36 +42,65 @@
 }
 
 .toolbar select {
-  border: 1px solid #ced8ef;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 4px 8px;
-  background: #fff;
+  background: var(--surface-input);
+  color: var(--text-main);
 }
 
 .tabs {
   display: flex;
+  align-items: center;
   gap: 8px;
   padding: 14px 20px 8px;
 }
 
+.theme-icon-btn {
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-normal);
+  border-radius: 10px;
+  background: var(--surface-chip-soft);
+  color: var(--text-tab);
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.theme-icon-btn:hover {
+  background: var(--surface-chip-hover);
+  border-color: var(--border-normal);
+}
+
+.theme-icon-btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
 .console-empty {
   padding: 20px;
-  color: #4e5f83;
+  color: var(--text-subtle);
 }
 
 .tab-btn {
-  border: 1px solid #d6dff4;
-  background: #f7f9ff;
-  color: #345;
+  border: 1px solid var(--border-normal);
+  background: var(--surface-chip-soft);
+  color: var(--text-tab);
   border-radius: 10px;
   padding: 6px 14px;
   cursor: pointer;
 }
 
 .tab-btn.active {
-  background: #0f62fe;
-  color: #fff;
-  border-color: #0f62fe;
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
+  border-color: var(--accent-primary);
 }
 
 .pager {
@@ -86,8 +115,8 @@
   border: none;
   padding: 8px 14px;
   border-radius: 8px;
-  background: #0f62fe;
-  color: #fff;
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
   cursor: pointer;
   font-size: 14px;
 }
@@ -96,5 +125,9 @@
   .panel-head {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
   }
 }
