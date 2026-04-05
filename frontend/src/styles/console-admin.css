@@ -69,6 +69,24 @@
   font-size: 13px;
 }
 
+.console-admin-table input[type="checkbox"],
+.console-admin-table input[type="radio"] {
+  width: auto;
+  border: none;
+  padding: 0;
+}
+
+.console-admin-table textarea,
+.console-admin-table select {
+  width: 100%;
+  border: 1px solid #ccd6ed;
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+}
+
 .console-submit-btn {
   border: none;
   padding: 7px 12px;
@@ -82,4 +100,390 @@
 .console-band-icon {
   width: 18px;
   height: 18px;
+}
+
+.bands-picker-trigger {
+  width: 100%;
+  border: 1px solid #ccd6ed;
+  border-radius: 7px;
+  padding: 6px 8px;
+  cursor: pointer;
+  user-select: none;
+  background: #fff;
+  text-align: left;
+  font-size: 13px;
+  color: #2f4269;
+}
+
+.live-id-selector {
+  margin: 4px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-id-selector label {
+  color: #2d3d61;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.live-id-selector select {
+  min-width: 280px;
+  border: 1px solid #ccd6ed;
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.setlist-input-wrap {
+  margin-top: 12px;
+}
+
+.setlist-table {
+  min-width: 980px;
+}
+
+.readonly-cell {
+  color: #233a63;
+  font-weight: 600;
+}
+
+.song-id-input {
+  text-align: center;
+}
+
+.song-missing-btn {
+  border: 1px solid #cfdaf1;
+  background: #f7f9ff;
+  color: #33558d;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.is-short-check {
+  display: block;
+  margin: 0 auto;
+}
+
+.comment-input {
+  width: 100%;
+}
+
+.band-member-trigger {
+  width: 100%;
+  border: 1px solid #ccd6ed;
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: #fff;
+  color: #2f4269;
+  cursor: pointer;
+  text-align: left;
+}
+
+.other-member-trigger {
+  width: 100%;
+  border: 1px solid #ccd6ed;
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: #fff;
+  color: #2f4269;
+  cursor: pointer;
+  text-align: left;
+}
+
+.other-member-editor {
+  display: grid;
+  gap: 4px;
+}
+
+.other-member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 26px;
+  gap: 4px;
+}
+
+.mini-ghost-btn {
+  border: 1px solid #cad6ef;
+  background: #f7f9ff;
+  color: #334f81;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  height: 26px;
+  cursor: pointer;
+}
+
+.mini-ghost-btn.add {
+  width: 100%;
+}
+
+.setlist-actions-row {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.console-ghost-btn {
+  border: 1px solid #c8d5ef;
+  background: #f6f9ff;
+  color: #3b5482;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.console-submit-row {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.song-submit-row {
+  margin-top: 8px;
+}
+
+.song-admin-form-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.song-admin-form-table th:nth-child(1),
+.song-admin-form-table td:nth-child(1) {
+  width: auto;
+}
+
+.song-admin-form-table th:nth-child(2),
+.song-admin-form-table td:nth-child(2) {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+}
+
+.song-admin-form-table th:nth-child(3),
+.song-admin-form-table td:nth-child(3) {
+  width: 76px;
+  min-width: 76px;
+  max-width: 76px;
+}
+
+.song-band-trigger {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.song-result-table {
+  min-width: 0;
+  margin-top: 8px;
+  table-layout: fixed;
+}
+
+.song-result-table th:nth-child(1),
+.song-result-table td:nth-child(1) {
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+}
+
+.setlist-preview-wrap {
+  margin-top: 12px;
+}
+
+.live-history-wrap {
+  margin-top: 24px;
+}
+
+.live-history-table thead th {
+  background: #eef6f2;
+  color: #214a37;
+}
+
+.live-history-table td {
+  background: #fbfffd;
+}
+
+.live-history-table tr:hover td {
+  background: #f3fbf7;
+}
+
+.setlist-table th:nth-child(1),
+.setlist-table td:nth-child(1) {
+  width: 148px;
+  min-width: 148px;
+  max-width: 148px;
+}
+
+.setlist-table th:nth-child(2),
+.setlist-table td:nth-child(2) {
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+}
+
+.setlist-table th:nth-child(3),
+.setlist-table td:nth-child(3) {
+  width: 58px;
+  min-width: 58px;
+  max-width: 58px;
+}
+
+.setlist-table th:nth-child(4),
+.setlist-table td:nth-child(4) {
+  width: 92px;
+  min-width: 92px;
+  max-width: 92px;
+}
+
+.setlist-table th:nth-child(5),
+.setlist-table td:nth-child(5) {
+  width: 58px;
+  min-width: 58px;
+  max-width: 58px;
+}
+
+.setlist-table th:nth-child(6),
+.setlist-table td:nth-child(6) {
+  width: 54px;
+  min-width: 54px;
+  max-width: 54px;
+}
+
+.setlist-table th:nth-child(7),
+.setlist-table td:nth-child(7) {
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+}
+
+.setlist-table th:nth-child(8),
+.setlist-table td:nth-child(8) {
+  width: 98px;
+  min-width: 98px;
+  max-width: 98px;
+}
+
+.setlist-table th:nth-child(9),
+.setlist-table td:nth-child(9) {
+  width: 128px;
+  min-width: 128px;
+  max-width: 128px;
+}
+
+.bands-floating-menu {
+  position: fixed;
+  z-index: 80;
+  max-height: min(320px, 60vh);
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #d5dff3;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(12, 22, 49, 0.2);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.bands-floating-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #2a426f;
+  font-size: 13px;
+}
+
+.band-member-floating-menu {
+  position: fixed;
+  z-index: 85;
+  max-height: min(420px, 70vh);
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #d5dff3;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(12, 22, 49, 0.2);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.other-member-floating-menu {
+  position: fixed;
+  z-index: 86;
+  max-height: min(360px, 65vh);
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #d5dff3;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(12, 22, 49, 0.2);
+  padding: 10px;
+}
+
+.song-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(18, 27, 45, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.song-modal {
+  width: min(880px, 94vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #fff;
+  border: 1px solid #d5dff3;
+  border-radius: 12px;
+  box-shadow: 0 14px 36px rgba(12, 22, 49, 0.24);
+  padding: 12px;
+}
+
+.song-modal .console-table-wrap {
+  overflow-x: hidden;
+}
+
+.song-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: #203760;
+}
+
+.band-member-block {
+  border: 1px solid #e4eaf8;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.band-member-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1f365d;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.band-member-sub-list {
+  margin-top: 6px;
+  display: grid;
+  gap: 4px;
+  padding-left: 20px;
+}
+
+.band-member-sub-list label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #355180;
+  font-size: 12px;
 }
