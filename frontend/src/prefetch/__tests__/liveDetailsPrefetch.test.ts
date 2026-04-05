@@ -26,10 +26,8 @@ describe("liveDetailsPrefetch", () => {
     getLivesMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
     getLiveDetailsBatchMock.mockResolvedValue({ items: [], missing_live_ids: [] });
-    (window as Window & { requestIdleCallback?: unknown; cancelIdleCallback?: unknown }).requestIdleCallback =
-      undefined;
-    (window as Window & { requestIdleCallback?: unknown; cancelIdleCallback?: unknown }).cancelIdleCallback =
-      undefined;
+    Reflect.deleteProperty(window, "requestIdleCallback");
+    Reflect.deleteProperty(window, "cancelIdleCallback");
   });
 
   test("prefetchCurrentPageDetails 会去重并过滤非法 live_id", async () => {
@@ -68,9 +66,11 @@ describe("liveDetailsPrefetch", () => {
 
   test("scheduleIdleNextPagePrefetch 取消后不会触发下一页请求", async () => {
     // 测试点：调用 cancel 后，即使 idle callback 触发，也不应再请求下一页。
-    let idleCallback: IdleRequestCallback | null = null;
-    const requestIdleCallback = vi.fn((callback: IdleRequestCallback) => {
-      idleCallback = callback;
+    const state: { triggerIdle?: () => void } = {};
+    const requestIdleCallback = vi.fn((callback: (deadline: IdleDeadline) => void) => {
+      state.triggerIdle = () => {
+        callback({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
+      };
       return 7;
     });
     const cancelIdleCallback = vi.fn();
@@ -82,7 +82,7 @@ describe("liveDetailsPrefetch", () => {
     const cancel = scheduleIdleNextPagePrefetch({ page: 1, pageSize: 20, totalPages: 3 });
     cancel();
 
-    idleCallback?.({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
+    state.triggerIdle?.();
     await Promise.resolve();
 
     expect(cancelIdleCallback).toHaveBeenCalledWith(7);
