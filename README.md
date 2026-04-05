@@ -73,6 +73,17 @@ cd frontend
 npm run typecheck
 ```
 
+### 一键检查脚本（推荐）
+
+```powershell
+cd <项目根目录>
+python run_checks.py <arguments>
+```
+
+- `frontend`：只运行前端 `typecheck + test`
+- `backend`：只运行后端测试 `backend/tests/unit`
+- `all`：先运行后端测试，再运行前端 `typecheck + test`
+
 ## 开发路线图（TODO）
 
 - [x] 初始化前后端工程骨架
