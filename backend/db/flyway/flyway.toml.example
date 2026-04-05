@@ -1,0 +1,27 @@
+name = "LiveSetList"
+databaseType = "postgresql"
+
+[flyway]
+# Flyway is a standalone Java tool, so connection URLs use JDBC format.
+# This is independent of the application runtime, which still uses psycopg2.
+environment = "test"
+locations = ["filesystem:backend/db/flyway/sql"]
+table = "flyway_schema_history"
+baselineVersion = "1"
+baselineDescription = "Existing database baseline"
+createSchemas = false
+defaultSchema = "public"
+
+[environments.dev]
+url = "jdbc:postgresql://localhost:15432/live_statistic"
+user = "live_project_flyway"
+password = "replace_me"
+displayName = "Development database"
+schemas = ["public"]
+
+[environments.test]
+url = "jdbc:postgresql://localhost:15432/live_statistic_test"
+user = "live_project_flyway"
+password = "replace_me"
+displayName = "Test database"
+schemas = ["public"]

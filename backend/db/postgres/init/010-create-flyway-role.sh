@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
+DO \$\$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${FLYWAY_USER}') THEN
+        CREATE ROLE ${FLYWAY_USER} LOGIN PASSWORD '${FLYWAY_PASSWORD}';
+    ELSE
+        ALTER ROLE ${FLYWAY_USER} WITH LOGIN PASSWORD '${FLYWAY_PASSWORD}';
+    END IF;
+END
+\$\$;
+
+SELECT 'CREATE DATABASE live_statistic_test OWNER ${POSTGRES_USER}'
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'live_statistic_test')\gexec
+
+GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO ${FLYWAY_USER};
+GRANT CONNECT ON DATABASE live_statistic_test TO ${FLYWAY_USER};
+GRANT USAGE, CREATE ON SCHEMA public TO ${FLYWAY_USER};
+EOSQL
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "live_statistic_test" <<EOSQL
+GRANT USAGE, CREATE ON SCHEMA public TO ${FLYWAY_USER};
+EOSQL
