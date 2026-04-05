@@ -34,7 +34,7 @@ def run_step(label: str, args: list[str], cwd: Path, retries: int = 0) -> int:
     return completed.returncode
 
 
-def build_backend_steps() -> tuple[list[CheckStep], list[CheckFailure]]:
+def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckFailure]]:
     steps: list[CheckStep] = []
     failures: list[CheckFailure] = []
     if not BACKEND_DIR.exists():
@@ -48,12 +48,26 @@ def build_backend_steps() -> tuple[list[CheckStep], list[CheckFailure]]:
         failures.append(("backend", "Python 环境检查", 1))
         return steps, failures
 
-    steps.extend(
-        [
-            ("backend", "mypy", [str(python_path), "-m", "mypy", "--config-file", "mypy.ini"], BACKEND_DIR, 0),
-            ("backend", "pytest tests/unit", [str(python_path), "-m", "pytest", "tests/unit", "-q"], BACKEND_DIR, 0),
-        ]
-    )
+    if mode in {"unit", "all"}:
+        steps.extend(
+            [
+                ("backend", "mypy", [str(python_path), "-m", "mypy", "--config-file", "mypy.ini"], BACKEND_DIR, 0),
+                ("backend", "pytest tests/unit", [str(python_path), "-m", "pytest", "tests/unit", "-q"], BACKEND_DIR, 0),
+            ]
+        )
+
+    if mode in {"integration", "all"}:
+        if mode == "integration":
+            steps.append(("backend", "mypy", [str(python_path), "-m", "mypy", "--config-file", "mypy.ini"], BACKEND_DIR, 0))
+        steps.append(
+            (
+                "backend",
+                "pytest tests/integration",
+                [str(python_path), "-m", "pytest", "tests/integration", "-q"],
+                BACKEND_DIR,
+                0,
+            )
+        )
     return steps, failures
 
 
@@ -86,8 +100,12 @@ def run_check_steps(steps: list[CheckStep]) -> list[CheckFailure]:
 
 def print_summary(target: str, failures: list[CheckFailure]) -> int:
     if not failures:
-        if target == "backend":
-            print("后端检查完成：mypy + pytest tests/unit 全部通过。")
+        if target == "backend-unit":
+            print("后端检查完成：mypy(app + tests) + pytest tests/unit 全部通过。")
+        elif target == "backend-integration":
+            print("后端检查完成：mypy(app + tests) + pytest tests/integration 全部通过。")
+        elif target == "backend":
+            print("后端检查完成：mypy(app + tests) + pytest tests/unit + pytest tests/integration 全部通过。")
         elif target == "frontend":
             print("前端检查完成：typecheck + test 全部通过。")
         else:
@@ -101,9 +119,21 @@ def print_summary(target: str, failures: list[CheckFailure]) -> int:
 
 
 def run_backend_checks() -> int:
-    steps, failures = build_backend_steps()
+    steps, failures = build_backend_steps(mode="all")
     failures.extend(run_check_steps(steps))
     return print_summary("backend", failures)
+
+
+def run_backend_unit_checks() -> int:
+    steps, failures = build_backend_steps(mode="unit")
+    failures.extend(run_check_steps(steps))
+    return print_summary("backend-unit", failures)
+
+
+def run_backend_integration_checks() -> int:
+    steps, failures = build_backend_steps(mode="integration")
+    failures.extend(run_check_steps(steps))
+    return print_summary("backend-integration", failures)
 
 
 def run_frontend_checks() -> int:
@@ -114,7 +144,7 @@ def run_frontend_checks() -> int:
 
 def run_all_checks() -> int:
     failures: list[CheckFailure] = []
-    backend_steps, backend_failures = build_backend_steps()
+    backend_steps, backend_failures = build_backend_steps(mode="all")
     frontend_steps, frontend_failures = build_frontend_steps()
     failures.extend(backend_failures)
     failures.extend(run_check_steps(backend_steps))
@@ -127,8 +157,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run project checks.")
     parser.add_argument(
         "target",
-        choices=["frontend", "backend", "all"],
-        help="Check target: frontend / backend / all.",
+        choices=["frontend", "backend", "backend-unit", "backend-integration", "all"],
+        help="Check target: frontend / backend / backend-unit / backend-integration / all.",
     )
     return parser.parse_args()
 
@@ -137,6 +167,10 @@ def main() -> int:
     args = parse_args()
     if args.target == "backend":
         return run_backend_checks()
+    if args.target == "backend-unit":
+        return run_backend_unit_checks()
+    if args.target == "backend-integration":
+        return run_backend_integration_checks()
     if args.target == "frontend":
         return run_frontend_checks()
     if args.target == "all":
