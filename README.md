@@ -51,11 +51,12 @@ python run_dev.py
 
 ## 运行测试
 
-### 后端单元测试
+### 后端检查（类型 + 单元测试）
 
 ```powershell
 cd backend
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m mypy --config-file mypy.ini
 .\.venv\Scripts\python.exe -m pytest tests\unit -q
 ```
 
@@ -81,8 +82,8 @@ python run_checks.py <arguments>
 ```
 
 - `frontend`：只运行前端 `typecheck + test`
-- `backend`：只运行后端测试 `backend/tests/unit`
-- `all`：先运行后端测试，再运行前端 `typecheck + test`
+- `backend`：运行后端 `mypy + pytest tests/unit`
+- `all`：先运行后端 `mypy + pytest`，再运行前端 `typecheck + test`
 
 ## 开发路线图（TODO）
 

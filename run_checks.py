@@ -42,6 +42,7 @@ def run_backend_checks() -> int:
         return 1
 
     steps: list[tuple[list[str], int]] = [
+        ([str(python_path), "-m", "mypy", "--config-file", "mypy.ini"], 0),
         ([str(python_path), "-m", "pytest", "tests/unit", "-q"], 0),
     ]
 
@@ -51,7 +52,7 @@ def run_backend_checks() -> int:
             print(f"命令失败，退出码: {code}")
             return code
 
-    print("后端检查完成：pytest tests/unit 全部通过。")
+    print("后端检查完成：mypy + pytest tests/unit 全部通过。")
     return 0
 
 

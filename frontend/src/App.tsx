@@ -202,6 +202,9 @@ function App() {
     : detailLoading
       ? "加载中..."
       : "-";
+  const venueText = detailData?.venue?.trim() ? detailData.venue : "-";
+  const openingTimeText = detailData?.opening_time?.trim() ? detailData.opening_time : "-";
+  const startTimeText = detailData?.start_time?.trim() ? detailData.start_time : "-";
   const toggleTheme = () => {
     setThemeMode(resolvedTheme === "dark" ? "light" : "dark");
   };
@@ -389,6 +392,18 @@ function App() {
             <p className="detail-row">
               <strong>乐队：</strong>
               <span>{bandNamesText}</span>
+            </p>
+            <p className="detail-row">
+              <strong>场地：</strong>
+              <span>{venueText}</span>
+            </p>
+            <p className="detail-row">
+              <strong>开场：</strong>
+              <span>{openingTimeText}</span>
+            </p>
+            <p className="detail-row">
+              <strong>开演：</strong>
+              <span>{startTimeText}</span>
             </p>
             <p className="detail-row">
               <strong>链接：</strong>

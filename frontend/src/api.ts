@@ -49,6 +49,9 @@ export type LiveDetailResponse = {
   live_id: number;
   live_date: string;
   live_title: string;
+  venue: string | null;
+  opening_time: string | null;
+  start_time: string | null;
   bands: number[];
   band_names: string[];
   url: string | null;

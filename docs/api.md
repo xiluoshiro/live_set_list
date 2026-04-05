@@ -160,6 +160,9 @@ select 1;
    - `live_id`
    - `live_date`
    - `live_title`
+   - `venue`
+   - `opening_time`
+   - `start_time`
    - `bands`
    - `band_names`
    - `url`
@@ -176,9 +179,12 @@ select 1;
   "live_id": 123,
   "live_date": "2026-03-28",
   "live_title": "示例 Live 名称",
+  "venue": "K-Arena Yokohama",
+  "opening_time": "17:00",
+  "start_time": "18:00",
   "bands": [1, 2, 3],
   "band_names": ["Poppin'Party", "Afterglow", "Roselia"],
-  "url": null,
+  "url": "https://example.com/live/123",
   "detail_rows": [
     {
       "row_id": "M1",
@@ -208,9 +214,12 @@ select 1;
 - `live_id`: Live 主键 ID
 - `live_date`: 日期
 - `live_title`: 标题
+- `venue`: 场地名，来自 `live_attrs.venue_id -> venue_list.venue`
+- `opening_time`: 开场时间，来自 `live_attrs.opening_time`
+- `start_time`: 开演时间，来自 `live_attrs.start_time`
 - `bands`: 去重后的 `band_id` 列表，按升序返回
 - `band_names`: 从 `band_member` 中聚合出的乐队名称列表
-- `url`: 当前实现固定返回 `null`
+- `url`: Live 链接，来自 `live_attrs.url`
 
 `detail_rows[]` 字段：
 - `row_id`: 由 `segment_type + sub_order` 拼接得到，例如 `M1`、`EN1`
@@ -223,8 +232,8 @@ select 1;
 
 - `detail_rows` 实际按数据库中的 `absolute_order` 返回，不是按 `row_id` 字典序排序
 - `band_members[].present_count = present_members.length`
-- `band_members[].total_count` 当前固定为 `5`
-- `band_members[].is_full = present_count >= 5`
+- `band_members[].total_count` 来自 `band_attrs.band_members` 的数据库查询结果
+- `band_members[].is_full = present_count >= total_count`
 - `band_members` 会优先按 `band_id` 升序排列，无法映射到 `band_id` 的项目排在后面
 - `band_names` 会先去重，再按 `bands` 中的 `band_id` 顺序排列；无法映射到 `band_id` 的名称排在最后
 - `other_members` 会按 `key` 升序排列
@@ -285,9 +294,12 @@ select 1;
       "live_id": 123,
       "live_date": "2026-03-28",
       "live_title": "示例 Live 名称",
+      "venue": "K-Arena Yokohama",
+      "opening_time": "17:00",
+      "start_time": "18:00",
       "bands": [1, 2, 3],
       "band_names": ["Poppin'Party", "Afterglow", "Roselia"],
-      "url": null,
+      "url": "https://example.com/live/123",
       "detail_rows": []
     }
   ],
@@ -369,4 +381,5 @@ select 1;
 - 当前前端实际调用的后端 API 就是本文档列出的 5 个接口
 - 当前前端收藏状态使用 `localStorage`，不依赖后端收藏接口
 - 当前前端依赖 `pagination.total` 与 `pagination.total_pages` 驱动分页
-- 当前实现中 `url` 字段已在接口层预留，但尚未真正接入数据库数据
+- 当前详情接口已返回 `venue`、`opening_time`、`start_time`、`url`
+- 当前 `band_members[].total_count` 已不再固定写死，而是按 `band_attrs` 中的数据库值返回
