@@ -71,13 +71,26 @@ python scripts/recovery_db.py <arguments> [--force]
 
 ## 测试覆盖思路
 
-当前优先做两层看护：
+当前优先做三层看护：
 
 1. mock 单元测试
    - 看护路径生成、备份选择、保留策略、参数分发等纯 Python 逻辑
 2. 命令契约测试
    - 看护候选容器流程、external volume 创建、回滚分支、快照清理等命令编排
+3. Docker 沙箱集成测试
+   - 使用独立容器、独立 volume 和独立备份目录
+   - 看护 `pg_dump`、`pg_restore`、候选容器启动、`flyway info + validate` 等真实行为
 
 相关测试位于：
 
 - `recovery/tests`
+- `recovery/tests/integration`
+
+运行建议：
+
+- `python scripts/run_checks.py recovery-unit`
+  - 只跑 mock 单元测试和命令契约测试，速度快
+- `python scripts/run_checks.py recovery-integration`
+  - 只跑真实 Docker 沙箱集成测试
+- `python scripts/run_checks.py recovery`
+  - 同时跑上面两层；因为会真实拉起独立 PostgreSQL 容器、volume 和备份目录，所以明显更重

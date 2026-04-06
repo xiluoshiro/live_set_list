@@ -99,6 +99,18 @@ python scripts/recovery_db.py recovery --force
 
 - [recovery/README.md](D:/Code/PythonCode/5%20LiveSetList/recovery/README.md)
 
+如果只想验证 recovery 的真实 Docker 沙箱行为，可以运行：
+
+```powershell
+python scripts/run_checks.py recovery-integration
+```
+
+如果想把 recovery 的轻量测试和 Docker 沙箱测试一起跑完，可以运行：
+
+```powershell
+python scripts/run_checks.py recovery
+```
+
 ## 相关位置
 
 - Flyway 说明：[docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md)

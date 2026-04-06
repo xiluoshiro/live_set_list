@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_DIR = ROOT / "frontend"
 BACKEND_DIR = ROOT / "backend"
 RECOVERY_TEST_DIR = ROOT / "recovery" / "tests"
+RECOVERY_INTEGRATION_TEST_DIR = ROOT / "recovery" / "tests" / "integration"
 
 CheckStep = tuple[str, str, list[str], Path, int]
 CheckFailure = tuple[str, str, int]
@@ -72,7 +73,7 @@ def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckF
     return steps, failures
 
 
-def build_recovery_steps() -> tuple[list[CheckStep], list[CheckFailure]]:
+def build_recovery_steps(mode: str = "unit") -> tuple[list[CheckStep], list[CheckFailure]]:
     steps: list[CheckStep] = []
     failures: list[CheckFailure] = []
     if not RECOVERY_TEST_DIR.exists():
@@ -86,15 +87,37 @@ def build_recovery_steps() -> tuple[list[CheckStep], list[CheckFailure]]:
         failures.append(("recovery", "Python 环境检查", 1))
         return steps, failures
 
-    steps.append(
-        (
-            "recovery",
-            "pytest recovery/tests",
-            [str(python_path), "-m", "pytest", str(RECOVERY_TEST_DIR.relative_to(ROOT)), "-q"],
-            ROOT,
-            0,
+    if mode in {"unit", "all"}:
+        steps.append(
+            (
+                "recovery",
+                "pytest recovery/tests (unit+contract)",
+                [
+                    str(python_path),
+                    "-m",
+                    "pytest",
+                    str((RECOVERY_TEST_DIR / "test_recovery_unit.py").relative_to(ROOT)),
+                    str((RECOVERY_TEST_DIR / "test_recovery_contract.py").relative_to(ROOT)),
+                    "-q",
+                ],
+                ROOT,
+                0,
+            )
         )
-    )
+    if mode in {"integration", "all"}:
+        if not RECOVERY_INTEGRATION_TEST_DIR.exists():
+            print("recovery/tests/integration 目录不存在。")
+            failures.append(("recovery-integration", "目录检查", 1))
+            return steps, failures
+        steps.append(
+            (
+                "recovery-integration",
+                "pytest recovery/tests/integration",
+                [str(python_path), "-m", "pytest", str(RECOVERY_INTEGRATION_TEST_DIR.relative_to(ROOT)), "-q"],
+                ROOT,
+                0,
+            )
+        )
     return steps, failures
 
 
@@ -133,8 +156,12 @@ def print_summary(target: str, failures: list[CheckFailure]) -> int:
             print("后端检查完成：backend-integration 全部通过。")
         elif target == "backend":
             print("后端检查完成：backend-unit + backend-integration 全部通过。")
+        elif target == "recovery-unit":
+            print("恢复脚本检查完成：recovery-unit 全部通过。")
+        elif target == "recovery-integration":
+            print("恢复脚本检查完成：Docker 沙箱集成测试全部通过。")
         elif target == "recovery":
-            print("恢复脚本检查完成：pytest recovery/tests 全部通过。")
+            print("恢复脚本检查完成：recovery-unit + recovery-integration 全部通过。")
         elif target == "frontend":
             print("前端检查完成：typecheck + test 全部通过。")
         elif target == "functional":
@@ -176,7 +203,19 @@ def run_frontend_checks() -> int:
 
 
 def run_recovery_checks() -> int:
-    steps, failures = build_recovery_steps()
+    steps, failures = build_recovery_steps(mode="unit")
+    failures.extend(run_check_steps(steps))
+    return print_summary("recovery-unit", failures)
+
+
+def run_recovery_integration_checks() -> int:
+    steps, failures = build_recovery_steps(mode="integration")
+    failures.extend(run_check_steps(steps))
+    return print_summary("recovery-integration", failures)
+
+
+def run_recovery_all_checks() -> int:
+    steps, failures = build_recovery_steps(mode="all")
     failures.extend(run_check_steps(steps))
     return print_summary("recovery", failures)
 
@@ -196,7 +235,7 @@ def run_full_checks() -> int:
     failures: list[CheckFailure] = []
     backend_steps, backend_failures = build_backend_steps(mode="all")
     frontend_steps, frontend_failures = build_frontend_steps()
-    recovery_steps, recovery_failures = build_recovery_steps()
+    recovery_steps, recovery_failures = build_recovery_steps(mode="all")
     failures.extend(backend_failures)
     failures.extend(run_check_steps(backend_steps))
     failures.extend(frontend_failures)
@@ -210,8 +249,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run project checks.")
     parser.add_argument(
         "target",
-        choices=["frontend", "backend", "backend-unit", "backend-integration", "recovery", "functional", "full"],
-        help="Check target: frontend / backend / backend-unit / backend-integration / recovery / functional / full.",
+        choices=["frontend", "backend", "backend-unit", "backend-integration", "recovery-unit", "recovery-integration", "recovery", "functional", "full"],
+        help="Check target: frontend / backend / backend-unit / backend-integration / recovery-unit / recovery-integration / recovery / functional / full.",
     )
     return parser.parse_args()
 
@@ -224,8 +263,12 @@ def main() -> int:
         return run_backend_unit_checks()
     if args.target == "backend-integration":
         return run_backend_integration_checks()
-    if args.target == "recovery":
+    if args.target == "recovery-unit":
         return run_recovery_checks()
+    if args.target == "recovery-integration":
+        return run_recovery_integration_checks()
+    if args.target == "recovery":
+        return run_recovery_all_checks()
     if args.target == "frontend":
         return run_frontend_checks()
     if args.target == "functional":
