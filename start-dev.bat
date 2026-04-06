@@ -1,3 +1,3 @@
 @echo off
 cd /d "%~dp0"
-python run_dev.py
+python scripts\run_dev.py

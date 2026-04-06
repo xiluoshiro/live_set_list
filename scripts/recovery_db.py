@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / "infra" / "postgres" / ".env.pg-migrate"
 COMPOSE_FILE = ROOT / "infra" / "postgres" / "docker-compose.pg-migrate.yml"
 FLYWAY_CONFIG = ROOT / "backend" / "db" / "flyway" / "flyway.toml"
@@ -261,7 +261,7 @@ def recover_all_databases() -> int:
 
 
 def run_full_checks() -> int:
-    run_step("checks", ["python", "run_checks.py", "all"])
+    run_step("checks", ["python", "scripts/run_checks.py", "all"])
     return 0
 
 
