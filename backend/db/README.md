@@ -56,13 +56,13 @@ docker exec -i live-set-list-pg-migrate psql -U live_project_test_admin -d live_
 4. 或者直接运行集成测试；integration 用例会在每条测试前自动导入同一份 seed：
 
 ```powershell
-python run_checks.py backend-integration
+python scripts/run_checks.py backend-integration
 ```
 
 5. 如果希望一条命令执行“重建 Docker + Flyway migrate + 导入 seed”，可以在项目根目录运行：
 
 ```powershell
-python recovery_db.py test --force
+python scripts/recovery_db.py test --force
 ```
 
 可选参数：
@@ -76,7 +76,7 @@ python recovery_db.py test --force
 
 1. 如果当前 PostgreSQL 容器存在，先将旧容器重命名为备份容器并停止
 2. 用新的候选 volume 启动新容器并恢复测试库
-3. 跑 `python run_checks.py all`
+3. 跑 `python scripts/run_checks.py all`
 4. 如果检查通过：
    - 先对旧正式 volume 做一份临时快照
    - 将候选 volume 的数据复制回固定正式 volume 名

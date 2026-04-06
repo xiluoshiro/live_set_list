@@ -35,19 +35,7 @@ npm install
 
 ### 3) 一键启动
 
-在项目根目录执行：
-
-```powershell
-python run_dev.py
-```
-
-或：
-
-```powershell
-.\start-dev.bat
-```
-
-按 `Ctrl+C` 可同时关闭前后端。
+脚本入口说明见 [scripts/README.md](D:/Code/PythonCode/5%20LiveSetList/scripts/README.md)。
 
 ## 运行测试
 
@@ -92,18 +80,7 @@ cd frontend
 npm run typecheck
 ```
 
-### 一键检查脚本（推荐）
-
-```powershell
-cd <项目根目录>
-python run_checks.py <arguments>
-```
-
-- `frontend`：只运行前端 `typecheck + test`
-- `backend-unit`：运行后端 `mypy(app + tests) + pytest tests/unit`
-- `backend-integration`：运行后端 `mypy(app + tests) + pytest tests/integration`
-- `backend`：运行后端 `mypy(app + tests) + pytest tests/unit + pytest tests/integration`
-- `all`：先运行后端完整检查，再运行前端 `typecheck + test`
+脚本化检查入口说明见 [scripts/README.md](D:/Code/PythonCode/5%20LiveSetList/scripts/README.md)。
 
 ## 数据库版本控制
 
