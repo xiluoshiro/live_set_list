@@ -16,7 +16,7 @@ def confirm_restore(backup_path: Path) -> None:
 
 
 def confirm_finalize() -> None:
-    print("候选恢复已完成，且 run_checks all 已通过。", flush=True)
+    print("候选恢复已完成，且 run_checks functional 已通过。", flush=True)
     answer = input("请人工检查当前候选容器；确认转正请输入 yes：").strip().lower()
     if answer != "yes":
         raise SystemExit("已取消主库转正。")
@@ -291,6 +291,6 @@ def restore_app_database_from_backup(
     return 0
 
 
-def run_full_checks() -> int:
-    run_step("checks", ["python", "scripts/run_checks.py", "all"])
+def run_functional_checks() -> int:
+    run_step("checks", ["python", "scripts/run_checks.py", "functional"])
     return 0

@@ -56,16 +56,6 @@ def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckF
                 ("backend", "pytest tests/unit", [str(python_path), "-m", "pytest", "tests/unit", "-q"], BACKEND_DIR, 0),
             ]
         )
-        if RECOVERY_TEST_DIR.exists():
-            steps.append(
-                (
-                    "recovery",
-                    "pytest recovery/tests",
-                    [str(python_path), "-m", "pytest", str(RECOVERY_TEST_DIR.relative_to(ROOT)), "-q"],
-                    ROOT,
-                    0,
-                )
-            )
 
     if mode in {"integration", "all"}:
         if mode == "integration":
@@ -79,6 +69,32 @@ def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckF
                 0,
             )
         )
+    return steps, failures
+
+
+def build_recovery_steps() -> tuple[list[CheckStep], list[CheckFailure]]:
+    steps: list[CheckStep] = []
+    failures: list[CheckFailure] = []
+    if not RECOVERY_TEST_DIR.exists():
+        print("recovery/tests 目录不存在。")
+        failures.append(("recovery", "目录检查", 1))
+        return steps, failures
+
+    python_path = backend_python()
+    if not python_path.exists():
+        print("未找到 backend/.venv 的 Python。请先在 backend 目录创建并安装依赖。")
+        failures.append(("recovery", "Python 环境检查", 1))
+        return steps, failures
+
+    steps.append(
+        (
+            "recovery",
+            "pytest recovery/tests",
+            [str(python_path), "-m", "pytest", str(RECOVERY_TEST_DIR.relative_to(ROOT)), "-q"],
+            ROOT,
+            0,
+        )
+    )
     return steps, failures
 
 
@@ -112,15 +128,21 @@ def run_check_steps(steps: list[CheckStep]) -> list[CheckFailure]:
 def print_summary(target: str, failures: list[CheckFailure]) -> int:
     if not failures:
         if target == "backend-unit":
-            print("后端检查完成：mypy(app + tests) + pytest tests/unit + pytest recovery/tests 全部通过。")
+            print("后端检查完成：backend-unit 全部通过。")
         elif target == "backend-integration":
-            print("后端检查完成：mypy(app + tests) + pytest tests/integration 全部通过。")
+            print("后端检查完成：backend-integration 全部通过。")
         elif target == "backend":
-            print("后端检查完成：mypy(app + tests) + pytest tests/unit + pytest recovery/tests + pytest tests/integration 全部通过。")
+            print("后端检查完成：backend-unit + backend-integration 全部通过。")
+        elif target == "recovery":
+            print("恢复脚本检查完成：pytest recovery/tests 全部通过。")
         elif target == "frontend":
             print("前端检查完成：typecheck + test 全部通过。")
+        elif target == "functional":
+            print("功能检查完成：frontend + backend 全部通过。")
+        elif target == "full":
+            print("全量检查完成：frontend + backend + recovery 全部通过。")
         else:
-            print("全部检查通过：backend + frontend 所有用例均成功。")
+            print("检查全部通过。")
         return 0
 
     print("检查完成：存在失败项。")
@@ -153,7 +175,13 @@ def run_frontend_checks() -> int:
     return print_summary("frontend", failures)
 
 
-def run_all_checks() -> int:
+def run_recovery_checks() -> int:
+    steps, failures = build_recovery_steps()
+    failures.extend(run_check_steps(steps))
+    return print_summary("recovery", failures)
+
+
+def run_functional_checks() -> int:
     failures: list[CheckFailure] = []
     backend_steps, backend_failures = build_backend_steps(mode="all")
     frontend_steps, frontend_failures = build_frontend_steps()
@@ -161,15 +189,29 @@ def run_all_checks() -> int:
     failures.extend(run_check_steps(backend_steps))
     failures.extend(frontend_failures)
     failures.extend(run_check_steps(frontend_steps))
-    return print_summary("all", failures)
+    return print_summary("functional", failures)
+
+
+def run_full_checks() -> int:
+    failures: list[CheckFailure] = []
+    backend_steps, backend_failures = build_backend_steps(mode="all")
+    frontend_steps, frontend_failures = build_frontend_steps()
+    recovery_steps, recovery_failures = build_recovery_steps()
+    failures.extend(backend_failures)
+    failures.extend(run_check_steps(backend_steps))
+    failures.extend(frontend_failures)
+    failures.extend(run_check_steps(frontend_steps))
+    failures.extend(recovery_failures)
+    failures.extend(run_check_steps(recovery_steps))
+    return print_summary("full", failures)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run project checks.")
     parser.add_argument(
         "target",
-        choices=["frontend", "backend", "backend-unit", "backend-integration", "all"],
-        help="Check target: frontend / backend / backend-unit / backend-integration / all.",
+        choices=["frontend", "backend", "backend-unit", "backend-integration", "recovery", "functional", "full"],
+        help="Check target: frontend / backend / backend-unit / backend-integration / recovery / functional / full.",
     )
     return parser.parse_args()
 
@@ -182,10 +224,14 @@ def main() -> int:
         return run_backend_unit_checks()
     if args.target == "backend-integration":
         return run_backend_integration_checks()
+    if args.target == "recovery":
+        return run_recovery_checks()
     if args.target == "frontend":
         return run_frontend_checks()
-    if args.target == "all":
-        return run_all_checks()
+    if args.target == "functional":
+        return run_functional_checks()
+    if args.target == "full":
+        return run_full_checks()
     return 1
 
 

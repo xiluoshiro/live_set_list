@@ -23,6 +23,12 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 ```
 
 4. 跑后端/前端检查，确认接口与页面正常
+   建议优先运行：
+
+```powershell
+python scripts/run_checks.py functional
+```
+
 5. 不要修改已执行过的 `V...sql`；如需修正，新增下一个版本文件
 
 ## 恢复测试库

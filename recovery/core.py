@@ -40,7 +40,7 @@ from .restore import (
     restore_app_database_from_backup,
     run_flyway_for_environment,
     run_flyway_info_capture,
-    run_full_checks,
+    run_functional_checks,
 )
 
 
@@ -84,7 +84,7 @@ def recover_main_database(env_values: dict[str, str], docker_cmd: str) -> int:
             )
             restore_app_database_from_backup(env_values, docker_cmd, container_name, backup_to_restore)
             recover_test_database(env_values, docker_cmd, container_name)
-            run_full_checks()
+            run_functional_checks()
             confirm_finalize()
         except (SystemExit, Exception) as exc:
             print("候选容器验证未通过，正在回滚到旧容器。", flush=True)
