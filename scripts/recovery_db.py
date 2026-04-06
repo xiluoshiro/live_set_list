@@ -15,6 +15,7 @@ SEED_SQL = ROOT / "backend" / "db" / "postgres" / "seed" / "base_seed.sql"
 BACKUP_ROOT = Path(r"C:\Users\xiluo\OneDrive - stu.jiangnan.edu.cn\Backup\live-set-list-docker")
 AUTO_BACKUP_DIR = BACKUP_ROOT / "app" / "auto"
 MANUAL_BACKUP_DIR = BACKUP_ROOT / "app" / "manual"
+RECOVERY_SNAPSHOT_DIR = BACKUP_ROOT / "app" / "recovery-snapshot"
 AUTO_BACKUP_KEEP = 5
 MANUAL_BACKUP_KEEP = 3
 
@@ -245,11 +246,17 @@ def parse_args() -> argparse.Namespace:
 def ensure_backup_dirs() -> None:
     AUTO_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     MANUAL_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    RECOVERY_SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def build_backup_path(kind: str) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    directory = AUTO_BACKUP_DIR if kind == "auto" else MANUAL_BACKUP_DIR
+    if kind == "auto":
+        directory = AUTO_BACKUP_DIR
+    elif kind == "manual":
+        directory = MANUAL_BACKUP_DIR
+    else:
+        directory = RECOVERY_SNAPSHOT_DIR
     return directory / f"live_statistic_{kind}_{timestamp}.dump"
 
 
@@ -275,6 +282,8 @@ def list_backup_files(kind: str | None = None) -> list[Path]:
 
 
 def prune_old_backups(kind: str) -> None:
+    if kind not in {"auto", "manual"}:
+        return
     keep = AUTO_BACKUP_KEEP if kind == "auto" else MANUAL_BACKUP_KEEP
     backups = list_backup_files(kind)
     for path in backups[keep:]:
@@ -323,6 +332,11 @@ def create_app_backup(
     prune_old_backups(kind)
     print(f"主库备份完成：{backup_path}", flush=True)
     return backup_path
+
+
+def remove_recovery_snapshot(snapshot_path: Path | None) -> None:
+    if snapshot_path and snapshot_path.exists():
+        snapshot_path.unlink(missing_ok=True)
 
 
 def get_latest_app_backup() -> Path:
@@ -406,6 +420,8 @@ def prepare_candidate_database(
         POSTGRES_CONTAINER_NAME=container_name,
         POSTGRES_VOLUME_NAME=candidate_volume_name,
     )
+    # Compose 里的 pgdata 现在是 external volume，候选 volume 需要先显式创建。
+    create_volume_if_missing(docker_cmd, candidate_volume_name)
     run_step(
         "docker",
         [
@@ -806,8 +822,8 @@ def recover_main_database(env_values: dict[str, str], docker_cmd: str) -> int:
     current_volume_name = env_values.get("POSTGRES_VOLUME_NAME", "live_set_list_docker_data")
     backup_to_restore = get_latest_app_backup()
     confirm_restore(backup_to_restore)
-    pre_restore_backup = create_app_backup(env_values, docker_cmd, kind="manual", container_name=container_name)
-    print(f"已保留恢复前主库状态：{pre_restore_backup}", flush=True)
+    pre_restore_snapshot = create_app_backup(env_values, docker_cmd, kind="snapshot", container_name=container_name)
+    print(f"已生成恢复流程专用快照：{pre_restore_snapshot}", flush=True)
 
     suffix = datetime.now().strftime("%Y%m%d%H%M%S")
     candidate_volume_name = f"{current_volume_name}_candidate_{suffix}"
@@ -834,6 +850,7 @@ def recover_main_database(env_values: dict[str, str], docker_cmd: str) -> int:
                 print(f"回滚原因：{message}", flush=True)
             return int(message) if message.isdigit() else 1
         print(f"回滚原因：{exc}", flush=True)
+        remove_recovery_snapshot(pre_restore_snapshot)
         return 1
 
     try:
@@ -870,10 +887,12 @@ def recover_main_database(env_values: dict[str, str], docker_cmd: str) -> int:
                 print(f"回滚原因：{message}", flush=True)
             return int(message) if message.isdigit() else 1
         print(f"回滚原因：{exc}", flush=True)
+        remove_recovery_snapshot(pre_restore_snapshot)
         return 1
 
     if backup_snapshot_volume_name:
         remove_volume_if_exists(docker_cmd, backup_snapshot_volume_name)
+    remove_recovery_snapshot(pre_restore_snapshot)
     print("主库恢复、测试库重建与校验完成，正式 volume 名保持不变。", flush=True)
     return 0
 
