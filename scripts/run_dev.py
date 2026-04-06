@@ -1,5 +1,6 @@
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -40,14 +41,26 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, capture_output=True, text=True, check=False)
 
 
+def resolve_docker_command() -> str | None:
+    if os.name == "nt":
+        return shutil.which("docker.cmd") or shutil.which("docker.exe") or shutil.which("docker")
+    return shutil.which("docker")
+
+
 def ensure_postgres_container_running() -> bool:
     container_name = get_postgres_container_name()
     if not container_name:
         print(f"未在 {PG_ENV_PATH} 中找到 POSTGRES_CONTAINER_NAME，无法检查 PostgreSQL 容器。")
         return False
 
+    docker_cmd = resolve_docker_command()
+    if not docker_cmd:
+        print("未找到 docker 可执行文件。")
+        print("请确认 Docker Desktop 已安装，并且当前终端环境变量 PATH 能访问 docker。")
+        return False
+
     exists_result = run_command(
-        ["docker", "ps", "-a", "--filter", f"name=^{container_name}$", "--format", "{{.Names}}"]
+        [docker_cmd, "ps", "-a", "--filter", f"name=^{container_name}$", "--format", "{{.Names}}"]
     )
     if exists_result.returncode != 0:
         print("检查 PostgreSQL 容器失败：")
@@ -59,7 +72,7 @@ def ensure_postgres_container_running() -> bool:
         print("请先确认 Docker 容器已创建，再重新执行启动脚本。")
         return False
 
-    running_result = run_command(["docker", "inspect", "-f", "{{.State.Running}}", container_name])
+    running_result = run_command([docker_cmd, "inspect", "-f", "{{.State.Running}}", container_name])
     if running_result.returncode != 0:
         print("读取 PostgreSQL 容器状态失败：")
         print(running_result.stderr.strip() or running_result.stdout.strip())
@@ -69,7 +82,7 @@ def ensure_postgres_container_running() -> bool:
         return True
 
     print(f"PostgreSQL 容器未启动，正在拉起：{container_name}")
-    start_result = run_command(["docker", "start", container_name])
+    start_result = run_command([docker_cmd, "start", container_name])
     if start_result.returncode != 0:
         print("拉起 PostgreSQL 容器失败：")
         print(start_result.stderr.strip() or start_result.stdout.strip())
