@@ -5,10 +5,13 @@ import sys
 import time
 from pathlib import Path
 
+from dotenv import dotenv_values
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = ROOT / "backend"
 FRONTEND_DIR = ROOT / "frontend"
+PG_ENV_PATH = ROOT / "infra" / "postgres" / ".env.pg-migrate"
 
 
 def build_backend_command() -> list[str]:
@@ -25,6 +28,54 @@ def build_backend_command() -> list[str]:
 def build_frontend_command() -> list[str]:
     npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
     return [npm_cmd, "run", "dev"]
+
+
+def get_postgres_container_name() -> str:
+    env_values = dotenv_values(PG_ENV_PATH)
+    container_name = str(env_values.get("POSTGRES_CONTAINER_NAME", "")).strip()
+    return container_name
+
+
+def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(command, capture_output=True, text=True, check=False)
+
+
+def ensure_postgres_container_running() -> bool:
+    container_name = get_postgres_container_name()
+    if not container_name:
+        print(f"未在 {PG_ENV_PATH} 中找到 POSTGRES_CONTAINER_NAME，无法检查 PostgreSQL 容器。")
+        return False
+
+    exists_result = run_command(
+        ["docker", "ps", "-a", "--filter", f"name=^{container_name}$", "--format", "{{.Names}}"]
+    )
+    if exists_result.returncode != 0:
+        print("检查 PostgreSQL 容器失败：")
+        print(exists_result.stderr.strip() or exists_result.stdout.strip())
+        return False
+
+    if container_name not in exists_result.stdout.splitlines():
+        print(f"未找到 PostgreSQL 容器：{container_name}")
+        print("请先确认 Docker 容器已创建，再重新执行启动脚本。")
+        return False
+
+    running_result = run_command(["docker", "inspect", "-f", "{{.State.Running}}", container_name])
+    if running_result.returncode != 0:
+        print("读取 PostgreSQL 容器状态失败：")
+        print(running_result.stderr.strip() or running_result.stdout.strip())
+        return False
+
+    if running_result.stdout.strip().lower() == "true":
+        return True
+
+    print(f"PostgreSQL 容器未启动，正在拉起：{container_name}")
+    start_result = run_command(["docker", "start", container_name])
+    if start_result.returncode != 0:
+        print("拉起 PostgreSQL 容器失败：")
+        print(start_result.stderr.strip() or start_result.stdout.strip())
+        return False
+
+    return True
 
 
 def terminate_process(proc: subprocess.Popen) -> None:
@@ -45,6 +96,8 @@ def terminate_process(proc: subprocess.Popen) -> None:
 def main() -> int:
     if not BACKEND_DIR.exists() or not FRONTEND_DIR.exists():
         print("backend 或 frontend 目录不存在，请先生成项目骨架。")
+        return 1
+    if not ensure_postgres_container_running():
         return 1
 
     backend_cmd = build_backend_command()
