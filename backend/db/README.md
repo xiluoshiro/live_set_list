@@ -81,15 +81,6 @@ python scripts/recovery_db.py test --force
 
 ## 备份与恢复主库
 
-主库备份目录当前固定为：
-
-- `C:\Users\xiluo\OneDrive - stu.jiangnan.edu.cn\Backup\live-set-list-docker`
-
-其中：
-
-- 自动备份：`app/auto`
-- 手动备份：`app/manual`
-
 常用命令：
 
 ```powershell
@@ -98,28 +89,9 @@ python scripts/recovery_db.py backup-app-manual
 python scripts/recovery_db.py recovery --force
 ```
 
-当前 `recovery` 模式的恢复流程是：
+完整备份目录、候选恢复流程和测试说明见：
 
-1. 读取自动备份和手动备份，选择最近一份作为恢复源
-2. 弹出确认提示
-3. 先对当前主库生成一份恢复流程专用临时快照，不混入手动备份目录
-4. 将当前正式容器重命名为备份容器，并用候选 volume 拉起新容器
-5. 在候选容器中用 `pg_restore` 恢复主库
-6. 对主库执行 `flyway info + validate`，如果存在 `Pending` 再执行 `migrate`
-7. 在候选容器中重建测试库并重新导入 seed
-8. 跑 `python scripts/run_checks.py all`
-9. 如果检查通过：
-   - 脚本会暂停，等待人工确认候选容器状态
-10. 人工确认后：
-   - 将候选 volume 的数据复制回固定正式 volume 名并重新拉起正式容器
-11. 如果检查失败，或人工确认阶段取消：
-   - 删除候选容器和候选 volume
-    - 将旧容器改名并启动回来
-    - 删除这次恢复生成的临时快照
-
-补充说明：
-
-- 正式 volume 当前通过 Compose 的 `external` 模式接入，避免恢复/转正时反复出现“volume 已存在但不是由 Compose 创建”的警告
+- [recovery/README.md](D:/Code/PythonCode/5%20LiveSetList/recovery/README.md)
 
 ## 相关位置
 

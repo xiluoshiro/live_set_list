@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_DIR = ROOT / "frontend"
 BACKEND_DIR = ROOT / "backend"
+RECOVERY_TEST_DIR = ROOT / "recovery" / "tests"
 
 CheckStep = tuple[str, str, list[str], Path, int]
 CheckFailure = tuple[str, str, int]
@@ -55,6 +56,16 @@ def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckF
                 ("backend", "pytest tests/unit", [str(python_path), "-m", "pytest", "tests/unit", "-q"], BACKEND_DIR, 0),
             ]
         )
+        if RECOVERY_TEST_DIR.exists():
+            steps.append(
+                (
+                    "recovery",
+                    "pytest recovery/tests",
+                    [str(python_path), "-m", "pytest", str(RECOVERY_TEST_DIR.relative_to(ROOT)), "-q"],
+                    ROOT,
+                    0,
+                )
+            )
 
     if mode in {"integration", "all"}:
         if mode == "integration":
@@ -101,11 +112,11 @@ def run_check_steps(steps: list[CheckStep]) -> list[CheckFailure]:
 def print_summary(target: str, failures: list[CheckFailure]) -> int:
     if not failures:
         if target == "backend-unit":
-            print("后端检查完成：mypy(app + tests) + pytest tests/unit 全部通过。")
+            print("后端检查完成：mypy(app + tests) + pytest tests/unit + pytest recovery/tests 全部通过。")
         elif target == "backend-integration":
             print("后端检查完成：mypy(app + tests) + pytest tests/integration 全部通过。")
         elif target == "backend":
-            print("后端检查完成：mypy(app + tests) + pytest tests/unit + pytest tests/integration 全部通过。")
+            print("后端检查完成：mypy(app + tests) + pytest tests/unit + pytest recovery/tests + pytest tests/integration 全部通过。")
         elif target == "frontend":
             print("前端检查完成：typecheck + test 全部通过。")
         else:
