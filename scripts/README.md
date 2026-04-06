@@ -29,10 +29,12 @@ python scripts/run_checks.py <arguments>
 ```
 
 - `frontend`：只运行前端 `typecheck + test`
-- `backend-unit`：运行后端 `mypy(app + tests) + pytest tests/unit + pytest recovery/tests`
+- `backend-unit`：运行后端单元测试集
 - `backend-integration`：运行后端 `mypy(app + tests) + pytest tests/integration`
-- `backend`：运行后端 `mypy(app + tests) + pytest tests/unit + pytest recovery/tests + pytest tests/integration`
-- `all`：先运行后端完整检查，再运行前端 `typecheck + test`
+- `backend`：相当于运行 `backend-unit + backend-integration`
+- `recovery`：运行恢复脚本的 mock/命令契约测试
+- `functional`：运行功能测试集，只包含 `frontend + backend`
+- `full`：运行全部检查，等于 `frontend + backend + recovery`
 
 ## 数据库恢复
 
