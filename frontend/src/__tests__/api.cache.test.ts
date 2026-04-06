@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+vi.mock("../logger", () => ({
+  logInfo: vi.fn(),
+  logWarn: vi.fn(),
+  logError: vi.fn(),
+}));
+
 type FetchMock = ReturnType<typeof vi.fn>;
 
 function makeJsonResponse<T>(payload: T, ok = true, status = 200): Response {
@@ -27,6 +33,7 @@ describe("api cache behavior", () => {
     vi.resetModules();
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
+    localStorage.clear();
   });
 
   afterEach(() => {

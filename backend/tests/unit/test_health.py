@@ -39,12 +39,16 @@ def test_db_healthcheck_returns_none_when_no_row():
 
 
 def test_db_healthcheck_db_error_returns_500():
-    with patch("app.routers.health.get_db_connection", side_effect=Error("db down")):
+    # 测试点：数据库异常时既返回 500，也会写一条服务端异常日志。
+    with patch("app.routers.health.logger.exception") as logger_exception, patch(
+        "app.routers.health.get_db_connection", side_effect=Error("db down")
+    ):
         client = TestClient(app)
         response = client.get("/api/health/db")
 
     assert response.status_code == 500
     assert "Database error" in response.json()["detail"]
+    logger_exception.assert_called_once()
 
 
 def test_db_healthcheck_uses_connection_and_cursor_context():

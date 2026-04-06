@@ -81,6 +81,11 @@ npm run typecheck
 
 脚本化检查入口说明见 [scripts/README.md](D:/Code/PythonCode/5%20LiveSetList/scripts/README.md)。
 
+## 日志位置
+
+- 后端日志默认写入 [backend/logs/app.log](D:/Code/PythonCode/5%20LiveSetList/backend/logs/app.log)
+- 前端日志默认写入浏览器 `localStorage`，键名为 `live-set-list-logs`
+
 ## 数据库版本控制
 
 - Flyway 落地说明见 [docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md)
