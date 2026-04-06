@@ -4,7 +4,7 @@
 
 ## 主要功能
 
-- 后端使用 `FastAPI + psycopg2` 连接 `localhost:5432`
+- 后端使用 `FastAPI + psycopg2` 连接 Docker PostgreSQL（默认 `localhost:15432`）
 - 提供数据库健康检查接口：`GET /api/health/db`
 - 接口会执行 `select 1;` 并返回结果
 - 前端使用 `React + TypeScript + Vite`
@@ -21,10 +21,9 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env
 ```
 
-在 `backend/.env` 中填写数据库连接信息（默认用户为 `live_project_ro`）。
+数据库连接与超时配置默认都从 `infra/postgres/.env.pg-migrate` 读取；`backend/.env` 已不再作为日常维护入口。
 
 ### 2) 前端准备
 
