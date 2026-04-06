@@ -133,3 +133,30 @@ def test_main_allows_backup_without_force(tmp_path, monkeypatch) -> None:
 
     assert exit_code == 0
     assert calls == [("docker", "manual")]
+
+
+def test_main_test_target_stays_in_place_and_never_touches_candidate_recovery(tmp_path, monkeypatch) -> None:
+    # 测试点：test 目标只应重建测试库，不能进入主库候选恢复链路。
+    env_file = tmp_path / ".env.pg-migrate"
+    compose_file = tmp_path / "docker-compose.yml"
+    flyway_config = tmp_path / "flyway.toml"
+    seed_file = tmp_path / "seed.sql"
+    for path in (env_file, compose_file, flyway_config, seed_file):
+        path.write_text("placeholder", encoding="utf-8")
+
+    monkeypatch.setattr(core, "ENV_FILE", env_file)
+    monkeypatch.setattr(core, "COMPOSE_FILE", compose_file)
+    monkeypatch.setattr(core, "FLYWAY_CONFIG", flyway_config)
+    monkeypatch.setattr(core, "SEED_SQL", seed_file)
+    monkeypatch.setattr(core, "parse_args", lambda: Namespace(target="test", force=True))
+    monkeypatch.setattr(core, "load_env_file", lambda _path: {"POSTGRES_CONTAINER_NAME": "live-set-list-docker"})
+
+    calls: list[str] = []
+    monkeypatch.setattr(core, "recover_test_database_in_place", lambda *_args: calls.append("recover-test") or 0)
+    monkeypatch.setattr(core, "prepare_candidate_database", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not prepare candidate database")))
+    monkeypatch.setattr(core, "recover_main_database", lambda *_args: (_ for _ in ()).throw(AssertionError("should not enter main recovery flow")))
+
+    exit_code = core.main()
+
+    assert exit_code == 0
+    assert calls == ["recover-test"]
