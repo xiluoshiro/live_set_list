@@ -25,7 +25,7 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 4. 跑后端/前端检查，确认接口与页面正常
 5. 不要修改已执行过的 `V...sql`；如需修正，新增下一个版本文件
 
-## 重建 Docker 后如何恢复测试库
+## 恢复测试库
 
 当前测试库 `live_statistic_test` 的恢复分成 3 层：
 
@@ -67,35 +67,59 @@ python scripts/recovery_db.py test --force
 
 可选参数：
 
-- `test`：恢复测试库，当前已实现
-- `app`：预留给业务库恢复，当前尚未实现
-- `all`：预留给“恢复所有内容”，当前尚未实现
-- `--force`：确认执行 `docker compose down -v`
+- `test`：在当前正式容器内重建测试库
+- `app`：从最近一份主库备份恢复业务库，当前已实现
+- `all`：当前与 `app` 等价，恢复主库时会一并重建测试库
+- `backup-app-auto`：生成自动备份，保留最近 5 份
+- `backup-app-manual`：生成手动备份，保留最近 3 份
+- `--force`：确认执行恢复类操作
 
-当前 `test` 模式的安全流程是：
+说明：
 
-1. 如果当前 PostgreSQL 容器存在，先将旧容器重命名为备份容器并停止
-2. 用新的候选 volume 启动新容器并恢复测试库
-3. 跑 `python scripts/run_checks.py all`
-4. 如果检查通过：
-   - 先对旧正式 volume 做一份临时快照
-   - 将候选 volume 的数据复制回固定正式 volume 名
-   - 重新拉起正式容器
-   - 删除旧备份容器、候选 volume 和临时快照 volume
-5. 如果检查失败：
+- `test` 模式会保留当前主库，只在现有正式容器内把测试库恢复到项目约定的“基线状态”
+- 它恢复的是 Flyway 管理的表结构和 `base_seed.sql` 中定义的固定测试数据
+- 如果你想恢复“重建前测试库里当时所有临时数据”，仍然需要额外做 `pg_dump/pg_restore`
+
+## 备份与恢复主库
+
+主库备份目录当前固定为：
+
+- `C:\Users\xiluo\OneDrive - stu.jiangnan.edu.cn\Backup\live-set-list-docker`
+
+其中：
+
+- 自动备份：`app/auto`
+- 手动备份：`app/manual`
+
+常用命令：
+
+```powershell
+python scripts/recovery_db.py backup-app-auto
+python scripts/recovery_db.py backup-app-manual
+python scripts/recovery_db.py app --force
+```
+
+当前 `app` / `all` 模式的恢复流程是：
+
+1. 读取自动备份和手动备份，选择最近一份作为恢复源
+2. 弹出确认提示
+3. 先对当前主库再补一份手动备份，保留恢复前最后状态
+4. 将当前正式容器重命名为备份容器，并用候选 volume 拉起新容器
+5. 在候选容器中用 `pg_restore` 恢复主库
+6. 对主库执行 `flyway info + validate`，如果存在 `Pending` 再执行 `migrate`
+7. 在候选容器中重建测试库并重新导入 seed
+8. 跑 `python scripts/run_checks.py all`
+9. 如果检查通过：
+   - 脚本会暂停，等待人工确认候选容器状态
+10. 人工确认后：
+   - 将候选 volume 的数据复制回固定正式 volume 名并重新拉起正式容器
+11. 如果检查失败，或人工确认阶段取消：
    - 删除候选容器和候选 volume
    - 将旧容器改名并启动回来
 
-说明：
+补充说明：
 
-- `POSTGRES_VOLUME_NAME` 始终保持为固定正式名
-- 候选 volume 名会基于这个固定正式名生成，例如 `xxx_candidate_<timestamp>`
-
-说明：
-
-- 这套流程可以把测试库恢复到当前项目约定的“基线状态”
-- 它恢复的是 Flyway 管理的表结构和 `base_seed.sql` 中定义的固定测试数据
-- 如果你想恢复“重建前测试库里当时所有临时数据”，仍然需要额外做 `pg_dump/pg_restore`
+- 正式 volume 当前通过 Compose 的 `external` 模式接入，避免恢复/转正时反复出现“volume 已存在但不是由 Compose 创建”的警告
 
 ## 相关位置
 

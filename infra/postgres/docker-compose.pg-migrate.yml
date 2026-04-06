@@ -23,7 +23,7 @@ services:
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
-      - ${POSTGRES_VOLUME_NAME:-live_set_list_pg_migrate_data}:/var/lib/postgresql
+      - pgdata:/var/lib/postgresql
       - ../../backend/db/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -34,3 +34,4 @@ services:
 volumes:
   pgdata:
     name: ${POSTGRES_VOLUME_NAME:-live_set_list_pg_migrate_data}
+    external: true
