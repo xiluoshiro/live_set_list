@@ -16,6 +16,8 @@ python scripts/run_dev.py
 .\start-dev.bat
 ```
 
+启动前会检查 PostgreSQL Docker 容器；若容器存在但未运行则自动拉起，若容器不存在则直接报错退出。
+
 按 `Ctrl+C` 可同时关闭前后端。
 
 ## 一键检查
