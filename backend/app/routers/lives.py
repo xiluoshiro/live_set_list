@@ -9,8 +9,10 @@ from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled
 
 from app.db import get_db_connection
+from app.logging_config import get_logger
 
 router = APIRouter(prefix="/api/lives", tags=["lives"])
+logger = get_logger(__name__)
 
 ALLOWED_PAGE_SIZE = {15, 20}
 
@@ -501,12 +503,30 @@ def get_lives(
                 cur.execute(LIVES_PAGE_QUERY, (page_size, offset))
                 rows = cur.fetchall()
     except QueryCanceled as exc:
+        logger.exception(
+            "get_lives failed page=%s page_size=%s error_type=%s",
+            page,
+            page_size,
+            type(exc).__name__,
+        )
         raise HTTPException(status_code=504, detail="Database query timeout") from exc
     except OperationalError as exc:
+        logger.exception(
+            "get_lives failed page=%s page_size=%s error_type=%s",
+            page,
+            page_size,
+            type(exc).__name__,
+        )
         if "timeout expired" in str(exc).lower():
             raise HTTPException(status_code=504, detail="Database connection timeout") from exc
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     except Error as exc:
+        logger.exception(
+            "get_lives failed page=%s page_size=%s error_type=%s",
+            page,
+            page_size,
+            type(exc).__name__,
+        )
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
     items = [
@@ -646,12 +666,27 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(...)):
                     }
                     items.append(detail)
     except QueryCanceled as exc:
+        logger.exception(
+            "get_live_details_batch failed live_ids_count=%s error_type=%s",
+            len(deduped_live_ids),
+            type(exc).__name__,
+        )
         raise HTTPException(status_code=504, detail="Database query timeout") from exc
     except OperationalError as exc:
+        logger.exception(
+            "get_live_details_batch failed live_ids_count=%s error_type=%s",
+            len(deduped_live_ids),
+            type(exc).__name__,
+        )
         if "timeout expired" in str(exc).lower():
             raise HTTPException(status_code=504, detail="Database connection timeout") from exc
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     except Error as exc:
+        logger.exception(
+            "get_live_details_batch failed live_ids_count=%s error_type=%s",
+            len(deduped_live_ids),
+            type(exc).__name__,
+        )
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
     return {
@@ -672,12 +707,15 @@ def get_live_detail(live_id: int):
                 if detail is None:
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
     except QueryCanceled as exc:
+        logger.exception("get_live_detail failed live_id=%s error_type=%s", live_id, type(exc).__name__)
         raise HTTPException(status_code=504, detail="Database query timeout") from exc
     except OperationalError as exc:
+        logger.exception("get_live_detail failed live_id=%s error_type=%s", live_id, type(exc).__name__)
         if "timeout expired" in str(exc).lower():
             raise HTTPException(status_code=504, detail="Database connection timeout") from exc
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     except Error as exc:
+        logger.exception("get_live_detail failed live_id=%s error_type=%s", live_id, type(exc).__name__)
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
     return detail

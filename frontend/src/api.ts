@@ -1,4 +1,5 @@
 import { LruRequestCache, RecentPromiseDebouncer } from "./cache/queryCache";
+import { logError, logInfo } from "./logger";
 
 export type DbHealthResponse = {
   ok: boolean;
@@ -84,12 +85,64 @@ function detailCacheKey(liveId: number): string {
   return `detail:${liveId}`;
 }
 
-async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
+type RequestKind = "health" | "lives" | "live_detail" | "live_details_batch";
+
+type RequestLogMeta = {
+  requestKind: RequestKind;
+  method?: string;
+};
+
+async function fetchWithTimeout(
+  input: string,
+  init?: RequestInit,
+  meta?: RequestLogMeta,
+): Promise<Response> {
+  const method = meta?.method ?? init?.method ?? "GET";
+  const requestKind = meta?.requestKind ?? "lives";
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const startedAt = performance.now();
+  // 只在真实发起 fetch 时记录网络日志，缓存命中路径不会走到这里。
+  logInfo("api_request_start", {
+    method,
+    url: input,
+    request_kind: requestKind,
+  });
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
+    const payload = {
+      method,
+      url: input,
+      request_kind: requestKind,
+      status: response.status,
+      duration_ms: durationMs,
+    };
+    if (response.ok) {
+      logInfo("api_request_success", payload);
+    } else {
+      // 非 2xx 也先记录下来，再交给调用方统一抛错。
+      logError("api_request_error", {
+        ...payload,
+        message: `Request failed: ${response.status}`,
+      });
+    }
+    return response;
   } catch (error) {
+    const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
+    const message =
+      error instanceof DOMException && error.name === "AbortError"
+        ? "Request timeout"
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    logError("api_request_error", {
+      method,
+      url: input,
+      request_kind: requestKind,
+      duration_ms: durationMs,
+      message,
+    });
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error("Request timeout");
     }
@@ -100,7 +153,9 @@ async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Resp
 }
 
 export async function checkDbHealth(): Promise<DbHealthResponse> {
-  const response = await fetchWithTimeout(`${BASE_URL}/api/health/db`);
+  const response = await fetchWithTimeout(`${BASE_URL}/api/health/db`, undefined, {
+    requestKind: "health",
+  });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
@@ -112,7 +167,9 @@ async function fetchLivesRemote(page: number, pageSize: 15 | 20): Promise<LivesR
     page: String(page),
     page_size: String(pageSize),
   });
-  const response = await fetchWithTimeout(`${BASE_URL}/api/lives?${query.toString()}`);
+  const response = await fetchWithTimeout(`${BASE_URL}/api/lives?${query.toString()}`, undefined, {
+    requestKind: "lives",
+  });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
@@ -120,7 +177,9 @@ async function fetchLivesRemote(page: number, pageSize: 15 | 20): Promise<LivesR
 }
 
 async function fetchLiveDetailRemote(liveId: number): Promise<LiveDetailResponse> {
-  const response = await fetchWithTimeout(`${BASE_URL}/api/lives/${liveId}`);
+  const response = await fetchWithTimeout(`${BASE_URL}/api/lives/${liveId}`, undefined, {
+    requestKind: "live_detail",
+  });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
@@ -134,6 +193,9 @@ async function fetchLiveDetailsBatchRemote(liveIds: number[]): Promise<LiveDetai
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ live_ids: liveIds }),
+  }, {
+    requestKind: "live_details_batch",
+    method: "POST",
   });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
@@ -154,6 +216,7 @@ export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesRe
     .then((payload) => {
       const updatedAt = Date.now();
       livesCache.setData(requestedKey, payload, updatedAt);
+      // 后端可能会把超大页码钳回最后一页，这里顺手写入规范 key。
       const canonicalKey = livesCacheKey(payload.pagination.page, pageSize);
       if (canonicalKey !== requestedKey) {
         livesCache.setData(canonicalKey, payload, updatedAt);
@@ -244,6 +307,7 @@ export async function getLiveDetailsBatch(liveIds: number[]): Promise<LiveDetail
     missing_live_ids: [],
   };
   for (const chunk of chunks) {
+    // 分片遵循后端 live_ids <= 100 的契约，避免单次 body 过大。
     const payload = await fetchLiveDetailsBatchRemote(chunk);
     payload.items.forEach((item) => {
       detailCache.setData(detailCacheKey(item.live_id), item);

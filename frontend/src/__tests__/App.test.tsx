@@ -10,16 +10,23 @@ import {
   type LiveDetailResponse,
   type LivesResponse,
 } from "../api";
+import { logError } from "../logger";
 
 vi.mock("../api", () => ({
   getLives: vi.fn(),
   getLiveDetail: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
 }));
+vi.mock("../logger", () => ({
+  logInfo: vi.fn(),
+  logWarn: vi.fn(),
+  logError: vi.fn(),
+}));
 
 const getLivesMock = vi.mocked(getLives);
 const getLiveDetailMock = vi.mocked(getLiveDetail);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
+const logErrorMock = vi.mocked(logError);
 
 function makeItems(count: number, startId = 1, withUrl = true) {
   return Array.from({ length: count }, (_, idx) => {
@@ -125,6 +132,7 @@ describe("App", () => {
     getLivesMock.mockReset();
     getLiveDetailMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
+    logErrorMock.mockReset();
     getLiveDetailMock.mockImplementation(async (liveId: number) =>
       makeDetailResponse({ liveId, rowCount: 20 }),
     );
@@ -629,6 +637,46 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getByText("数据加载失败: Request failed: 500")).toBeInTheDocument();
       expect(screen.getByText(/第 \d+ \/ \d+ 页/)).toBeInTheDocument();
+    });
+  });
+
+  test("列表加载失败时会记录页面级错误日志", async () => {
+    // 测试点：列表请求失败后，页面 catch 会记录带分页上下文的业务日志。
+    getLivesMock.mockRejectedValueOnce(new Error("Request failed: 500"));
+    render(<App />);
+
+    await waitFor(() => {
+      expect(logErrorMock).toHaveBeenCalledWith(
+        "load_lives_failed",
+        expect.objectContaining({
+          page: 1,
+          pageSize: 20,
+          message: "Request failed: 500",
+        }),
+      );
+    });
+  });
+
+  test("详情加载失败时会记录页面级错误日志", async () => {
+    // 测试点：详情请求失败后，页面 catch 会记录 liveId 和错误信息，便于定位具体弹窗失败。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    getLiveDetailMock.mockRejectedValueOnce(new Error("Request failed: 500"));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+
+    await waitFor(() => {
+      expect(logErrorMock).toHaveBeenCalledWith(
+        "load_live_detail_failed",
+        expect.objectContaining({
+          liveId: 1,
+          message: "Request failed: 500",
+        }),
+      );
     });
   });
 

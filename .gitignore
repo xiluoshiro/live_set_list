@@ -7,3 +7,4 @@ infra/postgres/.env.pg-migrate
 backend/__pycache__/
 __pycache__/
 recovery/.runtime/
+backend/logs/

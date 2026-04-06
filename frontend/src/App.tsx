@@ -3,6 +3,7 @@ import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { MemberStatusTable } from "./components/DetailMemberTable";
 import { getLiveDetail, getLives, type LiveDetailResponse, type LiveItem } from "./api";
+import { logError } from "./logger";
 import { prefetchCurrentPageDetails, scheduleIdleNextPagePrefetch } from "./prefetch/liveDetailsPrefetch";
 import { useTheme } from "./theme/ThemeProvider";
 import "./styles/index.css";
@@ -86,6 +87,11 @@ function App() {
         if (canceled) return;
         const rawMessage = error instanceof Error ? error.message : "未知错误";
         const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
+        logError("load_lives_failed", {
+          page,
+          pageSize,
+          message,
+        });
         setLoadError(message);
         setItems([]);
         setServerTotal(0);
@@ -160,6 +166,10 @@ function App() {
         if (canceled) return;
         const rawMessage = error instanceof Error ? error.message : "未知错误";
         const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
+        logError("load_live_detail_failed", {
+          liveId: activeRow.liveId,
+          message,
+        });
         setDetailError(message);
       } finally {
         if (!canceled) {

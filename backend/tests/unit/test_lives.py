@@ -101,13 +101,16 @@ def test_get_lives_invalid_page_size_returns_400():
 
 
 def test_get_lives_db_error_returns_500():
-    # 测试点：数据库异常时应返回 500，避免服务静默失败。
-    with patch("app.routers.lives.get_db_connection", side_effect=Error("db down")):
+    # 测试点：数据库异常时应返回 500，并同步记录一条路由级异常日志。
+    with patch("app.routers.lives.logger.exception") as logger_exception, patch(
+        "app.routers.lives.get_db_connection", side_effect=Error("db down")
+    ):
         client = TestClient(app)
         response = client.get("/api/lives?page=1&page_size=20")
 
     assert response.status_code == 500
     assert "Database error" in response.json()["detail"]
+    logger_exception.assert_called_once()
 
 
 def test_get_lives_large_page_clamps_to_last_page():
