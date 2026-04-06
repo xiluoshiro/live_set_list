@@ -32,7 +32,9 @@ python scripts/run_checks.py <arguments>
 - `backend-unit`：运行后端单元测试集
 - `backend-integration`：运行后端 `mypy(app + tests) + pytest tests/integration`
 - `backend`：相当于运行 `backend-unit + backend-integration`
-- `recovery`：运行恢复脚本的 mock/命令契约测试
+- `recovery-unit`：运行恢复脚本的 mock/命令契约测试
+- `recovery-integration`：运行恢复脚本的 Docker 沙箱集成测试
+- `recovery`：相当于运行 `recovery-unit + recovery-integration`，这组检查会真实操作独立 Docker 沙箱，明显更重
 - `functional`：运行功能测试集，只包含 `frontend + backend`
 - `full`：运行全部检查，等于 `frontend + backend + recovery`
 
