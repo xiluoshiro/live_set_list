@@ -11,6 +11,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       APP_DB: ${APP_DB:-live_statistic}
       APP_OWNER: ${APP_OWNER:-live_project_owner}
+      APP_OWNER_PASSWORD: ${APP_OWNER_PASSWORD:-}
       FLYWAY_USER: ${FLYWAY_USER}
       FLYWAY_PASSWORD: ${FLYWAY_PASSWORD}
       APP_RO_USER: ${APP_RO_USER:-live_project_ro}

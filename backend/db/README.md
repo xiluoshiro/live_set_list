@@ -5,7 +5,7 @@
 ## 角色分工
 
 - `postgres`：容器 bootstrap / 管理账号
-- `live_project_owner`：业务库 owner，由 `APP_OWNER` 指定
+- `live_project_owner`：业务库 owner，由 `APP_OWNER` / `APP_OWNER_PASSWORD` 指定
 - `live_project_flyway`：Flyway 迁移账号
 - `live_project_ro`：普通查询账号
 - `live_project_super_ro`：高权限业务账号，可查询/插入/更新
