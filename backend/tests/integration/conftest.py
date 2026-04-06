@@ -11,12 +11,12 @@ from app.main import app
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SEED_SQL_PATH = ROOT_DIR / "backend" / "db" / "postgres" / "seed" / "base_seed.sql"
-PG_MIGRATE_ENV_PATH = ROOT_DIR / ".env.pg-migrate"
+PG_MIGRATE_ENV_PATH = ROOT_DIR / "infra" / "postgres" / ".env.pg-migrate"
 
 
 def _load_integration_db_config() -> dict[str, str] | None:
     if os.getenv("TEST_DB_PASSWORD"):
-        user = os.getenv("TEST_DB_USER", "live_project_flyway")
+        user = os.getenv("TEST_DB_USER", "live_project_ro")
         password = os.getenv("TEST_DB_PASSWORD", "")
         return {
             "host": os.getenv("TEST_DB_HOST", "localhost"),
@@ -24,16 +24,16 @@ def _load_integration_db_config() -> dict[str, str] | None:
             "dbname": os.getenv("TEST_DB_NAME", "live_statistic_test"),
             "user": user,
             "password": password,
-            "admin_user": os.getenv("TEST_DB_ADMIN_USER", user),
-            "admin_password": os.getenv("TEST_DB_ADMIN_PASSWORD", password),
+            "admin_user": os.getenv("TEST_DB_ADMIN_USER", "live_project_test_admin"),
+            "admin_password": os.getenv("TEST_DB_ADMIN_PASSWORD") or password,
         }
 
     if not PG_MIGRATE_ENV_PATH.exists():
         return None
 
     values = dotenv_values(PG_MIGRATE_ENV_PATH)
-    raw_password = values.get("FLYWAY_PASSWORD")
-    raw_user = values.get("FLYWAY_USER")
+    raw_password = values.get("APP_RO_PASSWORD") or values.get("POSTGRES_PASSWORD")
+    raw_user = values.get("APP_RO_USER") or "live_project_ro"
     port = values.get("POSTGRES_PORT")
     if not raw_password or not raw_user:
         return None
@@ -46,8 +46,8 @@ def _load_integration_db_config() -> dict[str, str] | None:
         "dbname": str(values.get("TEST_DB_NAME", "live_statistic_test")),
         "user": user,
         "password": password,
-        "admin_user": str(values.get("TEST_DB_ADMIN_USER", user)),
-        "admin_password": str(values.get("TEST_DB_ADMIN_PASSWORD", password)),
+        "admin_user": str(values.get("TEST_DB_ADMIN_USER") or values.get("TEST_ADMIN_USER") or "live_project_test_admin"),
+        "admin_password": str(values.get("TEST_DB_ADMIN_PASSWORD") or values.get("TEST_ADMIN_PASSWORD") or values.get("POSTGRES_PASSWORD") or password),
     }
 
 
@@ -55,7 +55,7 @@ def _load_integration_db_config() -> dict[str, str] | None:
 def integration_db_config() -> dict[str, str]:
     config = _load_integration_db_config()
     if config is None:
-        pytest.skip("未配置 integration 测试数据库。请提供 TEST_DB_* 环境变量或 .env.pg-migrate。")
+        pytest.skip("未配置 integration 测试数据库。请提供 TEST_DB_* 环境变量或 infra/postgres/.env.pg-migrate。")
     return config
 
 

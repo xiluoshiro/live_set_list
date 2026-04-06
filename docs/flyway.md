@@ -85,8 +85,11 @@
 当前仓库建议并已基本落地如下结构：
 
 ```text
-docker-compose.pg-migrate.yml
-.env.pg-migrate
+infra/
+  postgres/
+    docker-compose.pg-migrate.yml
+    .env.pg-migrate
+    .env.pg-migrate.example
 backend/
   db/
     flyway/
@@ -112,12 +115,16 @@ backend/
 - `backend/db/flyway/sql/B1__baseline_schema.sql`
   - 当前 baseline 脚本
   - 已准备完成，后续作为版本 `1` 保留
-- `docker-compose.pg-migrate.yml`
+- `infra/postgres/docker-compose.pg-migrate.yml`
   - 本地 PostgreSQL 18.3 迁移目标库容器配置
+- `infra/postgres/.env.pg-migrate`
+  - 本地 Docker PostgreSQL 环境变量
+  - 包含 owner / flyway / app / test admin 角色配置
+  - 其中 `POSTGRES_USER/POSTGRES_DB` 用于容器 bootstrap，`APP_DB/APP_OWNER` 用于项目业务库
 - `backend/db/postgres/init/010-create-flyway-role.sh`
-  - 容器首次初始化时创建 / 更新 Flyway 账号
+  - 容器首次初始化时创建 / 更新 Flyway / app 账号
   - 会创建 `live_statistic_test`
-  - 会授予测试库连接权限与 `public` schema 的 `USAGE, CREATE`
+  - 会授予测试库连接权限与相应 schema/table/sequence 权限
 
 ## 5. 当前容器化方案
 
@@ -150,7 +157,7 @@ backend/
 
 否则容器可能在初始化后报错并反复重启。
 
-当前 [`docker-compose.pg-migrate.yml`](D:/Code/PythonCode/5%20LiveSetList/docker-compose.pg-migrate.yml) 已按 PostgreSQL 18 的要求修正。
+当前 [`docker-compose.pg-migrate.yml`](D:/Code/PythonCode/5%20LiveSetList/infra/postgres/docker-compose.pg-migrate.yml) 已按 PostgreSQL 18 的要求修正。
 
 ## 6. Flyway 配置与使用方式
 
@@ -228,8 +235,12 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 
 当前本地容器内已经按这个思路工作：
 
-- `live_project_owner` 负责数据库拥有权
+- `postgres` 负责容器 bootstrap 与管理入口
+- `live_project_owner` 负责业务数据库拥有权
 - `live_project_flyway` 负责 Flyway 连接与迁移
+- `live_project_ro` 负责普通查询
+- `live_project_super_ro` 负责查询、插入、更新
+- `live_project_test_admin` 负责测试库重置与 seed，不授予主库访问权限
 
 ### 最低建议权限
 
@@ -251,6 +262,10 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 
 - `GRANT CONNECT ON DATABASE live_statistic_test TO live_project_flyway;`
 - `GRANT USAGE, CREATE ON SCHEMA public TO live_project_flyway;`
+- `GRANT CONNECT ON DATABASE live_statistic_test TO live_project_ro;`
+- `GRANT CONNECT ON DATABASE live_statistic_test TO live_project_super_ro;`
+- `GRANT CONNECT ON DATABASE live_statistic_test TO live_project_test_admin;`
+- `GRANT live_project_flyway TO live_project_test_admin;`
 
 这足以让 Flyway 在空测试库上建立 schema history 表并执行 baseline。
 
@@ -305,6 +320,6 @@ ALTER ROLE live_project_flyway CREATEDB;
 - 不要修改已执行过的 `V...sql`
   - 修正应新增下一个版本文件
 - 测试库应通过 Flyway 重建，而不是手工点 pgAdmin 同步
-- 如果 `.env.pg-migrate` 中的数据库密码变更，而容器已初始化完成，需要同步更新数据库角色密码
+- 如果 `infra/postgres/.env.pg-migrate` 中的数据库密码变更，而容器已初始化完成，需要同步更新数据库角色密码
   - 否则 Flyway 会出现密码认证失败
 - PostgreSQL 18 容器的数据卷挂载路径应使用 `/var/lib/postgresql`

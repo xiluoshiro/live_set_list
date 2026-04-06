@@ -1,3 +1,5 @@
+name: live-set-list-pg-migrate
+
 services:
   postgres:
     image: postgres:18.3-trixie
@@ -7,13 +9,21 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB: ${APP_DB:-live_statistic}
+      APP_OWNER: ${APP_OWNER:-live_project_owner}
       FLYWAY_USER: ${FLYWAY_USER}
       FLYWAY_PASSWORD: ${FLYWAY_PASSWORD}
+      APP_RO_USER: ${APP_RO_USER:-live_project_ro}
+      APP_RO_PASSWORD: ${APP_RO_PASSWORD:-}
+      APP_SUPER_USER: ${APP_SUPER_USER:-live_project_super_ro}
+      APP_SUPER_PASSWORD: ${APP_SUPER_PASSWORD:-}
+      TEST_ADMIN_USER: ${TEST_ADMIN_USER:-live_project_test_admin}
+      TEST_ADMIN_PASSWORD: ${TEST_ADMIN_PASSWORD:-}
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - live_set_list_pg_migrate_data:/var/lib/postgresql
-      - ./backend/db/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ../../backend/db/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -22,3 +32,4 @@ services:
 
 volumes:
   live_set_list_pg_migrate_data:
+    name: live_set_list_pg_migrate_data

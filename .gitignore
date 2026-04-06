@@ -3,6 +3,6 @@ frontend/node_modules/
 backend/.venv/
 backend/.env
 backend/db/flyway/flyway.toml
-/.env.pg-migrate
+infra/postgres/.env.pg-migrate
 backend/__pycache__/
 __pycache__/
