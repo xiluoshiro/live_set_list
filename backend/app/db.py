@@ -1,20 +1,30 @@
 import os
+from pathlib import Path
 
 import psycopg2
 from dotenv import load_dotenv
 
-load_dotenv()
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+PG_MIGRATE_ENV_PATH = ROOT_DIR / "infra" / "postgres" / ".env.pg-migrate"
+
+if PG_MIGRATE_ENV_PATH.exists():
+    load_dotenv(PG_MIGRATE_ENV_PATH, override=False)
+
+
+def _get_db_setting(name: str, fallback_name: str, default: str) -> str:
+    return os.getenv(name) or os.getenv(fallback_name) or default
 
 
 def get_db_connection():
     connect_timeout_seconds = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))
     statement_timeout_ms = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "10000"))
     return psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=int(os.getenv("DB_PORT", "5432")),
-        dbname=os.getenv("DB_NAME", "live_statistic"),
-        user=os.getenv("DB_USER", "live_project_ro"),
-        password=os.getenv("DB_PASSWORD", ""),
+        host=_get_db_setting("DB_HOST", "POSTGRES_HOST", "localhost"),
+        port=int(_get_db_setting("DB_PORT", "POSTGRES_PORT", "5432")),
+        dbname=_get_db_setting("DB_NAME", "APP_DB", "live_statistic"),
+        user=_get_db_setting("DB_USER", "APP_RO_USER", "live_project_ro"),
+        password=_get_db_setting("DB_PASSWORD", "APP_RO_PASSWORD", ""),
         connect_timeout=connect_timeout_seconds,
         options=f"-c statement_timeout={statement_timeout_ms}",
     )
