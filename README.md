@@ -108,21 +108,16 @@ python run_checks.py <arguments>
 ## 数据库版本控制
 
 - Flyway 落地说明见 [docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md)
+- 数据库操作说明见 [backend/db/README.md](D:/Code/PythonCode/5%20LiveSetList/backend/db/README.md)
 - 仓库内 Flyway 骨架位于 `backend/db/flyway`
-
-### 修改表结构时怎么做
-
-1. 先在 pgAdmin 中试验 SQL
-2. 将正式变更整理成新的 `backend/db/flyway/sql/V...sql`
-3. 先对测试库执行 Flyway：
-
-```powershell
-flyway -configFiles=backend/db/flyway/flyway.toml validate
-flyway -configFiles=backend/db/flyway/flyway.toml migrate
-```
-
-4. 跑后端/前端检查，确认接口与页面正常
-5. 不要修改已执行过的 `V...sql`；如需修正，新增下一个版本文件
+- Docker PostgreSQL 配置位于 `infra/postgres`
+- 当前容器内默认使用的账号分工：
+  - `postgres`：容器 bootstrap / 管理账号
+  - `live_project_owner`：业务库 owner，由 `APP_OWNER` 指定
+  - `live_project_flyway`：Flyway 迁移账号
+  - `live_project_ro`：普通查询账号
+  - `live_project_super_ro`：高权限业务账号，可查询/插入/更新
+  - `live_project_test_admin`：测试库专用管理账号，用于 integration 的重置与 seed
 
 ## 开发路线图（TODO）
 

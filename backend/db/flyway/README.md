@@ -7,7 +7,7 @@
 1. 先阅读 [docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md)
 2. 本地可直接使用 `flyway.toml` 连接 Docker 迁移目标库
 3. 如需提交模板或切换环境，再参考 `flyway.toml.example`
-4. 项目根目录提供 `docker-compose.pg-migrate.yml` 用于启动本地 PostgreSQL 18.3 迁移目标库
+4. `infra/postgres` 提供 Docker PostgreSQL 的 compose 和 env 配置
 5. 当前默认先操作测试库 `live_statistic_test`
 6. 将结构变更写入 `sql/V...sql`
 
@@ -34,4 +34,4 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 - `sql/B1__baseline_schema.sql`
   - 当前 baseline migration
 - `../postgres/init/010-create-flyway-role.sh`
-  - PostgreSQL 容器初始化时创建 Flyway 登录角色并授予 schema 权限
+  - PostgreSQL 容器初始化时创建 Flyway / app / test admin 角色并授予相应权限
