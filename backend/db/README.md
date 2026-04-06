@@ -68,8 +68,7 @@ python scripts/recovery_db.py test --force
 可选参数：
 
 - `test`：在当前正式容器内重建测试库
-- `app`：从最近一份主库备份恢复业务库，当前已实现
-- `all`：当前与 `app` 等价，恢复主库时会一并重建测试库
+- `recovery`：从最近一份主库备份恢复业务库，当前已实现
 - `backup-app-auto`：生成自动备份，保留最近 5 份
 - `backup-app-manual`：生成手动备份，保留最近 3 份
 - `--force`：确认执行恢复类操作
@@ -96,10 +95,10 @@ python scripts/recovery_db.py test --force
 ```powershell
 python scripts/recovery_db.py backup-app-auto
 python scripts/recovery_db.py backup-app-manual
-python scripts/recovery_db.py app --force
+python scripts/recovery_db.py recovery --force
 ```
 
-当前 `app` / `all` 模式的恢复流程是：
+当前 `recovery` 模式的恢复流程是：
 
 1. 读取自动备份和手动备份，选择最近一份作为恢复源
 2. 弹出确认提示

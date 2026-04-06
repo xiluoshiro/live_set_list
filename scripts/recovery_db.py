@@ -231,7 +231,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Recover or back up Docker PostgreSQL databases.")
     parser.add_argument(
         "target",
-        choices=["test", "app", "all", "backup-app-auto", "backup-app-manual"],
+        choices=["test", "recovery", "backup-app-auto", "backup-app-manual"],
         help="Action target.",
     )
     parser.add_argument(
@@ -800,7 +800,7 @@ def restore_formal_from_snapshot(
     wait_for_container_ready(docker_cmd, container_name)
 
 
-def recover_app_or_all(env_values: dict[str, str], docker_cmd: str) -> int:
+def recover_main_database(env_values: dict[str, str], docker_cmd: str) -> int:
     # 主库恢复主流程：选备份、保底再备份、候选恢复、跑全量检查、人工确认后转正。
     container_name = env_values.get("POSTGRES_CONTAINER_NAME", "live-set-list-docker")
     current_volume_name = env_values.get("POSTGRES_VOLUME_NAME", "live_set_list_docker_data")
@@ -907,8 +907,8 @@ def main() -> int:
 
     if args.target == "test":
         return recover_test_database_in_place(env_values, docker_cmd)
-    if args.target in {"app", "all"}:
-        return recover_app_or_all(env_values, docker_cmd)
+    if args.target == "recovery":
+        return recover_main_database(env_values, docker_cmd)
 
     raise SystemExit(f"不支持的目标：{args.target}")
 
