@@ -59,6 +59,38 @@ docker exec -i live-set-list-pg-migrate psql -U live_project_test_admin -d live_
 python run_checks.py backend-integration
 ```
 
+5. 如果希望一条命令执行“重建 Docker + Flyway migrate + 导入 seed”，可以在项目根目录运行：
+
+```powershell
+python recovery_db.py test --force
+```
+
+可选参数：
+
+- `test`：恢复测试库，当前已实现
+- `app`：预留给业务库恢复，当前尚未实现
+- `all`：预留给“恢复所有内容”，当前尚未实现
+- `--force`：确认执行 `docker compose down -v`
+
+当前 `test` 模式的安全流程是：
+
+1. 如果当前 PostgreSQL 容器存在，先将旧容器重命名为备份容器并停止
+2. 用新的候选 volume 启动新容器并恢复测试库
+3. 跑 `python run_checks.py all`
+4. 如果检查通过：
+   - 先对旧正式 volume 做一份临时快照
+   - 将候选 volume 的数据复制回固定正式 volume 名
+   - 重新拉起正式容器
+   - 删除旧备份容器、候选 volume 和临时快照 volume
+5. 如果检查失败：
+   - 删除候选容器和候选 volume
+   - 将旧容器改名并启动回来
+
+说明：
+
+- `POSTGRES_VOLUME_NAME` 始终保持为固定正式名
+- 候选 volume 名会基于这个固定正式名生成，例如 `xxx_candidate_<timestamp>`
+
 说明：
 
 - 这套流程可以把测试库恢复到当前项目约定的“基线状态”

@@ -23,7 +23,7 @@ services:
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
-      - live_set_list_pg_migrate_data:/var/lib/postgresql
+      - ${POSTGRES_VOLUME_NAME:-live_set_list_pg_migrate_data}:/var/lib/postgresql
       - ../../backend/db/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -32,5 +32,5 @@ services:
       retries: 5
 
 volumes:
-  live_set_list_pg_migrate_data:
-    name: live_set_list_pg_migrate_data
+  pgdata:
+    name: ${POSTGRES_VOLUME_NAME:-live_set_list_pg_migrate_data}
