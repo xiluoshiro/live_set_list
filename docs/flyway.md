@@ -120,7 +120,7 @@ backend/
 - `infra/postgres/.env.pg-migrate`
   - 本地 Docker PostgreSQL 环境变量
   - 包含 owner / flyway / app / test admin 角色配置
-  - 其中 `POSTGRES_USER/POSTGRES_DB` 用于容器 bootstrap，`APP_DB/APP_OWNER` 用于项目业务库
+  - 其中 `POSTGRES_USER/POSTGRES_DB` 用于容器 bootstrap，`APP_DB/APP_OWNER/APP_OWNER_PASSWORD` 用于项目业务库
 - `backend/db/postgres/init/010-create-flyway-role.sh`
   - 容器首次初始化时创建 / 更新 Flyway / app 账号
   - 会创建 `live_statistic_test`

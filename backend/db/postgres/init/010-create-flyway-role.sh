@@ -5,6 +5,7 @@ flyway_user="${FLYWAY_USER:-live_project_flyway}"
 flyway_password="${FLYWAY_PASSWORD:-$POSTGRES_PASSWORD}"
 app_db="${APP_DB:-live_statistic}"
 app_owner="${APP_OWNER:-live_project_owner}"
+app_owner_password="${APP_OWNER_PASSWORD:-$POSTGRES_PASSWORD}"
 readonly_user="${APP_RO_USER:-live_project_ro}"
 readonly_password="${APP_RO_PASSWORD:-$POSTGRES_PASSWORD}"
 super_user="${APP_SUPER_USER:-live_project_super_ro}"
@@ -17,9 +18,9 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EO
 DO \$\$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${app_owner}') THEN
-        CREATE ROLE ${app_owner} LOGIN PASSWORD '${POSTGRES_PASSWORD}';
+        CREATE ROLE ${app_owner} LOGIN PASSWORD '${app_owner_password}';
     ELSE
-        ALTER ROLE ${app_owner} WITH LOGIN PASSWORD '${POSTGRES_PASSWORD}';
+        ALTER ROLE ${app_owner} WITH LOGIN PASSWORD '${app_owner_password}';
     END IF;
 END
 \$\$;
