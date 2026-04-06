@@ -7,7 +7,8 @@
 - 已引入 Flyway 配置与基线脚本
 - 已准备本地 PostgreSQL 18.3 容器作为迁移目标库
 - 已将 `B1__baseline_schema.sql` 成功迁移到测试库 `live_statistic_test`
-- 当前默认只操作测试库，不动主开发库 `live_statistic`
+- 已将主开发库 `live_statistic` 以 `baselineVersion = 1` 纳入 Flyway 管理
+- 主库与测试库当前都处于 schema version `1`
 
 ## 1. 日常推荐流程
 
@@ -19,7 +20,7 @@
 4. 在测试库上执行 `flyway validate`
 5. 在测试库上执行 `flyway migrate`
 6. 跑后端集成测试 / 接口验证
-7. 验证通过后，再考虑是否让开发库跟进
+7. 验证通过后，再对开发库执行同一套迁移
 
 ## 2. 当前后端实际依赖的表
 
@@ -130,16 +131,16 @@ backend/
 
 ### 5.1 当前目标
 
-当前只把 Flyway 迁移到测试库：
+当前 Flyway 已同时接管两套库：
 
 - 测试库：`live_statistic_test`
 - 主开发库：`live_statistic`
 
 约定：
 
-- 当前默认只迁移测试库
-- 不直接对主开发库做 `migrate`
-- 等测试库迁移与验证稳定后，再评估是否接管主开发库
+- 默认环境仍然是 `test`
+- 日常结构变更先在测试库执行 `validate + migrate`
+- 测试与联调通过后，再对主开发库执行同一版本迁移
 
 ### 5.2 PostgreSQL 18 镜像的挂载注意事项
 
@@ -189,7 +190,7 @@ backend/
 
 - `jdbc:postgresql://localhost:15432/live_statistic_test`
 
-开发库配置也保留在同一个文件中，但默认不会使用。
+开发库配置保留在同一个文件中，当前已完成 baseline 接管，但默认命令仍指向测试库。
 
 ### 6.3 当前推荐命令
 
@@ -218,10 +219,12 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 - `live_statistic_test` 已成功应用 `B1__baseline_schema.sql`
 - `public.flyway_schema_history` 已建立
 - 当前 schema version 为 `1`
+- `live_statistic` 已成功执行 `baseline`
+- 主库与测试库均已通过 `flyway validate`
 
 因此：
 
-- 测试库已具备基础表结构
+- 两套数据库都已被 Flyway 正确接管
 - 后续新增数据库结构变化时，应从 `V2__...sql` 开始继续追加
 
 ## 7. Flyway 使用的 PostgreSQL 用户权限

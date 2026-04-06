@@ -50,7 +50,7 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 3. 如需手工恢复基础测试数据，导入 seed：
 
 ```powershell
-docker exec -i live-set-list-pg-migrate psql -U live_project_test_admin -d live_statistic_test < backend/db/postgres/seed/base_seed.sql
+docker exec -i live-set-list-docker psql -U live_project_test_admin -d live_statistic_test < backend/db/postgres/seed/base_seed.sql
 ```
 
 4. 或者直接运行集成测试；integration 用例会在每条测试前自动导入同一份 seed：
