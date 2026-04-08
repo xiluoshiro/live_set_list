@@ -34,7 +34,7 @@ SELECT
             FILTER (WHERE b.id IS NOT NULL),
         ARRAY[]::int[]
     ) AS band_ids,
-    NULL AS url
+    l.url AS url
 FROM live_attrs l
 JOIN live_setlist ls
     ON l.id = ls.live_id
@@ -44,7 +44,7 @@ LEFT JOIN LATERAL (
 ) t ON true
 LEFT JOIN band_attrs b
     ON b.band_name = t.key
-GROUP BY l.id, l.live_date, l.live_title
+GROUP BY l.id, l.live_date, l.live_title, l.url
 """
 
 LIVES_COUNT_QUERY = f"""

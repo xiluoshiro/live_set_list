@@ -108,7 +108,7 @@ select 1;
       "live_date": "2026-03-28",
       "live_title": "示例 Live 名称",
       "bands": [1, 2, 3],
-      "url": null
+      "url": "https://example.com/live/123"
     }
   ],
   "pagination": {
@@ -126,7 +126,7 @@ select 1;
 - `live_date`: Live 日期
 - `live_title`: Live 标题
 - `bands`: 从明细中聚合出的乐队 ID 列表，去重后按升序返回
-- `url`: 当前实现固定返回 `null`，尚未真正从数据库读取链接字段
+- `url`: Live 链接，来自 `live_attrs.url`
 
 ### 分页行为
 
@@ -381,5 +381,6 @@ select 1;
 - 当前前端实际调用的后端 API 就是本文档列出的 5 个接口
 - 当前前端收藏状态使用 `localStorage`，不依赖后端收藏接口
 - 当前前端依赖 `pagination.total` 与 `pagination.total_pages` 驱动分页
-- 当前详情接口已返回 `venue`、`opening_time`、`start_time`、`url`
+- 当前列表与详情接口都已返回 `url`
+- 当前详情接口已返回 `venue`、`opening_time`、`start_time`
 - 当前 `band_members[].total_count` 已不再固定写死，而是按 `band_attrs` 中的数据库值返回
