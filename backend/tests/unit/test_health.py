@@ -49,6 +49,8 @@ def test_db_healthcheck_db_error_returns_500():
     assert response.status_code == 500
     assert "Database error" in response.json()["detail"]
     logger_exception.assert_called_once()
+    assert logger_exception.call_args.args[0].startswith("db healthcheck failed")
+    assert logger_exception.call_args.args[1] == "Error"
 
 
 def test_db_healthcheck_uses_connection_and_cursor_context():
