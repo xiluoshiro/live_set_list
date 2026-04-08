@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, call, patch
 
+import pytest
 from fastapi.testclient import TestClient
 from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled
@@ -98,6 +99,34 @@ def test_get_lives_invalid_page_size_returns_400():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "page_size must be 15 or 20"
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected_status", "expected_detail", "exact_match"),
+    [
+        (QueryCanceled("statement timeout"), 504, "Database query timeout", True),
+        (OperationalError("timeout expired"), 504, "Database connection timeout", True),
+        (Error("db down"), 500, "Database error", False),
+    ],
+)
+def test_get_lives_db_errors_log_context(exc, expected_status, expected_detail, exact_match):
+    # 测试点：get_lives 三类数据库异常都要记录 page/page_size 与 error_type。
+    with patch("app.routers.lives.logger.exception") as logger_exception, patch(
+        "app.routers.lives.get_db_connection", side_effect=exc
+    ):
+        client = TestClient(app)
+        response = client.get("/api/lives?page=3&page_size=20")
+
+    assert response.status_code == expected_status
+    if exact_match:
+        assert response.json()["detail"] == expected_detail
+    else:
+        assert expected_detail in response.json()["detail"]
+    logger_exception.assert_called_once()
+    assert logger_exception.call_args.args[0].startswith("get_lives failed")
+    assert logger_exception.call_args.args[1] == 3
+    assert logger_exception.call_args.args[2] == 20
+    assert logger_exception.call_args.args[3] == type(exc).__name__
 
 
 def test_get_lives_db_error_returns_500():
@@ -240,6 +269,33 @@ def test_get_live_detail_invalid_id_returns_400():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "live_id must be >= 1"
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected_status", "expected_detail", "exact_match"),
+    [
+        (QueryCanceled("statement timeout"), 504, "Database query timeout", True),
+        (OperationalError("timeout expired"), 504, "Database connection timeout", True),
+        (Error("db down"), 500, "Database error", False),
+    ],
+)
+def test_get_live_detail_db_errors_log_context(exc, expected_status, expected_detail, exact_match):
+    # 测试点：get_live_detail 三类数据库异常都要记录 live_id 与 error_type。
+    with patch("app.routers.lives.logger.exception") as logger_exception, patch(
+        "app.routers.lives.get_db_connection", side_effect=exc
+    ):
+        client = TestClient(app)
+        response = client.get("/api/lives/123")
+
+    assert response.status_code == expected_status
+    if exact_match:
+        assert response.json()["detail"] == expected_detail
+    else:
+        assert expected_detail in response.json()["detail"]
+    logger_exception.assert_called_once()
+    assert logger_exception.call_args.args[0].startswith("get_live_detail failed")
+    assert logger_exception.call_args.args[1] == 123
+    assert logger_exception.call_args.args[2] == type(exc).__name__
 
 
 def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
@@ -578,3 +634,32 @@ def test_get_live_details_batch_normalizes_band_and_other_members():
     other_member_map = {item["key"]: item["value"] for item in row["other_members"]}
     assert other_member_map["嘉宾"] == ["Alice", "Bob"]
     assert other_member_map["支援"] == ["Solo"]
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected_status", "expected_detail", "exact_match"),
+    [
+        (QueryCanceled("statement timeout"), 504, "Database query timeout", True),
+        (OperationalError("timeout expired"), 504, "Database connection timeout", True),
+        (Error("db down"), 500, "Database error", False),
+    ],
+)
+def test_get_live_details_batch_db_errors_log_context_and_deduped_count(
+    exc, expected_status, expected_detail, exact_match
+):
+    # 测试点：batch 三类数据库异常都要记录 error_type，且 live_ids_count 取去重后的数量。
+    with patch("app.routers.lives.logger.exception") as logger_exception, patch(
+        "app.routers.lives.get_db_connection", side_effect=exc
+    ):
+        client = TestClient(app)
+        response = client.post("/api/lives/details:batch", json={"live_ids": [1, 2, 2, 3]})
+
+    assert response.status_code == expected_status
+    if exact_match:
+        assert response.json()["detail"] == expected_detail
+    else:
+        assert expected_detail in response.json()["detail"]
+    logger_exception.assert_called_once()
+    assert logger_exception.call_args.args[0].startswith("get_live_details_batch failed")
+    assert logger_exception.call_args.args[1] == 3
+    assert logger_exception.call_args.args[2] == type(exc).__name__
