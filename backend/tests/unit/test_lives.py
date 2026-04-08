@@ -55,7 +55,7 @@ def _build_batch_detail_connection_mock(
 def test_get_lives_success_returns_items_and_pagination():
     # 测试点：正常请求时，返回 items 与 pagination，且字段映射符合接口契约。
     rows = [
-        (1, "2026-03-28", "Title 1", [1, 2], None),
+        (1, "2026-03-28", "Title 1", [1, 2], "https://example.com/live/1"),
         (2, "2026-03-27", "Title 2", [], None),
     ]
     conn, cursor = _build_connection_mock(47, rows)
@@ -78,7 +78,7 @@ def test_get_lives_success_returns_items_and_pagination():
             "live_date": "2026-03-28",
             "live_title": "Title 1",
             "bands": [1, 2],
-            "url": None,
+            "url": "https://example.com/live/1",
         },
         {
             "live_id": 2,
@@ -90,6 +90,21 @@ def test_get_lives_success_returns_items_and_pagination():
     ]
     assert cursor.execute.call_count == 2
     assert cursor.execute.call_args_list[1] == call(LIVES_PAGE_QUERY, (20, 0))
+
+
+def test_get_lives_returns_url_from_live_attrs():
+    # 测试点：列表接口的 url 应直接透传 live_attrs.url，而不是固定返回空值。
+    rows = [
+        (7, "2026-04-08", "Title 7", [3], "https://example.com/live/7?from=list"),
+    ]
+    conn, _ = _build_connection_mock(1, rows)
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.get("/api/lives?page=1&page_size=20")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["url"] == "https://example.com/live/7?from=list"
 
 
 def test_get_lives_invalid_page_size_returns_400():
