@@ -5,7 +5,7 @@ import { MemberStatusTable } from "./components/DetailMemberTable";
 import { getLiveDetail, getLives, type LiveDetailResponse, type LiveItem } from "./api";
 import { logError } from "./logger";
 import { prefetchCurrentPageDetails, scheduleIdleNextPagePrefetch } from "./prefetch/liveDetailsPrefetch";
-import { useTheme } from "./theme/ThemeProvider";
+import { useTheme, type ThemeMode } from "./theme/ThemeProvider";
 import "./styles/index.css";
 
 type LiveRow = {
@@ -38,8 +38,33 @@ function formatTimedLabel(value: string | null | undefined): string {
   return `${timePart}(${timezoneLabel})`;
 }
 
+function getNextThemeMode(mode: ThemeMode): ThemeMode {
+  if (mode === "system") return "dark";
+  if (mode === "dark") return "light";
+  return "system";
+}
+
+function getThemeToggleMeta(mode: ThemeMode, resolvedTheme: "light" | "dark") {
+  if (mode === "system") {
+    return {
+      icon: "⦿",
+      label: `当前跟随系统（${resolvedTheme === "dark" ? "夜间" : "浅色"}），单击锁定夜间模式`,
+    };
+  }
+  if (mode === "dark") {
+    return {
+      icon: "☽",
+      label: "当前夜间模式，单击切换到浅色模式",
+    };
+  }
+  return {
+    icon: "☀",
+    label: "当前浅色模式，单击切换到跟随系统",
+  };
+}
+
 function App() {
-  const { resolvedTheme, setMode: setThemeMode } = useTheme();
+  const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
   const [pageSize, setPageSize] = useState<15 | 20>(20);
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState<TabKey>("favorites");
@@ -236,8 +261,9 @@ function App() {
   const startTimeText = formatTimedLabel(detailData?.start_time);
   const detailUrl = detailData?.url ?? activeRow?.url ?? null;
   const toggleTheme = () => {
-    setThemeMode(resolvedTheme === "dark" ? "light" : "dark");
+    setThemeMode(getNextThemeMode(themeMode));
   };
+  const themeToggleMeta = getThemeToggleMeta(themeMode, resolvedTheme);
 
   return (
     <main className="page">
@@ -282,10 +308,10 @@ function App() {
             type="button"
             className="theme-icon-btn"
             onClick={toggleTheme}
-            aria-label={resolvedTheme === "dark" ? "切换到浅色模式" : "切换到夜间模式"}
-            title={resolvedTheme === "dark" ? "切换到浅色模式" : "切换到夜间模式"}
+            aria-label={themeToggleMeta.label}
+            title={themeToggleMeta.label}
           >
-            {resolvedTheme === "dark" ? "☀" : "🌙"}
+            {themeToggleMeta.icon}
           </button>
         </nav>
 

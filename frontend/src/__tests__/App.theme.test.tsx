@@ -128,22 +128,31 @@ describe("App dark mode", () => {
     getLiveDetailsBatchMock.mockResolvedValue({ items: [], missing_live_ids: [] });
   });
 
-  test("点击主题按钮可在浅色和夜间之间切换", async () => {
-    // 测试点：主题切换按钮应可双向切换，并正确更新按钮文案/图标与持久化值。
+  test("点击主题按钮可在跟随系统、夜间、浅色之间循环切换", async () => {
+    // 测试点：主题按钮应支持三态循环，并正确更新文案/图标与持久化值。
     installMatchMedia(false);
     const user = userEvent.setup();
     renderWithTheme();
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
-    expect(screen.getByRole("button", { name: "切换到夜间模式" })).toHaveTextContent("🌙");
+    expect(
+      screen.getByRole("button", { name: "当前跟随系统（浅色），单击锁定夜间模式" }),
+    ).toHaveTextContent("⦿");
 
-    await user.click(screen.getByRole("button", { name: "切换到夜间模式" }));
+    await user.click(screen.getByRole("button", { name: "当前跟随系统（浅色），单击锁定夜间模式" }));
     await waitFor(() => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-      expect(screen.getByRole("button", { name: "切换到浅色模式" })).toHaveTextContent("☀");
+      expect(screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" })).toHaveTextContent("☽");
     });
     expect(localStorage.getItem("live-theme-mode")).toBe("dark");
+
+    await user.click(screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" }));
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+      expect(screen.getByRole("button", { name: "当前浅色模式，单击切换到跟随系统" })).toHaveTextContent("☀");
+    });
+    expect(localStorage.getItem("live-theme-mode")).toBe("light");
   });
 
   test("手动切到夜间后刷新仍保持夜间", async () => {
@@ -152,15 +161,17 @@ describe("App dark mode", () => {
     const user = userEvent.setup();
     const mounted = renderWithTheme();
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "切换到夜间模式" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "切换到夜间模式" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "当前跟随系统（浅色），单击锁定夜间模式" })).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("button", { name: "当前跟随系统（浅色），单击锁定夜间模式" }));
     await waitFor(() => expect(document.documentElement.getAttribute("data-theme")).toBe("dark"));
     mounted.unmount();
 
     renderWithTheme();
     await waitFor(() => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-      expect(screen.getByRole("button", { name: "切换到浅色模式" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" })).toBeInTheDocument();
     });
   });
 
@@ -172,7 +183,7 @@ describe("App dark mode", () => {
 
     await waitFor(() => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("light");
-      expect(screen.getByRole("button", { name: "切换到夜间模式" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "当前跟随系统（浅色），单击锁定夜间模式" })).toBeInTheDocument();
     });
 
     act(() => {
@@ -181,7 +192,7 @@ describe("App dark mode", () => {
 
     await waitFor(() => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-      expect(screen.getByRole("button", { name: "切换到浅色模式" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "当前跟随系统（夜间），单击锁定夜间模式" })).toBeInTheDocument();
     });
   });
 
@@ -204,7 +215,7 @@ describe("App dark mode", () => {
     await user.click(screen.getByRole("button", { name: "控制台" }));
 
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-    expect(screen.getByRole("button", { name: "切换到浅色模式" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" })).toBeInTheDocument();
   });
 });
 
