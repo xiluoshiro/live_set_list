@@ -11,6 +11,7 @@ import {
   type LivesResponse,
 } from "../api";
 import { logError } from "../logger";
+import { ThemeProvider } from "../theme/ThemeProvider";
 
 vi.mock("../api", () => ({
   getLives: vi.fn(),
@@ -713,6 +714,47 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "示例 Live 名称 1" })).not.toBeInTheDocument();
     });
+  });
+
+  test("主题按钮支持跟随系统、夜间、浅色三态循环", async () => {
+    // 测试点：顶部主题按钮应支持 system -> dark -> light -> system 的循环切换。
+    window.localStorage.setItem("live-theme-mode", "system");
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 3, totalPages: 1, itemCount: 3 }),
+    );
+    const user = userEvent.setup();
+
+    render(
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>,
+    );
+
+    const systemButton = await screen.findByRole("button", {
+      name: "当前跟随系统（浅色），单击锁定夜间模式",
+    });
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+
+    await user.click(systemButton);
+    expect(
+      screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" }),
+    ).toBeInTheDocument();
+    expect(window.localStorage.getItem("live-theme-mode")).toBe("dark");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+
+    await user.click(screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" }));
+    expect(
+      screen.getByRole("button", { name: "当前浅色模式，单击切换到跟随系统" }),
+    ).toBeInTheDocument();
+    expect(window.localStorage.getItem("live-theme-mode")).toBe("light");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+
+    await user.click(screen.getByRole("button", { name: "当前浅色模式，单击切换到跟随系统" }));
+    expect(
+      screen.getByRole("button", { name: "当前跟随系统（浅色），单击锁定夜间模式" }),
+    ).toBeInTheDocument();
+    expect(window.localStorage.getItem("live-theme-mode")).toBe("system");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 
 });
