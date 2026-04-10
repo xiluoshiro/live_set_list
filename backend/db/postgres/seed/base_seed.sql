@@ -3,6 +3,10 @@ BEGIN;
 -- Base seed for live_statistic_test.
 -- Safe to rerun after Flyway migrate because it truncates business tables first.
 TRUNCATE TABLE
+    public.audit_logs,
+    public.auth_sessions,
+    public.user_live_favorites,
+    public.app_users,
     public.live_setlist,
     public.live_attrs,
     public.song_list,

@@ -29,9 +29,10 @@
 当前仓库中的相关情况：
 
 - 前端首页列表和详情接口均可匿名访问
-- 首页存在收藏功能，但收藏状态当前保存在浏览器 `localStorage`
+- 前端首页当前仍保留旧版收藏 UI，尚未切换到“仅登录用户可见”的新方案
 - 控制台录入界面当前仍是前端 mock，尚未接入真实写接口
-- 后端当前默认数据库连接账号偏向只读查询
+- 后端认证骨架已落地：已新增用户表、会话表、认证路由和管理员初始化脚本
+- 后端当前默认数据库连接仍以只读查询为主，认证相关逻辑已补充业务写连接
 
 相关代码位置：
 
@@ -574,16 +575,21 @@ flowchart TD
 
 ### 阶段 A：数据库与认证骨架
 
-- [ ] A1. 新增 Flyway migration：创建 `app_users`、`auth_sessions`、`user_live_favorites`、`audit_logs`
-- [ ] A2. 新增管理员初始化脚本，用于创建首个账号
-- [ ] A3. 后端新增认证模块骨架：密码校验、session 创建、session 校验、logout 失效
-- [ ] A4. 新增 `/api/auth/login`、`/api/auth/me`、`/api/auth/logout`
+- [x] A1. 新增 Flyway migration：创建 `app_users`、`auth_sessions`、`user_live_favorites`、`audit_logs`
+- [x] A2. 新增管理员初始化脚本，用于创建首个账号
+- [x] A3. 后端新增认证模块骨架：密码校验、session 创建、session 校验、logout 失效
+- [x] A4. 新增 `/api/auth/login`、`/api/auth/me`、`/api/auth/logout`
 
 确认点：
 
 - 能手动创建管理员
 - 能登录、获取当前用户、退出登录
 - Session cookie 和 CSRF Token 已生效
+
+当前状态：
+
+- Phase A 代码骨架已完成
+- 认证相关测试尚未开始，本阶段还没有完成正式验收
 
 ### 阶段 B：收藏服务端化
 
@@ -629,7 +635,7 @@ flowchart TD
 ### 阶段 E：测试与回归
 
 - [ ] E1. 后端单元测试：登录、登出、session、csrf
-- [ ] E2. 后端集成测试：收藏增删查与 merge
+- [ ] E2. 后端集成测试：收藏增删查
 - [ ] E3. 前端测试：登录态恢复、收藏来源切换、控制台权限
 - [ ] E4. 回归验证：现有 live 列表、详情、详情批量预读不受影响
 
@@ -640,14 +646,17 @@ flowchart TD
 
 ## 11. 当前推荐的第一步
 
-建议从阶段 A 开始，先落：
+当前推荐进入阶段 B 或阶段 E：
 
-- A1. 新增 Flyway migration
-- A2. 新增管理员初始化脚本
-- A3. 认证模块骨架
-- A4. `/api/auth/login`、`/api/auth/me`、`/api/auth/logout`
+- 若继续开发功能：
+  - B1. 新增 `/api/me/favorites/lives`
+  - B2. 新增 `PUT /api/me/favorites/lives/{live_id}`
+  - B3. 新增 `DELETE /api/me/favorites/lives/{live_id}`
+  - B4. 改造 `GET /api/lives` 和 `GET /api/lives/{live_id}`，支持返回 `is_favorite`
+- 若先做验收：
+  - E1. 后端单元测试：登录、登出、session、csrf
 
 原因：
 
-- 这是后续收藏服务端化和控制台鉴权的基础
-- 先把认证打通，后续前端和收藏改造都能复用
+- Phase A 已经把后续收藏服务端化和控制台鉴权的认证基础铺好
+- 当前最自然的分叉是继续做收藏接口，或先把认证骨架测稳
