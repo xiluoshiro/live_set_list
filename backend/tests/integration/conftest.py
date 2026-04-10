@@ -24,6 +24,8 @@ def _load_integration_db_config() -> dict[str, str] | None:
             "dbname": os.getenv("TEST_DB_NAME", "live_statistic_test"),
             "user": user,
             "password": password,
+            "write_user": os.getenv("TEST_DB_WRITE_USER", "live_project_super_ro"),
+            "write_password": os.getenv("TEST_DB_WRITE_PASSWORD") or os.getenv("APP_SUPER_PASSWORD") or password,
             "admin_user": os.getenv("TEST_DB_ADMIN_USER", "live_project_test_admin"),
             "admin_password": os.getenv("TEST_DB_ADMIN_PASSWORD") or password,
         }
@@ -46,6 +48,8 @@ def _load_integration_db_config() -> dict[str, str] | None:
         "dbname": str(values.get("TEST_DB_NAME", "live_statistic_test")),
         "user": user,
         "password": password,
+        "write_user": str(values.get("APP_SUPER_USER", "live_project_super_ro")),
+        "write_password": str(values.get("APP_SUPER_PASSWORD") or values.get("POSTGRES_PASSWORD") or password),
         "admin_user": str(values.get("TEST_DB_ADMIN_USER") or values.get("TEST_ADMIN_USER") or "live_project_test_admin"),
         "admin_password": str(values.get("TEST_DB_ADMIN_PASSWORD") or values.get("TEST_ADMIN_PASSWORD") or values.get("POSTGRES_PASSWORD") or password),
     }
@@ -93,6 +97,9 @@ def integration_test_client(
     monkeypatch.setenv("DB_NAME", integration_db_config["dbname"])
     monkeypatch.setenv("DB_USER", integration_db_config["user"])
     monkeypatch.setenv("DB_PASSWORD", integration_db_config["password"])
+    monkeypatch.setenv("DB_WRITE_USER", integration_db_config["write_user"])
+    monkeypatch.setenv("DB_WRITE_PASSWORD", integration_db_config["write_password"])
     monkeypatch.setenv("DB_CONNECT_TIMEOUT_SECONDS", "5")
     monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", "10000")
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
     return TestClient(app)
