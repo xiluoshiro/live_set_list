@@ -114,6 +114,7 @@ python scripts/run_checks.py recovery
 ## 相关位置
 
 - Flyway 说明：[docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md)
+- Flyway 踩坑指南：[docs/fails/flyway-pitfalls.md](D:/Code/PythonCode/5%20LiveSetList/docs/fails/flyway-pitfalls.md)
 - 数据库角色与后端用户梳理：[docs/db-roles.md](D:/Code/PythonCode/5%20LiveSetList/docs/db-roles.md)
 - Flyway 配置目录：[backend/db/flyway/README.md](D:/Code/PythonCode/5%20LiveSetList/backend/db/flyway/README.md)
 - Docker PostgreSQL 配置：`infra/postgres`
