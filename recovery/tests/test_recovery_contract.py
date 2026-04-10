@@ -89,6 +89,36 @@ def test_restore_app_database_applies_permissions_and_migrates_only_when_pending
     ]
 
 
+def test_recover_test_database_recreates_test_db_before_migrate_and_seed(monkeypatch, tmp_path) -> None:
+    # 测试点：test 恢复应先 fresh rebuild 测试库，再 migrate、补权限、导入 seed。
+    steps: list[str] = []
+    seed_file = tmp_path / "seed.sql"
+    seed_file.write_text("select 1;", encoding="utf-8")
+
+    monkeypatch.setattr(restore, "SEED_SQL", seed_file)
+    monkeypatch.setattr(restore, "reset_test_database_for_restore", lambda *_args: steps.append("reset-test-db"))
+    monkeypatch.setattr(restore, "run_flyway_for_environment", lambda command, environment: steps.append(f"flyway:{environment}:{command}"))
+    monkeypatch.setattr(restore, "apply_test_database_permissions", lambda *_args: steps.append("test-permissions"))
+
+    def fake_run_step(label: str, args: list[str], **kwargs) -> None:
+        if label == "seed":
+            steps.append("seed")
+            assert kwargs["input_text"] == "select 1;"
+            assert "live_statistic_test" in args
+
+    monkeypatch.setattr(restore, "run_step", fake_run_step)
+
+    exit_code = restore.recover_test_database(_env_values(), "docker", "candidate-container")
+
+    assert exit_code == 0
+    assert steps == [
+        "reset-test-db",
+        "flyway:test:migrate",
+        "test-permissions",
+        "seed",
+    ]
+
+
 def test_recover_main_database_uses_snapshot_backup_and_rolls_back_on_check_failure(monkeypatch, tmp_path) -> None:
     # 测试点：恢复流程应使用临时快照，且在 run_checks 失败时回滚并清理快照。
     calls: list[str] = []

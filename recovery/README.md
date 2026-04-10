@@ -20,7 +20,7 @@ python scripts/recovery_db.py <arguments> [--force]
 
 当前支持：
 
-- `test`：在当前正式容器内重建测试库结构并重新导入 seed
+- `test`：在当前正式容器内 drop/create 测试库，重新执行 Flyway migrate，并重新导入 seed
 - `backup-app-auto`：立即生成一份主库自动备份，保留最近 5 份
 - `backup-app-manual`：立即生成一份主库手动备份，保留最近 3 份
 - `recovery`：从最近一份主库备份恢复业务库，恢复前会先生成一份恢复流程专用临时快照，再走候选容器验证与回滚
@@ -58,7 +58,7 @@ python scripts/recovery_db.py <arguments> [--force]
 4. 将当前正式容器重命名为备份容器，并用候选 volume 拉起新容器
 5. 在候选容器中用 `pg_restore` 恢复主库
 6. 对主库执行 `flyway info + validate`，如果存在 `Pending` 再执行 `migrate`
-7. 在候选容器中重建测试库并重新导入 seed
+7. 在候选容器中 drop/create 测试库，重新执行 Flyway migrate，并重新导入 seed
 8. 跑 `python scripts/run_checks.py functional`
 9. 如果检查通过：
    - 脚本会暂停，等待人工确认候选容器状态
