@@ -4,6 +4,7 @@ backend/.venv/
 backend/.env
 backend/db/flyway/flyway.toml
 infra/postgres/.env.pg-migrate
+infra/auth/.env.auth
 backend/__pycache__/
 __pycache__/
 recovery/.runtime/

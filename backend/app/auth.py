@@ -4,11 +4,12 @@ import ipaddress
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, NoReturn
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from fastapi import Depends, HTTPException, Request, status
+from psycopg2 import Error
 from psycopg2.extras import Json
 
 from app.db import get_write_db_connection
@@ -82,6 +83,33 @@ def _session_cookie_max_age_seconds() -> int:
     return int(_session_lifetime().total_seconds())
 
 
+def _default_admin_enabled() -> bool:
+    return os.getenv("AUTH_DEFAULT_ADMIN_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _read_required_auth_setting(name: str) -> str | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _default_admin_username() -> str | None:
+    value = _read_required_auth_setting("AUTH_DEFAULT_ADMIN_USERNAME")
+    if value is None:
+        return None
+    return normalize_username(value)
+
+
+def _default_admin_password() -> str | None:
+    return _read_required_auth_setting("AUTH_DEFAULT_ADMIN_PASSWORD")
+
+
+def _default_admin_display_name() -> str | None:
+    return _read_required_auth_setting("AUTH_DEFAULT_ADMIN_DISPLAY_NAME")
+
+
 def _user_payload(user: AuthUser) -> dict[str, Any]:
     return {
         "id": user.id,
@@ -91,7 +119,7 @@ def _user_payload(user: AuthUser) -> dict[str, Any]:
     }
 
 
-def _raise_auth_error(status_code: int, code: str, message: str) -> None:
+def _raise_auth_error(status_code: int, code: str, message: str) -> NoReturn:
     raise HTTPException(
         status_code=status_code,
         detail={
@@ -160,6 +188,51 @@ def write_audit_log_entry(
                 resource_id=resource_id,
                 payload_json=payload_json,
             )
+
+
+def ensure_default_admin_user() -> None:
+    if not _default_admin_enabled():
+        return
+
+    username = _default_admin_username()
+    display_name = _default_admin_display_name()
+    password = _default_admin_password()
+    if username is None or password is None or display_name is None:
+        logger.warning("default admin bootstrap skipped because AUTH_DEFAULT_ADMIN_* is incomplete")
+        return
+
+    password_hash = hash_password(password)
+    now = _now_utc()
+
+    # 默认 admin 作为当前阶段的内建入口，在环境配置齐全时自动补齐。
+    try:
+        with get_write_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO app_users (
+                        username,
+                        password_hash,
+                        display_name,
+                        role,
+                        is_active,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, 'admin', true, %s, %s)
+                    ON CONFLICT (username) DO UPDATE
+                    SET
+                        password_hash = EXCLUDED.password_hash,
+                        display_name = EXCLUDED.display_name,
+                        role = 'admin',
+                        is_active = true,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (username, password_hash, display_name, now, now),
+                )
+        logger.info("default admin ensured username=%s", username)
+    except Error:
+        logger.exception("ensure_default_admin_user failed username=%s", username)
 
 
 def authenticate_user(username: str, password: str, request: Request) -> dict[str, Any]:

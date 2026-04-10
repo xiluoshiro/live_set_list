@@ -1,5 +1,3 @@
-from argparse import Namespace
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,6 +8,7 @@ from app.auth import (
     AuthSessionContext,
     AuthUser,
     assert_valid_csrf,
+    ensure_default_admin_user,
     get_current_auth_context,
     hash_password,
     require_role,
@@ -209,41 +208,26 @@ def test_require_role_rejects_lower_priority_user():
     assert exc_info.value.detail["code"] == "AUTH_FORBIDDEN"
 
 
-# 测试点：管理员初始化脚本会规范用户名并以 upsert 方式写入账号。
-def test_bootstrap_admin_main_upserts_user():
-    import importlib.util
-    import sys
-
-    script_path = Path(__file__).resolve().parents[3] / "scripts" / "bootstrap_admin.py"
-    spec = importlib.util.spec_from_file_location("bootstrap_admin_module_for_test", script_path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-
+# 测试点：默认 admin 加载逻辑会按环境变量 upsert 账号，并固定提升为 admin。
+def test_ensure_default_admin_user_upserts_admin_from_env():
     conn = MagicMock()
     cursor = MagicMock()
     conn.__enter__.return_value = conn
     conn.cursor.return_value.__enter__.return_value = cursor
-    cursor.fetchone.return_value = (7,)
 
-    with patch.object(
-        module,
-        "parse_args",
-        return_value=Namespace(
-            username="Admin",
-            password="secret-pass",
-            display_name="Administrator",
-            role="admin",
-        ),
-    ), patch.object(module, "get_write_db_connection", return_value=conn), patch(
-        "builtins.print"
-    ) as print_mock:
-        exit_code = module.main()
+    with patch("app.auth.get_write_db_connection", return_value=conn), patch.dict(
+        "os.environ",
+        {
+            "AUTH_DEFAULT_ADMIN_USERNAME": "Root",
+            "AUTH_DEFAULT_ADMIN_PASSWORD": "secret-pass",
+            "AUTH_DEFAULT_ADMIN_DISPLAY_NAME": "Root User",
+            "AUTH_DEFAULT_ADMIN_ENABLED": "true",
+        },
+        clear=False,
+    ):
+        ensure_default_admin_user()
 
-    assert exit_code == 0
     sql_params = cursor.execute.call_args.args[1]
-    assert sql_params[0] == "admin"
-    assert sql_params[2] == "Administrator"
-    assert sql_params[3] == "admin"
-    print_mock.assert_called_once_with("Bootstrap admin/user success: id=7 username=admin role=admin")
+    assert sql_params[0] == "root"
+    assert isinstance(sql_params[1], str)
+    assert sql_params[2] == "Root User"

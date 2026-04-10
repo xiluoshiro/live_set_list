@@ -29,18 +29,24 @@ def setup_logging() -> None:
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
 
-    file_handler = RotatingFileHandler(
-        LOG_FILE,
-        maxBytes=1_048_576,
-        backupCount=3,
-        encoding="utf-8",
-    )
-    file_handler.setFormatter(formatter)
-
     root_logger.handlers.clear()
     root_logger.setLevel(log_level)
     root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
+
+    # 只读或受限环境下允许退回控制台日志，避免测试因文件句柄权限失败。
+    try:
+        file_handler = RotatingFileHandler(
+            LOG_FILE,
+            maxBytes=1_048_576,
+            backupCount=3,
+            encoding="utf-8",
+        )
+    except OSError:
+        root_logger.warning("file logging disabled because %s is not writable", LOG_FILE)
+    else:
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+
     _LOGGING_CONFIGURED = True
 
 

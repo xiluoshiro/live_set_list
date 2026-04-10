@@ -1,8 +1,11 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth import ensure_default_admin_user
 from app.logging_config import get_logger, setup_logging
 from app.routers.auth import router as auth_router
 from app.routers.health import router as health_router
@@ -11,7 +14,14 @@ from app.routers.lives import router as lives_router
 setup_logging()
 logger = get_logger(__name__)
 
-app = FastAPI(title="LiveSetList API")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    ensure_default_admin_user()
+    yield
+
+
+app = FastAPI(title="LiveSetList API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
