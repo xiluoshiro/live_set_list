@@ -31,7 +31,7 @@
 - 前端首页列表和详情接口均可匿名访问
 - 前端首页当前仍保留旧版收藏 UI，尚未切换到“仅登录用户可见”的新方案
 - 控制台录入界面当前仍是前端 mock，尚未接入真实写接口
-- 后端认证骨架已落地：已新增用户表、会话表、认证路由和管理员初始化脚本
+- 后端认证骨架已落地：已新增用户表、会话表、认证路由和默认 admin 加载机制
 - 后端当前默认数据库连接仍以只读查询为主，认证相关逻辑已补充业务写连接
 
 相关代码位置：
@@ -60,6 +60,15 @@
 - 属性：`Secure`
 - 属性：`SameSite=Lax`
 - 路径：`/`
+
+当前实现补充：
+
+- 启动时自动确保一个默认 `admin` 账号存在
+- 默认值优先读取环境变量：
+  - `AUTH_DEFAULT_ADMIN_USERNAME`
+  - `AUTH_DEFAULT_ADMIN_PASSWORD`
+  - `AUTH_DEFAULT_ADMIN_DISPLAY_NAME`
+- 若未设置，则回退到代码内默认值
 
 ### 3.2 收藏模式
 
@@ -161,7 +170,7 @@
 ```sql
 create table app_users (
   id bigserial primary key,
-  username varchar(64) not null,
+    username varchar(64) not null,
   password_hash text not null,
   display_name varchar(64) not null,
   role varchar(16) not null check (role in ('viewer', 'editor', 'admin')),
@@ -176,7 +185,8 @@ create table app_users (
 说明：
 
 - `password_hash` 使用 `argon2id`
-- 不开放公开注册，首批用户通过初始化脚本或管理脚本创建
+- 不开放公开注册
+- 当前阶段默认 admin 用户通过应用启动时的内建加载逻辑自动写入
 
 ### 4.2 `auth_sessions`
 
@@ -208,7 +218,7 @@ create table user_live_favorites (
   id bigserial primary key,
   user_id bigint not null references app_users(id) on delete cascade,
   live_id integer not null references live_attrs(id) on delete cascade,
-  source varchar(16) not null default 'manual' check (source in ('manual', 'merge')),
+  source varchar(16) not null default 'manual' check (source in ('manual', 'imported')),
   created_at timestamptz not null default now(),
   unique (user_id, live_id)
 );
@@ -217,7 +227,7 @@ create table user_live_favorites (
 说明：
 
 - 唯一键保证收藏操作幂等
-- `source` 用于区分手动收藏和登录合并
+- `source` 用于区分手动收藏和后续可能的导入来源
 
 ### 4.4 `audit_logs`
 
@@ -235,7 +245,7 @@ create table audit_logs (
 
 说明：
 
-- 记录登录、登出、写操作、权限失败、收藏 merge 等行为
+- 记录登录、登出、写操作、权限失败和收藏操作等行为
 
 ## 5. 后端接口设计
 
@@ -576,20 +586,20 @@ flowchart TD
 ### 阶段 A：数据库与认证骨架
 
 - [x] A1. 新增 Flyway migration：创建 `app_users`、`auth_sessions`、`user_live_favorites`、`audit_logs`
-- [x] A2. 新增管理员初始化脚本，用于创建首个账号
+- [x] A2. 新增默认 admin 加载机制，用于自动写入首个最高权限账号
 - [x] A3. 后端新增认证模块骨架：密码校验、session 创建、session 校验、logout 失效
 - [x] A4. 新增 `/api/auth/login`、`/api/auth/me`、`/api/auth/logout`
 
 确认点：
 
-- 能手动创建管理员
+- 启动时会自动补齐默认 admin
 - 能登录、获取当前用户、退出登录
 - Session cookie 和 CSRF Token 已生效
 
 当前状态：
 
-- Phase A 代码骨架已完成
-- 认证相关测试尚未开始，本阶段还没有完成正式验收
+- Phase A 代码、单元测试、认证集成测试已完成
+- 测试库与主库都已完成 `v2` 迁移
 
 ### 阶段 B：收藏服务端化
 
@@ -634,7 +644,7 @@ flowchart TD
 
 ### 阶段 E：测试与回归
 
-- [ ] E1. 后端单元测试：登录、登出、session、csrf
+- [x] E1. 后端单元测试：登录、登出、session、csrf
 - [ ] E2. 后端集成测试：收藏增删查
 - [ ] E3. 前端测试：登录态恢复、收藏来源切换、控制台权限
 - [ ] E4. 回归验证：现有 live 列表、详情、详情批量预读不受影响
@@ -646,17 +656,15 @@ flowchart TD
 
 ## 11. 当前推荐的第一步
 
-当前推荐进入阶段 B 或阶段 E：
+当前推荐进入阶段 B：
 
-- 若继续开发功能：
-  - B1. 新增 `/api/me/favorites/lives`
-  - B2. 新增 `PUT /api/me/favorites/lives/{live_id}`
-  - B3. 新增 `DELETE /api/me/favorites/lives/{live_id}`
-  - B4. 改造 `GET /api/lives` 和 `GET /api/lives/{live_id}`，支持返回 `is_favorite`
-- 若先做验收：
-  - E1. 后端单元测试：登录、登出、session、csrf
+- B1. 新增 `/api/me/favorites/lives`
+- B2. 新增 `PUT /api/me/favorites/lives/{live_id}`
+- B3. 新增 `DELETE /api/me/favorites/lives/{live_id}`
+- B4. 改造 `GET /api/lives` 和 `GET /api/lives/{live_id}`，支持返回 `is_favorite`
 
 原因：
 
 - Phase A 已经把后续收藏服务端化和控制台鉴权的认证基础铺好
-- 当前最自然的分叉是继续做收藏接口，或先把认证骨架测稳
+- 认证骨架的单元测试与认证集成测试已经补齐
+- 当前最自然的下一步就是把收藏链路接到服务端

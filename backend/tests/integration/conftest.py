@@ -1,10 +1,13 @@
 import os
+from collections.abc import Generator
 from pathlib import Path
 
 import psycopg2
 import pytest
 from dotenv import dotenv_values
 from fastapi.testclient import TestClient
+
+os.environ.setdefault("APP_LOG_LEVEL", "CRITICAL")
 
 from app.main import app
 
@@ -91,7 +94,7 @@ def seed_test_database(integration_admin_connection):
 def integration_test_client(
     monkeypatch: pytest.MonkeyPatch,
     integration_db_config: dict[str, str],
-) -> TestClient:
+) -> Generator[TestClient, None, None]:
     monkeypatch.setenv("DB_HOST", integration_db_config["host"])
     monkeypatch.setenv("DB_PORT", integration_db_config["port"])
     monkeypatch.setenv("DB_NAME", integration_db_config["dbname"])
@@ -102,4 +105,8 @@ def integration_test_client(
     monkeypatch.setenv("DB_CONNECT_TIMEOUT_SECONDS", "5")
     monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", "10000")
     monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
-    return TestClient(app)
+    monkeypatch.setenv("AUTH_DEFAULT_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("AUTH_DEFAULT_ADMIN_PASSWORD", "test-admin-pass")
+    monkeypatch.setenv("AUTH_DEFAULT_ADMIN_DISPLAY_NAME", "Administrator")
+    with TestClient(app) as client:
+        yield client

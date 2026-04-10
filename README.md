@@ -13,7 +13,7 @@
 - 前端已提供 Live 列表、详情弹窗、分页、主题切换和控制台 mock 录入界面
 - 提供一键启动脚本，可同时启动前后端并统一关闭
 - 已引入 Flyway baseline 和 `V2` 认证相关表结构迁移骨架
-- 已提供管理员初始化脚本：`python scripts/bootstrap_admin.py --username <name> --password <password>`
+- 已支持应用启动时自动补齐默认 admin 账号（优先读取环境变量，否则使用内建默认值）
 - 已包含后端单元测试和前端接口测试框架
 
 ## 快速开始
@@ -46,19 +46,24 @@ npm install
 
 脚本入口说明见 [scripts/README.md](D:/Code/PythonCode/5%20LiveSetList/scripts/README.md)。
 
-### 4) 初始化管理员账号
+### 4) 默认 admin 账号
 
-在完成数据库迁移后，可在项目根目录执行：
+在完成数据库迁移并启动后端后，应用会自动确保一个默认 admin 账号存在。
+
+可选环境变量：
 
 ```powershell
-python scripts/bootstrap_admin.py --username admin --password your_password --display-name Administrator --role admin
+$env:AUTH_DEFAULT_ADMIN_USERNAME="admin"
+$env:AUTH_DEFAULT_ADMIN_PASSWORD="your_password"
+$env:AUTH_DEFAULT_ADMIN_DISPLAY_NAME="Administrator"
 ```
 
 说明：
 
+- 若未设置环境变量，后端会使用代码内默认值
 - 用户名会自动规范成小写
 - 当前阶段默认不开放公开注册
-- 首个账号通过该脚本创建或更新
+- 默认账号会在应用启动时自动写入或更新为 `admin` 角色
 
 ## 运行测试
 
@@ -114,6 +119,7 @@ npm run typecheck
 
 - Flyway 落地说明见 [docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md)
 - 登录与权限方案见 [docs/auth-design.md](D:/Code/PythonCode/5%20LiveSetList/docs/auth-design.md)
+- 数据库角色与后端用户梳理见 [docs/db-roles.md](D:/Code/PythonCode/5%20LiveSetList/docs/db-roles.md)
 - 数据库操作说明见 [backend/db/README.md](D:/Code/PythonCode/5%20LiveSetList/backend/db/README.md)
 - 仓库内 Flyway 骨架位于 `backend/db/flyway`
 - Docker PostgreSQL 配置位于 `infra/postgres`
@@ -135,7 +141,7 @@ npm run typecheck
 - [x] 新增后端查询接口（返回真实表数据）
 - [x] 前端改为表格展示查询结果
 - [x] 增加基础日志与配置说明
-- [x] 增加登录框架第一阶段骨架（数据库迁移、认证接口、管理员初始化脚本）
+- [x] 增加登录框架第一阶段骨架（数据库迁移、认证接口、默认 admin 加载）
 - [ ] 前端接入登录态与权限控制
 - [ ] 收藏改为仅登录用户可见并切换到服务端存储
 - [ ] 控制台接入真实写接口

@@ -7,9 +7,13 @@ from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 PG_MIGRATE_ENV_PATH = ROOT_DIR / "infra" / "postgres" / ".env.pg-migrate"
+AUTH_ENV_PATH = ROOT_DIR / "infra" / "auth" / ".env.auth"
 
 if PG_MIGRATE_ENV_PATH.exists():
     load_dotenv(PG_MIGRATE_ENV_PATH, override=False)
+
+if AUTH_ENV_PATH.exists():
+    load_dotenv(AUTH_ENV_PATH, override=False)
 
 
 def _get_db_setting(name: str, fallback_name: str, default: str) -> str:

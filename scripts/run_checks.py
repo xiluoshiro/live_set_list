@@ -54,7 +54,7 @@ def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckF
         steps.extend(
             [
                 ("backend", "mypy", [str(python_path), "-m", "mypy", "--config-file", "mypy.ini"], BACKEND_DIR, 0),
-                ("backend", "pytest tests/unit", [str(python_path), "-m", "pytest", "tests/unit", "-q"], BACKEND_DIR, 0),
+                ("backend", "pytest tests/unit", [str(python_path), "-m", "pytest", "-s", "tests/unit", "-q"], BACKEND_DIR, 0),
             ]
         )
 
@@ -65,7 +65,7 @@ def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckF
             (
                 "backend",
                 "pytest tests/integration",
-                [str(python_path), "-m", "pytest", "tests/integration", "-q"],
+                [str(python_path), "-m", "pytest", "-s", "tests/integration", "-q"],
                 BACKEND_DIR,
                 0,
             )

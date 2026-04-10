@@ -1,50 +1,16 @@
 import pytest
 
-from app.auth import hash_password
-
-
 pytestmark = pytest.mark.integration
-
-
-def _insert_user(
-    integration_admin_connection,
-    *,
-    username: str = "admin",
-    password: str = "secret-pass",
-    display_name: str = "Administrator",
-    role: str = "admin",
-    is_active: bool = True,
-) -> int:
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cursor:
-        cursor.execute(
-            """
-            INSERT INTO public.app_users (
-                username,
-                password_hash,
-                display_name,
-                role,
-                is_active
-            )
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING id
-            """,
-            (username, hash_password(password), display_name, role, is_active),
-        )
-        row = cursor.fetchone()
-    return int(row[0])
-
+TEST_DEFAULT_ADMIN_USERNAME = "admin"
+TEST_DEFAULT_ADMIN_PASSWORD = "test-admin-pass"
 
 # 测试点：真实测试库中登录成功后，应返回用户信息、csrf_token，并写入会话 cookie。
 def test_auth_login_success_against_test_database(
     integration_test_client,
-    integration_admin_connection,
 ):
-    _insert_user(integration_admin_connection, username="admin", password="secret-pass")
-
     response = integration_test_client.post(
         "/api/auth/login",
-        json={"username": "Admin", "password": "secret-pass"},
+        json={"username": TEST_DEFAULT_ADMIN_USERNAME, "password": TEST_DEFAULT_ADMIN_PASSWORD},
     )
 
     assert response.status_code == 200
@@ -64,13 +30,10 @@ def test_auth_login_success_against_test_database(
 # 测试点：真实测试库中密码错误时，应返回统一的 401 错误码。
 def test_auth_login_invalid_password_returns_401(
     integration_test_client,
-    integration_admin_connection,
 ):
-    _insert_user(integration_admin_connection, username="admin", password="secret-pass")
-
     response = integration_test_client.post(
         "/api/auth/login",
-        json={"username": "admin", "password": "wrong-pass"},
+        json={"username": TEST_DEFAULT_ADMIN_USERNAME, "password": "wrong-pass"},
     )
 
     assert response.status_code == 401
@@ -80,13 +43,10 @@ def test_auth_login_invalid_password_returns_401(
 # 测试点：真实测试库中登录后请求 `/api/auth/me`，应恢复登录态并返回新的 csrf_token。
 def test_auth_me_returns_authenticated_user_after_login(
     integration_test_client,
-    integration_admin_connection,
 ):
-    _insert_user(integration_admin_connection, username="admin", password="secret-pass")
-
     login_response = integration_test_client.post(
         "/api/auth/login",
-        json={"username": "admin", "password": "secret-pass"},
+        json={"username": TEST_DEFAULT_ADMIN_USERNAME, "password": TEST_DEFAULT_ADMIN_PASSWORD},
     )
     first_csrf = login_response.json()["csrf_token"]
 
@@ -105,13 +65,10 @@ def test_auth_me_returns_authenticated_user_after_login(
 # 测试点：真实测试库中退出登录后，当前 session 应失效，后续 `/api/auth/me` 返回未登录。
 def test_auth_logout_revokes_session_against_test_database(
     integration_test_client,
-    integration_admin_connection,
 ):
-    _insert_user(integration_admin_connection, username="admin", password="secret-pass")
-
     login_response = integration_test_client.post(
         "/api/auth/login",
-        json={"username": "admin", "password": "secret-pass"},
+        json={"username": TEST_DEFAULT_ADMIN_USERNAME, "password": TEST_DEFAULT_ADMIN_PASSWORD},
     )
     csrf_token = login_response.json()["csrf_token"]
 
@@ -130,13 +87,10 @@ def test_auth_logout_revokes_session_against_test_database(
 # 测试点：真实测试库中退出登录若缺少 CSRF token，应返回 403 而不是直接放行。
 def test_auth_logout_requires_csrf_token(
     integration_test_client,
-    integration_admin_connection,
 ):
-    _insert_user(integration_admin_connection, username="admin", password="secret-pass")
-
     integration_test_client.post(
         "/api/auth/login",
-        json={"username": "admin", "password": "secret-pass"},
+        json={"username": TEST_DEFAULT_ADMIN_USERNAME, "password": TEST_DEFAULT_ADMIN_PASSWORD},
     )
     response = integration_test_client.post("/api/auth/logout")
 
