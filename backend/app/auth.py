@@ -1,5 +1,6 @@
 import os
 import hashlib
+import ipaddress
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -8,6 +9,7 @@ from typing import Any
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from fastapi import Depends, HTTPException, Request, status
+from psycopg2.extras import Json
 
 from app.db import get_write_db_connection
 from app.logging_config import get_logger
@@ -60,6 +62,15 @@ def _now_utc() -> datetime:
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _normalize_client_ip(raw_client_ip: str | None) -> str | None:
+    if not raw_client_ip:
+        return None
+    try:
+        return str(ipaddress.ip_address(raw_client_ip))
+    except ValueError:
+        return None
 
 
 def _session_lifetime() -> timedelta:
@@ -127,7 +138,7 @@ def _write_audit_log(
         INSERT INTO audit_logs (user_id, action, resource_type, resource_id, payload_json)
         VALUES (%s, %s, %s, %s, %s)
         """,
-        (user_id, action, resource_type, resource_id, payload_json),
+        (user_id, action, resource_type, resource_id, Json(payload_json) if payload_json is not None else None),
     )
 
 
@@ -159,7 +170,7 @@ def authenticate_user(username: str, password: str, request: Request) -> dict[st
     csrf_token = secrets.token_urlsafe(32)
     session_token_hash = _hash_token(session_token)
     csrf_token_hash = _hash_token(csrf_token)
-    client_ip = request.client.host if request.client else None
+    client_ip = _normalize_client_ip(request.client.host if request.client else None)
     user_agent = request.headers.get("user-agent")
 
     # 登录在一个事务里完成：校验密码、写 session、更新登录时间、记录审计。
