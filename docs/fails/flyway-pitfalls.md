@@ -145,6 +145,44 @@
 - 遇到“迁移卡住”时，数据库侧锁采样几乎是必须动作
 - 光看 CLI 是否还在转圈，不足以判断根因
 
+### `P2` 中风险：把“测试库恢复”误认为“全新库验证”
+
+风险级别：
+
+- 不一定直接导致迁移失败
+- 但会让测试库对 migration 问题的暴露不稳定，形成“主库炸了，测试库没炸”的错觉
+
+本轮实际现象：
+
+- 主库在执行 `V3` 时暴露了 owned sequence 的 owner 调整问题
+- 测试库没有先一步暴露同样的问题
+- 进一步排查后确认，之前的 `python scripts/recovery_db.py test --force` 并不是严格的 fresh DB
+
+旧实现的问题：
+
+- 旧的 `test` 模式只是在现有测试库上执行 `flyway migrate`
+- 然后重新导入 `base_seed.sql`
+- 它不会先：
+  - `DROP DATABASE`
+  - `CREATE DATABASE`
+  - 清掉旧的 `flyway_schema_history`
+
+这会带来两个后果：
+
+- 测试库会继承之前的 Flyway history 和对象状态
+- 一旦 migration 被 `repair` 过、对象 owner 被手工调过，测试库就不再是“从零验证”的环境
+
+为什么这次会影响判断：
+
+- `V3` 原先对 owned sequence 的处理本身就不安全
+- 再叠加 `pg_class` 返回顺序未显式 `ORDER BY`
+- 不同数据库即使都显示为 `v2 -> v3`，也可能因为既有对象状态和 catalog 顺序不同，触发出不同结果
+
+结论：
+
+- 不能把“在已有测试库上跑 migrate + seed”当成 fresh DB 验证
+- 遇到 migration 级问题，尤其是 owner / default privileges / sequence 依赖问题时，必须验证真正的全新库重建路径
+
 ## 3. 根因回溯
 
 本轮问题经历了三个关键判断阶段：
@@ -158,6 +196,10 @@
 - **直接根因**：`REASSIGN OWNED BY live_project_flyway TO live_project_owner` 试图改动 `flyway_schema_history`，与 Flyway 自己的元数据锁冲突
 - **次级根因**：迁移脚本最初把“Flyway 管理对象”和“业务对象”混在一起处理，没有把 `flyway_schema_history` 视为特殊对象
 
+这轮还补充确认了一条流程级根因：
+
+- **环境根因**：旧的 `recovery_db.py test --force` 不是 fresh DB，只能验证“现有测试库继续迁移”这条路径，不能完全替代“从零建库到最新版本”的验证
+
 ## 4. 最终修复方案
 
 当前已经验证通过的安全修复方式如下：
@@ -169,6 +211,14 @@
 3. 分两层处理：
    - `SET ROLE live_project_owner` 只处理 `public schema` owner
    - `RESET ROLE` 后，由 `live_project_flyway` 把自己拥有的业务对象逐个 `ALTER ... OWNER TO live_project_owner`
+4. 把测试库恢复流程改成真正的 fresh DB：
+   - 断开测试库连接
+   - `DROP DATABASE`
+   - `CREATE DATABASE`
+   - 重新授予 `CONNECT`
+   - `flyway migrate`
+   - 回灌测试库权限
+   - 导入 seed
 
 当前 [V3__align_public_object_owners.sql](/D:/Code/PythonCode/5%20LiveSetList/backend/db/flyway/sql/V3__align_public_object_owners.sql) 就是按这个思路收口的。
 
@@ -181,6 +231,7 @@
 3. 只处理 `public` 下明确列举或明确过滤后的业务对象
 4. `schema owner` 和 `object owner` 分开处理
 5. 一旦迁移超过预期时间，立即用数据库视角看锁，不要只盯着 Flyway 命令行
+6. 不要把“已有测试库上的 migrate + seed”误当成 fresh DB 验证
 
 ## 6. 推荐排查流程
 
@@ -193,6 +244,7 @@
 5. 如果锁指向 `flyway_schema_history`
    - 优先检查 migration 是否碰到了 Flyway 元数据表
 6. 修脚本时优先采用“显式排除 + 明确遍历业务对象”的方式
+7. 如果要确认迁移是否真正稳健，再跑一次 fresh DB 重建，而不是只在已有测试库上补 migrate
 
 ## 7. 一句话结论
 

@@ -49,7 +49,9 @@ def run_flyway_info_capture(environment: str) -> subprocess.CompletedProcess[str
 
 
 def recover_test_database(env_values: dict[str, str], docker_cmd: str, container_name: str) -> int:
+    reset_test_database_for_restore(env_values, docker_cmd, container_name)
     run_flyway_for_environment("migrate", "test")
+    apply_test_database_permissions(env_values, docker_cmd, container_name)
     test_db_name = env_values.get("TEST_DB_NAME", "live_statistic_test")
     test_admin_user = env_values.get("TEST_ADMIN_USER", "live_project_test_admin")
     seed_sql = SEED_SQL.read_text(encoding="utf-8")
@@ -73,6 +75,156 @@ def recover_test_database(env_values: dict[str, str], docker_cmd: str, container
 
     print("测试库恢复完成。", flush=True)
     return 0
+
+
+def reset_test_database_for_restore(env_values: dict[str, str], docker_cmd: str, container_name: str) -> None:
+    # 测试库 fresh rebuild：先断开连接，再 drop/create，避免沿用旧的 flyway history。
+    postgres_user = env_values.get("POSTGRES_USER", "postgres")
+    test_db_name = env_values.get("TEST_DB_NAME", "live_statistic_test")
+    app_owner = env_values.get("APP_OWNER", "live_project_owner")
+    flyway_user = env_values.get("FLYWAY_USER", "live_project_flyway")
+    readonly_user = env_values.get("APP_RO_USER", "live_project_ro")
+    super_user = env_values.get("APP_SUPER_USER", "live_project_super_ro")
+    test_admin_user = env_values.get("TEST_ADMIN_USER", "live_project_test_admin")
+
+    run_step(
+        "psql",
+        [
+            docker_cmd,
+            "exec",
+            container_name,
+            "psql",
+            "-U",
+            postgres_user,
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{test_db_name}' AND pid <> pg_backend_pid();",
+        ],
+    )
+    run_step(
+        "psql",
+        [
+            docker_cmd,
+            "exec",
+            container_name,
+            "psql",
+            "-U",
+            postgres_user,
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            f"DROP DATABASE IF EXISTS {test_db_name};",
+        ],
+    )
+    run_step(
+        "psql",
+        [
+            docker_cmd,
+            "exec",
+            container_name,
+            "psql",
+            "-U",
+            postgres_user,
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            f"CREATE DATABASE {test_db_name} OWNER {app_owner};",
+        ],
+    )
+    run_step(
+        "psql",
+        [
+            docker_cmd,
+            "exec",
+            container_name,
+            "psql",
+            "-U",
+            postgres_user,
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            f"GRANT CONNECT ON DATABASE {test_db_name} TO {flyway_user}, {readonly_user}, {super_user}, {test_admin_user};",
+        ],
+    )
+
+
+def apply_test_database_permissions(env_values: dict[str, str], docker_cmd: str, container_name: str) -> None:
+    # 测试库重建后，要把 test_admin 和运行时角色的权限重新补齐回初始化约定。
+    postgres_user = env_values.get("POSTGRES_USER", "postgres")
+    test_db_name = env_values.get("TEST_DB_NAME", "live_statistic_test")
+    app_owner = env_values.get("APP_OWNER", "live_project_owner")
+    flyway_user = env_values.get("FLYWAY_USER", "live_project_flyway")
+    readonly_user = env_values.get("APP_RO_USER", "live_project_ro")
+    super_user = env_values.get("APP_SUPER_USER", "live_project_super_ro")
+    test_admin_user = env_values.get("TEST_ADMIN_USER", "live_project_test_admin")
+
+    permission_sql = f"""
+ALTER SCHEMA public OWNER TO {app_owner};
+
+GRANT USAGE ON SCHEMA public TO {readonly_user}, {super_user};
+GRANT USAGE, CREATE ON SCHEMA public TO {flyway_user}, {test_admin_user};
+
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO {readonly_user};
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO {super_user};
+GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO {super_user};
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {test_admin_user};
+
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO {readonly_user};
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO {super_user};
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {test_admin_user};
+
+ALTER DEFAULT PRIVILEGES FOR ROLE {app_owner} IN SCHEMA public
+GRANT SELECT ON TABLES TO {readonly_user};
+ALTER DEFAULT PRIVILEGES FOR ROLE {app_owner} IN SCHEMA public
+GRANT SELECT, INSERT, UPDATE ON TABLES TO {super_user};
+ALTER DEFAULT PRIVILEGES FOR ROLE {app_owner} IN SCHEMA public
+GRANT ALL PRIVILEGES ON TABLES TO {test_admin_user};
+ALTER DEFAULT PRIVILEGES FOR ROLE {app_owner} IN SCHEMA public
+GRANT SELECT ON SEQUENCES TO {readonly_user};
+ALTER DEFAULT PRIVILEGES FOR ROLE {app_owner} IN SCHEMA public
+GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {super_user};
+ALTER DEFAULT PRIVILEGES FOR ROLE {app_owner} IN SCHEMA public
+GRANT ALL PRIVILEGES ON SEQUENCES TO {test_admin_user};
+
+ALTER DEFAULT PRIVILEGES FOR ROLE {flyway_user} IN SCHEMA public
+GRANT SELECT ON TABLES TO {readonly_user};
+ALTER DEFAULT PRIVILEGES FOR ROLE {flyway_user} IN SCHEMA public
+GRANT SELECT, INSERT, UPDATE ON TABLES TO {super_user};
+ALTER DEFAULT PRIVILEGES FOR ROLE {flyway_user} IN SCHEMA public
+GRANT ALL PRIVILEGES ON TABLES TO {test_admin_user};
+ALTER DEFAULT PRIVILEGES FOR ROLE {flyway_user} IN SCHEMA public
+GRANT SELECT ON SEQUENCES TO {readonly_user};
+ALTER DEFAULT PRIVILEGES FOR ROLE {flyway_user} IN SCHEMA public
+GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {super_user};
+ALTER DEFAULT PRIVILEGES FOR ROLE {flyway_user} IN SCHEMA public
+GRANT ALL PRIVILEGES ON SEQUENCES TO {test_admin_user};
+"""
+    run_step(
+        "psql",
+        [
+            docker_cmd,
+            "exec",
+            "-i",
+            container_name,
+            "psql",
+            "-U",
+            postgres_user,
+            "-d",
+            test_db_name,
+            "-v",
+            "ON_ERROR_STOP=1",
+        ],
+        input_text=permission_sql,
+    )
 
 
 def recover_test_database_in_place(env_values: dict[str, str], docker_cmd: str) -> int:

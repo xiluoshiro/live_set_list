@@ -48,7 +48,7 @@ python scripts/recovery_db.py <arguments> [--force]
 
 当前支持：
 
-- `test`：在当前正式容器内重建测试库结构并重新导入 seed
+- `test`：在当前正式容器内 drop/create 测试库，重新执行 Flyway migrate，并重新导入 seed
 - `backup-app-auto`：立即生成一份主库自动备份，保留最近 5 份
 - `backup-app-manual`：立即生成一份主库手动备份，保留最近 3 份
 - `recovery`：从最近一份主库备份恢复业务库，恢复前会先生成一份恢复流程专用临时快照，再走候选容器验证与回滚
