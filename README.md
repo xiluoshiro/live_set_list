@@ -1,15 +1,19 @@
 # LiveSetList
 
-一个前后端分离的最小示例工程，用于在本机访问 PostgreSQL。
+一个前后端分离的 Live 信息管理工程，用于在本机访问 PostgreSQL，并逐步演进到带登录、收藏和后台录入能力的完整应用。
 
 ## 主要功能
 
 - 后端使用 `FastAPI + psycopg2` 连接 Docker PostgreSQL（默认 `localhost:15432`）
 - 提供数据库健康检查接口：`GET /api/health/db`
-- 接口会执行 `select 1;` 并返回结果
+- 已提供 Live 列表、单条详情和详情批量预读接口
+- 已提供登录骨架接口：`POST /api/auth/login`、`GET /api/auth/me`、`POST /api/auth/logout`
+- 接口会执行真实业务查询；健康检查接口会执行 `select 1;`
 - 前端使用 `React + TypeScript + Vite`
-- 页面包含一个按钮，点击后调用后端接口并展示成功/失败信息
+- 前端已提供 Live 列表、详情弹窗、分页、主题切换和控制台 mock 录入界面
 - 提供一键启动脚本，可同时启动前后端并统一关闭
+- 已引入 Flyway baseline 和 `V2` 认证相关表结构迁移骨架
+- 已提供管理员初始化脚本：`python scripts/bootstrap_admin.py --username <name> --password <password>`
 - 已包含后端单元测试和前端接口测试框架
 
 ## 快速开始
@@ -25,6 +29,12 @@ pip install -r requirements.txt
 
 数据库连接与超时配置默认都从 `infra/postgres/.env.pg-migrate` 读取；`backend/.env` 已不再作为日常维护入口。
 
+如需安装新引入的登录框架依赖，请重新执行：
+
+```powershell
+pip install -r requirements.txt
+```
+
 ### 2) 前端准备
 
 ```powershell
@@ -35,6 +45,20 @@ npm install
 ### 3) 一键启动
 
 脚本入口说明见 [scripts/README.md](D:/Code/PythonCode/5%20LiveSetList/scripts/README.md)。
+
+### 4) 初始化管理员账号
+
+在完成数据库迁移后，可在项目根目录执行：
+
+```powershell
+python scripts/bootstrap_admin.py --username admin --password your_password --display-name Administrator --role admin
+```
+
+说明：
+
+- 用户名会自动规范成小写
+- 当前阶段默认不开放公开注册
+- 首个账号通过该脚本创建或更新
 
 ## 运行测试
 
@@ -89,6 +113,7 @@ npm run typecheck
 ## 数据库版本控制
 
 - Flyway 落地说明见 [docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md)
+- 登录与权限方案见 [docs/auth-design.md](D:/Code/PythonCode/5%20LiveSetList/docs/auth-design.md)
 - 数据库操作说明见 [backend/db/README.md](D:/Code/PythonCode/5%20LiveSetList/backend/db/README.md)
 - 仓库内 Flyway 骨架位于 `backend/db/flyway`
 - Docker PostgreSQL 配置位于 `infra/postgres`
@@ -107,9 +132,13 @@ npm run typecheck
 - [x] 前端按钮触发接口并展示结果
 - [x] 增加一键启动脚本（同时启动/统一关闭）
 - [x] 搭建后端单元测试和前端接口测试框架
-- [ ] 新增后端查询接口（返回真实表数据）
-- [ ] 前端改为表格展示查询结果
-- [ ] 支持单行编辑并提交更新
+- [x] 新增后端查询接口（返回真实表数据）
+- [x] 前端改为表格展示查询结果
+- [x] 增加基础日志与配置说明
+- [x] 增加登录框架第一阶段骨架（数据库迁移、认证接口、管理员初始化脚本）
+- [ ] 前端接入登录态与权限控制
+- [ ] 收藏改为仅登录用户可见并切换到服务端存储
+- [ ] 控制台接入真实写接口
 - [ ] 增加后端更新接口权限与参数校验
 - [ ] 补充错误提示、空数据态、加载态
-- [ ] 增加基础日志与配置说明
+- [ ] 增加管理员创建用户与用户管理能力
