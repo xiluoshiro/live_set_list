@@ -2,6 +2,31 @@
 
 本文档描述首页“收藏”能力的前端交互优化方案，目标是在本地开发环境存在偶发连接抖动时，降低收藏操作的体感卡顿，同时保持后端与数据库不被错误写入污染。
 
+## 当前进度
+
+截至 2026-04-12，本文档对应方案已完成以下落地：
+
+- 已将收藏弱一致状态机从 `AuthProvider` 拆分到独立的 `FavoriteProvider`
+- 已实现乐观切星与单条目单飞同步
+- 已取消收藏按钮的 `disabled` 阻塞交互
+- 已实现连续失败 `>= 3` 的统一提示文案
+- 已实现进入“收藏”页时通过会话快照进行一次对账收敛
+- 已补充 favorites 域埋点：
+  - `favorite_click`
+  - `favorite_sync_start`
+  - `favorite_sync_success`
+  - `favorite_sync_failed`
+  - `favorite_sync_reconcile`
+  - `favorite_sync_warning_shown`
+
+当前代码位置：
+
+- 收藏 provider：[FavoriteProvider.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/favorites/FavoriteProvider.tsx)
+- 收藏同步辅助逻辑：[favoriteSync.ts](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/favorites/favoriteSync.ts)
+- 认证 provider：[AuthProvider.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/auth/AuthProvider.tsx)
+- 页面接入：[App.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/App.tsx)
+- 回归测试：[App.test.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/__tests__/App.test.tsx)
+
 ## 1. 背景
 
 当前收藏链路的后端接口与数据库执行通常只需几十毫秒，但浏览器对本地服务的连接建立偶发会出现约 `300ms+` 的额外耗时。
@@ -221,7 +246,7 @@ type FavoriteSyncState = {
 规则：
 
 - 收藏页列表数据始终以服务端接口返回为准
-- 进入收藏页时，先尝试刷新服务端收藏列表
+- 进入收藏页时，先尝试刷新当前 session 快照，再加载服务端收藏列表
 - 若此前存在未收敛的乐观意图，允许保留在全量页展示层，但不直接污染收藏页列表
 
 说明：
@@ -280,7 +305,7 @@ type FavoriteSyncState = {
 职责：
 
 - 响应用户点击星标
-- 调用 AuthProvider 暴露的收藏切换动作
+- 调用 `FavoriteProvider` 暴露的收藏切换动作
 - 根据 `effectiveFavoriteIdSet` 渲染星标
 - 根据 `isFavoriteSyncing(liveId)` 显示轻量同步态
 - 展示统一失败提示文案
@@ -295,7 +320,8 @@ type FavoriteSyncState = {
 
 文件：
 
-- `frontend/src/auth/AuthProvider.tsx`
+- `frontend/src/favorites/FavoriteProvider.tsx`
+- `frontend/src/favorites/favoriteSync.ts`
 
 职责：
 
@@ -304,17 +330,33 @@ type FavoriteSyncState = {
 - 持有 `favoriteSyncById`
 - 持有 `favoriteConsecutiveFailureCount`
 - 暴露：
-  - `isFavorite(liveId)`
   - `isFavoriteSyncing(liveId)`
   - `toggleFavorite(liveId)`
   - `reconcileFavorites()`
 
 说明：
 
-- 收藏的“意图、同步、收敛”都应下沉到该层
+- 收藏的“意图、同步、收敛”都应下沉到 favorites 域
+- `favoriteSync.ts` 承载纯状态辅助逻辑，`FavoriteProvider` 只保留 provider 级时序控制
 - `App.tsx` 不应再维护 `favoritePendingIds`
 
-### 10.3 API 访问层
+### 10.3 认证层
+
+文件：
+
+- `frontend/src/auth/AuthProvider.tsx`
+
+职责：
+
+- 持有登录态、用户信息与 `csrfToken`
+- 持有当前会话返回的 `sessionFavoriteLiveIds`
+- 提供 `refreshSession()` 给 favorites 域用于对账
+
+说明：
+
+- 收藏弱一致状态已不再放在 auth 域内部
+- auth 只提供 favorites 收敛所需的会话快照
+### 10.4 API 访问层
 
 文件：
 
@@ -330,13 +372,13 @@ type FavoriteSyncState = {
 
 - 当前问题不是接口定义问题，因此本层无需结构性改造
 
-### 10.4 日志与观测层
+### 10.5 日志与观测层
 
 文件：
 
 - `frontend/src/logger.ts`
 
-建议新增事件：
+当前已落地事件：
 
 - `favorite_click`
 - `favorite_sync_start`
@@ -349,7 +391,7 @@ type FavoriteSyncState = {
 
 - 后续继续观察本地环境抖动是否仍频繁影响收藏体验
 
-### 10.5 后端层
+### 10.6 后端层
 
 文件：
 
@@ -363,17 +405,15 @@ type FavoriteSyncState = {
 - 不需要新增数据库表
 - 不需要为收藏链路加入额外复杂重试
 
-## 11. 建议的数据接口
-
-建议 `AuthProvider` 暴露的接口形态如下：
+## 11. 当前数据接口
+当前 `FavoriteProvider` 暴露的接口形态如下：
 
 ```ts
-type AuthContextValue = {
-  isAuthenticated: boolean;
+type FavoritesContextValue = {
   favoriteLiveIds: number[];
   favoriteLiveIdSet: ReadonlySet<number>;
   isFavoriteSyncing: (liveId: number) => boolean;
-  toggleFavorite: (liveId: number) => void;
+  toggleFavorite: (liveId: number) => Promise<void>;
   reconcileFavorites: () => Promise<void>;
   favoriteSyncWarning: string | null;
 };
@@ -381,7 +421,7 @@ type AuthContextValue = {
 
 说明：
 
-- `toggleFavorite` 采用“同步触发 + 异步后台处理”的模式，对视图层暴露成同步入口即可
+- `toggleFavorite` 采用“乐观切换 + 异步后台处理”的模式
 - `favoriteSyncWarning` 仅在连续失败次数达到阈值后返回固定文案
 
 ## 12. 推荐伪代码
@@ -445,21 +485,22 @@ async function flushFavoriteIntent(liveId: number) {
 
 ### 第一阶段：状态重构
 
-- 将 `favoritePendingIds` 从 `App.tsx` 下沉移除
-- 在 `AuthProvider` 中增加乐观意图层和同步状态层
-- 增加 `toggleFavorite`、`isFavoriteSyncing`
+- [x] 将 `favoritePendingIds` 从 `App.tsx` 下沉移除
+- [x] 初版弱一致状态机已搭起
+- [x] 增加 `toggleFavorite`、`isFavoriteSyncing`
 
 ### 第二阶段：界面行为调整
 
-- 收藏按钮取消 `disabled`
-- 增加轻量同步视觉态
-- 接入固定失败提示文案
+- [x] 收藏按钮取消 `disabled`
+- [x] 增加轻量同步视觉态
+- [x] 接入固定失败提示文案
 
 ### 第三阶段：收敛与对账
 
-- 进入收藏页时引入服务端真值刷新
-- 登录恢复时完善收藏集合收敛
-- 增加相关埋点日志
+- [x] 进入收藏页时引入服务端真值刷新
+- [x] 登录恢复时完善收藏集合收敛
+- [x] 增加相关埋点日志
+- [x] 将 favorites 弱一致状态从 auth 域拆分成独立 provider
 
 ## 15. 验收标准
 

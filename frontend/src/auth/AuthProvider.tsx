@@ -18,6 +18,7 @@ type AuthContextValue = {
   favoriteSnapshotVersion: number;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
   setAnonymous: () => void;
 };
 
@@ -119,6 +120,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await logout(state.csrfToken);
         setState(anonymousState);
       },
+      refreshSession: async () => {
+        const payload = await getAuthMe();
+        if (!payload.authenticated) {
+          setState(anonymousState);
+          return;
+        }
+        setState(
+          toAuthenticatedState({
+            user: payload.user,
+            csrfToken: payload.csrf_token,
+            favoriteLiveIds: payload.favorite_live_ids,
+          }),
+        );
+      },
       setAnonymous: () => setState(anonymousState),
     };
   }, [state]);
@@ -132,6 +147,7 @@ const fallbackContext: AuthContextValue = {
   favoriteSnapshotVersion: 0,
   login: async () => undefined,
   logout: async () => undefined,
+  refreshSession: async () => undefined,
   setAnonymous: () => undefined,
 };
 

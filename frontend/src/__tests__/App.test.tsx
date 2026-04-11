@@ -158,6 +158,15 @@ function getPageInfo(): { page: number; totalPages: number } {
   return { page: Number(match[1]), totalPages: Number(match[2]) };
 }
 
+function getTableRowByLiveTitle(title: string): HTMLElement {
+  const nameButton = screen.getByRole("button", { name: title });
+  const row = nameButton.closest("tr");
+  if (!row) {
+    throw new Error(`未找到标题 ${title} 对应的表格行`);
+  }
+  return row as HTMLElement;
+}
+
 function renderApp(options?: { withAuthProvider?: boolean }) {
   if (options?.withAuthProvider) {
     return render(
@@ -372,6 +381,70 @@ describe("App", () => {
 
     deferredUnfavorite.resolve();
     await waitFor(() => expect(optimisticButton).toBeInTheDocument());
+  });
+
+  test("连续失败三次后会显示统一的收藏同步提示", async () => {
+    // 测试点：收藏同步连续失败达到阈值后，页面会显示固定提示文案。
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: [1, 2],
+    });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    favoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
+    unfavoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
+    unfavoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
+    const user = userEvent.setup();
+    renderApp({ withAuthProvider: true });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
+    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 1")).getByRole("button", { name: "取消收藏" }));
+    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 2")).getByRole("button", { name: "取消收藏" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("收藏同步失败，请稍后重试或刷新页面确认")).toBeInTheDocument();
+    });
+  });
+
+  test("进入收藏页时会用服务端快照收敛之前失败的乐观收藏", async () => {
+    // 测试点：全量页残留的乐观收藏状态，会在进入收藏页后通过服务端快照重新对齐。
+    getAuthMeMock
+      .mockResolvedValueOnce({
+        authenticated: true,
+        user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+        csrf_token: "csrf-token",
+        favorite_live_ids: [1, 2],
+      })
+      .mockResolvedValueOnce({
+        authenticated: true,
+        user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+        csrf_token: "csrf-token",
+        favorite_live_ids: [1, 2],
+      });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    getMyFavoriteLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2, startId: 101 }),
+    );
+    favoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
+    const user = userEvent.setup();
+    renderApp({ withAuthProvider: true });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 3" })).toBeInTheDocument());
+    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
+    expect(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "取消收藏" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "收藏" }));
+    await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
+    await waitFor(() => expect(getAuthMeMock).toHaveBeenCalledTimes(2));
+
+    await user.click(screen.getByRole("button", { name: "全量" }));
+    expect(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" })).toBeInTheDocument();
   });
 
 

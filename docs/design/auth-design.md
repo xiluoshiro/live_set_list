@@ -29,7 +29,7 @@
 当前仓库中的相关情况：
 
 - 前端首页列表和详情接口均可匿名访问
-- 前端已接入 `AuthProvider`、登录弹窗、`/api/auth/me` 启动恢复和服务端收藏切换
+- 前端已接入 `AuthProvider`、`FavoriteProvider`、登录弹窗、`/api/auth/me` 启动恢复和服务端收藏切换
 - 前端未登录时已隐藏“收藏”页签与星标入口
 - 控制台录入界面当前仍是前端 mock，尚未接入真实写接口
 - 后端认证骨架已落地：已新增用户表、会话表、认证路由和默认 admin 加载机制
@@ -38,6 +38,7 @@
 相关代码位置：
 
 - 前端登录态实现：[AuthProvider.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/auth/AuthProvider.tsx)
+- 前端收藏同步状态实现：[FavoriteProvider.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/favorites/FavoriteProvider.tsx)
 - 前端登录弹窗：[LoginDialog.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/components/LoginDialog.tsx)
 - 前端收藏状态实现：[App.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/App.tsx)
 - 前端接口封装：[api.ts](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/api.ts)
@@ -636,6 +637,7 @@ flowchart TD
 - [x] C3. 前端新增登录弹窗或登录页
 - [x] C4. 未登录时隐藏“收藏”页签与星标入口
 - [x] C5. 登录后接入服务端收藏状态
+- [x] C6. 收藏弱一致同步已拆分到独立 favorites 域，并完成失败提示与收藏页对账
 
 确认点：
 

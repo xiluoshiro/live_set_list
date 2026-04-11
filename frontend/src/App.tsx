@@ -95,6 +95,7 @@ function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const listSnapshotsRef = useRef<Record<string, ListSnapshot>>({});
+  const favoritesReconcileGateRef = useRef(false);
   const listEnabled = tab !== "console" && !auth.isLoading;
   const canUseFavoriteFeatures = auth.isAuthenticated;
 
@@ -114,6 +115,22 @@ function App() {
     setTab("all");
     setPage(1);
   }, [canUseFavoriteFeatures, tab]);
+
+  useEffect(() => {
+    if (tab !== "favorites" || !canUseFavoriteFeatures) {
+      favoritesReconcileGateRef.current = false;
+      return;
+    }
+    if (favoritesReconcileGateRef.current) return;
+    favoritesReconcileGateRef.current = true;
+    void favorites.reconcileFavorites().catch((error) => {
+      if (error instanceof ApiError && error.status === 401) {
+        auth.setAnonymous();
+        setTab("all");
+        favoritesReconcileGateRef.current = false;
+      }
+    });
+  }, [auth, canUseFavoriteFeatures, favorites, tab]);
 
   useEffect(() => {
     // 登录用户切换或匿名/登录状态变化后，之前页签快照不再可信，直接清空。
