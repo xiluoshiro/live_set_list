@@ -11,11 +11,13 @@ type LoginDialogProps = {
 export function LoginDialog({ open, loading, error, onClose, onSubmit }: LoginDialogProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!open) {
       setUsername("");
       setPassword("");
+      setShowPassword(false);
     }
   }, [open]);
 
@@ -47,10 +49,12 @@ export function LoginDialog({ open, loading, error, onClose, onSubmit }: LoginDi
             await onSubmit({ username, password });
           }}
         >
-          <label className="login-field">
-            <span>用户名</span>
+          <label className="login-field login-field-inline">
+            <span className="login-field-label">用户名</span>
+            <span className="login-field-colon">：</span>
             <input
               type="text"
+              aria-label="用户名"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               autoComplete="username"
@@ -58,16 +62,30 @@ export function LoginDialog({ open, loading, error, onClose, onSubmit }: LoginDi
               required
             />
           </label>
-          <label className="login-field">
-            <span>密码</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              disabled={loading}
-              required
-            />
+          <label className="login-field login-field-inline">
+            <span className="login-field-label">密码</span>
+            <span className="login-field-colon">：</span>
+            <div className="login-password-inline">
+              <input
+                type={showPassword ? "text" : "password"}
+                aria-label="密码"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                disabled={loading}
+                required
+              />
+              <button
+                type="button"
+                className={`password-visibility-btn ${showPassword ? "visible" : "hidden-until-hover"}`}
+                aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                title={showPassword ? "隐藏密码" : "显示密码"}
+                onClick={() => setShowPassword((value) => !value)}
+                disabled={loading}
+              >
+                {showPassword ? "🔓" : "🔒"}
+              </button>
+            </div>
           </label>
           {error && <p className="login-error">{error}</p>}
           <div className="login-actions">

@@ -21,6 +21,18 @@
   overflow: hidden;
 }
 
+/* 登录弹窗需要走紧凑布局，避免被通用 modal 大尺寸规则覆盖。 */
+.modal.login-modal {
+  width: min(392px, calc(100vw - 20px));
+  height: auto;
+  max-height: calc(100vh - 20px);
+  padding: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border-normal);
+  display: block;
+}
+
 .modal.fullscreen {
   width: 96vw;
   height: 92vh;
