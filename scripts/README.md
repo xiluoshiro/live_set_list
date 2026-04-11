@@ -49,8 +49,8 @@ python scripts/recovery_db.py <arguments> [--force]
 当前支持：
 
 - `test`：在当前正式容器内 drop/create 测试库，重新执行 Flyway migrate，并重新导入 seed
-- `backup-app-auto`：立即生成一份主库自动备份，保留最近 5 份
-- `backup-app-manual`：立即生成一份主库手动备份，保留最近 3 份
+- `backup-app-auto`：立即生成一份主库自动备份，保留最近 5 份，并执行一次最小恢复 SQL 行数校验；自动备份还会对比最近几份自动备份的行数，异常偏低时直接判失败
+- `backup-app-manual`：立即生成一份主库手动备份，保留最近 3 份，并执行一次最小恢复 SQL 行数校验
 - `recovery`：从最近一份主库备份恢复业务库，恢复前会先生成一份恢复流程专用临时快照，再走候选容器验证与回滚
 
 `--force` 的作用：
@@ -61,3 +61,11 @@ python scripts/recovery_db.py <arguments> [--force]
 完整流程与测试说明见：
 
 - [recovery/README.md](D:/Code/PythonCode/5%20LiveSetList/recovery/README.md)
+
+## Windows 定时任务
+
+可直接挂 `scripts/backup_app_auto.ps1` 到 Windows Task Scheduler。
+
+- 脚本会调用 `python scripts/recovery_db.py backup-app-auto`
+- 结束后会提取最后一条摘要，发送一条 Windows 系统通知
+- 若希望看到通知，任务需要运行在当前已登录用户会话中；如果任务配置成“无论用户是否登录都运行”，通常拿不到桌面通知

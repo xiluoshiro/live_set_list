@@ -21,8 +21,8 @@ python scripts/recovery_db.py <arguments> [--force]
 当前支持：
 
 - `test`：在当前正式容器内 drop/create 测试库，重新执行 Flyway migrate，并重新导入 seed
-- `backup-app-auto`：立即生成一份主库自动备份，保留最近 5 份
-- `backup-app-manual`：立即生成一份主库手动备份，保留最近 3 份
+- `backup-app-auto`：立即生成一份主库自动备份，保留最近 5 份，并执行一次最小恢复 SQL 行数校验；自动备份还会对比最近几份自动备份的行数，异常偏低时直接判失败
+- `backup-app-manual`：立即生成一份主库手动备份，保留最近 3 份，并执行一次最小恢复 SQL 行数校验
 - `recovery`：从最近一份主库备份恢复业务库，恢复前会先生成一份恢复流程专用临时快照，再走候选容器验证与回滚
 
 `--force` 的作用：
@@ -47,6 +47,8 @@ python scripts/recovery_db.py <arguments> [--force]
 - `recovery-snapshot` 只用于单次恢复流程保留“恢复前最后状态”
 - 这类快照不参与“最近备份”选择，也不计入自动/手动备份的保留策略
 - 恢复成功或失败后，脚本都会尝试清理这次生成的临时快照
+- 普通备份完成后会先做 `pg_restore -l` 基础校验，再做一次“最小恢复到 stdout”的 SQL 行数统计
+- 自动备份会继续拿当前行数与最近几份自动备份比较，若当前结果明显偏低，会删除这次可疑备份并返回失败
 
 ## 主库恢复流程
 
