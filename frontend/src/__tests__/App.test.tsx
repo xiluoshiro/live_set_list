@@ -285,6 +285,62 @@ describe("App", () => {
     expect(screen.getByText("Administrator")).toBeInTheDocument();
   });
 
+  test("从全量切到收藏时不会残留上一轮全量结果", async () => {
+    // 测试点：切到收藏页后，在收藏接口返回前应先清空旧列表，只显示加载态。
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: [1, 2],
+    });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const deferredFavorites = deferred<LivesResponse>();
+    getMyFavoriteLivesMock.mockImplementationOnce(() => deferredFavorites.promise);
+    const user = userEvent.setup();
+    renderApp({ withAuthProvider: true });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "收藏" }));
+
+    expect(screen.queryByRole("button", { name: "示例 Live 名称 1" })).not.toBeInTheDocument();
+    expect(screen.getByText("加载中...")).toBeInTheDocument();
+
+    deferredFavorites.resolve(
+      makeResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2, startId: 101 }),
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument());
+  });
+
+  test("已加载过的页签再次切回时会直接复用快照，不重复显示刷新态", async () => {
+    // 测试点：同一登录态下已访问过的全量/收藏页再次切回时，应直接命中本地快照。
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: [1, 2],
+    });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    getMyFavoriteLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2, startId: 101 }),
+    );
+    const user = userEvent.setup();
+    renderApp({ withAuthProvider: true });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "收藏" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "全量" }));
+
+    expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument();
+    expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
+    expect(getLivesMock).toHaveBeenCalledTimes(1);
+  });
+
 
   test("分页和每页条数切换正常工作", async () => {
     // 测试点：分页跳转与 15/20 行切换后页码计算正确。
@@ -667,8 +723,8 @@ describe("App", () => {
     });
   });
 
-  test("后端校正页码后，前端页码显示与请求参数会同步", async () => {
-    // 测试点：后端返回 pagination.page 被校正时，前端自动 setPage 并二次请求。
+  test("后端校正页码后，前端页码显示会同步到纠正结果且不重复请求", async () => {
+    // 测试点：后端返回 canonical page 时，前端应同步显示该页并复用这次响应，不再冗余补请求。
     getLivesMock
       .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 40, totalPages: 2, itemCount: 20 }),
@@ -676,17 +732,17 @@ describe("App", () => {
       .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 20, totalPages: 1, itemCount: 20 }),
       )
-      .mockResolvedValueOnce(
-        makeResponse({ page: 1, pageSize: 20, total: 20, totalPages: 1, itemCount: 20 }),
-      );
     const user = userEvent.setup();
     renderApp();
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "下一页" }));
     await waitFor(() => {
       expect(screen.getByText("第 1 / 1 页")).toBeInTheDocument();
-      expect(getLivesMock).toHaveBeenCalledWith(1, 20);
+      expect(screen.getByText("总计 20 条")).toBeInTheDocument();
     });
+    expect(getLivesMock).toHaveBeenCalledTimes(2);
+    expect(getLivesMock).toHaveBeenNthCalledWith(2, 2, 20);
   });
 
   test("url 为空时显示 '-' 且不渲染链接", async () => {
