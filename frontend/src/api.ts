@@ -6,12 +6,40 @@ export type DbHealthResponse = {
   result: number | null;
 };
 
+export type AuthUser = {
+  id: number;
+  username: string;
+  display_name: string;
+  role: string;
+};
+
+export type AuthLoginResponse = {
+  user: AuthUser;
+  csrf_token: string;
+  favorite_live_ids: number[];
+};
+
+export type AuthMeResponse =
+  | {
+      authenticated: false;
+      user?: null;
+      csrf_token?: null;
+      favorite_live_ids?: null;
+    }
+  | {
+      authenticated: true;
+      user: AuthUser;
+      csrf_token: string;
+      favorite_live_ids: number[];
+    };
+
 export type LiveItem = {
   live_id: number;
   live_date: string;
   live_title: string;
   bands: Array<number | string>;
   url: string | null;
+  is_favorite: boolean;
 };
 
 export type LivesResponse = {
@@ -56,12 +84,34 @@ export type LiveDetailResponse = {
   bands: number[];
   band_names: string[];
   url: string | null;
+  is_favorite: boolean;
   detail_rows: LiveDetailRow[];
 };
 
 export type LiveDetailsBatchResponse = {
   items: LiveDetailResponse[];
   missing_live_ids: number[];
+};
+
+type AuthErrorPayload = {
+  detail?: string | { code?: string; message?: string };
+};
+
+type RequestKind =
+  | "health"
+  | "lives"
+  | "favorite_lives"
+  | "live_detail"
+  | "live_details_batch"
+  | "auth_me"
+  | "auth_login"
+  | "auth_logout"
+  | "favorite_add"
+  | "favorite_remove";
+
+type RequestLogMeta = {
+  requestKind: RequestKind;
+  method?: string;
 };
 
 const BASE_URL = "http://localhost:8000";
@@ -77,6 +127,18 @@ const livesCache = new LruRequestCache<LivesResponse>(LIVES_CACHE_MAX);
 const detailCache = new LruRequestCache<LiveDetailResponse>(DETAIL_CACHE_MAX);
 const detailRecentRequest = new RecentPromiseDebouncer<number, LiveDetailResponse>();
 
+export class ApiError extends Error {
+  status: number;
+  code: string | null;
+
+  constructor(message: string, status: number, code: string | null = null) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 function livesCacheKey(page: number, pageSize: 15 | 20): string {
   return `lives:${page}:${pageSize}`;
 }
@@ -84,13 +146,6 @@ function livesCacheKey(page: number, pageSize: 15 | 20): string {
 function detailCacheKey(liveId: number): string {
   return `detail:${liveId}`;
 }
-
-type RequestKind = "health" | "lives" | "live_detail" | "live_details_batch";
-
-type RequestLogMeta = {
-  requestKind: RequestKind;
-  method?: string;
-};
 
 async function fetchWithTimeout(
   input: string,
@@ -102,14 +157,17 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const startedAt = performance.now();
-  // 只在真实发起 fetch 时记录网络日志，缓存命中路径不会走到这里。
   logInfo("api_request_start", {
     method,
     url: input,
     request_kind: requestKind,
   });
   try {
-    const response = await fetch(input, { ...init, signal: controller.signal });
+    const response = await fetch(input, {
+      credentials: "include",
+      ...init,
+      signal: controller.signal,
+    });
     const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
     const payload = {
       method,
@@ -121,7 +179,6 @@ async function fetchWithTimeout(
     if (response.ok) {
       logInfo("api_request_success", payload);
     } else {
-      // 非 2xx 也先记录下来，再交给调用方统一抛错。
       logError("api_request_error", {
         ...payload,
         message: `Request failed: ${response.status}`,
@@ -152,14 +209,55 @@ async function fetchWithTimeout(
   }
 }
 
+async function readJsonSafely<T>(response: Response): Promise<T | null> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+function extractApiErrorPayload(payload: AuthErrorPayload | null, status: number): ApiError {
+  if (payload?.detail && typeof payload.detail === "object") {
+    return new ApiError(
+      payload.detail.message?.trim() || `Request failed: ${status}`,
+      status,
+      payload.detail.code?.trim() || null,
+    );
+  }
+  if (typeof payload?.detail === "string" && payload.detail.trim() !== "") {
+    return new ApiError(payload.detail, status, null);
+  }
+  return new ApiError(`Request failed: ${status}`, status, null);
+}
+
+async function expectJsonResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const payload = await readJsonSafely<AuthErrorPayload>(response);
+    throw extractApiErrorPayload(payload, response.status);
+  }
+  return (await response.json()) as T;
+}
+
+async function expectNoContent(response: Response): Promise<void> {
+  if (!response.ok) {
+    const payload = await readJsonSafely<AuthErrorPayload>(response);
+    throw extractApiErrorPayload(payload, response.status);
+  }
+}
+
+function jsonHeaders(csrfToken?: string | null): HeadersInit {
+  return {
+    "Content-Type": "application/json",
+    ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+  };
+}
+
 export async function checkDbHealth(): Promise<DbHealthResponse> {
   const response = await fetchWithTimeout(`${BASE_URL}/api/health/db`, undefined, {
     requestKind: "health",
   });
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-  return (await response.json()) as DbHealthResponse;
+  return expectJsonResponse<DbHealthResponse>(response);
 }
 
 async function fetchLivesRemote(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
@@ -170,37 +268,109 @@ async function fetchLivesRemote(page: number, pageSize: 15 | 20): Promise<LivesR
   const response = await fetchWithTimeout(`${BASE_URL}/api/lives?${query.toString()}`, undefined, {
     requestKind: "lives",
   });
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-  return (await response.json()) as LivesResponse;
+  return expectJsonResponse<LivesResponse>(response);
+}
+
+export async function getMyFavoriteLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
+  const query = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  const response = await fetchWithTimeout(`${BASE_URL}/api/me/favorites/lives?${query.toString()}`, undefined, {
+    requestKind: "favorite_lives",
+  });
+  return expectJsonResponse<LivesResponse>(response);
 }
 
 async function fetchLiveDetailRemote(liveId: number): Promise<LiveDetailResponse> {
   const response = await fetchWithTimeout(`${BASE_URL}/api/lives/${liveId}`, undefined, {
     requestKind: "live_detail",
   });
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-  return (await response.json()) as LiveDetailResponse;
+  return expectJsonResponse<LiveDetailResponse>(response);
 }
 
 async function fetchLiveDetailsBatchRemote(liveIds: number[]): Promise<LiveDetailsBatchResponse> {
-  const response = await fetchWithTimeout(`${BASE_URL}/api/lives/details:batch`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/lives/details:batch`,
+    {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ live_ids: liveIds }),
     },
-    body: JSON.stringify({ live_ids: liveIds }),
-  }, {
-    requestKind: "live_details_batch",
-    method: "POST",
+    {
+      requestKind: "live_details_batch",
+      method: "POST",
+    },
+  );
+  return expectJsonResponse<LiveDetailsBatchResponse>(response);
+}
+
+export async function getAuthMe(): Promise<AuthMeResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/auth/me`, undefined, {
+    requestKind: "auth_me",
   });
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-  return (await response.json()) as LiveDetailsBatchResponse;
+  return expectJsonResponse<AuthMeResponse>(response);
+}
+
+export async function login(username: string, password: string): Promise<AuthLoginResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/auth/login`,
+    {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ username, password }),
+    },
+    {
+      requestKind: "auth_login",
+      method: "POST",
+    },
+  );
+  return expectJsonResponse<AuthLoginResponse>(response);
+}
+
+export async function logout(csrfToken: string | null): Promise<void> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/auth/logout`,
+    {
+      method: "POST",
+      headers: csrfToken ? { "X-CSRF-Token": csrfToken } : undefined,
+    },
+    {
+      requestKind: "auth_logout",
+      method: "POST",
+    },
+  );
+  return expectNoContent(response);
+}
+
+export async function favoriteLive(liveId: number, csrfToken: string): Promise<void> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/me/favorites/lives/${liveId}`,
+    {
+      method: "PUT",
+      headers: { "X-CSRF-Token": csrfToken },
+    },
+    {
+      requestKind: "favorite_add",
+      method: "PUT",
+    },
+  );
+  return expectNoContent(response);
+}
+
+export async function unfavoriteLive(liveId: number, csrfToken: string): Promise<void> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/me/favorites/lives/${liveId}`,
+    {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrfToken },
+    },
+    {
+      requestKind: "favorite_remove",
+      method: "DELETE",
+    },
+  );
+  return expectNoContent(response);
 }
 
 export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
@@ -216,7 +386,6 @@ export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesRe
     .then((payload) => {
       const updatedAt = Date.now();
       livesCache.setData(requestedKey, payload, updatedAt);
-      // 后端可能会把超大页码钳回最后一页，这里顺手写入规范 key。
       const canonicalKey = livesCacheKey(payload.pagination.page, pageSize);
       if (canonicalKey !== requestedKey) {
         livesCache.setData(canonicalKey, payload, updatedAt);

@@ -29,13 +29,16 @@
 当前仓库中的相关情况：
 
 - 前端首页列表和详情接口均可匿名访问
-- 前端首页当前仍保留旧版收藏 UI，尚未切换到“仅登录用户可见”的新方案
+- 前端已接入 `AuthProvider`、登录弹窗、`/api/auth/me` 启动恢复和服务端收藏切换
+- 前端未登录时已隐藏“收藏”页签与星标入口
 - 控制台录入界面当前仍是前端 mock，尚未接入真实写接口
 - 后端认证骨架已落地：已新增用户表、会话表、认证路由和默认 admin 加载机制
-- 后端当前默认数据库连接仍以只读查询为主，认证相关逻辑已补充业务写连接
+- 后端当前数据库连接已拆分为只读连接、普通用户写连接和高权限业务写连接
 
 相关代码位置：
 
+- 前端登录态实现：[AuthProvider.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/auth/AuthProvider.tsx)
+- 前端登录弹窗：[LoginDialog.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/components/LoginDialog.tsx)
 - 前端收藏状态实现：[App.tsx](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/App.tsx)
 - 前端接口封装：[api.ts](/D:/Code/PythonCode/5%20LiveSetList/frontend/src/api.ts)
 - 后端接口入口：[main.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/main.py)
@@ -627,11 +630,11 @@ flowchart TD
 
 ### 阶段 C：前端登录态与收藏切换
 
-- [ ] C1. 前端新增 `AuthProvider`
-- [ ] C2. 前端启动时接入 `/api/auth/me`
-- [ ] C3. 前端新增登录弹窗或登录页
-- [ ] C4. 未登录时隐藏“收藏”页签与星标入口
-- [ ] C5. 登录后接入服务端收藏状态
+- [x] C1. 前端新增 `AuthProvider`
+- [x] C2. 前端启动时接入 `/api/auth/me`
+- [x] C3. 前端新增登录弹窗或登录页
+- [x] C4. 未登录时隐藏“收藏”页签与星标入口
+- [x] C5. 登录后接入服务端收藏状态
 
 确认点：
 
@@ -639,9 +642,17 @@ flowchart TD
 - 登录后收藏完全由服务端驱动
 - 刷新页面后仍可恢复登录态和收藏状态
 
+当前状态：
+
+- 前端已完成 `AuthProvider + LoginDialog + App` 接线
+- 所有请求已统一带 `credentials: "include"`
+- 收藏页改为调用 `/api/me/favorites/lives`
+- 星标切换改为调用服务端收藏接口，不再使用 `localStorage`
+- 已完成前端测试更新，并已通过整仓 `run_checks functional`
+
 ### 阶段 D：控制台权限与写接口
 
-- [ ] D1. 未登录时隐藏或拦截“控制台”页签
+- [x] D1. 未登录时隐藏或拦截“控制台”页签
 - [ ] D2. 新增 `/api/admin/songs`
 - [ ] D3. 新增 `/api/admin/lives`
 - [ ] D4. 新增 `/api/admin/lives/{live_id}`
@@ -657,8 +668,8 @@ flowchart TD
 
 - [x] E1. 后端单元测试：登录、登出、session、csrf
 - [x] E2. 后端集成测试：收藏增删查
-- [ ] E3. 前端测试：登录态恢复、收藏来源切换、控制台权限
-- [ ] E4. 回归验证：现有 live 列表、详情、详情批量预读不受影响
+- [x] E3. 前端测试：登录态恢复、收藏来源切换、控制台权限
+- [x] E4. 回归验证：现有 live 列表、详情、详情批量预读不受影响
 
 确认点：
 
@@ -667,16 +678,16 @@ flowchart TD
 
 ## 11. 当前推荐的第一步
 
-当前推荐进入阶段 C：
+当前推荐进入阶段 D：
 
-- C1. 前端新增 `AuthProvider`
-- C2. 前端启动时接入 `/api/auth/me`
-- C3. 前端新增登录弹窗或登录页
-- C4. 未登录时隐藏“收藏”页签与星标入口
-- C5. 登录后接入服务端收藏状态
+- D2. 新增 `/api/admin/songs`
+- D3. 新增 `/api/admin/lives`
+- D4. 新增 `/api/admin/lives/{live_id}`
+- D5. 写接口接入审计日志
+- D6. 把控制台页签从“仅登录拦截”继续细化到 `editor+` 角色控制
 
 原因：
 
-- Phase A 和 Phase B 已把认证与服务端收藏链路打通
-- 后端已经具备登录态、收藏列表、收藏增删和 `is_favorite` 回传能力
-- 当前最自然的下一步就是把前端从旧版 localStorage 收藏切到服务端模型
+- Phase A、B、C 已把认证、服务端收藏和前端登录态切换完整打通
+- 当前最大的空白已经转到控制台真实写接口与角色控制
+- 后续应围绕 `editor / admin` 能力继续推进后台写链路

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useAuth } from "./auth/AuthProvider";
 import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { MemberStatusTable } from "./components/DetailMemberTable";
-import { getLiveDetail, getLives, type LiveDetailResponse, type LiveItem } from "./api";
+import { LoginDialog } from "./components/LoginDialog";
+import { ApiError, getLiveDetail, getLives, getMyFavoriteLives, type LiveDetailResponse, type LiveItem } from "./api";
 import { logError } from "./logger";
 import { prefetchCurrentPageDetails, scheduleIdleNextPagePrefetch } from "./prefetch/liveDetailsPrefetch";
 import { useTheme, type ThemeMode } from "./theme/ThemeProvider";
@@ -17,7 +19,6 @@ type LiveRow = {
 };
 
 type TabKey = "favorites" | "all" | "console";
-type FavoriteMap = Record<number, boolean>;
 
 function formatTimedLabel(value: string | null | undefined): string {
   const raw = value?.trim();
@@ -64,13 +65,13 @@ function getThemeToggleMeta(mode: ThemeMode, resolvedTheme: "light" | "dark") {
 }
 
 function App() {
+  const auth = useAuth();
   const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
   const [pageSize, setPageSize] = useState<15 | 20>(20);
   const [page, setPage] = useState(1);
-  const [tab, setTab] = useState<TabKey>("favorites");
+  const [tab, setTab] = useState<TabKey>("all");
   const [activeRow, setActiveRow] = useState<LiveRow | null>(null);
   const [detailFullscreen, setDetailFullscreen] = useState(false);
-  const [favorites, setFavorites] = useState<FavoriteMap>({});
   const [items, setItems] = useState<LiveRow[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(1);
@@ -79,7 +80,12 @@ function App() {
   const [detailData, setDetailData] = useState<LiveDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const listEnabled = tab !== "console";
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [favoritePendingIds, setFavoritePendingIds] = useState<Record<number, boolean>>({});
+  const listEnabled = tab !== "console" && !auth.isLoading;
+  const canUseFavoriteFeatures = auth.isAuthenticated;
 
   const toLiveRow = (item: LiveItem): LiveRow => ({
     liveId: item.live_id,
@@ -93,14 +99,21 @@ function App() {
   });
 
   useEffect(() => {
+    if (canUseFavoriteFeatures || tab !== "favorites") return;
+    setTab("all");
+    setPage(1);
+  }, [canUseFavoriteFeatures, tab]);
+
+  useEffect(() => {
     if (!listEnabled) return;
+    if (tab === "favorites" && !canUseFavoriteFeatures) return;
     let canceled = false;
 
     const fetchLives = async () => {
       setLoading(true);
       setLoadError(null);
       try {
-        const data = await getLives(page, pageSize);
+        const data = tab === "favorites" ? await getMyFavoriteLives(page, pageSize) : await getLives(page, pageSize);
         if (canceled) return;
         setItems(data.items.map(toLiveRow));
         setServerTotal(data.pagination.total);
@@ -110,11 +123,16 @@ function App() {
         }
       } catch (error) {
         if (canceled) return;
+        if (error instanceof ApiError && error.status === 401) {
+          auth.setAnonymous();
+          setTab("all");
+        }
         const rawMessage = error instanceof Error ? error.message : "未知错误";
         const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
         logError("load_lives_failed", {
           page,
           pageSize,
+          tab,
           message,
         });
         setLoadError(message);
@@ -130,22 +148,7 @@ function App() {
     return () => {
       canceled = true;
     };
-  }, [page, pageSize, listEnabled]);
-
-  useEffect(() => {
-    const raw = localStorage.getItem("live-favorites-map");
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as FavoriteMap;
-      setFavorites(parsed);
-    } catch {
-      setFavorites({});
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("live-favorites-map", JSON.stringify(favorites));
-  }, [favorites]);
+  }, [auth, canUseFavoriteFeatures, listEnabled, page, pageSize, tab]);
 
   useEffect(() => {
     if (tab === "console") return;
@@ -159,6 +162,7 @@ function App() {
         live_title: row.liveTitle,
         bands: row.icons,
         url: row.url,
+        is_favorite: isFavorite(row.liveId),
       })),
     ).catch(() => undefined);
     const cancelIdlePrefetch = scheduleIdleNextPagePrefetch({
@@ -209,16 +213,8 @@ function App() {
     };
   }, [activeRow?.liveId]);
 
-  const isFavorite = (id: number) => favorites[id] ?? true;
-  const rows = useMemo(() => {
-    if (tab === "favorites") {
-      return items.filter((row) => isFavorite(row.liveId));
-    }
-    if (tab === "all") {
-      return items;
-    }
-    return [];
-  }, [favorites, items, tab]);
+  const isFavorite = (id: number) => auth.favoriteLiveIdSet.has(id);
+  const rows = tab === "console" ? [] : items;
 
   const total = serverTotal;
   const totalPages = serverTotalPages;
@@ -231,17 +227,57 @@ function App() {
   };
 
   const handleTabChange = (nextTab: TabKey) => {
+    if (nextTab === "favorites" && !canUseFavoriteFeatures) {
+      setLoginError(null);
+      setLoginDialogOpen(true);
+      return;
+    }
+    if (nextTab === "console" && !auth.isAuthenticated) {
+      setLoginError(null);
+      setLoginDialogOpen(true);
+      return;
+    }
     setTab(nextTab);
     setPage(1);
   };
 
-  const showFavoriteColumn = tab === "all";
+  const showFavoriteColumn = tab === "all" && auth.isAuthenticated;
 
-  const toggleFavorite = (id: number) => {
-    setFavorites((prev) => ({
-      ...prev,
-      [id]: !(prev[id] ?? true),
-    }));
+  const toggleFavorite = async (id: number) => {
+    if (!auth.isAuthenticated) {
+      setLoginError(null);
+      setLoginDialogOpen(true);
+      return;
+    }
+    if (favoritePendingIds[id]) {
+      return;
+    }
+
+    setFavoritePendingIds((prev) => ({ ...prev, [id]: true }));
+    try {
+      // 收藏切换只改服务端真值，页面展示统一从 AuthProvider 中的内存态读取。
+      if (isFavorite(id)) {
+        await auth.unfavoriteLive(id);
+      } else {
+        await auth.favoriteLive(id);
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        auth.setAnonymous();
+        setTab("all");
+        setLoginDialogOpen(true);
+      }
+      logError("toggle_favorite_failed", {
+        liveId: id,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setFavoritePendingIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
   };
 
   const closeDetailModal = () => {
@@ -265,33 +301,87 @@ function App() {
   };
   const themeToggleMeta = getThemeToggleMeta(themeMode, resolvedTheme);
 
+  const handleLoginSubmit = async (params: { username: string; password: string }) => {
+    setLoginLoading(true);
+    setLoginError(null);
+    try {
+      await auth.login(params.username, params.password);
+      setLoginDialogOpen(false);
+      setTab("all");
+      setPage(1);
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "登录失败，请稍后重试");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await auth.logout();
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "退出失败，请稍后重试");
+      return;
+    }
+    setTab("all");
+    setPage(1);
+  };
+
   return (
     <main className="page">
       <section className="panel">
         <header className="panel-head">
           <h1>Live 信息统计</h1>
-          <div className="toolbar">
-            <label>
-              每页行数
-              <select
-                value={pageSize}
-                onChange={(e) => handlePageSizeChange(Number(e.target.value) as 15 | 20)}
+          <div className="auth-toolbar">
+            <div className="toolbar">
+              <label>
+                每页行数
+                <select
+                  value={pageSize}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value) as 15 | 20)}
+                >
+                  <option value={15}>15</option>
+                  <option value={20}>20</option>
+                </select>
+              </label>
+              <span>总计 {total} 条</span>
+            </div>
+            {auth.isLoading ? (
+              <span className="auth-status">登录态检查中...</span>
+            ) : auth.isAuthenticated ? (
+              <>
+                <span className="auth-user">
+                  <span>{auth.user?.display_name}</span>
+                  <span className="auth-role-chip">{auth.user?.role}</span>
+                </span>
+                <button type="button" className="secondary-btn" onClick={() => void handleLogout()}>
+                  退出登录
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => {
+                  setLoginError(null);
+                  setLoginDialogOpen(true);
+                }}
               >
-                <option value={15}>15</option>
-                <option value={20}>20</option>
-              </select>
-            </label>
-            <span>总计 {total} 条</span>
+                登录
+              </button>
+            )}
           </div>
         </header>
 
         <nav className="tabs">
-          <button
-            className={`tab-btn ${tab === "favorites" ? "active" : ""}`}
-            onClick={() => handleTabChange("favorites")}
-          >
-            收藏
-          </button>
+          {auth.isAuthenticated && (
+            <button
+              className={`tab-btn ${tab === "favorites" ? "active" : ""}`}
+              onClick={() => handleTabChange("favorites")}
+            >
+              收藏
+            </button>
+          )}
           <button
             className={`tab-btn ${tab === "all" ? "active" : ""}`}
             onClick={() => handleTabChange("all")}
@@ -314,6 +404,9 @@ function App() {
             {themeToggleMeta.icon}
           </button>
         </nav>
+        {!auth.isLoading && !auth.isAuthenticated && (
+          <p className="tab-tip">登录后可使用收藏同步；未登录模式下不会显示收藏页签与星标入口。</p>
+        )}
 
         {tab !== "console" ? (
           <>
@@ -335,9 +428,10 @@ function App() {
                         <td className="fav-col-cell">
                           <button
                             className={`star-btn ${isFavorite(row.liveId) ? "is-fav" : ""}`}
-                            onClick={() => toggleFavorite(row.liveId)}
+                            onClick={() => void toggleFavorite(row.liveId)}
                             title={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
                             aria-label={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
+                            disabled={Boolean(favoritePendingIds[row.liveId])}
                           >
                             ★
                           </button>
@@ -511,6 +605,16 @@ function App() {
           </div>
         </div>
       )}
+      <LoginDialog
+        open={loginDialogOpen}
+        loading={loginLoading}
+        error={loginError}
+        onClose={() => {
+          setLoginDialogOpen(false);
+          setLoginError(null);
+        }}
+        onSubmit={handleLoginSubmit}
+      />
     </main>
   );
 }
