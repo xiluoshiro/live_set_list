@@ -439,6 +439,28 @@ describe("App", () => {
     expect(pageInfoAfterResize.totalPages).toBe(Math.ceil(total / 15));
   });
 
+  test("跳转页输入框支持回车跳转到目标页", async () => {
+    // 测试点：在“跳转至第（）页”输入页码后按回车，应请求对应页并更新分页显示。
+    getLivesMock
+      .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({ page: 3, pageSize: 20, total: 47, totalPages: 3, itemCount: 7, startId: 41 }),
+      );
+    const user = userEvent.setup();
+    renderApp();
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+
+    const jumpInput = screen.getByRole("textbox");
+    await user.clear(jumpInput);
+    await user.type(jumpInput, "3{Enter}");
+
+    await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(3, 20));
+    await waitFor(() => expect(screen.getByText("第 3 / 3 页")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "示例 Live 名称 41" })).toBeInTheDocument();
+  });
+
   test("翻页后主表仍保持固定布局，避免列间距抖动", async () => {
     // 测试点：第一页到下一页（超长标题）后，表格仍为 fixed 布局，列宽分配不受内容长度影响。
     const page1 = makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 });

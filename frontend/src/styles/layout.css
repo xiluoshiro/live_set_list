@@ -105,10 +105,38 @@
 
 .pager {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px 18px;
+}
+
+.pager-controls {
+  display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 20px 18px;
+}
+
+.pager-status {
+  white-space: nowrap;
+}
+
+.pager-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.pager-jump input {
+  width: 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: var(--surface-input);
+  color: var(--text-main);
 }
 
 .pager button {
@@ -128,6 +156,15 @@
   }
 
   .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .pager {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pager-controls {
     flex-wrap: wrap;
   }
 }

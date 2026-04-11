@@ -93,6 +93,7 @@ function App() {
   const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
   const [pageSize, setPageSize] = useState<15 | 20>(20);
   const [page, setPage] = useState(1);
+  const [jumpPageInput, setJumpPageInput] = useState("1");
   const [tab, setTab] = useState<TabKey>("all");
   const [activeRow, setActiveRow] = useState<LiveRow | null>(null);
   const [detailFullscreen, setDetailFullscreen] = useState(false);
@@ -332,6 +333,10 @@ function App() {
   const safePage = Math.min(page, totalPages);
   const pagedRows = rows;
 
+  useEffect(() => {
+    setJumpPageInput(String(safePage));
+  }, [safePage]);
+
   const handlePageSizeChange = (value: 15 | 20) => {
     setPageSize(value);
     setPage(1);
@@ -350,6 +355,14 @@ function App() {
     }
     setTab(nextTab);
     setPage(1);
+  };
+
+  const commitJumpPage = () => {
+    const parsed = Number.parseInt(jumpPageInput, 10);
+    const fallbackPage = Number.isFinite(parsed) ? parsed : safePage;
+    const nextPage = Math.min(totalPages, Math.max(1, fallbackPage));
+    setPage(nextPage);
+    setJumpPageInput(String(nextPage));
   };
 
   const showFavoriteColumn = tab === "all" && auth.isAuthenticated;
@@ -429,19 +442,6 @@ function App() {
         <header className="panel-head">
           <h1>Live 信息统计</h1>
           <div className="auth-toolbar">
-            <div className="toolbar">
-              <label>
-                每页行数
-                <select
-                  value={pageSize}
-                  onChange={(e) => handlePageSizeChange(Number(e.target.value) as 15 | 20)}
-                >
-                  <option value={15}>15</option>
-                  <option value={20}>20</option>
-                </select>
-              </label>
-              <span>总计 {total} 条</span>
-            </div>
             {auth.isLoading ? (
               <span className="auth-status">登录态检查中...</span>
             ) : auth.isAuthenticated ? (
@@ -582,18 +582,51 @@ function App() {
             </div>
 
             <footer className="pager">
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>
-                上一页
-              </button>
-              <span>
-                第 {safePage} / {totalPages} 页
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={safePage >= totalPages}
-              >
-                下一页
-              </button>
+              <div className="toolbar">
+                <label>
+                  每页行数
+                  <select
+                    value={pageSize}
+                    onChange={(e) => handlePageSizeChange(Number(e.target.value) as 15 | 20)}
+                  >
+                    <option value={15}>15</option>
+                    <option value={20}>20</option>
+                  </select>
+                </label>
+                <span>总计 {total} 条</span>
+              </div>
+              <div className="pager-controls">
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>
+                  上一页
+                </button>
+                <span className="pager-status">
+                  第 {safePage} / {totalPages} 页
+                </span>
+                <label className="pager-jump">
+                  跳转至第
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={jumpPageInput}
+                    onChange={(e) => setJumpPageInput(e.target.value)}
+                    onBlur={commitJumpPage}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitJumpPage();
+                      }
+                    }}
+                  />
+                  页
+                </label>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                >
+                  下一页
+                </button>
+              </div>
             </footer>
           </>
         ) : (
