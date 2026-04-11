@@ -3,11 +3,13 @@ from collections.abc import Mapping
 from math import ceil
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled
 
+from app.auth import AuthUser, get_current_user_optional
 from app.db import get_db_connection
+from app.favorites import get_favorite_live_id_set, is_live_favorite
 from app.logging_config import get_logger
 from app.schemas import (
     ErrorResponse,
@@ -509,6 +511,7 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
 def get_lives(
     page: int = Query(default=1, ge=1, description="页码，从 1 开始。"),
     page_size: int = Query(default=20, description="每页条数，当前仅允许 15 或 20。"),
+    current_user: AuthUser | None = Depends(get_current_user_optional),
 ):
     if page_size not in ALLOWED_PAGE_SIZE:
         raise HTTPException(status_code=400, detail="page_size must be 15 or 20")
@@ -526,6 +529,10 @@ def get_lives(
 
                 cur.execute(LIVES_PAGE_QUERY, (page_size, offset))
                 rows = cur.fetchall()
+                favorite_live_ids = set()
+                if current_user is not None:
+                    requested_live_ids = [int(row[0]) for row in rows]
+                    favorite_live_ids = get_favorite_live_id_set(cur, current_user.id, requested_live_ids)
     except QueryCanceled as exc:
         logger.exception(
             "get_lives failed page=%s page_size=%s error_type=%s",
@@ -560,6 +567,7 @@ def get_lives(
             "live_title": row[2],
             "bands": row[3] or [],
             "url": row[4],
+            "is_favorite": int(row[0]) in favorite_live_ids if current_user is not None else False,
         }
         for row in rows
     ]
@@ -602,7 +610,10 @@ def get_lives(
         },
     },
 )
-def get_live_details_batch(payload: LiveDetailBatchRequest = Body(..., description="待批量查询的 live_id 列表。")):
+def get_live_details_batch(
+    payload: LiveDetailBatchRequest = Body(..., description="待批量查询的 live_id 列表。"),
+    current_user: AuthUser | None = Depends(get_current_user_optional),
+):
     deduped_live_ids: list[int] = []
     seen: set[int] = set()
     for live_id in payload.live_ids:
@@ -621,6 +632,9 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(..., descripti
                 cur.execute(BATCH_LIVE_DETAIL_HEADERS_QUERY, (deduped_live_ids,))
                 header_rows = cur.fetchall()
                 header_by_live_id = {int(row[0]): row for row in header_rows}
+                favorite_live_ids = set()
+                if current_user is not None:
+                    favorite_live_ids = get_favorite_live_id_set(cur, current_user.id, deduped_live_ids)
 
                 cur.execute(BATCH_LIVE_DETAIL_ROWS_QUERY, (deduped_live_ids,))
                 raw_rows = cur.fetchall()
@@ -712,6 +726,7 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(..., descripti
                             band_name_to_id_by_live_id.get(live_id, {}),
                         ),
                         "url": header_row[8],
+                        "is_favorite": live_id in favorite_live_ids if current_user is not None else False,
                         "detail_rows": detail_rows,
                     }
                     items.append(detail)
@@ -772,7 +787,10 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(..., descripti
         },
     },
 )
-def get_live_detail(live_id: int):
+def get_live_detail(
+    live_id: int,
+    current_user: AuthUser | None = Depends(get_current_user_optional),
+):
     if live_id < 1:
         raise HTTPException(status_code=400, detail="live_id must be >= 1")
 
@@ -782,6 +800,7 @@ def get_live_detail(live_id: int):
                 detail = _build_live_detail_with_cursor(cur, live_id)
                 if detail is None:
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
+                detail["is_favorite"] = is_live_favorite(cur, current_user.id, live_id) if current_user is not None else False
     except QueryCanceled as exc:
         logger.exception("get_live_detail failed live_id=%s error_type=%s", live_id, type(exc).__name__)
         raise HTTPException(status_code=504, detail="Database query timeout") from exc

@@ -603,10 +603,10 @@ flowchart TD
 
 ### 阶段 B：收藏服务端化
 
-- [ ] B1. 新增 `/api/me/favorites/lives`
-- [ ] B2. 新增 `PUT /api/me/favorites/lives/{live_id}`
-- [ ] B3. 新增 `DELETE /api/me/favorites/lives/{live_id}`
-- [ ] B4. 改造 `GET /api/lives` 和 `GET /api/lives/{live_id}`，支持返回 `is_favorite`
+- [x] B1. 新增 `/api/me/favorites/lives`
+- [x] B2. 新增 `PUT /api/me/favorites/lives/{live_id}`
+- [x] B3. 新增 `DELETE /api/me/favorites/lives/{live_id}`
+- [x] B4. 改造 `GET /api/lives` 和 `GET /api/lives/{live_id}`，支持返回 `is_favorite`
 
 确认点：
 
@@ -645,7 +645,7 @@ flowchart TD
 ### 阶段 E：测试与回归
 
 - [x] E1. 后端单元测试：登录、登出、session、csrf
-- [ ] E2. 后端集成测试：收藏增删查
+- [x] E2. 后端集成测试：收藏增删查
 - [ ] E3. 前端测试：登录态恢复、收藏来源切换、控制台权限
 - [ ] E4. 回归验证：现有 live 列表、详情、详情批量预读不受影响
 
@@ -656,15 +656,16 @@ flowchart TD
 
 ## 11. 当前推荐的第一步
 
-当前推荐进入阶段 B：
+当前推荐进入阶段 C：
 
-- B1. 新增 `/api/me/favorites/lives`
-- B2. 新增 `PUT /api/me/favorites/lives/{live_id}`
-- B3. 新增 `DELETE /api/me/favorites/lives/{live_id}`
-- B4. 改造 `GET /api/lives` 和 `GET /api/lives/{live_id}`，支持返回 `is_favorite`
+- C1. 前端新增 `AuthProvider`
+- C2. 前端启动时接入 `/api/auth/me`
+- C3. 前端新增登录弹窗或登录页
+- C4. 未登录时隐藏“收藏”页签与星标入口
+- C5. 登录后接入服务端收藏状态
 
 原因：
 
-- Phase A 已经把后续收藏服务端化和控制台鉴权的认证基础铺好
-- 认证骨架的单元测试与认证集成测试已经补齐
-- 当前最自然的下一步就是把收藏链路接到服务端
+- Phase A 和 Phase B 已把认证与服务端收藏链路打通
+- 后端已经具备登录态、收藏列表、收藏增删和 `is_favorite` 回传能力
+- 当前最自然的下一步就是把前端从旧版 localStorage 收藏切到服务端模型

@@ -13,6 +13,7 @@ from psycopg2 import Error
 from psycopg2.extras import Json
 
 from app.db import get_write_db_connection
+from app.favorites import get_favorite_live_ids
 from app.logging_config import get_logger
 
 
@@ -137,19 +138,6 @@ def _parse_auth_user(row: tuple[Any, ...]) -> AuthUser:
         role=str(row[3]),
         is_active=bool(row[4]),
     )
-
-
-def _get_favorite_live_ids(cur: Any, user_id: int) -> list[int]:
-    cur.execute(
-        """
-        SELECT live_id
-        FROM user_live_favorites
-        WHERE user_id = %s
-        ORDER BY live_id
-        """,
-        (user_id,),
-    )
-    return [int(row[0]) for row in cur.fetchall() if row and isinstance(row[0], int)]
 
 
 def _write_audit_log(
@@ -320,7 +308,7 @@ def authenticate_user(username: str, password: str, request: Request) -> dict[st
                     user_agent,
                 ),
             )
-            favorite_live_ids = _get_favorite_live_ids(cur, user.id)
+            favorite_live_ids = get_favorite_live_ids(cur, user.id)
             _write_audit_log(
                 cur,
                 user_id=user.id,
@@ -355,7 +343,7 @@ def build_authenticated_response_payload(context: AuthSessionContext) -> dict[st
                 """,
                 (csrf_token_hash, now, context.session_id),
             )
-            favorite_live_ids = _get_favorite_live_ids(cur, context.user.id)
+            favorite_live_ids = get_favorite_live_ids(cur, context.user.id)
 
     return {
         "authenticated": True,
