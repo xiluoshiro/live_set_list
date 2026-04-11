@@ -14,6 +14,7 @@ class LiveItem(BaseModel):
     live_title: str = Field(..., description='Live title')
     bands: list[int] = Field(..., description='Deduplicated band IDs sorted ascending')
     url: str | None = Field(default=None, description='Live URL from live_attrs.url')
+    is_favorite: bool = Field(..., description='Whether the current user has favorited this live')
 
 
 class LivesPagination(BaseModel):
@@ -63,6 +64,7 @@ class LiveDetailResponse(BaseModel):
     bands: list[int] = Field(..., description='Deduplicated band IDs sorted ascending')
     band_names: list[str] = Field(..., description='Band names ordered by display rules')
     url: str | None = Field(default=None, description='Live URL from live_attrs.url')
+    is_favorite: bool = Field(..., description='Whether the current user has favorited this live')
     detail_rows: list[LiveDetailRow] = Field(..., description='Detailed song rows for the live')
 
 

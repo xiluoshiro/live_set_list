@@ -11,6 +11,7 @@ from app.schemas import RootResponse
 from app.routers.auth import router as auth_router
 from app.routers.health import router as health_router
 from app.routers.lives import router as lives_router
+from app.routers.me import router as me_router
 
 setup_logging()
 logger = get_logger(__name__)
@@ -35,6 +36,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(lives_router)
 app.include_router(auth_router)
+app.include_router(me_router)
 
 
 @app.middleware("http")

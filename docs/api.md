@@ -27,6 +27,12 @@
   - 获取当前登录态，已登录时返回用户信息、CSRF Token 和收藏 ID 列表
 - `POST /api/auth/logout`
   - 退出当前登录态并使 session 失效
+- `GET /api/me/favorites/lives`
+  - 获取当前登录用户的收藏分页列表
+- `PUT /api/me/favorites/lives/{live_id}`
+  - 收藏指定 live
+- `DELETE /api/me/favorites/lives/{live_id}`
+  - 取消收藏指定 live
 - `GET /api/lives`
   - Live 列表分页查询
 - `GET /api/lives/{live_id}`
@@ -59,6 +65,7 @@
 - `bands` 来自 `live_setlist.band_member` 中聚合出的乐队 ID
 - `bands` 会去重并按升序返回
 - `url` 当前来自 `live_attrs.url`
+- `is_favorite` 会按当前登录用户的 `user_live_favorites` 计算；匿名请求统一返回 `false`
 
 ### 2. `GET /api/lives/{live_id}`
 
@@ -75,6 +82,7 @@
 - `other_members` 的 `value` 允许源数据是数组、单个字符串、JSON 字符串数组、JSON 字符串字面量
 - `other_members` 最终按 `key` 升序排列
 - `comments` 当前仅在 `is_short = true` 时返回 `["短版"]`
+- `is_favorite` 会按当前登录用户的 `user_live_favorites` 计算；匿名请求统一返回 `false`
 
 ### 3. `POST /api/lives/details:batch`
 
@@ -86,6 +94,15 @@
 - `items` 按去重后的请求顺序返回，而不是数据库自然顺序
 - `missing_live_ids` 也按去重后的请求顺序返回
 - `items` 中的单项结构与 `GET /api/lives/{live_id}` 一致
+
+### 4. `GET /api/me/favorites/lives`
+
+自动文档能看到字段结构，但以下规则更值得额外说明：
+
+- 该接口要求已登录
+- 返回结构与 `GET /api/lives` 保持一致
+- `items[].is_favorite` 恒为 `true`
+- 取消收藏后，该接口会立即反映最新结果
 
 ## 错误处理说明
 

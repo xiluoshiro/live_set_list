@@ -176,6 +176,7 @@ GRANT USAGE, CREATE ON SCHEMA public TO {flyway_user}, {test_admin_user};
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO {readonly_user};
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO {super_user};
 GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO {super_user};
+GRANT DELETE ON TABLE public.user_live_favorites TO {super_user};
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {test_admin_user};
 
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO {readonly_user};
@@ -352,6 +353,7 @@ GRANT USAGE, CREATE ON SCHEMA public TO {flyway_user};
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO {readonly_user};
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO {super_user};
 GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO {super_user};
+GRANT DELETE ON TABLE public.user_live_favorites TO {super_user};
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.flyway_schema_history TO {flyway_user};
 
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO {readonly_user};
