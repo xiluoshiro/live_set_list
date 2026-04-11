@@ -310,6 +310,22 @@ describe("App", () => {
     expect(screen.getByRole("menuitem", { name: "退出登录" })).toBeInTheDocument();
   });
 
+  test("登录弹窗使用紧凑样式，避免被通用 modal 尺寸覆盖", async () => {
+    // 测试点：登录弹窗应命中 .modal.login-modal 的覆盖样式，不再使用通用 .modal 的大弹窗布局。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    const { container } = renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "登录" }));
+    const loginModal = container.querySelector(".modal.login-modal");
+    expect(loginModal).not.toBeNull();
+    const style = getComputedStyle(loginModal as HTMLElement);
+    expect(style.display).toBe("block");
+    expect(style.height).toBe("auto");
+  });
+
   test("从全量切到收藏时不会残留上一轮全量结果", async () => {
     // 测试点：切到收藏页后，在收藏接口返回前应先清空旧列表，只显示加载态。
     getAuthMeMock.mockResolvedValue({
