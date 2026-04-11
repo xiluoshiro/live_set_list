@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "./auth/AuthProvider";
 import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
@@ -19,6 +19,11 @@ type LiveRow = {
 };
 
 type TabKey = "favorites" | "all" | "console";
+type ListSnapshot = {
+  items: LiveRow[];
+  total: number;
+  totalPages: number;
+};
 
 function formatTimedLabel(value: string | null | undefined): string {
   const raw = value?.trim();
@@ -64,6 +69,10 @@ function getThemeToggleMeta(mode: ThemeMode, resolvedTheme: "light" | "dark") {
   };
 }
 
+function buildListSnapshotKey(tab: Exclude<TabKey, "console">, page: number, pageSize: 15 | 20): string {
+  return `${tab}:${page}:${pageSize}`;
+}
+
 function App() {
   const auth = useAuth();
   const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
@@ -84,6 +93,7 @@ function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [favoritePendingIds, setFavoritePendingIds] = useState<Record<number, boolean>>({});
+  const listSnapshotsRef = useRef<Record<string, ListSnapshot>>({});
   const listEnabled = tab !== "console" && !auth.isLoading;
   const canUseFavoriteFeatures = auth.isAuthenticated;
 
@@ -105,21 +115,62 @@ function App() {
   }, [canUseFavoriteFeatures, tab]);
 
   useEffect(() => {
+    // 登录用户切换或匿名/登录状态变化后，之前页签快照不再可信，直接清空。
+    listSnapshotsRef.current = {};
+  }, [auth.isAuthenticated, auth.user?.id]);
+
+  useEffect(() => {
+    // 收藏集合变化后，只清理收藏页快照；全量页星标显示由内存态实时驱动。
+    const currentSnapshots = listSnapshotsRef.current;
+    Object.keys(currentSnapshots).forEach((key) => {
+      if (key.startsWith("favorites:")) {
+        delete currentSnapshots[key];
+      }
+    });
+  }, [auth.favoriteLiveIds]);
+
+  useEffect(() => {
     if (!listEnabled) return;
     if (tab === "favorites" && !canUseFavoriteFeatures) return;
     let canceled = false;
+    const requestedSnapshotKey = buildListSnapshotKey(tab, page, pageSize);
+    const cachedSnapshot = listSnapshotsRef.current[requestedSnapshotKey];
 
     const fetchLives = async () => {
+      if (cachedSnapshot) {
+        setItems(cachedSnapshot.items);
+        setServerTotal(cachedSnapshot.total);
+        setServerTotalPages(cachedSnapshot.totalPages);
+        setLoadError(null);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setLoadError(null);
+      // 首次进入未缓存的页签/分页时，先清空上一轮列表，避免残留旧 tab 数据。
+      setItems([]);
+      setServerTotal(0);
+      setServerTotalPages(1);
       try {
         const data = tab === "favorites" ? await getMyFavoriteLives(page, pageSize) : await getLives(page, pageSize);
         if (canceled) return;
-        setItems(data.items.map(toLiveRow));
+        const mappedItems = data.items.map(toLiveRow);
+        const canonicalPage = data.pagination.page;
+        const canonicalSnapshotKey = buildListSnapshotKey(tab, canonicalPage, pageSize);
+        listSnapshotsRef.current[canonicalSnapshotKey] = {
+          items: mappedItems,
+          total: data.pagination.total,
+          totalPages: data.pagination.total_pages,
+        };
+        if (canonicalSnapshotKey !== requestedSnapshotKey) {
+          delete listSnapshotsRef.current[requestedSnapshotKey];
+        }
+        setItems(mappedItems);
         setServerTotal(data.pagination.total);
         setServerTotalPages(data.pagination.total_pages);
-        if (data.pagination.page !== page) {
-          setPage(data.pagination.page);
+        if (canonicalPage !== page) {
+          setPage(canonicalPage);
         }
       } catch (error) {
         if (canceled) return;
@@ -148,7 +199,7 @@ function App() {
     return () => {
       canceled = true;
     };
-  }, [auth, canUseFavoriteFeatures, listEnabled, page, pageSize, tab]);
+  }, [canUseFavoriteFeatures, listEnabled, page, pageSize, tab]);
 
   useEffect(() => {
     if (tab === "console") return;
@@ -165,6 +216,9 @@ function App() {
         is_favorite: isFavorite(row.liveId),
       })),
     ).catch(() => undefined);
+    if (tab !== "all") {
+      return () => undefined;
+    }
     const cancelIdlePrefetch = scheduleIdleNextPagePrefetch({
       page: currentPage,
       pageSize,
