@@ -1,0 +1,2 @@
+postgres/.env.pg-migrate
+auth/.env.auth
