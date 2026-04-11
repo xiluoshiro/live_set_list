@@ -18,6 +18,7 @@ function makeLiveItem(id: number): LiveItem {
     live_title: `Live ${id}`,
     bands: [1],
     url: null,
+    is_favorite: false,
   };
 }
 

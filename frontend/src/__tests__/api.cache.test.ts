@@ -55,6 +55,7 @@ describe("api cache behavior", () => {
     await getLives(1, 20);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ credentials: "include" }));
   });
 
   test("getLives 并发相同请求会复用 inFlight promise", async () => {
@@ -105,7 +106,7 @@ describe("api cache behavior", () => {
     // 测试点：请求 page=99 返回 page=1 时，后续 page=1 可直接命中缓存。
     fetchMock.mockResolvedValue(
       makeJsonResponse({
-        items: [{ live_id: 1, live_date: "2026-03-01", live_title: "A", bands: [1], url: null }],
+        items: [{ live_id: 1, live_date: "2026-03-01", live_title: "A", bands: [1], url: null, is_favorite: false }],
         pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
       }),
     );
@@ -142,6 +143,7 @@ describe("api cache behavior", () => {
         bands: [1],
         band_names: ["Band A"],
         url: null,
+        is_favorite: false,
         detail_rows: [],
       }),
     );
@@ -165,6 +167,7 @@ describe("api cache behavior", () => {
         bands: [1],
         band_names: ["Band A"],
         url: null,
+        is_favorite: false,
         detail_rows: [],
       }),
     );
@@ -190,6 +193,7 @@ describe("api cache behavior", () => {
           bands: [1],
           band_names: ["Band A"],
           url: null,
+          is_favorite: false,
           detail_rows: [],
         }),
       )
@@ -203,6 +207,7 @@ describe("api cache behavior", () => {
               bands: [2],
               band_names: ["Band B"],
               url: null,
+              is_favorite: false,
               detail_rows: [],
             },
           ],
@@ -265,6 +270,7 @@ describe("api cache behavior", () => {
           bands: [1],
           band_names: ["Band A"],
           url: null,
+          is_favorite: false,
           detail_rows: [],
         }),
       )
@@ -276,6 +282,7 @@ describe("api cache behavior", () => {
           bands: [2],
           band_names: ["Band B"],
           url: null,
+          is_favorite: false,
           detail_rows: [],
         }),
       );
@@ -304,6 +311,7 @@ describe("api cache behavior", () => {
               bands: [2],
               band_names: ["Band B"],
               url: null,
+              is_favorite: false,
               detail_rows: [],
             },
           ],
@@ -330,6 +338,7 @@ describe("api cache behavior", () => {
         bands: [1],
         band_names: ["Band A"],
         url: null,
+        is_favorite: false,
         detail_rows: [],
       }),
     );
@@ -348,6 +357,7 @@ describe("api cache behavior", () => {
             bands: [1],
             band_names: ["Band A"],
             url: null,
+            is_favorite: false,
             detail_rows: [],
           },
         ],

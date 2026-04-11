@@ -62,11 +62,11 @@ describe("api logging", () => {
   });
 
   test("非 2xx 响应会记录错误日志", async () => {
-    // 测试点：后端返回非 2xx 时，API 层应记录 error 日志并保留响应状态。
+    // 测试点：后端返回结构化错误体时，API 层应抛出后端 message 并记录状态。
     fetchMock.mockResolvedValueOnce(makeJsonResponse({ detail: "boom" }, false, 500));
     const { getLiveDetail } = await import("../api");
 
-    await expect(getLiveDetail(1)).rejects.toThrow("Request failed: 500");
+    await expect(getLiveDetail(1)).rejects.toThrow("boom");
 
     expect(logErrorMock).toHaveBeenCalledWith(
       "api_request_error",

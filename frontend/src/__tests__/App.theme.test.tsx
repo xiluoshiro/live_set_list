@@ -72,6 +72,7 @@ function makeResponse(): LivesResponse {
         live_title: "示例 Live 名称 1",
         bands: [1, 2],
         url: "https://example.com/live/1",
+        is_favorite: false,
       },
       {
         live_id: 2,
@@ -79,6 +80,7 @@ function makeResponse(): LivesResponse {
         live_title: "示例 Live 名称 2",
         bands: [1, 2],
         url: "https://example.com/live/2",
+        is_favorite: false,
       },
     ],
     pagination: {
@@ -101,6 +103,7 @@ function makeDetailResponse(liveId: number): LiveDetailResponse {
     bands: [1, 2],
     band_names: ["Band 1", "Band 2"],
     url: `https://example.com/live/${liveId}`,
+    is_favorite: false,
     detail_rows: [],
   };
 }

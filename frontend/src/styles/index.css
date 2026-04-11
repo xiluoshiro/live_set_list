@@ -1,5 +1,6 @@
 @import "./theme.css";
 @import "./base.css";
+@import "./auth.css";
 @import "./layout.css";
 @import "./live-table.css";
 @import "./detail-modal.css";

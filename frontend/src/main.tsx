@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { AuthProvider } from "./auth/AuthProvider";
 import { logError } from "./logger";
 import { ThemeProvider } from "./theme/ThemeProvider";
 
@@ -35,7 +36,9 @@ if (typeof window !== "undefined" && !window.__liveSetListGlobalErrorLoggingAtta
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </ThemeProvider>
   </React.StrictMode>,
 );
