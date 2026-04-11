@@ -124,6 +124,7 @@ const DETAIL_REQUEST_DEBOUNCE_MS = 300;
 const DETAIL_BATCH_MAX_IDS = 100;
 
 const livesCache = new LruRequestCache<LivesResponse>(LIVES_CACHE_MAX);
+const favoriteLivesCache = new LruRequestCache<LivesResponse>(LIVES_CACHE_MAX);
 const detailCache = new LruRequestCache<LiveDetailResponse>(DETAIL_CACHE_MAX);
 const detailRecentRequest = new RecentPromiseDebouncer<number, LiveDetailResponse>();
 
@@ -141,6 +142,10 @@ export class ApiError extends Error {
 
 function livesCacheKey(page: number, pageSize: 15 | 20): string {
   return `lives:${page}:${pageSize}`;
+}
+
+function favoriteLivesCacheKey(page: number, pageSize: 15 | 20): string {
+  return `favorite_lives:${page}:${pageSize}`;
 }
 
 function detailCacheKey(liveId: number): string {
@@ -271,7 +276,7 @@ async function fetchLivesRemote(page: number, pageSize: 15 | 20): Promise<LivesR
   return expectJsonResponse<LivesResponse>(response);
 }
 
-export async function getMyFavoriteLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
+async function fetchMyFavoriteLivesRemote(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
   const query = new URLSearchParams({
     page: String(page),
     page_size: String(pageSize),
@@ -280,6 +285,41 @@ export async function getMyFavoriteLives(page: number, pageSize: 15 | 20): Promi
     requestKind: "favorite_lives",
   });
   return expectJsonResponse<LivesResponse>(response);
+}
+
+export function peekMyFavoriteLives(page: number, pageSize: 15 | 20): LivesResponse | undefined {
+  return favoriteLivesCache.getFresh(favoriteLivesCacheKey(page, pageSize), LIVES_CACHE_TTL_MS);
+}
+
+export function clearMyFavoriteLivesCache(): void {
+  favoriteLivesCache.clear();
+}
+
+export async function getMyFavoriteLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
+  const requestedKey = favoriteLivesCacheKey(page, pageSize);
+  const fresh = favoriteLivesCache.getFresh(requestedKey, LIVES_CACHE_TTL_MS);
+  if (fresh !== undefined) {
+    return fresh;
+  }
+  const inFlight = favoriteLivesCache.getInFlight(requestedKey);
+  if (inFlight) return inFlight;
+
+  const requestPromise = fetchMyFavoriteLivesRemote(page, pageSize)
+    .then((payload) => {
+      const updatedAt = Date.now();
+      favoriteLivesCache.setData(requestedKey, payload, updatedAt);
+      const canonicalKey = favoriteLivesCacheKey(payload.pagination.page, pageSize);
+      if (canonicalKey !== requestedKey) {
+        favoriteLivesCache.setData(canonicalKey, payload, updatedAt);
+      }
+      return payload;
+    })
+    .finally(() => {
+      favoriteLivesCache.clearInFlightIfMatch(requestedKey, requestPromise);
+    });
+
+  favoriteLivesCache.setInFlight(requestedKey, requestPromise);
+  return requestPromise;
 }
 
 async function fetchLiveDetailRemote(liveId: number): Promise<LiveDetailResponse> {

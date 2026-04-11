@@ -36,6 +36,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<FavoritesState>(anonymousFavoritesState);
   const stateRef = useRef(state);
   const authRef = useRef(auth);
+  const hasPendingFavoriteChangesRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
@@ -58,6 +59,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       favoriteConsecutiveFailureCount: 0,
       favoriteSyncWarning: null,
     });
+    hasPendingFavoriteChangesRef.current = false;
     logInfo("favorite_sync_reconcile", {
       source: "auth_snapshot",
       favorite_count: auth.sessionFavoriteLiveIds.length,
@@ -142,6 +144,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
           favoriteSyncWarning: null,
         };
       });
+      hasPendingFavoriteChangesRef.current = shouldFlushAgain;
 
       if (shouldFlushAgain && latestDesiredIntent !== undefined) {
         // 补发链路允许绕过旧快照里的 inFlight 窗口：
@@ -183,6 +186,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       if (warningShown) {
         logInfo("favorite_sync_warning_shown", { liveId });
       }
+      hasPendingFavoriteChangesRef.current = true;
 
       if (isAuthError) {
         throw error;
@@ -211,6 +215,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         }
         const nextDesired = !getEffectiveFavoriteState(latestState, liveId);
         logInfo("favorite_click", { liveId, desired: nextDesired });
+        hasPendingFavoriteChangesRef.current = true;
         setState((prev) => ({
           ...prev,
           optimisticFavoriteIntents: {
@@ -224,6 +229,9 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         }
       },
       reconcileFavorites: async () => {
+        if (!hasPendingFavoriteChangesRef.current && !stateRef.current.favoriteSyncWarning) {
+          return;
+        }
         // 进入“收藏”页时用最新 session 快照整体收敛一次，清理前面残留的乐观偏差。
         logInfo("favorite_sync_reconcile", { source: "favorites_tab" });
         await authRef.current.refreshSession();

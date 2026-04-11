@@ -50,6 +50,10 @@ export class LruRequestCache<T> {
     });
   }
 
+  clear(): void {
+    this.store.clear();
+  }
+
   private touch(key: string, entry: CacheEntry<T>): void {
     this.store.delete(key);
     this.store.set(key, entry);

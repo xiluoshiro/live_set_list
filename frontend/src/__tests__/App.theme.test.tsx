@@ -3,18 +3,30 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import App from "../App";
-import { getLiveDetail, getLiveDetailsBatch, getLives, type LiveDetailResponse, type LivesResponse } from "../api";
+import {
+  clearMyFavoriteLivesCache,
+  getLiveDetail,
+  getLiveDetailsBatch,
+  getLives,
+  peekMyFavoriteLives,
+  type LiveDetailResponse,
+  type LivesResponse,
+} from "../api";
 import { ThemeProvider } from "../theme/ThemeProvider";
 
 vi.mock("../api", () => ({
   getLives: vi.fn(),
   getLiveDetail: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
+  peekMyFavoriteLives: vi.fn(),
+  clearMyFavoriteLivesCache: vi.fn(),
 }));
 
 const getLivesMock = vi.mocked(getLives);
 const getLiveDetailMock = vi.mocked(getLiveDetail);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
+const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
+const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
 
 type MatchMediaController = {
   setDark: (dark: boolean) => void;
@@ -125,10 +137,13 @@ describe("App dark mode", () => {
     getLivesMock.mockReset();
     getLiveDetailMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
+    peekMyFavoriteLivesMock.mockReset();
+    clearMyFavoriteLivesCacheMock.mockReset();
 
     getLivesMock.mockResolvedValue(makeResponse());
     getLiveDetailMock.mockImplementation(async (liveId: number) => makeDetailResponse(liveId));
     getLiveDetailsBatchMock.mockResolvedValue({ items: [], missing_live_ids: [] });
+    peekMyFavoriteLivesMock.mockReturnValue(undefined);
   });
 
   test("点击主题按钮可在跟随系统、夜间、浅色之间循环切换", async () => {

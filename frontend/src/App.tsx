@@ -4,10 +4,23 @@ import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { MemberStatusTable } from "./components/DetailMemberTable";
 import { LoginDialog } from "./components/LoginDialog";
-import { ApiError, getLiveDetail, getLives, getMyFavoriteLives, type LiveDetailResponse, type LiveItem } from "./api";
+import {
+  ApiError,
+  clearMyFavoriteLivesCache,
+  getLiveDetail,
+  getLives,
+  getMyFavoriteLives,
+  peekMyFavoriteLives,
+  type LiveDetailResponse,
+  type LiveItem,
+} from "./api";
 import { useFavorites } from "./favorites/FavoriteProvider";
 import { logError } from "./logger";
-import { prefetchCurrentPageDetails, scheduleIdleNextPagePrefetch } from "./prefetch/liveDetailsPrefetch";
+import {
+  prefetchCurrentPageDetails,
+  scheduleIdleFavoritePagePrefetch,
+  scheduleIdleNextPagePrefetch,
+} from "./prefetch/liveDetailsPrefetch";
 import { useTheme, type ThemeMode } from "./theme/ThemeProvider";
 import "./styles/index.css";
 
@@ -145,6 +158,7 @@ function App() {
         delete currentSnapshots[key];
       }
     });
+    clearMyFavoriteLivesCache();
   }, [favorites.favoriteLiveIds]);
 
   useEffect(() => {
@@ -161,6 +175,25 @@ function App() {
         setServerTotalPages(cachedSnapshot.totalPages);
         setLoadError(null);
         setLoading(false);
+        return;
+      }
+      const cachedFavoritePage =
+        tab === "favorites" ? peekMyFavoriteLives(page, pageSize) : undefined;
+      if (cachedFavoritePage) {
+        const mappedItems = cachedFavoritePage.items.map(toLiveRow);
+        setItems(mappedItems);
+        setServerTotal(cachedFavoritePage.pagination.total);
+        setServerTotalPages(cachedFavoritePage.pagination.total_pages);
+        setLoadError(null);
+        setLoading(false);
+        listSnapshotsRef.current[requestedSnapshotKey] = {
+          items: mappedItems,
+          total: cachedFavoritePage.pagination.total,
+          totalPages: cachedFavoritePage.pagination.total_pages,
+        };
+        if (cachedFavoritePage.pagination.page !== page) {
+          setPage(cachedFavoritePage.pagination.page);
+        }
         return;
       }
 
@@ -242,8 +275,14 @@ function App() {
       pageSize,
       totalPages: serverTotalPages,
     });
-    return cancelIdlePrefetch;
-  }, [items, page, pageSize, serverTotalPages, tab]);
+    const cancelFavoritePrefetch = canUseFavoriteFeatures
+      ? scheduleIdleFavoritePagePrefetch(pageSize)
+      : () => undefined;
+    return () => {
+      cancelIdlePrefetch();
+      cancelFavoritePrefetch();
+    };
+  }, [canUseFavoriteFeatures, items, page, pageSize, serverTotalPages, tab]);
 
   useEffect(() => {
     if (!activeRow) {
