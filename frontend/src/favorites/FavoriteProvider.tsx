@@ -9,23 +9,16 @@ import {
 } from "react";
 import { ApiError, favoriteLive, unfavoriteLive } from "../api";
 import { useAuth } from "../auth/AuthProvider";
-
-const FAVORITE_SYNC_WARNING_MESSAGE = "收藏同步失败，请稍后重试或刷新页面确认";
-
-type FavoriteSyncState = {
-  inFlight: boolean;
-  lastAttemptSeq: number;
-  lastErrorCode: string | null;
-  lastErrorAt: number | null;
-};
-
-type FavoritesState = {
-  serverFavoriteIds: number[];
-  optimisticFavoriteIntents: Record<number, boolean>;
-  favoriteSyncById: Record<number, FavoriteSyncState>;
-  favoriteConsecutiveFailureCount: number;
-  favoriteSyncWarning: string | null;
-};
+import { logInfo } from "../logger";
+import {
+  FAVORITE_SYNC_WARNING_MESSAGE,
+  anonymousFavoritesState,
+  applyFavoriteState,
+  buildEffectiveFavoriteIds,
+  getEffectiveFavoriteState,
+  isAuthSessionError,
+  type FavoritesState,
+} from "./favoriteSync";
 
 type FavoritesContextValue = {
   favoriteLiveIds: number[];
@@ -33,54 +26,10 @@ type FavoritesContextValue = {
   favoriteSyncWarning: string | null;
   isFavoriteSyncing: (liveId: number) => boolean;
   toggleFavorite: (liveId: number) => Promise<void>;
-};
-
-const anonymousFavoritesState: FavoritesState = {
-  serverFavoriteIds: [],
-  optimisticFavoriteIntents: {},
-  favoriteSyncById: {},
-  favoriteConsecutiveFailureCount: 0,
-  favoriteSyncWarning: null,
+  reconcileFavorites: () => Promise<void>;
 };
 
 const FavoritesContext = createContext<FavoritesContextValue | null>(null);
-
-function applyFavoriteState(ids: number[], liveId: number, desired: boolean): number[] {
-  if (desired) {
-    return ids.includes(liveId) ? ids : [...ids, liveId];
-  }
-  return ids.filter((id) => id !== liveId);
-}
-
-function buildEffectiveFavoriteIds(
-  serverFavoriteIds: number[],
-  optimisticFavoriteIntents: Record<number, boolean>,
-): number[] {
-  // 展示层优先看用户最新意图，再回退到最近一次服务端确认结果。
-  const effective = new Set(serverFavoriteIds);
-  Object.entries(optimisticFavoriteIntents).forEach(([rawLiveId, desired]) => {
-    const liveId = Number(rawLiveId);
-    if (!Number.isInteger(liveId)) return;
-    if (desired) {
-      effective.add(liveId);
-    } else {
-      effective.delete(liveId);
-    }
-  });
-  return Array.from(effective).sort((left, right) => left - right);
-}
-
-function getEffectiveFavoriteState(state: FavoritesState, liveId: number): boolean {
-  const intent = state.optimisticFavoriteIntents[liveId];
-  if (intent !== undefined) {
-    return intent;
-  }
-  return state.serverFavoriteIds.includes(liveId);
-}
-
-function isAuthSessionError(error: unknown): boolean {
-  return error instanceof ApiError && (error.status === 401 || error.status === 403);
-}
 
 export function FavoriteProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
@@ -109,6 +58,10 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       favoriteConsecutiveFailureCount: 0,
       favoriteSyncWarning: null,
     });
+    logInfo("favorite_sync_reconcile", {
+      source: "auth_snapshot",
+      favorite_count: auth.sessionFavoriteLiveIds.length,
+    });
   }, [auth.isAuthenticated, auth.user?.id, auth.favoriteSnapshotVersion]);
 
   const flushFavoriteIntentRef = useRef<
@@ -129,6 +82,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
 
     const desired = desiredOverride ?? getEffectiveFavoriteState(snapshot, liveId);
     const attemptSeq = (currentSync?.lastAttemptSeq ?? 0) + 1;
+    logInfo("favorite_sync_start", { liveId, desired, attempt_seq: attemptSeq });
     setState((prev) => ({
       ...prev,
       favoriteSyncById: {
@@ -148,6 +102,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       } else {
         await unfavoriteLive(liveId, authSnapshot.csrfToken);
       }
+      logInfo("favorite_sync_success", { liveId, desired, attempt_seq: attemptSeq });
 
       let shouldFlushAgain = false;
       setState((prev) => {
@@ -185,8 +140,10 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       const isAuthError = isAuthSessionError(error);
 
+      let warningShown = false;
       setState((prev) => {
         const nextFailureCount = prev.favoriteConsecutiveFailureCount + 1;
+        warningShown = nextFailureCount >= 3 && prev.favoriteSyncWarning !== FAVORITE_SYNC_WARNING_MESSAGE;
         return {
           ...prev,
           favoriteSyncById: {
@@ -203,6 +160,16 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
             nextFailureCount >= 3 ? FAVORITE_SYNC_WARNING_MESSAGE : prev.favoriteSyncWarning,
         };
       });
+      logInfo("favorite_sync_failed", {
+        liveId,
+        desired,
+        attempt_seq: attemptSeq,
+        message: error instanceof Error ? error.message : String(error),
+        is_auth_error: isAuthError,
+      });
+      if (warningShown) {
+        logInfo("favorite_sync_warning_shown", { liveId });
+      }
 
       if (isAuthError) {
         throw error;
@@ -230,6 +197,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
           throw new ApiError("登录状态已失效，请重新登录", 401, "AUTH_SESSION_EXPIRED");
         }
         const nextDesired = !getEffectiveFavoriteState(latestState, liveId);
+        logInfo("favorite_click", { liveId, desired: nextDesired });
         setState((prev) => ({
           ...prev,
           optimisticFavoriteIntents: {
@@ -241,6 +209,11 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         if (!syncState?.inFlight) {
           await flushFavoriteIntentRef.current(liveId, nextDesired);
         }
+      },
+      reconcileFavorites: async () => {
+        // 进入“收藏”页时用最新 session 快照整体收敛一次，清理前面残留的乐观偏差。
+        logInfo("favorite_sync_reconcile", { source: "favorites_tab" });
+        await authRef.current.refreshSession();
       },
     };
   }, [state]);
@@ -254,6 +227,7 @@ const fallbackContext: FavoritesContextValue = {
   favoriteSyncWarning: null,
   isFavoriteSyncing: () => false,
   toggleFavorite: async () => undefined,
+  reconcileFavorites: async () => undefined,
 };
 
 export function useFavorites(): FavoritesContextValue {
