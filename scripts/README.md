@@ -38,6 +38,19 @@ python scripts/run_checks.py <arguments>
 - `functional`：运行功能测试集，只包含 `frontend + backend`
 - `full`：运行全部检查，等于 `frontend + backend + recovery`
 
+## 导出 OpenAPI
+
+在项目根目录执行：
+
+```powershell
+python scripts/export_openapi.py
+```
+
+说明：
+
+- 当前脚本会从 FastAPI 应用运行时生成 OpenAPI
+- 导出结果写入 [docs/openapi.json](D:/Code/PythonCode/5%20LiveSetList/docs/openapi.json)
+
 ## 数据库恢复
 
 在项目根目录执行：
