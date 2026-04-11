@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./auth/AuthProvider";
 import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
@@ -87,6 +87,34 @@ function buildListSnapshotKey(tab: Exclude<TabKey, "console">, page: number, pag
   return `${tab}:${page}:${pageSize}`;
 }
 
+const USER_AVATAR_COLORS = ["#5b7cfa", "#00a4a6", "#f59f00", "#e8590c", "#6c5ce7", "#2b8a3e"];
+
+function getAvatarInitial(name: string | null | undefined): string {
+  const text = name?.trim() ?? "";
+  if (text === "") return "?";
+  return [...text][0]?.toUpperCase() ?? "?";
+}
+
+function getAvatarColor(name: string | null | undefined): string {
+  const text = name?.trim() || "unknown";
+  let hash = 0;
+  for (let idx = 0; idx < text.length; idx += 1) {
+    hash = (hash * 31 + text.charCodeAt(idx)) >>> 0;
+  }
+  return USER_AVATAR_COLORS[hash % USER_AVATAR_COLORS.length];
+}
+
+function buildAvatarSvgDataUrl(initial: string, color: string): string {
+  const escapedInitial = initial
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><rect width="40" height="40" rx="20" fill="${color}"/><text x="20" y="20" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="18" font-family="Segoe UI, Arial, sans-serif" font-weight="700">${escapedInitial}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 function App() {
   const auth = useAuth();
   const favorites = useFavorites();
@@ -108,8 +136,10 @@ function App() {
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const listSnapshotsRef = useRef<Record<string, ListSnapshot>>({});
   const favoritesReconcileGateRef = useRef(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const listEnabled = tab !== "console" && !auth.isLoading;
   const canUseFavoriteFeatures = auth.isAuthenticated;
 
@@ -337,6 +367,24 @@ function App() {
     setJumpPageInput(String(safePage));
   }, [safePage]);
 
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (userMenuRef.current?.contains(target)) return;
+      setUserMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setUserMenuOpen(false);
+    };
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [userMenuOpen]);
+
   const handlePageSizeChange = (value: 15 | 20) => {
     setPageSize(value);
     setPage(1);
@@ -355,6 +403,7 @@ function App() {
     }
     setTab(nextTab);
     setPage(1);
+    setUserMenuOpen(false);
   };
 
   const commitJumpPage = () => {
@@ -418,6 +467,7 @@ function App() {
       setLoginDialogOpen(false);
       setTab("all");
       setPage(1);
+      setUserMenuOpen(false);
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "登录失败，请稍后重试");
     } finally {
@@ -434,7 +484,16 @@ function App() {
     }
     setTab("all");
     setPage(1);
+    setUserMenuOpen(false);
   };
+
+  const userDisplayName = auth.user?.display_name ?? auth.user?.username ?? "用户";
+  const userNameText = auth.user?.username ?? "unknown";
+  const userRoleLabel = auth.user?.role ?? "member";
+  const userAvatarSrc = useMemo(
+    () => buildAvatarSvgDataUrl(getAvatarInitial(userDisplayName), getAvatarColor(userDisplayName)),
+    [userDisplayName],
+  );
 
   return (
     <main className="page">
@@ -445,15 +504,40 @@ function App() {
             {auth.isLoading ? (
               <span className="auth-status">登录态检查中...</span>
             ) : auth.isAuthenticated ? (
-              <>
-                <span className="auth-user">
-                  <span>{auth.user?.display_name}</span>
-                  <span className="auth-role-chip">{auth.user?.role}</span>
-                </span>
-                <button type="button" className="secondary-btn" onClick={() => void handleLogout()}>
-                  退出登录
+              <div className="user-menu-wrap" ref={userMenuRef}>
+                <button
+                  type="button"
+                  className="user-menu-trigger"
+                  aria-label={`用户菜单：${userDisplayName}`}
+                  aria-expanded={userMenuOpen}
+                  onClick={() => setUserMenuOpen((open) => !open)}
+                >
+                  <img className="user-avatar-img" src={userAvatarSrc} alt={`${userDisplayName} 图标`} />
                 </button>
-              </>
+                {userMenuOpen && (
+                  <div className="user-menu-dropdown" role="menu" aria-label="用户菜单">
+                    <div className="user-menu-row user-name-row">
+                      <img className="user-avatar-img user-menu-avatar" src={userAvatarSrc} alt="" aria-hidden="true" />
+                      <span>{userDisplayName}</span>
+                    </div>
+                    <hr className="user-menu-divider" />
+                    <div className="user-menu-row user-account-row">账户：{userNameText}</div>
+                    <div className="user-menu-row user-role-row">角色：{userRoleLabel}</div>
+                    <hr className="user-menu-divider" />
+                    <a
+                      href="#"
+                      className="user-menu-logout-btn"
+                      role="menuitem"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void handleLogout();
+                      }}
+                    >
+                      退出登录
+                    </a>
+                  </div>
+                )}
+              </div>
             ) : (
               <button
                 type="button"

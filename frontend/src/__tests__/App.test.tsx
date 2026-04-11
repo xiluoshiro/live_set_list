@@ -289,7 +289,7 @@ describe("App", () => {
   });
 
   test("登录成功后切换到已登录模式并显示收藏入口", async () => {
-    // 测试点：用户登录成功后，页面应进入已登录态并显示收藏页签。
+    // 测试点：用户登录成功后显示收藏入口，并可打开用户下拉看到用户名/角色/退出。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -303,7 +303,11 @@ describe("App", () => {
 
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith("admin", "test-admin-pass"));
     expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "用户菜单：Administrator" }));
     expect(screen.getByText("Administrator")).toBeInTheDocument();
+    expect(screen.getByText("账户：admin")).toBeInTheDocument();
+    expect(screen.getByText("角色：admin")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "退出登录" })).toBeInTheDocument();
   });
 
   test("从全量切到收藏时不会残留上一轮全量结果", async () => {
