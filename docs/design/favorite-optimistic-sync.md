@@ -237,6 +237,21 @@ type FavoriteSyncState = {
 - 请求数量按“最终状态变化”收敛
 - 不因响应乱序把旧结果写回界面
 
+### 7.5 实现时序注意事项（补发链路）
+
+在 React 中，`setState` 的 updater 回调并不是同步立即执行；因此“是否需要补发下一轮同步”的判定不能依赖 updater 内部对外部变量的赋值结果。
+
+推荐做法：
+
+1. 在首轮请求 `await` 返回后，先从同步快照（如 `stateRef.current.optimisticFavoriteIntents[liveId]`）计算 `latestDesiredIntent`
+2. 若 `latestDesiredIntent !== desired`，标记需要补发
+3. 再执行 `setState` 提交本轮成功结果（清 in-flight、更新 server 真值等）
+4. 最后基于步骤 1 的快照结论触发 `flushFavoriteIntent(liveId, latestDesiredIntent)`
+
+额外约束：
+
+- 补发链路需要允许绕过“旧快照里仍为 in-flight”的短暂窗口，否则可能被错误短路，导致第二轮不发。
+
 ## 8. 对账策略
 
 本方案允许短时不一致，因此必须定义有限的对账时机。
