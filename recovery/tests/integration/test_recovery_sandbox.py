@@ -241,7 +241,7 @@ def sandbox_context(monkeypatch: pytest.MonkeyPatch) -> SandboxContext:
 
 
 def test_manual_backup_generates_real_dump_and_validates_with_pg_restore(sandbox_context: SandboxContext) -> None:
-    # 测试点：backup-app-manual 在独立沙箱容器里应能真实生成 dump，并通过 pg_restore -l 校验。
+    # 测试点：backup-app-manual 在独立沙箱容器里应能真实生成 dump，并通过最小恢复行数校验。
     _psql(
         sandbox_context.docker_cmd,
         sandbox_context.container_name,
@@ -259,6 +259,55 @@ def test_manual_backup_generates_real_dump_and_validates_with_pg_restore(sandbox
     assert backup_path.exists()
     assert backup_path.parent == backup.MANUAL_BACKUP_DIR
     backup.validate_backup_file(sandbox_context.docker_cmd, sandbox_context.container_name, backup_path)
+    assert backup.measure_backup_restore_line_count(
+        sandbox_context.docker_cmd,
+        sandbox_context.container_name,
+        backup_path,
+    ) > 0
+
+
+def test_auto_backup_rejects_current_dump_when_restore_line_count_drops_too_much(
+    sandbox_context: SandboxContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 测试点：自动备份在有历史基线时，当前最小恢复行数异常偏低应删除本次 dump 并直接失败。
+    _psql(
+        sandbox_context.docker_cmd,
+        sandbox_context.container_name,
+        "live_statistic",
+        "INSERT INTO public.venue_list (id, venue) VALUES (201, 'Auto Backup Baseline Hall');",
+    )
+
+    baseline_backup = backup.create_app_backup(
+        sandbox_context.env_values,
+        sandbox_context.docker_cmd,
+        kind="auto",
+        container_name=sandbox_context.container_name,
+    )
+    assert baseline_backup.exists()
+
+    current_backup = backup.AUTO_BACKUP_DIR / "live_statistic_auto_20990101_000001.dump"
+    original_measure = backup.measure_backup_restore_line_count
+
+    monkeypatch.setattr(backup, "build_backup_path", lambda _kind: current_backup)
+
+    def fake_measure(docker_cmd: str, container_name: str, backup_path: Path) -> int:
+        if backup_path == current_backup:
+            return 1
+        return original_measure(docker_cmd, container_name, backup_path)
+
+    monkeypatch.setattr(backup, "measure_backup_restore_line_count", fake_measure)
+
+    with pytest.raises(SystemExit, match="异常偏低"):
+        backup.create_app_backup(
+            sandbox_context.env_values,
+            sandbox_context.docker_cmd,
+            kind="auto",
+            container_name=sandbox_context.container_name,
+        )
+
+    assert baseline_backup.exists()
+    assert not current_backup.exists()
 
 
 def test_candidate_container_can_boot_from_external_volume_and_rollback_to_formal(sandbox_context: SandboxContext) -> None:
