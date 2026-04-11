@@ -119,8 +119,8 @@ npm run typecheck
 
 ## 数据库版本控制
 
-- Flyway 落地说明见 [docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md)
-- 登录与权限方案见 [docs/auth-design.md](D:/Code/PythonCode/5%20LiveSetList/docs/auth-design.md)
+- Flyway 落地说明见 [docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/flyway.md)
+- 登录与权限方案见 [docs/auth-design.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/auth-design.md)
 - 数据库角色与后端用户梳理见 [docs/db-roles.md](D:/Code/PythonCode/5%20LiveSetList/docs/db-roles.md)
 - 数据库操作说明见 [backend/db/README.md](D:/Code/PythonCode/5%20LiveSetList/backend/db/README.md)
 - 仓库内 Flyway 骨架位于 `backend/db/flyway`
