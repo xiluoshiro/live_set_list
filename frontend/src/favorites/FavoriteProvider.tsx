@@ -65,15 +65,23 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
   }, [auth.isAuthenticated, auth.user?.id, auth.favoriteSnapshotVersion]);
 
   const flushFavoriteIntentRef = useRef<
-    (liveId: number, desiredOverride?: boolean) => Promise<void>
+    (
+      liveId: number,
+      desiredOverride?: boolean,
+      options?: { allowInFlightBypass?: boolean },
+    ) => Promise<void>
   >(async () => undefined);
 
-  flushFavoriteIntentRef.current = async (liveId: number, desiredOverride?: boolean) => {
+  flushFavoriteIntentRef.current = async (
+    liveId: number,
+    desiredOverride?: boolean,
+    options?: { allowInFlightBypass?: boolean },
+  ) => {
     // 同一 liveId 始终只允许一条同步请求在飞，避免快速连点把旧响应写回最新意图。
     const snapshot = stateRef.current;
     const authSnapshot = authRef.current;
     const currentSync = snapshot.favoriteSyncById[liveId];
-    if (currentSync?.inFlight) {
+    if (currentSync?.inFlight && !options?.allowInFlightBypass) {
       return;
     }
     if (!authSnapshot.isAuthenticated || !authSnapshot.csrfToken) {
@@ -104,7 +112,10 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       }
       logInfo("favorite_sync_success", { liveId, desired, attempt_seq: attemptSeq });
 
-      let shouldFlushAgain = false;
+      // 注意：setState(updater) 不是同步立即执行，补发判定要先基于 stateRef 快照算出来，
+      // 不能依赖 updater 回调里对外部变量的赋值结果。
+      const latestDesiredIntent = stateRef.current.optimisticFavoriteIntents[liveId];
+      const shouldFlushAgain = latestDesiredIntent !== undefined && latestDesiredIntent !== desired;
       setState((prev) => {
         // 请求返回后再次读取当前意图；如果用户在飞行期间改过目标态，则补发下一轮同步。
         const nextServerFavoriteIds = applyFavoriteState(prev.serverFavoriteIds, liveId, desired);
@@ -112,8 +123,6 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         const latestDesired = nextOptimisticFavoriteIntents[liveId];
         if (latestDesired === desired) {
           delete nextOptimisticFavoriteIntents[liveId];
-        } else if (latestDesired !== undefined) {
-          shouldFlushAgain = true;
         }
 
         return {
@@ -134,8 +143,12 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         };
       });
 
-      if (shouldFlushAgain) {
-        void flushFavoriteIntentRef.current(liveId);
+      if (shouldFlushAgain && latestDesiredIntent !== undefined) {
+        // 补发链路允许绕过旧快照里的 inFlight 窗口：
+        // 此时上一轮已成功并即将落地为 inFlight=false，如果不 bypass 会被错误短路。
+        void flushFavoriteIntentRef.current(liveId, latestDesiredIntent, {
+          allowInFlightBypass: true,
+        });
       }
     } catch (error) {
       const isAuthError = isAuthSessionError(error);
