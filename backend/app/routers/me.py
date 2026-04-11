@@ -6,7 +6,7 @@ from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled
 
 from app.auth import AuthSessionContext, AuthUser, assert_valid_csrf, get_current_auth_context, get_current_user
-from app.db import get_db_connection, get_write_db_connection
+from app.db import get_db_connection, get_user_write_db_connection
 from app.favorites import live_exists
 from app.logging_config import get_logger
 from app.routers.lives import ALLOWED_PAGE_SIZE
@@ -196,7 +196,7 @@ def favorite_live(
     assert_valid_csrf(request, context)
 
     try:
-        with get_write_db_connection() as conn:
+        with get_user_write_db_connection() as conn:
             with conn.cursor() as cur:
                 if not live_exists(cur, live_id):
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
@@ -259,7 +259,7 @@ def unfavorite_live(
     assert_valid_csrf(request, context)
 
     try:
-        with get_write_db_connection() as conn:
+        with get_user_write_db_connection() as conn:
             with conn.cursor() as cur:
                 if not live_exists(cur, live_id):
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")

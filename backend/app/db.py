@@ -46,3 +46,10 @@ def get_write_db_connection():
         user=_get_db_setting("DB_WRITE_USER", "APP_SUPER_USER", "live_project_super_ro"),
         password=_get_db_setting("DB_WRITE_PASSWORD", "APP_SUPER_PASSWORD", ""),
     )
+
+
+def get_user_write_db_connection():
+    return _build_connection(
+        user=_get_db_setting("DB_USER_RW_USER", "APP_USER_RW_USER", "live_project_user_rw"),
+        password=_get_db_setting("DB_USER_RW_PASSWORD", "APP_USER_RW_PASSWORD", ""),
+    )

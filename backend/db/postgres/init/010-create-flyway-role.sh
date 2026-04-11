@@ -10,6 +10,8 @@ readonly_user="${APP_RO_USER:-live_project_ro}"
 readonly_password="${APP_RO_PASSWORD:-$POSTGRES_PASSWORD}"
 super_user="${APP_SUPER_USER:-live_project_super_ro}"
 super_password="${APP_SUPER_PASSWORD:-$POSTGRES_PASSWORD}"
+user_rw_user="${APP_USER_RW_USER:-live_project_user_rw}"
+user_rw_password="${APP_USER_RW_PASSWORD:-$POSTGRES_PASSWORD}"
 test_admin_user="${TEST_ADMIN_USER:-live_project_test_admin}"
 test_admin_password="${TEST_ADMIN_PASSWORD:-$POSTGRES_PASSWORD}"
 test_db="${TEST_DB_NAME:-live_statistic_test}"
@@ -57,6 +59,16 @@ END
 
 DO \$\$
 BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${user_rw_user}') THEN
+        CREATE ROLE ${user_rw_user} LOGIN PASSWORD '${user_rw_password}';
+    ELSE
+        ALTER ROLE ${user_rw_user} WITH LOGIN PASSWORD '${user_rw_password}';
+    END IF;
+END
+\$\$;
+
+DO \$\$
+BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${test_admin_user}') THEN
         CREATE ROLE ${test_admin_user} LOGIN PASSWORD '${test_admin_password}';
     ELSE
@@ -74,13 +86,13 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${test_db}')\gexec
 GRANT ${app_owner} TO ${flyway_user};
 GRANT ${flyway_user} TO ${test_admin_user};
 
-GRANT CONNECT ON DATABASE ${app_db} TO ${flyway_user}, ${readonly_user}, ${super_user};
-GRANT CONNECT ON DATABASE ${test_db} TO ${flyway_user}, ${readonly_user}, ${super_user}, ${test_admin_user};
+GRANT CONNECT ON DATABASE ${app_db} TO ${flyway_user}, ${readonly_user}, ${super_user}, ${user_rw_user};
+GRANT CONNECT ON DATABASE ${test_db} TO ${flyway_user}, ${readonly_user}, ${super_user}, ${user_rw_user}, ${test_admin_user};
 EOSQL
 
 for db_name in "$app_db" "$test_db"; do
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$db_name" <<EOSQL
-GRANT USAGE ON SCHEMA public TO ${readonly_user}, ${super_user};
+GRANT USAGE ON SCHEMA public TO ${readonly_user}, ${super_user}, ${user_rw_user};
 GRANT USAGE, CREATE ON SCHEMA public TO ${flyway_user};
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${readonly_user};

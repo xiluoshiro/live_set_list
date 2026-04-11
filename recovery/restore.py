@@ -85,6 +85,7 @@ def reset_test_database_for_restore(env_values: dict[str, str], docker_cmd: str,
     flyway_user = env_values.get("FLYWAY_USER", "live_project_flyway")
     readonly_user = env_values.get("APP_RO_USER", "live_project_ro")
     super_user = env_values.get("APP_SUPER_USER", "live_project_super_ro")
+    user_rw_user = env_values.get("APP_USER_RW_USER", "live_project_user_rw")
     test_admin_user = env_values.get("TEST_ADMIN_USER", "live_project_test_admin")
 
     run_step(
@@ -152,7 +153,7 @@ def reset_test_database_for_restore(env_values: dict[str, str], docker_cmd: str,
             "-v",
             "ON_ERROR_STOP=1",
             "-c",
-            f"GRANT CONNECT ON DATABASE {test_db_name} TO {flyway_user}, {readonly_user}, {super_user}, {test_admin_user};",
+            f"GRANT CONNECT ON DATABASE {test_db_name} TO {flyway_user}, {readonly_user}, {super_user}, {user_rw_user}, {test_admin_user};",
         ],
     )
 
@@ -165,23 +166,28 @@ def apply_test_database_permissions(env_values: dict[str, str], docker_cmd: str,
     flyway_user = env_values.get("FLYWAY_USER", "live_project_flyway")
     readonly_user = env_values.get("APP_RO_USER", "live_project_ro")
     super_user = env_values.get("APP_SUPER_USER", "live_project_super_ro")
+    user_rw_user = env_values.get("APP_USER_RW_USER", "live_project_user_rw")
     test_admin_user = env_values.get("TEST_ADMIN_USER", "live_project_test_admin")
 
     permission_sql = f"""
 ALTER SCHEMA public OWNER TO {app_owner};
 
-GRANT USAGE ON SCHEMA public TO {readonly_user}, {super_user};
+GRANT USAGE ON SCHEMA public TO {readonly_user}, {super_user}, {user_rw_user};
 GRANT USAGE, CREATE ON SCHEMA public TO {flyway_user}, {test_admin_user};
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO {readonly_user};
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO {super_user};
 GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO {super_user};
-GRANT DELETE ON TABLE public.user_live_favorites TO {super_user};
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {test_admin_user};
+GRANT SELECT ON TABLE public.live_attrs TO {user_rw_user};
+GRANT SELECT, INSERT, DELETE ON TABLE public.user_live_favorites TO {user_rw_user};
+GRANT INSERT ON TABLE public.audit_logs TO {user_rw_user};
 
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO {readonly_user};
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO {super_user};
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {test_admin_user};
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE public.user_live_favorites_id_seq TO {user_rw_user};
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE public.audit_logs_id_seq TO {user_rw_user};
 
 ALTER DEFAULT PRIVILEGES FOR ROLE {app_owner} IN SCHEMA public
 GRANT SELECT ON TABLES TO {readonly_user};
@@ -300,6 +306,7 @@ def apply_app_database_permissions(env_values: dict[str, str], docker_cmd: str, 
     flyway_user = env_values.get("FLYWAY_USER", "live_project_flyway")
     readonly_user = env_values.get("APP_RO_USER", "live_project_ro")
     super_user = env_values.get("APP_SUPER_USER", "live_project_super_ro")
+    user_rw_user = env_values.get("APP_USER_RW_USER", "live_project_user_rw")
 
     run_step(
         "psql",
@@ -315,7 +322,7 @@ def apply_app_database_permissions(env_values: dict[str, str], docker_cmd: str, 
             "-v",
             "ON_ERROR_STOP=1",
             "-c",
-            f"GRANT CONNECT ON DATABASE {app_db_name} TO {flyway_user}, {readonly_user}, {super_user};",
+            f"GRANT CONNECT ON DATABASE {app_db_name} TO {flyway_user}, {readonly_user}, {super_user}, {user_rw_user};",
         ],
     )
 
@@ -347,17 +354,21 @@ BEGIN
 END
 $$;
 
-GRANT USAGE ON SCHEMA public TO {readonly_user}, {super_user};
+GRANT USAGE ON SCHEMA public TO {readonly_user}, {super_user}, {user_rw_user};
 GRANT USAGE, CREATE ON SCHEMA public TO {flyway_user};
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO {readonly_user};
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO {super_user};
 GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO {super_user};
-GRANT DELETE ON TABLE public.user_live_favorites TO {super_user};
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.flyway_schema_history TO {flyway_user};
+GRANT SELECT ON TABLE public.live_attrs TO {user_rw_user};
+GRANT SELECT, INSERT, DELETE ON TABLE public.user_live_favorites TO {user_rw_user};
+GRANT INSERT ON TABLE public.audit_logs TO {user_rw_user};
 
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO {readonly_user};
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO {super_user};
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE public.user_live_favorites_id_seq TO {user_rw_user};
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE public.audit_logs_id_seq TO {user_rw_user};
 
 ALTER DEFAULT PRIVILEGES FOR ROLE {app_owner} IN SCHEMA public
 GRANT SELECT ON TABLES TO {readonly_user};
