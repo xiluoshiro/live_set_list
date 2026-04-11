@@ -1,15 +1,22 @@
-import json
+﻿import json
 from collections.abc import Mapping
 from math import ceil
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
-from pydantic import BaseModel, Field
 from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled
 
 from app.db import get_db_connection
 from app.logging_config import get_logger
+from app.schemas import (
+    ErrorResponse,
+    LiveDetailBatchRequest,
+    LiveDetailResponse,
+    LiveDetailsBatchResponse,
+    LivesResponse,
+    ValidationErrorResponse,
+)
 
 router = APIRouter(prefix="/api/lives", tags=["lives"])
 logger = get_logger(__name__)
@@ -234,11 +241,6 @@ WHERE ba.band_name = ANY(%s)
 """
 
 DEFAULT_BAND_TOTAL_COUNT = 5
-MAX_BATCH_LIVE_IDS = 100
-
-
-class LiveDetailBatchRequest(BaseModel):
-    live_ids: list[int] = Field(..., min_length=1, max_length=MAX_BATCH_LIVE_IDS)
 
 
 ParsedDetailRow = tuple[str, str, dict[str, Any], dict[str, Any], bool]
@@ -481,10 +483,32 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
     return _build_live_detail_payload(header_row, parsed_rows, band_meta_by_name)
 
 
-@router.get("")
+@router.get(
+    "",
+    response_model=LivesResponse,
+    summary="获取 Live 列表",
+    description=(
+        "返回分页后的 Live 列表。page_size 当前只允许 15 或 20；"
+        "当请求页码超过最后一页时，后端会自动钳制到最后一页。"
+    ),
+    responses={
+        400: {
+            "model": ErrorResponse,
+            "description": "参数错误，例如非法 page_size",
+        },
+        500: {
+            "model": ErrorResponse,
+            "description": "数据库一般错误",
+        },
+        504: {
+            "model": ErrorResponse,
+            "description": "数据库连接超时或查询超时",
+        },
+    },
+)
 def get_lives(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20),
+    page: int = Query(default=1, ge=1, description="页码，从 1 开始。"),
+    page_size: int = Query(default=20, description="每页条数，当前仅允许 15 或 20。"),
 ):
     if page_size not in ALLOWED_PAGE_SIZE:
         raise HTTPException(status_code=400, detail="page_size must be 15 or 20")
@@ -551,8 +575,34 @@ def get_lives(
     }
 
 
-@router.post("/details:batch")
-def get_live_details_batch(payload: LiveDetailBatchRequest = Body(...)):
+@router.post(
+    "/details:batch",
+    response_model=LiveDetailsBatchResponse,
+    summary="批量获取 Live 详情",
+    description=(
+        "用于批量预读详情。live_ids 会先去重并保序；"
+        "允许部分成功，未命中的 ID 会进入 missing_live_ids。"
+    ),
+    responses={
+        400: {
+            "model": ErrorResponse,
+            "description": "请求体中的某个 live_id 非法",
+        },
+        422: {
+            "model": ValidationErrorResponse,
+            "description": "请求体验证失败，例如缺失、空数组或超过最大长度",
+        },
+        500: {
+            "model": ErrorResponse,
+            "description": "数据库一般错误",
+        },
+        504: {
+            "model": ErrorResponse,
+            "description": "数据库连接超时或查询超时",
+        },
+    },
+)
+def get_live_details_batch(payload: LiveDetailBatchRequest = Body(..., description="待批量查询的 live_id 列表。")):
     deduped_live_ids: list[int] = []
     seen: set[int] = set()
     for live_id in payload.live_ids:
@@ -695,7 +745,33 @@ def get_live_details_batch(payload: LiveDetailBatchRequest = Body(...)):
     }
 
 
-@router.get("/{live_id}")
+@router.get(
+    "/{live_id}",
+    response_model=LiveDetailResponse,
+    summary="获取单条 Live 详情",
+    description=(
+        "返回指定 live_id 的完整详情。detail_rows 按 absolute_order 返回；"
+        "band_names 会先去重，再按 bands 中的 band_id 顺序排列。"
+    ),
+    responses={
+        400: {
+            "model": ErrorResponse,
+            "description": "参数错误",
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "指定 live_id 不存在",
+        },
+        500: {
+            "model": ErrorResponse,
+            "description": "数据库一般错误",
+        },
+        504: {
+            "model": ErrorResponse,
+            "description": "数据库连接超时或查询超时",
+        },
+    },
+)
 def get_live_detail(live_id: int):
     if live_id < 1:
         raise HTTPException(status_code=400, detail="live_id must be >= 1")
@@ -719,3 +795,6 @@ def get_live_detail(live_id: int):
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
     return detail
+
+
+

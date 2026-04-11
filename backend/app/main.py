@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+﻿from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from time import perf_counter
 
@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import ensure_default_admin_user
 from app.logging_config import get_logger, setup_logging
+from app.schemas import RootResponse
 from app.routers.auth import router as auth_router
 from app.routers.health import router as health_router
 from app.routers.lives import router as lives_router
@@ -70,6 +71,13 @@ async def log_api_requests(request: Request, call_next):
     return response
 
 
-@app.get("/")
+@app.get(
+    "/",
+    response_model=RootResponse,
+    summary="服务根路由",
+    description="用于确认后端服务已启动，不访问数据库。",
+)
 def root():
     return {"message": "LiveSetList backend is running"}
+
+
