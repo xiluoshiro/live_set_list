@@ -80,6 +80,7 @@
 - 未登录用户：不显示“收藏”页签，不显示星标入口
 - 已登录用户：使用服务端收藏表 `user_live_favorites`
 - 收藏状态不再落本地 `localStorage`
+- 收藏前端交互优化与弱一致同步策略，见 [favorite-optimistic-sync.md](/D:/Code/PythonCode/5%20LiveSetList/docs/design/favorite-optimistic-sync.md)
 
 这样可以直接简化：
 
