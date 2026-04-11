@@ -53,6 +53,13 @@
   font-size: 13px;
 }
 
+.favorite-sync-warning {
+  margin: 0;
+  padding: 0 20px 12px;
+  color: var(--accent-warning-strip);
+  font-size: 13px;
+}
+
 .login-modal {
   width: min(420px, calc(100vw - 32px));
 }

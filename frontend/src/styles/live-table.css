@@ -127,6 +127,10 @@ tbody tr:hover {
   text-shadow: 0 0 1px var(--star-filled-shadow);
 }
 
+.star-btn.is-syncing {
+  opacity: 0.72;
+}
+
 .icons-cell {
   white-space: nowrap;
   overflow-x: scroll;

@@ -4,6 +4,7 @@ import { vi } from "vitest";
 
 import App from "../App";
 import { AuthProvider } from "../auth/AuthProvider";
+import { FavoriteProvider } from "../favorites/FavoriteProvider";
 import {
   favoriteLive,
   getLiveDetail,
@@ -161,7 +162,9 @@ function renderApp(options?: { withAuthProvider?: boolean }) {
   if (options?.withAuthProvider) {
     return render(
       <AuthProvider>
-        <App />
+        <FavoriteProvider>
+          <App />
+        </FavoriteProvider>
       </AuthProvider>,
     );
   }
@@ -339,6 +342,36 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument();
     expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
     expect(getLivesMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("点击收藏后会立即乐观切换星标，且按钮不会进入禁用态", async () => {
+    // 测试点：收藏同步未返回时，星标先按用户意图切换，按钮保持可继续交互。
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: [1, 2],
+    });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const deferredUnfavorite = deferred<void>();
+    unfavoriteLiveMock.mockImplementationOnce(() => deferredUnfavorite.promise);
+    const user = userEvent.setup();
+    renderApp({ withAuthProvider: true });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
+    });
+    const starButton = screen.getAllByRole("button", { name: "取消收藏" })[0];
+    await user.click(starButton);
+
+    const optimisticButton = screen.getAllByRole("button", { name: "加入收藏" })[0];
+    expect(optimisticButton).not.toBeDisabled();
+    expect(unfavoriteLiveMock).toHaveBeenCalledWith(1, "csrf-token");
+
+    deferredUnfavorite.resolve();
+    await waitFor(() => expect(optimisticButton).toBeInTheDocument());
   });
 
 
@@ -731,7 +764,7 @@ describe("App", () => {
       )
       .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 20, totalPages: 1, itemCount: 20 }),
-      )
+      );
     const user = userEvent.setup();
     renderApp();
 
