@@ -21,6 +21,12 @@
   - 服务根路由，用于确认后端服务已启动
 - `GET /api/health/db`
   - 数据库健康检查
+- `POST /api/auth/login`
+  - 用户登录，写入 session cookie 并返回用户信息与 CSRF Token
+- `GET /api/auth/me`
+  - 获取当前登录态，已登录时返回用户信息、CSRF Token 和收藏 ID 列表
+- `POST /api/auth/logout`
+  - 退出当前登录态并使 session 失效
 - `GET /api/lives`
   - Live 列表分页查询
 - `GET /api/lives/{live_id}`
@@ -100,6 +106,7 @@
 
 说明：
 - `400/404/500/504` 当前通常返回 `{"detail": "..."}` 这种字符串结构
+- auth 相关接口在 `401/403` 下通常返回 `{"detail": {"code": "...", "message": "..."}}`
 - `422` 当前通常返回 FastAPI / Pydantic 默认的数组型校验错误结构
 
 ## 维护建议
