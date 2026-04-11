@@ -8,7 +8,8 @@
 - `live_project_owner`：业务库 owner，由 `APP_OWNER` / `APP_OWNER_PASSWORD` 指定
 - `live_project_flyway`：Flyway 迁移账号
 - `live_project_ro`：普通查询账号
-- `live_project_super_ro`：高权限业务账号，可查询/插入/更新
+- `live_project_user_rw`：前端普通用户写账号，只授予指定表写权限，当前用于收藏
+- `live_project_super_ro`：高权限业务账号，可查询/插入/更新，当前用于认证与后续控制台写接口
 - `live_project_test_admin`：测试库专用管理账号，用于 integration 的重置与 seed
 
 ## 修改表结构时怎么做

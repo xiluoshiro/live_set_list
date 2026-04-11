@@ -18,6 +18,8 @@ services:
       APP_RO_PASSWORD: ${APP_RO_PASSWORD:-}
       APP_SUPER_USER: ${APP_SUPER_USER:-live_project_super_ro}
       APP_SUPER_PASSWORD: ${APP_SUPER_PASSWORD:-}
+      APP_USER_RW_USER: ${APP_USER_RW_USER:-live_project_user_rw}
+      APP_USER_RW_PASSWORD: ${APP_USER_RW_PASSWORD:-}
       TEST_ADMIN_USER: ${TEST_ADMIN_USER:-live_project_test_admin}
       TEST_ADMIN_PASSWORD: ${TEST_ADMIN_PASSWORD:-}
     ports:
