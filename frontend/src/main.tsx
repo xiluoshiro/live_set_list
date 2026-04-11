@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { AuthProvider } from "./auth/AuthProvider";
+import { FavoriteProvider } from "./favorites/FavoriteProvider";
 import { logError } from "./logger";
 import { ThemeProvider } from "./theme/ThemeProvider";
 
@@ -37,7 +38,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider>
       <AuthProvider>
-        <App />
+        <FavoriteProvider>
+          <App />
+        </FavoriteProvider>
       </AuthProvider>
     </ThemeProvider>
   </React.StrictMode>,

@@ -5,6 +5,7 @@ import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { MemberStatusTable } from "./components/DetailMemberTable";
 import { LoginDialog } from "./components/LoginDialog";
 import { ApiError, getLiveDetail, getLives, getMyFavoriteLives, type LiveDetailResponse, type LiveItem } from "./api";
+import { useFavorites } from "./favorites/FavoriteProvider";
 import { logError } from "./logger";
 import { prefetchCurrentPageDetails, scheduleIdleNextPagePrefetch } from "./prefetch/liveDetailsPrefetch";
 import { useTheme, type ThemeMode } from "./theme/ThemeProvider";
@@ -75,6 +76,7 @@ function buildListSnapshotKey(tab: Exclude<TabKey, "console">, page: number, pag
 
 function App() {
   const auth = useAuth();
+  const favorites = useFavorites();
   const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
   const [pageSize, setPageSize] = useState<15 | 20>(20);
   const [page, setPage] = useState(1);
@@ -92,7 +94,6 @@ function App() {
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [favoritePendingIds, setFavoritePendingIds] = useState<Record<number, boolean>>({});
   const listSnapshotsRef = useRef<Record<string, ListSnapshot>>({});
   const listEnabled = tab !== "console" && !auth.isLoading;
   const canUseFavoriteFeatures = auth.isAuthenticated;
@@ -127,7 +128,7 @@ function App() {
         delete currentSnapshots[key];
       }
     });
-  }, [auth.favoriteLiveIds]);
+  }, [favorites.favoriteLiveIds]);
 
   useEffect(() => {
     if (!listEnabled) return;
@@ -267,7 +268,7 @@ function App() {
     };
   }, [activeRow?.liveId]);
 
-  const isFavorite = (id: number) => auth.favoriteLiveIdSet.has(id);
+  const isFavorite = (id: number) => favorites.favoriteLiveIdSet.has(id);
   const rows = tab === "console" ? [] : items;
 
   const total = serverTotal;
@@ -303,18 +304,9 @@ function App() {
       setLoginDialogOpen(true);
       return;
     }
-    if (favoritePendingIds[id]) {
-      return;
-    }
-
-    setFavoritePendingIds((prev) => ({ ...prev, [id]: true }));
     try {
-      // 收藏切换只改服务端真值，页面展示统一从 AuthProvider 中的内存态读取。
-      if (isFavorite(id)) {
-        await auth.unfavoriteLive(id);
-      } else {
-        await auth.favoriteLive(id);
-      }
+      // 收藏切换改由 AuthProvider 统一管理乐观意图与后台同步。
+      await favorites.toggleFavorite(id);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         auth.setAnonymous();
@@ -324,12 +316,6 @@ function App() {
       logError("toggle_favorite_failed", {
         liveId: id,
         message: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      setFavoritePendingIds((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
       });
     }
   };
@@ -461,6 +447,7 @@ function App() {
         {!auth.isLoading && !auth.isAuthenticated && (
           <p className="tab-tip">登录后可使用收藏同步；未登录模式下不会显示收藏页签与星标入口。</p>
         )}
+        {favorites.favoriteSyncWarning && <p className="favorite-sync-warning">{favorites.favoriteSyncWarning}</p>}
 
         {tab !== "console" ? (
           <>
@@ -481,11 +468,11 @@ function App() {
                       {showFavoriteColumn && (
                         <td className="fav-col-cell">
                           <button
-                            className={`star-btn ${isFavorite(row.liveId) ? "is-fav" : ""}`}
+                            className={`star-btn ${isFavorite(row.liveId) ? "is-fav" : ""} ${favorites.isFavoriteSyncing(row.liveId) ? "is-syncing" : ""}`}
                             onClick={() => void toggleFavorite(row.liveId)}
                             title={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
                             aria-label={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
-                            disabled={Boolean(favoritePendingIds[row.liveId])}
+                            aria-busy={favorites.isFavoriteSyncing(row.liveId)}
                           >
                             ★
                           </button>

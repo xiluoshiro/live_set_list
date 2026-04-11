@@ -6,15 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  ApiError,
-  favoriteLive as favoriteLiveRequest,
-  getAuthMe,
-  login,
-  logout,
-  unfavoriteLive as unfavoriteLiveRequest,
-  type AuthUser,
-} from "../api";
+import { getAuthMe, login, logout, type AuthUser } from "../api";
 import { logError } from "../logger";
 
 type AuthContextValue = {
@@ -22,12 +14,10 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   user: AuthUser | null;
   csrfToken: string | null;
-  favoriteLiveIds: number[];
-  favoriteLiveIdSet: ReadonlySet<number>;
+  sessionFavoriteLiveIds: number[];
+  favoriteSnapshotVersion: number;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  favoriteLive: (liveId: number) => Promise<void>;
-  unfavoriteLive: (liveId: number) => Promise<void>;
   setAnonymous: () => void;
 };
 
@@ -36,7 +26,8 @@ type AuthState = {
   isAuthenticated: boolean;
   user: AuthUser | null;
   csrfToken: string | null;
-  favoriteLiveIds: number[];
+  sessionFavoriteLiveIds: number[];
+  favoriteSnapshotVersion: number;
 };
 
 const anonymousState: AuthState = {
@@ -44,7 +35,8 @@ const anonymousState: AuthState = {
   isAuthenticated: false,
   user: null,
   csrfToken: null,
-  favoriteLiveIds: [],
+  sessionFavoriteLiveIds: [],
+  favoriteSnapshotVersion: 0,
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -59,7 +51,8 @@ function toAuthenticatedState(params: {
     isAuthenticated: true,
     user: params.user,
     csrfToken: params.csrfToken,
-    favoriteLiveIds: params.favoriteLiveIds,
+    sessionFavoriteLiveIds: params.favoriteLiveIds,
+    favoriteSnapshotVersion: Date.now(),
   };
 }
 
@@ -104,11 +97,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(() => {
-    const favoriteLiveIdSet = new Set(state.favoriteLiveIds);
-
     return {
-      ...state,
-      favoriteLiveIdSet,
+      isLoading: state.isLoading,
+      isAuthenticated: state.isAuthenticated,
+      user: state.user,
+      csrfToken: state.csrfToken,
+      // favorites 域据此判断“当前服务端快照是否整体换了一份”，从而重建本地同步状态。
+      sessionFavoriteLiveIds: state.sessionFavoriteLiveIds,
+      favoriteSnapshotVersion: state.favoriteSnapshotVersion,
       login: async (username: string, password: string) => {
         const payload = await login(username, password);
         setState(
@@ -123,28 +119,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await logout(state.csrfToken);
         setState(anonymousState);
       },
-      favoriteLive: async (liveId: number) => {
-        if (!state.csrfToken) {
-          throw new ApiError("登录状态已失效，请重新登录", 401, "AUTH_SESSION_EXPIRED");
-        }
-        await favoriteLiveRequest(liveId, state.csrfToken);
-        setState((prev) => ({
-          ...prev,
-          favoriteLiveIds: prev.favoriteLiveIds.includes(liveId)
-            ? prev.favoriteLiveIds
-            : [...prev.favoriteLiveIds, liveId],
-        }));
-      },
-      unfavoriteLive: async (liveId: number) => {
-        if (!state.csrfToken) {
-          throw new ApiError("登录状态已失效，请重新登录", 401, "AUTH_SESSION_EXPIRED");
-        }
-        await unfavoriteLiveRequest(liveId, state.csrfToken);
-        setState((prev) => ({
-          ...prev,
-          favoriteLiveIds: prev.favoriteLiveIds.filter((id) => id !== liveId),
-        }));
-      },
       setAnonymous: () => setState(anonymousState),
     };
   }, [state]);
@@ -154,11 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 const fallbackContext: AuthContextValue = {
   ...anonymousState,
-  favoriteLiveIdSet: new Set<number>(),
+  sessionFavoriteLiveIds: [],
+  favoriteSnapshotVersion: 0,
   login: async () => undefined,
   logout: async () => undefined,
-  favoriteLive: async () => undefined,
-  unfavoriteLive: async () => undefined,
   setAnonymous: () => undefined,
 };
 
