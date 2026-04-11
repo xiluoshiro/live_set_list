@@ -228,14 +228,35 @@ describe("FavoriteProvider", () => {
     expect(unfavoriteLiveMock).toHaveBeenCalledTimes(0);
   });
 
-  test("reconcileFavorites 会触发 auth.refreshSession 对账", async () => {
-    // 测试点：进入收藏页触发的 reconcile 需要委托给 auth 会话刷新。
+  test("reconcileFavorites 在没有脏状态时会直接跳过", async () => {
+    // 测试点：无待同步变更时，进入收藏页不应额外触发 auth/me 对账。
     renderProvider();
 
     await act(async () => {
       await readFavorites().reconcileFavorites();
     });
+    expect(currentAuth.refreshSession).toHaveBeenCalledTimes(0);
+  });
+
+  test("reconcileFavorites 在存在待同步变更时会触发 auth.refreshSession 对账", async () => {
+    // 测试点：只有收藏状态存在脏数据时，reconcile 才委托给 auth 会话刷新。
+    const user = userEvent.setup();
+    const firstCall = deferred<void>();
+    favoriteLiveMock.mockImplementationOnce(() => firstCall.promise);
+    renderProvider();
+
+    await user.click(screen.getByRole("button", { name: "toggle-3" }));
+    await waitFor(() => expect(screen.getByTestId("sync-1")).toBeInTheDocument());
+    expect(favoriteLiveMock).toHaveBeenCalledWith(3, "csrf-token");
+
+    await act(async () => {
+      await readFavorites().reconcileFavorites();
+    });
     expect(currentAuth.refreshSession).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      firstCall.resolve(undefined);
+      await firstCall.promise;
+    });
   });
 
   test("登录快照变更后会重建服务端真值并清理旧同步状态", async () => {

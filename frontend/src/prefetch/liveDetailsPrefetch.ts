@@ -1,4 +1,4 @@
-import { getLiveDetailsBatch, getLives, type LiveItem } from "../api";
+import { getLiveDetailsBatch, getLives, getMyFavoriteLives, type LiveItem } from "../api";
 
 type IdleWindow = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback) => number;
@@ -48,6 +48,24 @@ export function scheduleIdleNextPagePrefetch(params: IdlePrefetchParams): () => 
         // 预读失败不影响主流程。
       }
     })();
+  });
+
+  return () => {
+    canceled = true;
+    if (win.cancelIdleCallback) {
+      win.cancelIdleCallback(handle);
+    }
+  };
+}
+
+export function scheduleIdleFavoritePagePrefetch(pageSize: 15 | 20): () => void {
+  const win = (typeof window !== "undefined" ? window : undefined) as IdleWindow | undefined;
+  if (!win?.requestIdleCallback) return () => undefined;
+
+  let canceled = false;
+  const handle = win.requestIdleCallback(() => {
+    if (canceled) return;
+    void getMyFavoriteLives(1, pageSize).catch(() => undefined);
   });
 
   return () => {

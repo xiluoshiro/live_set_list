@@ -6,6 +6,7 @@ import App from "../App";
 import { AuthProvider } from "../auth/AuthProvider";
 import { FavoriteProvider } from "../favorites/FavoriteProvider";
 import {
+  clearMyFavoriteLivesCache,
   favoriteLive,
   getLiveDetail,
   getLiveDetailsBatch,
@@ -14,6 +15,7 @@ import {
   getMyFavoriteLives,
   login,
   logout,
+  peekMyFavoriteLives,
   unfavoriteLive,
   type LiveDetailResponse,
   type LivesResponse,
@@ -29,6 +31,8 @@ vi.mock("../api", () => ({
   login: vi.fn(),
   logout: vi.fn(),
   getMyFavoriteLives: vi.fn(),
+  peekMyFavoriteLives: vi.fn(),
+  clearMyFavoriteLivesCache: vi.fn(),
   favoriteLive: vi.fn(),
   unfavoriteLive: vi.fn(),
   ApiError: class ApiError extends Error {
@@ -56,6 +60,8 @@ const getAuthMeMock = vi.mocked(getAuthMe);
 const loginMock = vi.mocked(login);
 const logoutMock = vi.mocked(logout);
 const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
+const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
+const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
 const favoriteLiveMock = vi.mocked(favoriteLive);
 const unfavoriteLiveMock = vi.mocked(unfavoriteLive);
 const logErrorMock = vi.mocked(logError);
@@ -191,6 +197,8 @@ describe("App", () => {
     loginMock.mockReset();
     logoutMock.mockReset();
     getMyFavoriteLivesMock.mockReset();
+    peekMyFavoriteLivesMock.mockReset();
+    clearMyFavoriteLivesCacheMock.mockReset();
     favoriteLiveMock.mockReset();
     unfavoriteLiveMock.mockReset();
     logErrorMock.mockReset();
@@ -204,6 +212,7 @@ describe("App", () => {
     getMyFavoriteLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2 }),
     );
+    peekMyFavoriteLivesMock.mockReturnValue(undefined);
     favoriteLiveMock.mockResolvedValue();
     unfavoriteLiveMock.mockResolvedValue();
     getLiveDetailMock.mockImplementation(async (liveId: number) =>
@@ -351,6 +360,52 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument();
     expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
     expect(getLivesMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("收藏页预读命中后，切换到收藏不会再额外刷新 auth/me 且无加载闪烁", async () => {
+    // 测试点：全量页空闲预读命中收藏第一页后，切页签应直接复用缓存结果。
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    idleWindow.requestIdleCallback = vi.fn((callback: IdleRequestCallback) => {
+      callback({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
+      return 1;
+    });
+    idleWindow.cancelIdleCallback = vi.fn();
+
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: [1, 2],
+    });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const favoritePage = makeResponse({
+      page: 1,
+      pageSize: 20,
+      total: 2,
+      totalPages: 1,
+      itemCount: 2,
+      startId: 101,
+    });
+    getMyFavoriteLivesMock.mockResolvedValue(favoritePage);
+    peekMyFavoriteLivesMock.mockImplementation((page: number, pageSize: number) =>
+      page === 1 && pageSize === 20 ? favoritePage : undefined,
+    );
+    const user = userEvent.setup();
+    renderApp({ withAuthProvider: true });
+
+    await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
+    expect(getAuthMeMock).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "收藏" }));
+
+    expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument();
+    expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
+    expect(getAuthMeMock).toHaveBeenCalledTimes(1);
   });
 
   test("分页和每页条数切换正常工作", async () => {

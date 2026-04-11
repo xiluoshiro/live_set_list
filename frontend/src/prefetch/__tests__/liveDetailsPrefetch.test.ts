@@ -1,14 +1,20 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { getLiveDetailsBatch, getLives, type LiveItem } from "../../api";
-import { prefetchCurrentPageDetails, scheduleIdleNextPagePrefetch } from "../liveDetailsPrefetch";
+import { getLiveDetailsBatch, getLives, getMyFavoriteLives, type LiveItem } from "../../api";
+import {
+  prefetchCurrentPageDetails,
+  scheduleIdleFavoritePagePrefetch,
+  scheduleIdleNextPagePrefetch,
+} from "../liveDetailsPrefetch";
 
 vi.mock("../../api", () => ({
   getLives: vi.fn(),
+  getMyFavoriteLives: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
 }));
 
 const getLivesMock = vi.mocked(getLives);
+const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
 
 function makeLiveItem(id: number): LiveItem {
@@ -25,8 +31,13 @@ function makeLiveItem(id: number): LiveItem {
 describe("liveDetailsPrefetch", () => {
   beforeEach(() => {
     getLivesMock.mockReset();
+    getMyFavoriteLivesMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
     getLiveDetailsBatchMock.mockResolvedValue({ items: [], missing_live_ids: [] });
+    getMyFavoriteLivesMock.mockResolvedValue({
+      items: [],
+      pagination: { page: 1, page_size: 20, total: 0, total_pages: 1 },
+    });
     Reflect.deleteProperty(window, "requestIdleCallback");
     Reflect.deleteProperty(window, "cancelIdleCallback");
   });
@@ -96,5 +107,19 @@ describe("liveDetailsPrefetch", () => {
     const cancel = scheduleIdleNextPagePrefetch({ page: 1, pageSize: 20, totalPages: 3 });
     expect(() => cancel()).not.toThrow();
     expect(getLivesMock).not.toHaveBeenCalled();
+  });
+
+  test("scheduleIdleFavoritePagePrefetch 会在空闲时预读收藏第一页", async () => {
+    // 测试点：已登录场景下，空闲预读会提前拉取收藏页第一页数据。
+    const requestIdleCallback = vi.fn((callback: (deadline: IdleDeadline) => void) => {
+      callback({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
+      return 1;
+    });
+    (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = requestIdleCallback;
+
+    scheduleIdleFavoritePagePrefetch(20);
+    await Promise.resolve();
+
+    expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20);
   });
 });

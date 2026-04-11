@@ -15,6 +15,8 @@ import {
   getMyFavoriteLives,
   login,
   logout,
+  peekMyFavoriteLives,
+  clearMyFavoriteLivesCache,
   unfavoriteLive,
   type LiveDetailResponse,
   type LivesResponse,
@@ -28,6 +30,8 @@ vi.mock("../api", () => ({
   login: vi.fn(),
   logout: vi.fn(),
   getMyFavoriteLives: vi.fn(),
+  peekMyFavoriteLives: vi.fn(),
+  clearMyFavoriteLivesCache: vi.fn(),
   favoriteLive: vi.fn(),
   unfavoriteLive: vi.fn(),
   ApiError: class ApiError extends Error {
@@ -56,6 +60,8 @@ const getAuthMeMock = vi.mocked(getAuthMe);
 const loginMock = vi.mocked(login);
 const logoutMock = vi.mocked(logout);
 const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
+const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
+const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
 const favoriteLiveMock = vi.mocked(favoriteLive);
 const unfavoriteLiveMock = vi.mocked(unfavoriteLive);
 
@@ -166,6 +172,8 @@ describe("App optimistic favorite sync", () => {
     loginMock.mockReset();
     logoutMock.mockReset();
     getMyFavoriteLivesMock.mockReset();
+    peekMyFavoriteLivesMock.mockReset();
+    clearMyFavoriteLivesCacheMock.mockReset();
     favoriteLiveMock.mockReset();
     unfavoriteLiveMock.mockReset();
 
@@ -184,6 +192,7 @@ describe("App optimistic favorite sync", () => {
     getMyFavoriteLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2 }),
     );
+    peekMyFavoriteLivesMock.mockReturnValue(undefined);
     favoriteLiveMock.mockResolvedValue();
     unfavoriteLiveMock.mockResolvedValue();
     getLiveDetailMock.mockImplementation(async (liveId: number) =>
@@ -335,10 +344,12 @@ describe("App optimistic favorite sync", () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
+    favoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
     const user = userEvent.setup();
     renderApp();
 
     await waitFor(() => expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument());
+    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
     await user.click(screen.getByRole("button", { name: "收藏" }));
 
     await waitFor(() => expect(screen.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument());
