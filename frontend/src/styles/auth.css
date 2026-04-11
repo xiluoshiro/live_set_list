@@ -3,6 +3,7 @@
   align-items: center;
   gap: 10px;
   margin-left: auto;
+  position: relative;
 }
 
 .auth-status {
@@ -45,6 +46,93 @@
   border: 1px solid var(--border-normal);
   background: var(--surface-chip-soft);
   color: var(--text-tab);
+}
+
+.user-menu-wrap {
+  position: relative;
+}
+
+.user-menu-trigger {
+  border: 1px solid var(--border-normal);
+  background: var(--surface-chip-soft);
+  color: var(--text-tab);
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.user-menu-trigger:hover {
+  background: var(--surface-chip-hover);
+}
+
+.user-avatar-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: block;
+}
+
+.user-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 220px;
+  border: 1px solid var(--border-normal);
+  border-radius: 12px;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-panel);
+  padding: 10px;
+  z-index: 30;
+}
+
+.user-menu-row {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-main);
+}
+
+.user-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.user-menu-avatar {
+  width: 24px;
+  height: 24px;
+}
+
+.user-account-row {
+  margin-bottom: 4px;
+}
+
+.user-role-row {
+  color: var(--text-secondary);
+}
+
+.user-menu-divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 10px 0;
+}
+
+.user-menu-logout-btn {
+  display: inline-block;
+  color: rgba(196, 73, 73, 0.68);
+  text-decoration: none;
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.user-menu-logout-btn:hover {
+  color: rgba(166, 51, 51, 0.82);
 }
 
 .tab-tip {
