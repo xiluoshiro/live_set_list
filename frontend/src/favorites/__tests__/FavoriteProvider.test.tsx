@@ -3,13 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import { FavoriteProvider, useFavorites } from "../FavoriteProvider";
-import { ApiError, favoriteLive, unfavoriteLive } from "../../api";
+import { ApiError, favoriteLive, favoriteLivesBatch, unfavoriteLive } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { FAVORITE_SYNC_WARNING_MESSAGE } from "../favoriteSync";
 import { logInfo } from "../../logger";
 
 vi.mock("../../api", () => ({
   favoriteLive: vi.fn(),
+  favoriteLivesBatch: vi.fn(),
   unfavoriteLive: vi.fn(),
   ApiError: class ApiError extends Error {
     status: number;
@@ -33,6 +34,7 @@ vi.mock("../../logger", () => ({
 }));
 
 const favoriteLiveMock = vi.mocked(favoriteLive);
+const favoriteLivesBatchMock = vi.mocked(favoriteLivesBatch);
 const unfavoriteLiveMock = vi.mocked(unfavoriteLive);
 const useAuthMock = vi.mocked(useAuth);
 const logInfoMock = vi.mocked(logInfo);
@@ -120,12 +122,20 @@ function readFavorites() {
 describe("FavoriteProvider", () => {
   beforeEach(() => {
     favoriteLiveMock.mockReset();
+    favoriteLivesBatchMock.mockReset();
     unfavoriteLiveMock.mockReset();
     useAuthMock.mockReset();
     logInfoMock.mockReset();
     latestFavorites = null;
 
     favoriteLiveMock.mockResolvedValue(undefined);
+    favoriteLivesBatchMock.mockResolvedValue({
+      action: "favorite",
+      requested_count: 0,
+      applied_live_ids: [],
+      noop_live_ids: [],
+      not_found_live_ids: [],
+    });
     unfavoriteLiveMock.mockResolvedValue(undefined);
     currentAuth = makeAuth();
     useAuthMock.mockImplementation(() => currentAuth);

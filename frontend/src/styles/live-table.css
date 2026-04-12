@@ -111,6 +111,12 @@ tbody tr:hover {
   text-align: center;
 }
 
+.fav-header-with-batch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .star-btn {
   border: none;
   background: transparent;

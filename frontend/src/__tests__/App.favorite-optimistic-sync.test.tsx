@@ -8,6 +8,7 @@ import { FavoriteProvider } from "../favorites/FavoriteProvider";
 import {
   ApiError,
   favoriteLive,
+  favoriteLivesBatch,
   getAuthMe,
   getLiveDetail,
   getLiveDetailsBatch,
@@ -33,6 +34,7 @@ vi.mock("../api", () => ({
   peekMyFavoriteLives: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
   favoriteLive: vi.fn(),
+  favoriteLivesBatch: vi.fn(),
   unfavoriteLive: vi.fn(),
   ApiError: class ApiError extends Error {
     status: number;
@@ -63,6 +65,7 @@ const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
 const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
 const favoriteLiveMock = vi.mocked(favoriteLive);
+const favoriteLivesBatchMock = vi.mocked(favoriteLivesBatch);
 const unfavoriteLiveMock = vi.mocked(unfavoriteLive);
 
 function makeItems(count: number, startId = 1, withUrl = true) {
@@ -175,6 +178,7 @@ describe("App optimistic favorite sync", () => {
     peekMyFavoriteLivesMock.mockReset();
     clearMyFavoriteLivesCacheMock.mockReset();
     favoriteLiveMock.mockReset();
+    favoriteLivesBatchMock.mockReset();
     unfavoriteLiveMock.mockReset();
 
     getAuthMeMock.mockResolvedValue({
@@ -194,6 +198,13 @@ describe("App optimistic favorite sync", () => {
     );
     peekMyFavoriteLivesMock.mockReturnValue(undefined);
     favoriteLiveMock.mockResolvedValue();
+    favoriteLivesBatchMock.mockResolvedValue({
+      action: "favorite",
+      requested_count: 0,
+      applied_live_ids: [],
+      noop_live_ids: [],
+      not_found_live_ids: [],
+    });
     unfavoriteLiveMock.mockResolvedValue();
     getLiveDetailMock.mockImplementation(async (liveId: number) =>
       makeDetailResponse({ liveId, rowCount: 20 }),

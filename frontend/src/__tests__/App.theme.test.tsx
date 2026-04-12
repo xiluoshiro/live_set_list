@@ -230,7 +230,7 @@ describe("App dark mode", () => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     });
     await user.click(screen.getByRole("button", { name: "关闭" }));
-    await user.click(screen.getByRole("button", { name: "控制台" }));
+    await user.click(screen.getByRole("button", { name: "全量" }));
 
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     expect(screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" })).toBeInTheDocument();

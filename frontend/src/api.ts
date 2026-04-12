@@ -93,6 +93,16 @@ export type LiveDetailsBatchResponse = {
   missing_live_ids: number[];
 };
 
+export type FavoriteBatchAction = "favorite" | "unfavorite";
+
+export type FavoriteBatchResponse = {
+  action: FavoriteBatchAction;
+  requested_count: number;
+  applied_live_ids: number[];
+  noop_live_ids: number[];
+  not_found_live_ids: number[];
+};
+
 type AuthErrorPayload = {
   detail?: string | { code?: string; message?: string };
 };
@@ -101,6 +111,7 @@ type RequestKind =
   | "health"
   | "lives"
   | "favorite_lives"
+  | "favorite_lives_batch"
   | "live_detail"
   | "live_details_batch"
   | "auth_me"
@@ -411,6 +422,26 @@ export async function unfavoriteLive(liveId: number, csrfToken: string): Promise
     },
   );
   return expectNoContent(response);
+}
+
+export async function favoriteLivesBatch(
+  action: FavoriteBatchAction,
+  liveIds: number[],
+  csrfToken: string,
+): Promise<FavoriteBatchResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/me/favorites/lives:batch`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify({ action, live_ids: liveIds }),
+    },
+    {
+      requestKind: "favorite_lives_batch",
+      method: "POST",
+    },
+  );
+  return expectJsonResponse<FavoriteBatchResponse>(response);
 }
 
 export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
