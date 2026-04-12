@@ -123,6 +123,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .live-id-selector label {
@@ -169,12 +170,8 @@
 }
 
 .is-short-check {
-  display: block;
-  margin: 0 auto;
-}
-
-.comment-input {
-  width: 100%;
+  display: inline-block;
+  margin: 0;
 }
 
 .band-member-trigger {
@@ -254,27 +251,87 @@
 }
 
 .song-admin-form-table {
-  min-width: 0;
+  min-width: 860px;
   table-layout: fixed;
+}
+
+.live-admin-form-table {
+  min-width: 860px;
+  table-layout: fixed;
+}
+
+.live-admin-form-table th:nth-child(1),
+.live-admin-form-table td:nth-child(1) {
+  width: 136px;
+  min-width: 136px;
+  max-width: 136px;
+}
+
+.live-admin-form-table th:nth-child(2),
+.live-admin-form-table td:nth-child(2) {
+  width: auto;
+}
+
+.live-admin-form-table th:nth-child(3),
+.live-admin-form-table td:nth-child(3) {
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
+}
+
+.live-admin-form-table th:nth-child(5),
+.live-admin-form-table td:nth-child(5),
+.live-admin-form-table th:nth-child(6),
+.live-admin-form-table td:nth-child(6),
+.live-admin-form-table th:nth-child(7),
+.live-admin-form-table td:nth-child(7) {
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
+}
+
+.live-create-tools {
+  align-items: center;
+}
+
+.live-create-query-row {
+  margin-top: 2px;
+}
+
+.venue-picker-trigger {
+  min-width: 240px;
+  width: auto;
+}
+
+.venue-query-input {
+  width: 280px;
+  border: 1px solid var(--border-normal);
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: var(--surface-input);
+  color: var(--text-main);
+}
+
+.live-admin-insert-row {
+  margin-top: 10px;
 }
 
 .song-admin-form-table th:nth-child(1),
 .song-admin-form-table td:nth-child(1) {
-  width: auto;
+  width: 50%;
 }
 
 .song-admin-form-table th:nth-child(2),
 .song-admin-form-table td:nth-child(2) {
-  width: 220px;
+  width: 35%;
   min-width: 220px;
-  max-width: 220px;
 }
 
 .song-admin-form-table th:nth-child(3),
 .song-admin-form-table td:nth-child(3) {
-  width: 76px;
-  min-width: 76px;
-  max-width: 76px;
+  width: 15%;
+  min-width: 96px;
 }
 
 .song-band-trigger {
@@ -284,8 +341,7 @@
 }
 
 .song-result-table {
-  min-width: 0;
-  margin-top: 8px;
+  min-width: 860px;
   table-layout: fixed;
 }
 
@@ -368,16 +424,9 @@
 
 .setlist-table th:nth-child(8),
 .setlist-table td:nth-child(8) {
-  width: 98px;
-  min-width: 98px;
-  max-width: 98px;
-}
-
-.setlist-table th:nth-child(9),
-.setlist-table td:nth-child(9) {
-  width: 128px;
-  min-width: 128px;
-  max-width: 128px;
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
 }
 
 .bands-floating-menu {

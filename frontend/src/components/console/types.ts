@@ -1,4 +1,4 @@
-export type ConsoleMode = "live" | "song";
+export type ConsoleMode = "live_create" | "setlist" | "song";
 
 export type Position = {
   top: number;
@@ -9,6 +9,11 @@ export type Position = {
 export type BandOption = {
   band_id: number;
   band_name: string;
+};
+
+export type VenueOption = {
+  venue_id: number;
+  venue_name: string;
 };
 
 export type LiveInsertRow = {
@@ -34,7 +39,6 @@ export type SetlistInsertRow = {
   is_short: boolean;
   band_member: string;
   other_member: string;
-  comment: string;
 };
 
 export type LiveInsertBundle = {
@@ -56,7 +60,6 @@ export type SetlistDraftRow = {
   is_short: boolean;
   band_member: Record<string, string[]>;
   other_member: OtherMemberDraft[];
-  comment: string;
 };
 
 export type DerivedSegment = {

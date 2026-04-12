@@ -1,26 +1,69 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { LiveAdminSection } from "./console/LiveAdminSection";
 import { LiveInsertTab } from "./console/LiveInsertTab";
 import { SongAdminSection } from "./console/SongAdminSection";
-import { INITIAL_SETLIST_ROWS, MOCK_BANDS, MOCK_LIVES, MOCK_SONGS } from "./console/constants";
+import {
+  INITIAL_SETLIST_ROWS,
+  LIVE_TYPE_OPTIONS,
+  MOCK_BANDS,
+  MOCK_LIVES,
+  MOCK_SONGS,
+  MOCK_VENUES,
+  TIMEZONE_OPTIONS,
+} from "./console/constants";
 import { buildOtherMemberPayload, getBandMembersTemplate, getDerivedSegments } from "./console/helpers";
-import type { ConsoleMode, LiveInsertRow, LiveInsertBundle, Position, SetlistDraftRow, SongInsertRow } from "./console/types";
+import type {
+  ConsoleMode,
+  LiveInsertBundle,
+  LiveInsertRow,
+  Position,
+  SetlistDraftRow,
+  SongInsertRow,
+} from "./console/types";
+
+type LiveInsertDraft = {
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  type: string;
+  url: string | null;
+  opening_time: string;
+  start_time: string;
+  timezone: string;
+  venue_id: number;
+};
 
 export function ConsoleInsertPanel() {
-  const [mode, setMode] = useState<ConsoleMode>("live");
-  const [lives] = useState<LiveInsertRow[]>(MOCK_LIVES);
+  const [mode, setMode] = useState<ConsoleMode>("setlist");
+  const [lives, setLives] = useState<LiveInsertRow[]>(MOCK_LIVES);
   const [songs, setSongs] = useState<SongInsertRow[]>(MOCK_SONGS);
   const [submittedBundles, setSubmittedBundles] = useState<LiveInsertBundle[]>([]);
+  const [displayedBundle, setDisplayedBundle] = useState<LiveInsertBundle | null>(null);
   const [message, setMessage] = useState<string>("当前为前端 Mock 插入，后续可接后端写入接口。");
 
   const [selectedLiveId, setSelectedLiveId] = useState<number>(MOCK_LIVES[0]?.live_id ?? 0);
 
   const [songName, setSongName] = useState("");
-  const [songBandId, setSongBandId] = useState<number>(MOCK_BANDS[0]?.band_id ?? 1);
+  const [songBandId, setSongBandId] = useState<number | null>(null);
   const [songBandOpen, setSongBandOpen] = useState(false);
   const [songBandMenuPos, setSongBandMenuPos] = useState<Position | null>(null);
   const [songCover, setSongCover] = useState(false);
   const [insertedSongs, setInsertedSongs] = useState<SongInsertRow[]>([]);
+
+  const [liveDate, setLiveDate] = useState("2026-03-30");
+  const [liveTitle, setLiveTitle] = useState("");
+  const [liveType, setLiveType] = useState(LIVE_TYPE_OPTIONS[0] ?? "其他");
+  const [liveUrl, setLiveUrl] = useState("");
+  const [openingTime, setOpeningTime] = useState("18:00");
+  const [startTime, setStartTime] = useState("19:00");
+  const [timezone, setTimezone] = useState(TIMEZONE_OPTIONS[0] ?? "+08:00");
+  const [selectedVenueId, setSelectedVenueId] = useState<number>(MOCK_VENUES[0]?.venue_id ?? 0);
+  const [venueQueryText, setVenueQueryText] = useState("");
+  const [venueOpen, setVenueOpen] = useState(false);
+  const [venueMenuPos, setVenueMenuPos] = useState<Position | null>(null);
+  const [insertedLives, setInsertedLives] = useState<LiveInsertDraft[]>([]);
+  const [setlistDetailOpen, setSetlistDetailOpen] = useState(false);
 
   const [setlistRows, setSetlistRows] = useState<SetlistDraftRow[]>(INITIAL_SETLIST_ROWS);
   const [setlistRowKey, setSetlistRowKey] = useState(1000);
@@ -34,6 +77,8 @@ export function ConsoleInsertPanel() {
 
   const songBandTriggerRef = useRef<HTMLButtonElement | null>(null);
   const songBandMenuRef = useRef<HTMLDivElement | null>(null);
+  const venueTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const venueMenuRef = useRef<HTMLDivElement | null>(null);
   const bandMemberTriggerRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const bandMemberMenuRef = useRef<HTMLDivElement | null>(null);
   const otherMemberTriggerRefs = useRef<Record<number, HTMLButtonElement | null>>({});
@@ -43,9 +88,33 @@ export function ConsoleInsertPanel() {
     () => songs.reduce((maxId, row) => Math.max(maxId, row.song_id), 200) + 1,
     [songs],
   );
+  const nextLiveId = useMemo(
+    () => lives.reduce((maxId, row) => Math.max(maxId, row.live_id), 100) + 1,
+    [lives],
+  );
 
   const derivedSegments = useMemo(() => getDerivedSegments(setlistRows), [setlistRows]);
-  const latestBundle = submittedBundles[0] ?? null;
+  // 校验规则 1：查询 venue 行若当前查询输入为空，禁用该行“插入”。
+  const isVenueQuickInsertDisabled = venueQueryText.trim() === "";
+  // 校验规则 2：新增 Live 的“提交插入”要求 venue 已选，且表格字段（含 url）全部非空。
+  const isLiveSubmitDisabled =
+    selectedVenueId <= 0 ||
+    liveDate.trim() === "" ||
+    liveTitle.trim() === "" ||
+    liveType.trim() === "" ||
+    liveUrl.trim() === "" ||
+    openingTime.trim() === "" ||
+    startTime.trim() === "" ||
+    timezone.trim() === "";
+  // 校验规则 3：新增 Setlist 的“提交插入”要求每一行 song_name/sid/band_member 均非空。
+  const isSetlistSubmitDisabled =
+    setlistRows.length === 0 ||
+    setlistRows.some((row) => {
+      const hasBandMember = Object.values(row.band_member).some((members) => members.length > 0);
+      return row.song_name.trim() === "" || row.song_id.trim() === "" || !hasBandMember;
+    });
+  // 校验规则 4：新增歌曲的“提交插入”要求 song_name 与 band_id 均非空。
+  const isSongSubmitDisabled = songName.trim() === "" || songBandId === null;
 
   useEffect(() => {
     if (!songBandOpen) return;
@@ -65,6 +134,25 @@ export function ConsoleInsertPanel() {
       window.removeEventListener("scroll", close, true);
     };
   }, [songBandOpen]);
+
+  useEffect(() => {
+    if (!venueOpen) return;
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (venueTriggerRef.current?.contains(target)) return;
+      if (venueMenuRef.current?.contains(target)) return;
+      setVenueOpen(false);
+    };
+    const close = () => setVenueOpen(false);
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [venueOpen]);
 
   useEffect(() => {
     if (editingBandRowKey === null) return;
@@ -128,7 +216,6 @@ export function ConsoleInsertPanel() {
         is_short: false,
         band_member: {},
         other_member: [{ entry_id: newRowKey, member_key: "", member_value: "" }],
-        comment: "",
       },
     ]);
   };
@@ -196,6 +283,18 @@ export function ConsoleInsertPanel() {
       width: menuWidth,
     });
     setSongBandOpen(true);
+  };
+
+  const openVenueMenu = () => {
+    const rect = venueTriggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const menuWidth = Math.max(rect.width, 320);
+    setVenueMenuPos({
+      top: rect.bottom + 6,
+      left: Math.min(rect.left, window.innerWidth - menuWidth - 12),
+      width: menuWidth,
+    });
+    setVenueOpen(true);
   };
 
   const openBandMemberMenu = (rowKey: number) => {
@@ -311,7 +410,18 @@ export function ConsoleInsertPanel() {
     );
   };
 
-  const submitLiveWithSetlist = () => {
+  const showCurrentSetlistDetail = () => {
+    const target = submittedBundles.find((bundle) => bundle.live.live_id === selectedLiveId) ?? null;
+    setDisplayedBundle(target);
+    if (!target) {
+      setMessage(`Live #${selectedLiveId} 暂无可展示的 setlist 详细信息(mock)。`);
+      return;
+    }
+    setSetlistDetailOpen(true);
+    setMessage(`Live #${selectedLiveId} 可查看详细信息(mock)。`);
+  };
+
+  const submitSetlist = () => {
     const targetLive = lives.find((live) => live.live_id === selectedLiveId);
     if (!targetLive) {
       setMessage("提交setlist失败：未选择有效的 live_id。");
@@ -342,18 +452,60 @@ export function ConsoleInsertPanel() {
         is_short: row.is_short,
         band_member: JSON.stringify(row.band_member),
         other_member: buildOtherMemberPayload(row.other_member),
-        comment: row.comment.trim().slice(0, 40),
       };
     });
 
-    setSubmittedBundles((prev) => [{ live: targetLive, setlist_rows: setlistPayload }, ...prev]);
+    const newBundle = { live: targetLive, setlist_rows: setlistPayload };
+    setSubmittedBundles((prev) => [newBundle, ...prev]);
+    setDisplayedBundle(newBundle);
     setMessage(`已为Live #${targetLive.live_id} 插入 ${setlistPayload.length} 条 setlist(mock)`);
+  };
+
+  const queryVid = () => {
+    setMessage(`查询完成：关键词“${venueQueryText.trim() || "-"}” (mock)。`);
+  };
+
+  const insertLive = () => {
+    if (liveDate.trim() === "" || liveTitle.trim() === "") {
+      setMessage("新增Live失败：live_date 与 live_title 为必填项。");
+      return;
+    }
+    if (selectedVenueId <= 0) {
+      setMessage("新增Live失败：请先选择 venue。");
+      return;
+    }
+
+    const liveId = nextLiveId;
+    const inserted: LiveInsertDraft = {
+      live_id: liveId,
+      live_date: liveDate,
+      live_title: liveTitle.trim(),
+      type: liveType,
+      url: liveUrl.trim() || null,
+      opening_time: openingTime,
+      start_time: startTime,
+      timezone,
+      venue_id: selectedVenueId,
+    };
+
+    setInsertedLives((prev) => [inserted, ...prev]);
+    setLives((prev) => [{ live_id: inserted.live_id, live_date: inserted.live_date, live_title: inserted.live_title, bands: [], url: inserted.url }, ...prev]);
+    setSelectedLiveId(inserted.live_id);
+    setMessage(`已新增Live #${inserted.live_id}（${inserted.live_title}）`);
+  };
+
+  const submitInsertLive = () => {
+    insertLive();
   };
 
   const submitSong = () => {
     const name = songName.trim();
     if (name === "") {
       setMessage("新增歌曲失败：song_name 不能为空。");
+      return;
+    }
+    if (songBandId === null) {
+      setMessage("新增歌曲失败：请先选择 band_id。");
       return;
     }
     const row: SongInsertRow = { song_id: nextSongId, song_name: name, band_id: songBandId, cover: songCover };
@@ -392,6 +544,7 @@ export function ConsoleInsertPanel() {
         setSongBandOpen(false);
       }}
       onSubmitSong={submitSong}
+      submitDisabled={isSongSubmitDisabled}
     />
   );
 
@@ -404,11 +557,20 @@ export function ConsoleInsertPanel() {
         <button
           type="button"
           role="tab"
-          aria-selected={mode === "live"}
-          className={`console-mode-btn ${mode === "live" ? "active" : ""}`}
-          onClick={() => setMode("live")}
+          aria-selected={mode === "live_create"}
+          className={`console-mode-btn ${mode === "live_create" ? "active" : ""}`}
+          onClick={() => setMode("live_create")}
         >
           新增Live
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "setlist"}
+          className={`console-mode-btn ${mode === "setlist" ? "active" : ""}`}
+          onClick={() => setMode("setlist")}
+        >
+          新增Setlist
         </button>
         <button
           type="button"
@@ -421,7 +583,47 @@ export function ConsoleInsertPanel() {
         </button>
       </div>
 
-      {mode === "live" && (
+      {mode === "live_create" && (
+        <LiveAdminSection
+          liveDate={liveDate}
+          liveTitle={liveTitle}
+          liveType={liveType}
+          liveUrl={liveUrl}
+          openingTime={openingTime}
+          startTime={startTime}
+          timezone={timezone}
+          selectedVenueId={selectedVenueId}
+          venueQueryText={venueQueryText}
+          venues={MOCK_VENUES}
+          timezoneOptions={TIMEZONE_OPTIONS}
+          liveTypeOptions={LIVE_TYPE_OPTIONS}
+          venueOpen={venueOpen}
+          venueMenuPos={venueMenuPos}
+          venueTriggerRef={venueTriggerRef}
+          venueMenuRef={venueMenuRef}
+          insertedLives={insertedLives}
+          onLiveDateChange={setLiveDate}
+          onLiveTitleChange={setLiveTitle}
+          onLiveTypeChange={setLiveType}
+          onLiveUrlChange={setLiveUrl}
+          onOpeningTimeChange={setOpeningTime}
+          onStartTimeChange={setStartTime}
+          onTimezoneChange={setTimezone}
+          onVenueQueryTextChange={setVenueQueryText}
+          onOpenVenueMenu={openVenueMenu}
+          onSelectVenue={(venueId) => {
+            setSelectedVenueId(venueId);
+            setVenueOpen(false);
+          }}
+          onQueryVid={queryVid}
+          onInsertLive={insertLive}
+          onSubmitInsertLive={submitInsertLive}
+          queryInsertDisabled={isVenueQuickInsertDisabled}
+          submitInsertDisabled={isLiveSubmitDisabled}
+        />
+      )}
+
+      {mode === "setlist" && (
         <LiveInsertTab
           lives={lives}
           selectedLiveId={selectedLiveId}
@@ -429,7 +631,7 @@ export function ConsoleInsertPanel() {
           setlistRows={setlistRows}
           derivedSegments={derivedSegments}
           submittedBundles={submittedBundles}
-          latestBundle={latestBundle}
+          displayedBundle={displayedBundle}
           mockBands={MOCK_BANDS}
           editingBandRow={editingBandRow}
           editingOtherRow={editingOtherRow}
@@ -447,11 +649,12 @@ export function ConsoleInsertPanel() {
           onToggleSetlistShort={(rowKey, checked) => updateSetlistRow(rowKey, "is_short", checked)}
           onOpenBandMemberMenu={openBandMemberMenu}
           onOpenOtherMemberMenu={openOtherMemberMenu}
-          onUpdateSetlistComment={(rowKey, value) => updateSetlistRow(rowKey, "comment", value)}
+          onShowCurrentSetlist={showCurrentSetlistDetail}
           onAddSetlistRow={addSetlistRow}
           onRemoveLastSetlistRow={removeLastSetlistRow}
           onQuerySongsForSetlist={querySongsForSetlist}
-          onSubmitLiveWithSetlist={submitLiveWithSetlist}
+          onSubmitLiveWithSetlist={submitSetlist}
+          submitDisabled={isSetlistSubmitDisabled}
           onToggleBandForSetlistRow={toggleBandForSetlistRow}
           onToggleBandMemberForSetlistRow={toggleBandMemberForSetlistRow}
           onUpdateOtherMemberEntry={updateOtherMemberEntry}
@@ -462,8 +665,33 @@ export function ConsoleInsertPanel() {
       )}
 
       {mode === "song" && (
-        <div className="console-table-wrap">
-          {renderSongAdminSection()}
+        renderSongAdminSection()
+      )}
+
+      {setlistDetailOpen && (
+        <div className="modal-mask" onClick={() => setSetlistDetailOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>Setlist 详细信息</h2>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="modal-action-btn close"
+                  aria-label="关闭"
+                  onClick={() => setSetlistDetailOpen(false)}
+                >
+                  <span className="modal-action-glyph close">✕</span>
+                </button>
+              </div>
+            </div>
+            <p className="detail-row">
+              <strong>live_id：</strong>
+              <span>{selectedLiveId}</span>
+            </p>
+            <div className="detail-table-wrap">
+              <p className="empty-cell">TODO: 复用主界面详细信息内容结构（当前内部留空）。</p>
+            </div>
+          </div>
         </div>
       )}
     </section>

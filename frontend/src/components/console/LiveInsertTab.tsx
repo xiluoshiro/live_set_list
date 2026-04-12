@@ -11,7 +11,7 @@ type LiveInsertTabProps = {
   setlistRows: SetlistDraftRow[];
   derivedSegments: DerivedSegment[];
   submittedBundles: LiveInsertBundle[];
-  latestBundle: LiveInsertBundle | null;
+  displayedBundle: LiveInsertBundle | null;
   mockBands: BandOption[];
   editingBandRow: SetlistDraftRow | null;
   editingOtherRow: SetlistDraftRow | null;
@@ -29,11 +29,12 @@ type LiveInsertTabProps = {
   onToggleSetlistShort: (rowKey: number, checked: boolean) => void;
   onOpenBandMemberMenu: (rowKey: number) => void;
   onOpenOtherMemberMenu: (rowKey: number) => void;
-  onUpdateSetlistComment: (rowKey: number, value: string) => void;
+  onShowCurrentSetlist: () => void;
   onAddSetlistRow: () => void;
   onRemoveLastSetlistRow: () => void;
   onQuerySongsForSetlist: () => void;
   onSubmitLiveWithSetlist: () => void;
+  submitDisabled: boolean;
   onToggleBandForSetlistRow: (rowKey: number, bandName: string) => void;
   onToggleBandMemberForSetlistRow: (rowKey: number, bandName: string, memberName: string) => void;
   onUpdateOtherMemberEntry: (
@@ -54,7 +55,7 @@ export function LiveInsertTab({
   setlistRows,
   derivedSegments,
   submittedBundles,
-  latestBundle,
+  displayedBundle,
   mockBands,
   editingBandRow,
   editingOtherRow,
@@ -72,11 +73,12 @@ export function LiveInsertTab({
   onToggleSetlistShort,
   onOpenBandMemberMenu,
   onOpenOtherMemberMenu,
-  onUpdateSetlistComment,
+  onShowCurrentSetlist,
   onAddSetlistRow,
   onRemoveLastSetlistRow,
   onQuerySongsForSetlist,
   onSubmitLiveWithSetlist,
+  submitDisabled,
   onToggleBandForSetlistRow,
   onToggleBandMemberForSetlistRow,
   onUpdateOtherMemberEntry,
@@ -99,6 +101,9 @@ export function LiveInsertTab({
             </option>
           ))}
         </select>
+        <button type="button" className="console-ghost-btn" onClick={onShowCurrentSetlist}>
+          显示详细信息
+        </button>
       </div>
 
       <div className="console-table-wrap setlist-input-wrap">
@@ -113,7 +118,6 @@ export function LiveInsertTab({
               <th>short</th>
               <th>band_member</th>
               <th>other_member</th>
-              <th>comment</th>
             </tr>
           </thead>
           <tbody>
@@ -194,15 +198,6 @@ export function LiveInsertTab({
                     {summarizeOtherMember(row)}
                   </button>
                 </td>
-                <td>
-                  <input
-                    className="comment-input"
-                    value={row.comment}
-                    onChange={(e) => onUpdateSetlistComment(row.row_key, e.target.value)}
-                    maxLength={40}
-                    placeholder="可选"
-                  />
-                </td>
               </tr>
             ))}
           </tbody>
@@ -218,7 +213,7 @@ export function LiveInsertTab({
         <button type="button" onClick={onQuerySongsForSetlist} className="console-ghost-btn">
           查询歌曲
         </button>
-        <button type="button" onClick={onSubmitLiveWithSetlist} className="console-submit-btn">
+        <button type="button" onClick={onSubmitLiveWithSetlist} className="console-submit-btn" disabled={submitDisabled}>
           提交插入
         </button>
       </div>
@@ -256,7 +251,7 @@ export function LiveInsertTab({
         </table>
       </div>
 
-      {latestBundle && (
+      {displayedBundle && (
         <div className="console-table-wrap setlist-preview-wrap">
           <table className="console-admin-table setlist-table">
             <thead>
@@ -268,12 +263,11 @@ export function LiveInsertTab({
                 <th>is_short</th>
                 <th>band_member</th>
                 <th>other_member</th>
-                <th>comment</th>
               </tr>
             </thead>
             <tbody>
-              {latestBundle.setlist_rows.map((row) => (
-                <tr key={`${latestBundle.live.live_id}-${row.absolute_order}`}>
+              {displayedBundle.setlist_rows.map((row) => (
+                <tr key={`${displayedBundle.live.live_id}-${row.absolute_order}`}>
                   <td>{row.song_id}</td>
                   <td>{row.absolute_order}</td>
                   <td>{row.segment_type}</td>
@@ -281,7 +275,6 @@ export function LiveInsertTab({
                   <td>{row.is_short ? "true" : "false"}</td>
                   <td>{row.band_member}</td>
                   <td>{row.other_member}</td>
-                  <td>{row.comment || "-"}</td>
                 </tr>
               ))}
             </tbody>
@@ -388,7 +381,7 @@ export function LiveInsertTab({
                 <span className="modal-action-glyph close">✕</span>
               </button>
             </div>
-            <div className="console-table-wrap">{renderSongAdminSection()}</div>
+            {renderSongAdminSection()}
           </div>
         </div>
       )}

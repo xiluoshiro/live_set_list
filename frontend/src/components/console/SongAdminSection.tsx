@@ -7,7 +7,7 @@ type SongAdminSectionProps = {
   nextSongId: number;
   insertedSongs: SongInsertRow[];
   songName: string;
-  songBandId: number;
+  songBandId: number | null;
   songCover: boolean;
   songBandOpen: boolean;
   songBandMenuPos: Position | null;
@@ -18,6 +18,7 @@ type SongAdminSectionProps = {
   onOpenSongBandMenu: () => void;
   onSelectSongBand: (bandId: number) => void;
   onSubmitSong: () => void;
+  submitDisabled: boolean;
 };
 
 export function SongAdminSection({
@@ -36,6 +37,7 @@ export function SongAdminSection({
   onOpenSongBandMenu,
   onSelectSongBand,
   onSubmitSong,
+  submitDisabled,
 }: SongAdminSectionProps) {
   const selectedBandText = (() => {
     const selected = mockBands.find((band) => band.band_id === songBandId);
@@ -45,46 +47,48 @@ export function SongAdminSection({
 
   return (
     <>
-      <table className="console-admin-table song-admin-form-table">
-        <thead>
-          <tr>
-            <th>song_name</th>
-            <th>band_id</th>
-            <th>cover</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <input
-                value={songName}
-                onChange={(e) => onSongNameChange(e.target.value)}
-                placeholder="请输入歌曲名"
-              />
-            </td>
-            <td>
-              <button
-                ref={songBandTriggerRef}
-                type="button"
-                className="bands-picker-trigger song-band-trigger"
-                onClick={onOpenSongBandMenu}
-                title={selectedBandText}
-              >
-                {selectedBandText}
-              </button>
-            </td>
-            <td>
-              <input
-                className="is-short-check"
-                aria-label="song-cover"
-                type="checkbox"
-                checked={songCover}
-                onChange={(e) => onSongCoverChange(e.target.checked)}
-              />
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="console-table-wrap">
+        <table className="console-admin-table song-admin-form-table">
+          <thead>
+            <tr>
+              <th>song_name</th>
+              <th>band_id</th>
+              <th>cover</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <input
+                  value={songName}
+                  onChange={(e) => onSongNameChange(e.target.value)}
+                  placeholder="请输入歌曲名"
+                />
+              </td>
+              <td>
+                <button
+                  ref={songBandTriggerRef}
+                  type="button"
+                  className="bands-picker-trigger song-band-trigger"
+                  onClick={onOpenSongBandMenu}
+                  title={selectedBandText}
+                >
+                  {selectedBandText}
+                </button>
+              </td>
+              <td>
+                <input
+                  className="is-short-check"
+                  aria-label="song-cover"
+                  type="checkbox"
+                  checked={songCover}
+                  onChange={(e) => onSongCoverChange(e.target.checked)}
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       {songBandOpen && songBandMenuPos && (
         <div
@@ -109,33 +113,35 @@ export function SongAdminSection({
       )}
 
       <div className="console-submit-row song-submit-row">
-        <button type="button" onClick={onSubmitSong} className="console-submit-btn">
+        <button type="button" onClick={onSubmitSong} className="console-submit-btn" disabled={submitDisabled}>
           提交插入
         </button>
       </div>
 
-      <table className="console-admin-table song-result-table">
-        <thead>
-          <tr>
-            <th>song_id</th>
-            <th>song_name</th>
-          </tr>
-        </thead>
-        <tbody>
-          {insertedSongs.length === 0 ? (
+      <div className="console-table-wrap live-history-wrap">
+        <table className="console-admin-table song-result-table live-history-table">
+          <thead>
             <tr>
-              <td colSpan={2} className="empty-cell">暂无新增歌曲记录</td>
+              <th>song_id</th>
+              <th>song_name</th>
             </tr>
-          ) : (
-            insertedSongs.map((row) => (
-              <tr key={row.song_id}>
-                <td>{row.song_id}</td>
-                <td>{row.song_name}</td>
+          </thead>
+          <tbody>
+            {insertedSongs.length === 0 ? (
+              <tr>
+                <td colSpan={2} className="empty-cell">暂无新增歌曲记录</td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : (
+              insertedSongs.map((row) => (
+                <tr key={row.song_id}>
+                  <td>{row.song_id}</td>
+                  <td>{row.song_name}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
