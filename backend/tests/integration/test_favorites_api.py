@@ -316,6 +316,40 @@ def test_favorite_batch_endpoint_requires_auth_and_csrf(
     assert missing_csrf_post.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
 
 
+# 测试点：batch 接口也应拒绝 stale/invalid CSRF，仅放行最新有效 token。
+def test_favorite_batch_endpoint_rejects_invalid_or_stale_csrf_token(
+    integration_test_client,
+):
+    login_csrf_token = _login_and_get_csrf(integration_test_client)
+    me_response = integration_test_client.get("/api/auth/me")
+    refreshed_csrf_token = me_response.json()["csrf_token"]
+
+    stale_post_response = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": login_csrf_token},
+        json={"action": "favorite", "live_ids": [1]},
+    )
+    invalid_post_response = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": "invalid-csrf-token"},
+        json={"action": "favorite", "live_ids": [1]},
+    )
+    valid_post_response = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": refreshed_csrf_token},
+        json={"action": "favorite", "live_ids": [1]},
+    )
+
+    assert me_response.status_code == 200
+    assert refreshed_csrf_token != login_csrf_token
+
+    assert stale_post_response.status_code == 403
+    assert stale_post_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+    assert invalid_post_response.status_code == 403
+    assert invalid_post_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+    assert valid_post_response.status_code == 200
+
+
 # 测试点：批量收藏应返回 applied/noop/not_found 分组，并保持幂等与去重语义。
 def test_favorite_batch_endpoint_returns_partitioned_results_and_is_idempotent(
     integration_test_client,
@@ -387,6 +421,126 @@ def test_favorite_batch_endpoint_rejects_more_than_100_ids(
     )
 
     assert response.status_code == 422
+
+
+# 测试点：batch 请求体字段非法时应由参数校验直接拒绝。
+def test_favorite_batch_endpoint_rejects_invalid_payload(
+    integration_test_client,
+):
+    csrf_token = _login_and_get_csrf(integration_test_client)
+
+    invalid_action_response = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"action": "remove", "live_ids": [1]},
+    )
+    invalid_live_ids_response = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"action": "favorite", "live_ids": [0, -1]},
+    )
+
+    assert invalid_action_response.status_code == 422
+    assert invalid_live_ids_response.status_code == 422
+
+
+# 测试点：batch 收藏在不同用户之间必须完全隔离，不能互相污染收藏结果。
+def test_favorite_batch_endpoint_isolates_state_between_users(
+    integration_test_client,
+    integration_admin_connection,
+):
+    _create_user(
+        integration_admin_connection,
+        username="viewer_batch_a",
+        password="test-viewer-batch-a-pass",
+        display_name="Viewer Batch A",
+    )
+    _create_user(
+        integration_admin_connection,
+        username="viewer_batch_b",
+        password="test-viewer-batch-b-pass",
+        display_name="Viewer Batch B",
+    )
+
+    csrf_token_a = _login_and_get_csrf_for(
+        integration_test_client,
+        username="viewer_batch_a",
+        password="test-viewer-batch-a-pass",
+    )
+    add_response_a = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": csrf_token_a},
+        json={"action": "favorite", "live_ids": [1, 2]},
+    )
+    favorites_response_a = integration_test_client.get(
+        "/api/me/favorites/lives",
+        params={"page": 1, "page_size": 20},
+    )
+    _logout(integration_test_client, csrf_token_a)
+
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username="viewer_batch_b",
+        password="test-viewer-batch-b-pass",
+    )
+    favorites_response_b = integration_test_client.get(
+        "/api/me/favorites/lives",
+        params={"page": 1, "page_size": 20},
+    )
+    lives_response_b = integration_test_client.get("/api/lives", params={"page": 1, "page_size": 20})
+
+    assert add_response_a.status_code == 200
+    assert add_response_a.json()["applied_live_ids"] == [1, 2]
+    assert [item["live_id"] for item in favorites_response_a.json()["items"]] == [2, 1]
+    assert favorites_response_b.status_code == 200
+    assert favorites_response_b.json()["items"] == []
+    lives_by_id_b = {item["live_id"]: item for item in lives_response_b.json()["items"]}
+    assert lives_by_id_b[1]["is_favorite"] is False
+    assert lives_by_id_b[2]["is_favorite"] is False
+
+
+# 测试点：batch 响应应基于去重后输入顺序返回分组结果，并正确反映 requested_count。
+def test_favorite_batch_endpoint_preserves_deduped_order_in_result_groups(
+    integration_test_client,
+):
+    csrf_token = _login_and_get_csrf(integration_test_client)
+
+    response = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"action": "favorite", "live_ids": [2, 1, 2, 999, 1]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "action": "favorite",
+        "requested_count": 3,
+        "applied_live_ids": [2, 1],
+        "noop_live_ids": [],
+        "not_found_live_ids": [999],
+    }
+
+
+# 测试点：当输入全部不存在时，batch 应仅返回 not_found，不应产生 applied/noop。
+def test_favorite_batch_endpoint_all_not_found_returns_not_found_only(
+    integration_test_client,
+):
+    csrf_token = _login_and_get_csrf(integration_test_client)
+
+    response = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"action": "unfavorite", "live_ids": [999, 1000, 999]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "action": "unfavorite",
+        "requested_count": 2,
+        "applied_live_ids": [],
+        "noop_live_ids": [],
+        "not_found_live_ids": [999, 1000],
+    }
 
 
 # 测试点：批量收藏写操作应写入汇总审计，便于后续追踪批量行为规模与结果分布。

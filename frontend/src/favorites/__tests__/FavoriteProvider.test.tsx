@@ -88,6 +88,7 @@ function Probe() {
     <section>
       <p data-testid="favorite-ids">{favorites.favoriteLiveIds.join(",")}</p>
       <p data-testid="sync-1">{String(favorites.isFavoriteSyncing(1))}</p>
+      <p data-testid="sync-3">{String(favorites.isFavoriteSyncing(3))}</p>
       <p data-testid="favorite-1">{String(favorites.favoriteLiveIdSet.has(1))}</p>
       <p data-testid="favorite-3">{String(favorites.favoriteLiveIdSet.has(3))}</p>
       <p data-testid="warning">{favorites.favoriteSyncWarning ?? ""}</p>
@@ -294,5 +295,100 @@ describe("FavoriteProvider", () => {
     await waitFor(() => expect(screen.getByTestId("favorite-ids")).toHaveTextContent("5"));
     expect(screen.getByTestId("sync-1")).toHaveTextContent("false");
     expect(screen.getByTestId("warning")).toHaveTextContent("");
+  });
+
+  test("setFavoritesBatch 成功后仅调用 batch 接口，并按回包收敛收藏状态", async () => {
+    // 测试点：批量收藏成功后不应回退成逐条调用，且 applied/noop 会同步到服务端真值。
+    favoriteLivesBatchMock.mockResolvedValueOnce({
+      action: "favorite",
+      requested_count: 2,
+      applied_live_ids: [3],
+      noop_live_ids: [2],
+      not_found_live_ids: [],
+    });
+    renderProvider();
+
+    await act(async () => {
+      await readFavorites().setFavoritesBatch([2, 3, 3, -1], true);
+    });
+
+    expect(favoriteLivesBatchMock).toHaveBeenCalledWith("favorite", [2, 3], "csrf-token");
+    expect(favoriteLiveMock).toHaveBeenCalledTimes(0);
+    expect(unfavoriteLiveMock).toHaveBeenCalledTimes(0);
+    expect(screen.getByTestId("favorite-3")).toHaveTextContent("true");
+    expect(screen.getByTestId("warning")).toHaveTextContent("");
+  });
+
+  test("setFavoritesBatch 部分 not_found 时会清理 in-flight 与乐观意图", async () => {
+    // 测试点：not_found 结果也要完成本地收口，避免条目长期停留在同步中或乐观脏态。
+    const pending = deferred<{
+      action: "favorite";
+      requested_count: number;
+      applied_live_ids: number[];
+      noop_live_ids: number[];
+      not_found_live_ids: number[];
+    }>();
+    favoriteLivesBatchMock.mockImplementationOnce(() => pending.promise);
+    renderProvider();
+
+    let task: Promise<void> | null = null;
+    await act(async () => {
+      task = readFavorites().setFavoritesBatch([3], true);
+    });
+    await waitFor(() => expect(screen.getByTestId("sync-3")).toHaveTextContent("true"));
+    await waitFor(() => expect(screen.getByTestId("favorite-3")).toHaveTextContent("true"));
+
+    pending.resolve({
+      action: "favorite",
+      requested_count: 1,
+      applied_live_ids: [],
+      noop_live_ids: [],
+      not_found_live_ids: [3],
+    });
+    if (!task) {
+      throw new Error("setFavoritesBatch task 未初始化");
+    }
+    await act(async () => {
+      await task;
+    });
+
+    expect(screen.getByTestId("sync-3")).toHaveTextContent("false");
+    expect(screen.getByTestId("favorite-3")).toHaveTextContent("false");
+  });
+
+  test("setFavoritesBatch 连续失败三次后提示 warning，后续成功会清空提示", async () => {
+    // 测试点：批量接口同样遵循弱一致失败阈值策略，第三次失败提示、成功后清零。
+    favoriteLivesBatchMock
+      .mockRejectedValueOnce(new Error("Request timeout"))
+      .mockRejectedValueOnce(new Error("Request timeout"))
+      .mockRejectedValueOnce(new Error("Request timeout"))
+      .mockResolvedValueOnce({
+        action: "favorite",
+        requested_count: 1,
+        applied_live_ids: [3],
+        noop_live_ids: [],
+        not_found_live_ids: [],
+      });
+    renderProvider();
+
+    await act(async () => {
+      await readFavorites().setFavoritesBatch([3], true);
+    });
+    expect(screen.getByTestId("warning")).toHaveTextContent("");
+
+    await act(async () => {
+      await readFavorites().setFavoritesBatch([3], true);
+    });
+    expect(screen.getByTestId("warning")).toHaveTextContent("");
+
+    await act(async () => {
+      await readFavorites().setFavoritesBatch([3], true);
+    });
+    await waitFor(() => expect(screen.getByTestId("warning")).toHaveTextContent(FAVORITE_SYNC_WARNING_MESSAGE));
+
+    await act(async () => {
+      await readFavorites().setFavoritesBatch([3], true);
+    });
+    await waitFor(() => expect(screen.getByTestId("warning")).toHaveTextContent(""));
   });
 });
