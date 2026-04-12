@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+﻿import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -222,7 +222,7 @@ describe("App dark mode", () => {
     renderWithTheme();
 
     await waitFor(() => expect(document.documentElement.getAttribute("data-theme")).toBe("dark"));
-    await user.click(screen.getByRole("button", { name: "全量" }));
+    await user.click(screen.getByRole("button", { name: "全部内容" }));
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
 
     await waitFor(() => {
@@ -230,10 +230,11 @@ describe("App dark mode", () => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     });
     await user.click(screen.getByRole("button", { name: "关闭" }));
-    await user.click(screen.getByRole("button", { name: "全量" }));
+    await user.click(screen.getByRole("button", { name: "全部内容" }));
 
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     expect(screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" })).toBeInTheDocument();
   });
 });
+
 

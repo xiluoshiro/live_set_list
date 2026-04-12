@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+﻿import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -285,11 +285,11 @@ describe("App optimistic favorite sync", () => {
     await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
     expect(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "取消收藏" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "收藏" }));
+    await user.click(screen.getByRole("button", { name: "我的收藏" }));
     await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
     await waitFor(() => expect(getAuthMeMock).toHaveBeenCalledTimes(2));
 
-    await user.click(screen.getByRole("button", { name: "全量" }));
+    await user.click(screen.getByRole("button", { name: "全部内容" }));
     expect(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" })).toBeInTheDocument();
   });
 
@@ -359,12 +359,13 @@ describe("App optimistic favorite sync", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument());
     await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
-    await user.click(screen.getByRole("button", { name: "收藏" }));
+    await user.click(screen.getByRole("button", { name: "我的收藏" }));
 
-    await waitFor(() => expect(screen.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "全量" })).toHaveClass("active");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
     expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
   });
 });
+

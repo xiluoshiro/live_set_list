@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+﻿import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -238,9 +238,9 @@ describe("App", () => {
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     renderApp();
-    expect(screen.getByRole("button", { name: "全量" })).toHaveClass("active");
-    expect(screen.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "收藏" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
+    expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "我的收藏" })).not.toBeInTheDocument();
     return waitFor(() => expect(getTotalCount()).toBe(47));
   });
 
@@ -250,7 +250,7 @@ describe("App", () => {
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     renderApp();
-    await waitFor(() => expect(screen.getByRole("button", { name: "全量" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "全部内容" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "控制台" })).not.toBeInTheDocument();
   });
 
@@ -267,7 +267,7 @@ describe("App", () => {
     );
     renderApp({ withAuthProvider: true });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "控制台" })).not.toBeInTheDocument();
   });
 
@@ -368,10 +368,10 @@ describe("App", () => {
     );
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
-    await waitFor(() => expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "全量" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "全部内容" }));
 
-    expect(screen.getByRole("button", { name: "全量" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
     expect(screen.getByRole("columnheader", { name: /收藏/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "收藏本页" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
@@ -394,9 +394,9 @@ describe("App", () => {
 
     renderApp({ withAuthProvider: true });
 
-    await userEvent.setup().click(await screen.findByRole("button", { name: "收藏" }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: "我的收藏" }));
     await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
-    expect(screen.getByRole("button", { name: "收藏" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "我的收藏" })).toHaveClass("active");
     expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument();
   });
 
@@ -425,7 +425,7 @@ describe("App", () => {
     await user.click(screen.getAllByRole("button", { name: /^登录$/ })[1]);
 
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith("admin", "test-admin-pass"));
-    expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "用户菜单：Administrator" }));
     expect(screen.getByText("Administrator")).toBeInTheDocument();
     expect(screen.getByText("账户：admin")).toBeInTheDocument();
@@ -466,7 +466,7 @@ describe("App", () => {
     renderApp({ withAuthProvider: true });
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "收藏" }));
+    await user.click(screen.getByRole("button", { name: "我的收藏" }));
 
     expect(screen.queryByRole("button", { name: "示例 Live 名称 1" })).not.toBeInTheDocument();
     expect(screen.getByText("加载中...")).toBeInTheDocument();
@@ -496,9 +496,9 @@ describe("App", () => {
     renderApp({ withAuthProvider: true });
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "收藏" }));
+    await user.click(screen.getByRole("button", { name: "我的收藏" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "全量" }));
+    await user.click(screen.getByRole("button", { name: "全部内容" }));
 
     expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument();
     expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
@@ -544,7 +544,7 @@ describe("App", () => {
     await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
     expect(getAuthMeMock).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("button", { name: "收藏" }));
+    await user.click(screen.getByRole("button", { name: "我的收藏" }));
 
     expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument();
     expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
@@ -871,7 +871,7 @@ describe("App", () => {
     renderApp({ withAuthProvider: true });
 
     await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2, 3]));
-    await user.click(screen.getByRole("button", { name: "收藏" }));
+    await user.click(screen.getByRole("button", { name: "我的收藏" }));
     await waitFor(() => expect(getLiveDetailsBatchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
     expect(getLiveDetailsBatchMock).toHaveBeenLastCalledWith([101, 102]);
   });
@@ -1081,7 +1081,7 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
 
-    await user.click(screen.getByRole("button", { name: "全量" }));
+    await user.click(screen.getByRole("button", { name: "全部内容" }));
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
     });
@@ -1131,3 +1131,4 @@ describe("App", () => {
   });
 
 });
+

@@ -555,7 +555,7 @@ function App() {
     <main className="page">
       <section className="panel">
         <header className="panel-head">
-          <h1>Live 信息统计</h1>
+          <h1>BanG Dream! 活动信息统计</h1>
           <div className="auth-toolbar">
             {auth.isLoading ? (
               <span className="auth-status">登录态检查中...</span>
@@ -615,14 +615,14 @@ function App() {
               className={`tab-btn ${tab === "favorites" ? "active" : ""}`}
               onClick={() => handleTabChange("favorites")}
             >
-              收藏
+              我的收藏
             </button>
           )}
           <button
             className={`tab-btn ${tab === "all" ? "active" : ""}`}
             onClick={() => handleTabChange("all")}
           >
-            全量
+            全部内容
           </button>
           {canUseConsoleFeatures && (
             <button

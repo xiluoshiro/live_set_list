@@ -1,8 +1,8 @@
 :root {
-  --bg-body-start: #eef3ff;
-  --bg-body-end: #f8fbff;
+  --bg-body-start: rgba(243, 24, 100, 0.08);
+  --bg-body-end: rgba(243, 24, 100, 0.03);
   --text-main: #172033;
-  --text-link: #0c4dc9;
+  --text-link: #f31864;
   --text-heading: #1f2d4d;
   --text-secondary: #42516d;
   --text-muted: #5e6f92;
@@ -16,12 +16,12 @@
   --surface-muted: #eef3ff;
   --surface-hover: #f3fbf7;
   --surface-head: #f9fbff;
-  --surface-table-head: #f4f7ff;
+  --surface-table-head: rgba(243, 24, 100, 0.06);
   --surface-table-hover: #f9fbff;
   --surface-input: #ffffff;
   --surface-chip: #eef2fb;
-  --surface-chip-soft: #f7f9ff;
-  --surface-chip-hover: #e9efff;
+  --surface-chip-soft: rgba(243, 24, 100, 0.08);
+  --surface-chip-hover: rgba(243, 24, 100, 0.16);
   --surface-overlay: #ffffff;
   --surface-success-head: #eef6f2;
   --surface-success-row-hover: #f3fbf7;
@@ -33,7 +33,7 @@
   --border-table-head: #e4eaf8;
   --border-table-row: #eef2fb;
 
-  --accent-primary: #0f62fe;
+  --accent-primary: #f31864;
   --accent-success: #214a37;
   --accent-danger: #b23a3a;
   --accent-success-strip: #2fa55f;
@@ -66,7 +66,7 @@
   --bg-body-start: #0f1524;
   --bg-body-end: #121b2d;
   --text-main: #dce7ff;
-  --text-link: #80adff;
+  --text-link: #ff6f9f;
   --text-heading: #dce7ff;
   --text-secondary: #b6c7ea;
   --text-muted: #9fb2da;
@@ -84,8 +84,8 @@
   --surface-table-hover: #243553;
   --surface-input: #1f2b43;
   --surface-chip: #2a3b5d;
-  --surface-chip-soft: #22314d;
-  --surface-chip-hover: #2d4064;
+  --surface-chip-soft: rgba(243, 24, 100, 0.2);
+  --surface-chip-hover: rgba(243, 24, 100, 0.3);
   --surface-overlay: #182235;
   --surface-success-head: #223a34;
   --surface-success-row-hover: #254238;
@@ -97,7 +97,7 @@
   --border-table-head: #364a6f;
   --border-table-row: #2c3f61;
 
-  --accent-primary: #6ea2ff;
+  --accent-primary: #f31864;
   --accent-success: #87c7a8;
   --accent-danger: #ff8c8c;
   --accent-success-strip: #4bc27b;
