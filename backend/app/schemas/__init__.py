@@ -1,5 +1,6 @@
 ﻿from app.schemas.common import ErrorResponse, RootResponse, ValidationErrorItem, ValidationErrorResponse
 from app.schemas.health import HealthResponse
+from app.schemas.favorites import FavoriteBatchRequest, FavoriteBatchResponse
 from app.schemas.lives import (
     LiveDetailBandMember,
     LiveDetailBatchRequest,
@@ -18,6 +19,8 @@ __all__ = [
     'ValidationErrorItem',
     'ValidationErrorResponse',
     'HealthResponse',
+    'FavoriteBatchRequest',
+    'FavoriteBatchResponse',
     'LiveItem',
     'LivesPagination',
     'LivesResponse',

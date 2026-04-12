@@ -89,6 +89,33 @@ def _get_audit_action_rows(
     return [(str(row[0]), str(row[1]) if row[1] is not None else None) for row in rows]
 
 
+def _get_latest_audit_row(
+    integration_admin_connection,
+    *,
+    user_id: int,
+) -> tuple[str, str | None, dict[str, object] | None]:
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT action, resource_id, payload_json
+            FROM audit_logs
+            WHERE user_id = %s
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        row = cursor.fetchone()
+
+    assert row is not None
+    return (
+        str(row[0]),
+        str(row[1]) if row[1] is not None else None,
+        row[2] if isinstance(row[2], dict) else None,
+    )
+
+
 def _assert_insufficient_privilege(
     conn: psycopg2.extensions.connection,
     cur: psycopg2.extensions.cursor,
@@ -266,6 +293,125 @@ def test_favorite_endpoints_require_auth_and_csrf(
     assert missing_csrf_put.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
     assert missing_csrf_delete.status_code == 403
     assert missing_csrf_delete.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+
+
+# 测试点：批量收藏接口同样要求登录态与 CSRF，不能绕过认证写入收藏。
+def test_favorite_batch_endpoint_requires_auth_and_csrf(
+    integration_test_client,
+):
+    anonymous_post = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        json={"action": "favorite", "live_ids": [1, 2]},
+    )
+
+    _login_and_get_csrf(integration_test_client)
+    missing_csrf_post = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        json={"action": "favorite", "live_ids": [1, 2]},
+    )
+
+    assert anonymous_post.status_code == 401
+    assert anonymous_post.json()["detail"]["code"] == "AUTH_SESSION_EXPIRED"
+    assert missing_csrf_post.status_code == 403
+    assert missing_csrf_post.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+
+
+# 测试点：批量收藏应返回 applied/noop/not_found 分组，并保持幂等与去重语义。
+def test_favorite_batch_endpoint_returns_partitioned_results_and_is_idempotent(
+    integration_test_client,
+):
+    csrf_token = _login_and_get_csrf(integration_test_client)
+
+    first_add = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"action": "favorite", "live_ids": [1, 2, 999, 2]},
+    )
+    second_add = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"action": "favorite", "live_ids": [1, 2]},
+    )
+    remove = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"action": "unfavorite", "live_ids": [2, 999]},
+    )
+    favorite_list_response = integration_test_client.get(
+        "/api/me/favorites/lives",
+        params={"page": 1, "page_size": 20},
+    )
+
+    assert first_add.status_code == 200
+    assert first_add.json() == {
+        "action": "favorite",
+        "requested_count": 3,
+        "applied_live_ids": [1, 2],
+        "noop_live_ids": [],
+        "not_found_live_ids": [999],
+    }
+
+    assert second_add.status_code == 200
+    assert second_add.json() == {
+        "action": "favorite",
+        "requested_count": 2,
+        "applied_live_ids": [],
+        "noop_live_ids": [1, 2],
+        "not_found_live_ids": [],
+    }
+
+    assert remove.status_code == 200
+    assert remove.json() == {
+        "action": "unfavorite",
+        "requested_count": 2,
+        "applied_live_ids": [2],
+        "noop_live_ids": [],
+        "not_found_live_ids": [999],
+    }
+
+    assert favorite_list_response.status_code == 200
+    assert [item["live_id"] for item in favorite_list_response.json()["items"]] == [1]
+
+
+# 测试点：批量收藏超过上限时应由参数校验拒绝，避免异常大请求进入数据库写路径。
+def test_favorite_batch_endpoint_rejects_more_than_100_ids(
+    integration_test_client,
+):
+    csrf_token = _login_and_get_csrf(integration_test_client)
+    live_ids = list(range(1, 102))
+
+    response = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"action": "favorite", "live_ids": live_ids},
+    )
+
+    assert response.status_code == 422
+
+
+# 测试点：批量收藏写操作应写入汇总审计，便于后续追踪批量行为规模与结果分布。
+def test_favorite_batch_endpoint_writes_aggregated_audit_log(
+    integration_test_client,
+    integration_admin_connection,
+):
+    csrf_token = _login_and_get_csrf(integration_test_client)
+
+    response = integration_test_client.post(
+        "/api/me/favorites/lives:batch",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"action": "favorite", "live_ids": [1, 999]},
+    )
+
+    action, resource_id, payload = _get_latest_audit_row(integration_admin_connection, user_id=1)
+    assert response.status_code == 200
+    assert action == "favorite_batch_add"
+    assert resource_id == "2"
+    assert payload == {
+        "requested_count": 2,
+        "applied_count": 1,
+        "noop_count": 0,
+        "not_found_count": 1,
+    }
 
 
 # 测试点：收藏不存在的 live_id 时，应返回 404 而不是静默成功。
