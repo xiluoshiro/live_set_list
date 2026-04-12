@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PositiveInt
 
 
 class FavoriteBatchRequest(BaseModel):
@@ -8,7 +8,7 @@ class FavoriteBatchRequest(BaseModel):
         ...,
         description="Batch favorite action: favorite to add, unfavorite to remove",
     )
-    live_ids: list[int] = Field(
+    live_ids: list[PositiveInt] = Field(
         ...,
         min_length=1,
         max_length=100,

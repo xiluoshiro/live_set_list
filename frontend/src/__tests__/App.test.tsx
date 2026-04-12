@@ -316,6 +316,9 @@ describe("App", () => {
       Array.from({ length: 20 }, (_, idx) => idx + 1),
       "csrf-token",
     );
+    expect(favoriteLivesBatchMock).toHaveBeenCalledTimes(1);
+    expect(favoriteLiveMock).toHaveBeenCalledTimes(0);
+    expect(unfavoriteLiveMock).toHaveBeenCalledTimes(0);
   });
 
   test("全量页已全收藏时，显示取消收藏本页按钮并触发 batch 取消收藏", async () => {
@@ -347,6 +350,9 @@ describe("App", () => {
       Array.from({ length: 20 }, (_, idx) => idx + 1),
       "csrf-token",
     );
+    expect(favoriteLivesBatchMock).toHaveBeenCalledTimes(1);
+    expect(favoriteLiveMock).toHaveBeenCalledTimes(0);
+    expect(unfavoriteLiveMock).toHaveBeenCalledTimes(0);
   });
 
   test("已登录时显示收藏页签，切换到全量页后显示收藏列和星标按钮", async () => {
