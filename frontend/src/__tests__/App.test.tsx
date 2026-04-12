@@ -233,6 +233,49 @@ describe("App", () => {
     return waitFor(() => expect(getTotalCount()).toBe(47));
   });
 
+  test("未登录时不显示控制台入口", async () => {
+    // 测试点：匿名模式下控制台页签必须隐藏，避免未登录用户触发控制台逻辑。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    renderApp();
+    await waitFor(() => expect(screen.getByRole("button", { name: "全量" })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "控制台" })).not.toBeInTheDocument();
+  });
+
+  test("viewer 角色登录后不显示控制台入口", async () => {
+    // 测试点：控制台仅对 editor+ 开放；viewer 登录后也不应看到控制台页签。
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "viewer", display_name: "Viewer", role: "viewer" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: [1, 2],
+    });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    renderApp({ withAuthProvider: true });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "控制台" })).not.toBeInTheDocument();
+  });
+
+  test("admin 角色登录后显示控制台入口", async () => {
+    // 测试点：admin 属于 editor+，应显示控制台页签。
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: [1, 2],
+    });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    renderApp({ withAuthProvider: true });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "控制台" })).toBeInTheDocument());
+  });
+
   test("已登录时显示收藏页签，切换到全量页后显示收藏列和星标按钮", async () => {
     // 测试点：登录后才显示收藏入口，且全量页展示星标列。
     getAuthMeMock.mockResolvedValue({
