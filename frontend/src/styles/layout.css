@@ -103,6 +103,30 @@
   border-color: var(--accent-primary);
 }
 
+.batch-favorite-btn {
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  text-shadow: 0 0 0 var(--star-empty-shadow-main), 0 0 2px var(--star-empty-shadow-glow);
+}
+
+.batch-favorite-btn.is-fav-state {
+  color: var(--star-filled);
+  text-shadow: 0 0 1px var(--star-filled-shadow);
+}
+
+.batch-favorite-btn.is-empty-state {
+  color: var(--star-empty);
+}
+
 .pager {
   display: flex;
   justify-content: space-between;

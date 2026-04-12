@@ -214,6 +214,7 @@ function App() {
     const requestedSnapshotKey = buildListSnapshotKey(tab, page, pageSize);
     const cachedSnapshot = listSnapshotsRef.current[requestedSnapshotKey];
 
+    // 列表加载状态机：优先命中页快照/收藏缓存，再回源；切 tab 时先清空旧列表避免残影。
     const fetchLives = async () => {
       if (cachedSnapshot) {
         setItems(cachedSnapshot.items);
@@ -378,6 +379,11 @@ function App() {
   const totalPages = serverTotalPages;
   const safePage = Math.min(page, totalPages);
   const pagedRows = rows;
+  const pageLiveIds = tab === "all" ? pagedRows.map((row) => row.liveId) : [];
+  const canBatchFavorite = canUseFavoriteFeatures && tab === "all" && pageLiveIds.length > 0;
+  const pageAllFavorited =
+    canBatchFavorite && pageLiveIds.every((liveId) => favorites.favoriteLiveIdSet.has(liveId));
+  const batchFavoriteDesired = !pageAllFavorited;
 
   useEffect(() => {
     setJumpPageInput(String(safePage));
@@ -406,6 +412,7 @@ function App() {
     setPage(1);
   };
 
+  // 页签切换统一做权限闸门，防止未登录或低权限用户进入受限页。
   const handleTabChange = (nextTab: TabKey) => {
     if (nextTab === "favorites" && !canUseFavoriteFeatures) {
       setLoginError(null);
@@ -456,6 +463,32 @@ function App() {
       }
       logError("toggle_favorite_failed", {
         liveId: id,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  // 仅对“当前页 liveId 集合”做批量意图切换，具体同步与失败收敛交给 FavoriteProvider。
+  const toggleBatchFavorite = async () => {
+    if (!canBatchFavorite) {
+      return;
+    }
+    if (!auth.isAuthenticated) {
+      setLoginError(null);
+      setLoginDialogOpen(true);
+      return;
+    }
+    try {
+      await favorites.setFavoritesBatch(pageLiveIds, batchFavoriteDesired);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        auth.setAnonymous();
+        setTab("all");
+        setLoginDialogOpen(true);
+      }
+      logError("toggle_batch_favorite_failed", {
+        desired: batchFavoriteDesired,
+        count: pageLiveIds.length,
         message: error instanceof Error ? error.message : String(error),
       });
     }
@@ -620,7 +653,24 @@ function App() {
               <table className={showFavoriteColumn ? "table-with-fav" : "table-no-fav"}>
                 <thead>
                   <tr>
-                    {showFavoriteColumn && <th>收藏</th>}
+                    {showFavoriteColumn && (
+                      <th>
+                        <span className="fav-header-with-batch">
+                          <span>收藏</span>
+                          {canBatchFavorite && (
+                            <button
+                              type="button"
+                              className={`batch-favorite-btn ${pageAllFavorited ? "is-fav-state" : "is-empty-state"}`}
+                              onClick={() => void toggleBatchFavorite()}
+                              title={batchFavoriteDesired ? "收藏本页" : "取消收藏本页"}
+                              aria-label={batchFavoriteDesired ? "收藏本页" : "取消收藏本页"}
+                            >
+                              ★
+                            </button>
+                          )}
+                        </span>
+                      </th>
+                    )}
                     <th>日期</th>
                     <th>Live 名称</th>
                     <th>乐队</th>

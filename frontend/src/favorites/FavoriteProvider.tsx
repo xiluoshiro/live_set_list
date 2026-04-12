@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ApiError, favoriteLive, unfavoriteLive } from "../api";
+import { ApiError, favoriteLive, favoriteLivesBatch, unfavoriteLive } from "../api";
 import { useAuth } from "../auth/AuthProvider";
 import { logInfo } from "../logger";
 import {
@@ -26,6 +26,7 @@ type FavoritesContextValue = {
   favoriteSyncWarning: string | null;
   isFavoriteSyncing: (liveId: number) => boolean;
   toggleFavorite: (liveId: number) => Promise<void>;
+  setFavoritesBatch: (liveIds: number[], desired: boolean) => Promise<void>;
   reconcileFavorites: () => Promise<void>;
 };
 
@@ -74,6 +75,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
     ) => Promise<void>
   >(async () => undefined);
 
+  // 单条收藏同步机：同一 liveId 串行发送，确保“最后一次点击意图”最终落库。
   flushFavoriteIntentRef.current = async (
     liveId: number,
     desiredOverride?: boolean,
@@ -228,6 +230,139 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
           await flushFavoriteIntentRef.current(liveId, nextDesired);
         }
       },
+      // 批量收藏走一次后端 batch，再把 applied/noop/not_found 三类结果统一收敛到本地状态。
+      setFavoritesBatch: async (liveIds: number[], desired: boolean) => {
+        const latestAuth = authRef.current;
+        if (!latestAuth.isAuthenticated || !latestAuth.csrfToken) {
+          throw new ApiError("登录状态已失效，请重新登录", 401, "AUTH_SESSION_EXPIRED");
+        }
+        // 仅保留正整数 liveId，并去重，避免脏输入污染批量接口语义。
+        const dedupedLiveIds = Array.from(
+          new Set(liveIds.filter((liveId) => Number.isInteger(liveId) && liveId > 0)),
+        );
+        if (dedupedLiveIds.length === 0) {
+          return;
+        }
+
+        logInfo("favorite_batch_click", { desired, count: dedupedLiveIds.length });
+        hasPendingFavoriteChangesRef.current = true;
+
+        // 先统一打乐观状态与 inFlight，保证 UI 在请求期间即时反映批量目标态。
+        setState((prev) => {
+          const nextFavoriteSyncById = { ...prev.favoriteSyncById };
+          const nextOptimisticFavoriteIntents = { ...prev.optimisticFavoriteIntents };
+          dedupedLiveIds.forEach((liveId) => {
+            const prevSync = nextFavoriteSyncById[liveId];
+            nextFavoriteSyncById[liveId] = {
+              inFlight: true,
+              lastAttemptSeq: (prevSync?.lastAttemptSeq ?? 0) + 1,
+              lastErrorCode: null,
+              lastErrorAt: null,
+            };
+            nextOptimisticFavoriteIntents[liveId] = desired;
+          });
+          return {
+            ...prev,
+            optimisticFavoriteIntents: nextOptimisticFavoriteIntents,
+            favoriteSyncById: nextFavoriteSyncById,
+          };
+        });
+
+        try {
+          const payload = await favoriteLivesBatch(
+            desired ? "favorite" : "unfavorite",
+            dedupedLiveIds,
+            latestAuth.csrfToken,
+          );
+          logInfo("favorite_batch_sync_success", {
+            desired,
+            requested_count: payload.requested_count,
+            applied_count: payload.applied_live_ids.length,
+            noop_count: payload.noop_live_ids.length,
+            not_found_count: payload.not_found_live_ids.length,
+          });
+
+          const settledLiveIdSet = new Set([
+            ...payload.applied_live_ids,
+            ...payload.noop_live_ids,
+            ...payload.not_found_live_ids,
+          ]);
+          // 后端返回后按三类结果做最终收敛：
+          // applied/noop 会对齐服务端真值，not_found 只做本地同步状态收口。
+          setState((prev) => {
+            let nextServerFavoriteIds = prev.serverFavoriteIds;
+            const nextOptimisticFavoriteIntents = { ...prev.optimisticFavoriteIntents };
+            const nextFavoriteSyncById = { ...prev.favoriteSyncById };
+
+            payload.applied_live_ids.forEach((liveId) => {
+              nextServerFavoriteIds = applyFavoriteState(nextServerFavoriteIds, liveId, desired);
+            });
+            payload.noop_live_ids.forEach((liveId) => {
+              nextServerFavoriteIds = applyFavoriteState(nextServerFavoriteIds, liveId, desired);
+            });
+            settledLiveIdSet.forEach((liveId) => {
+              if (nextOptimisticFavoriteIntents[liveId] === desired) {
+                delete nextOptimisticFavoriteIntents[liveId];
+              }
+              nextFavoriteSyncById[liveId] = {
+                inFlight: false,
+                lastAttemptSeq: nextFavoriteSyncById[liveId]?.lastAttemptSeq ?? 1,
+                lastErrorCode: null,
+                lastErrorAt: null,
+              };
+            });
+
+            return {
+              ...prev,
+              serverFavoriteIds: nextServerFavoriteIds,
+              optimisticFavoriteIntents: nextOptimisticFavoriteIntents,
+              favoriteSyncById: nextFavoriteSyncById,
+              favoriteConsecutiveFailureCount: 0,
+              favoriteSyncWarning: null,
+            };
+          });
+          hasPendingFavoriteChangesRef.current = false;
+        } catch (error) {
+          const isAuthError = isAuthSessionError(error);
+          let warningShown = false;
+          // 批量失败不回滚乐观意图：允许后续重试/手动刷新再收敛，同时累计失败阈值提示。
+          setState((prev) => {
+            const nextFailureCount = prev.favoriteConsecutiveFailureCount + 1;
+            warningShown = nextFailureCount >= 3 && prev.favoriteSyncWarning !== FAVORITE_SYNC_WARNING_MESSAGE;
+            const nextFavoriteSyncById = { ...prev.favoriteSyncById };
+            dedupedLiveIds.forEach((liveId) => {
+              nextFavoriteSyncById[liveId] = {
+                inFlight: false,
+                lastAttemptSeq: nextFavoriteSyncById[liveId]?.lastAttemptSeq ?? 1,
+                lastErrorCode: error instanceof ApiError ? error.code : null,
+                lastErrorAt: Date.now(),
+              };
+            });
+
+            return {
+              ...prev,
+              favoriteSyncById: nextFavoriteSyncById,
+              favoriteConsecutiveFailureCount: nextFailureCount,
+              favoriteSyncWarning:
+                nextFailureCount >= 3 ? FAVORITE_SYNC_WARNING_MESSAGE : prev.favoriteSyncWarning,
+            };
+          });
+          logInfo("favorite_batch_sync_failed", {
+            desired,
+            count: dedupedLiveIds.length,
+            message: error instanceof Error ? error.message : String(error),
+            is_auth_error: isAuthError,
+          });
+          if (warningShown) {
+            logInfo("favorite_sync_warning_shown", { liveId: -1 });
+          }
+          hasPendingFavoriteChangesRef.current = true;
+
+          if (isAuthError) {
+            throw error;
+          }
+        }
+      },
       reconcileFavorites: async () => {
         if (!hasPendingFavoriteChangesRef.current && !stateRef.current.favoriteSyncWarning) {
           return;
@@ -248,6 +383,7 @@ const fallbackContext: FavoritesContextValue = {
   favoriteSyncWarning: null,
   isFavoriteSyncing: () => false,
   toggleFavorite: async () => undefined,
+  setFavoritesBatch: async () => undefined,
   reconcileFavorites: async () => undefined,
 };
 

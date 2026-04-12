@@ -8,6 +8,7 @@ import { FavoriteProvider } from "../favorites/FavoriteProvider";
 import {
   clearMyFavoriteLivesCache,
   favoriteLive,
+  favoriteLivesBatch,
   getLiveDetail,
   getLiveDetailsBatch,
   getAuthMe,
@@ -34,6 +35,7 @@ vi.mock("../api", () => ({
   peekMyFavoriteLives: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
   favoriteLive: vi.fn(),
+  favoriteLivesBatch: vi.fn(),
   unfavoriteLive: vi.fn(),
   ApiError: class ApiError extends Error {
     status: number;
@@ -63,6 +65,7 @@ const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
 const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
 const favoriteLiveMock = vi.mocked(favoriteLive);
+const favoriteLivesBatchMock = vi.mocked(favoriteLivesBatch);
 const unfavoriteLiveMock = vi.mocked(unfavoriteLive);
 const logErrorMock = vi.mocked(logError);
 
@@ -200,6 +203,7 @@ describe("App", () => {
     peekMyFavoriteLivesMock.mockReset();
     clearMyFavoriteLivesCacheMock.mockReset();
     favoriteLiveMock.mockReset();
+    favoriteLivesBatchMock.mockReset();
     unfavoriteLiveMock.mockReset();
     logErrorMock.mockReset();
     getAuthMeMock.mockResolvedValue({ authenticated: false });
@@ -214,6 +218,13 @@ describe("App", () => {
     );
     peekMyFavoriteLivesMock.mockReturnValue(undefined);
     favoriteLiveMock.mockResolvedValue();
+    favoriteLivesBatchMock.mockResolvedValue({
+      action: "favorite",
+      requested_count: 0,
+      applied_live_ids: [],
+      noop_live_ids: [],
+      not_found_live_ids: [],
+    });
     unfavoriteLiveMock.mockResolvedValue();
     getLiveDetailMock.mockImplementation(async (liveId: number) =>
       makeDetailResponse({ liveId, rowCount: 20 }),
@@ -276,6 +287,68 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "控制台" })).toBeInTheDocument());
   });
 
+  test("全量页存在未收藏条目时，显示收藏本页按钮并触发 batch 收藏", async () => {
+    // 测试点：混合收藏状态下，批量按钮应进入“收藏本页”动作，并只发一次 batch 请求。
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: [1, 2],
+    });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    favoriteLivesBatchMock.mockResolvedValueOnce({
+      action: "favorite",
+      requested_count: 20,
+      applied_live_ids: Array.from({ length: 18 }, (_, idx) => idx + 3),
+      noop_live_ids: [1, 2],
+      not_found_live_ids: [],
+    });
+    const user = userEvent.setup();
+    renderApp({ withAuthProvider: true });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "收藏本页" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "收藏本页" }));
+
+    expect(favoriteLivesBatchMock).toHaveBeenCalledWith(
+      "favorite",
+      Array.from({ length: 20 }, (_, idx) => idx + 1),
+      "csrf-token",
+    );
+  });
+
+  test("全量页已全收藏时，显示取消收藏本页按钮并触发 batch 取消收藏", async () => {
+    // 测试点：当当前页全部已收藏时，批量按钮切到“取消收藏本页”动作。
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: Array.from({ length: 20 }, (_, idx) => idx + 1),
+    });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    favoriteLivesBatchMock.mockResolvedValueOnce({
+      action: "unfavorite",
+      requested_count: 20,
+      applied_live_ids: Array.from({ length: 20 }, (_, idx) => idx + 1),
+      noop_live_ids: [],
+      not_found_live_ids: [],
+    });
+    const user = userEvent.setup();
+    renderApp({ withAuthProvider: true });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "取消收藏本页" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "取消收藏本页" }));
+
+    expect(favoriteLivesBatchMock).toHaveBeenCalledWith(
+      "unfavorite",
+      Array.from({ length: 20 }, (_, idx) => idx + 1),
+      "csrf-token",
+    );
+  });
+
   test("已登录时显示收藏页签，切换到全量页后显示收藏列和星标按钮", async () => {
     // 测试点：登录后才显示收藏入口，且全量页展示星标列。
     getAuthMeMock.mockResolvedValue({
@@ -293,7 +366,8 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "全量" }));
 
     expect(screen.getByRole("button", { name: "全量" })).toHaveClass("active");
-    expect(screen.getByRole("columnheader", { name: "收藏" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /收藏/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "收藏本页" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
   });
 
