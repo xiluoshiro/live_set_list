@@ -87,6 +87,13 @@ function buildListSnapshotKey(tab: Exclude<TabKey, "console">, page: number, pag
   return `${tab}:${page}:${pageSize}`;
 }
 
+const ROLE_PRIORITY: Record<string, number> = { viewer: 10, editor: 20, admin: 30 };
+
+function canAccessConsole(role: string | null | undefined): boolean {
+  const currentPriority = ROLE_PRIORITY[role ?? ""] ?? -1;
+  return currentPriority >= ROLE_PRIORITY.editor;
+}
+
 const USER_AVATAR_COLORS = ["#5b7cfa", "#00a4a6", "#f59f00", "#e8590c", "#6c5ce7", "#2b8a3e"];
 
 function getAvatarInitial(name: string | null | undefined): string {
@@ -142,6 +149,7 @@ function App() {
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const listEnabled = tab !== "console" && !auth.isLoading;
   const canUseFavoriteFeatures = auth.isAuthenticated;
+  const canUseConsoleFeatures = auth.isAuthenticated && canAccessConsole(auth.user?.role);
 
   const toLiveRow = (item: LiveItem): LiveRow => ({
     liveId: item.live_id,
@@ -159,6 +167,13 @@ function App() {
     setTab("all");
     setPage(1);
   }, [canUseFavoriteFeatures, tab]);
+
+  useEffect(() => {
+    // 双重兜底：即使通过控制台改状态把 tab 强行切到 console，角色不足也会立即回退。
+    if (tab !== "console" || canUseConsoleFeatures) return;
+    setTab("all");
+    setPage(1);
+  }, [canUseConsoleFeatures, tab]);
 
   useEffect(() => {
     if (tab !== "favorites" || !canUseFavoriteFeatures) {
@@ -356,7 +371,8 @@ function App() {
   }, [activeRow?.liveId]);
 
   const isFavorite = (id: number) => favorites.favoriteLiveIdSet.has(id);
-  const rows = tab === "console" ? [] : items;
+  const showConsolePanel = tab === "console" && canUseConsoleFeatures;
+  const rows = showConsolePanel ? [] : items;
 
   const total = serverTotal;
   const totalPages = serverTotalPages;
@@ -396,10 +412,17 @@ function App() {
       setLoginDialogOpen(true);
       return;
     }
-    if (nextTab === "console" && !auth.isAuthenticated) {
-      setLoginError(null);
-      setLoginDialogOpen(true);
-      return;
+    if (nextTab === "console") {
+      if (!auth.isAuthenticated) {
+        setLoginError(null);
+        setLoginDialogOpen(true);
+        return;
+      }
+      if (!canUseConsoleFeatures) {
+        setTab("all");
+        setPage(1);
+        return;
+      }
     }
     setTab(nextTab);
     setPage(1);
@@ -568,12 +591,14 @@ function App() {
           >
             全量
           </button>
-          <button
-            className={`tab-btn ${tab === "console" ? "active" : ""}`}
-            onClick={() => handleTabChange("console")}
-          >
-            控制台
-          </button>
+          {canUseConsoleFeatures && (
+            <button
+              className={`tab-btn ${tab === "console" ? "active" : ""}`}
+              onClick={() => handleTabChange("console")}
+            >
+              控制台
+            </button>
+          )}
           <button
             type="button"
             className="theme-icon-btn"
@@ -585,11 +610,11 @@ function App() {
           </button>
         </nav>
         {!auth.isLoading && !auth.isAuthenticated && (
-          <p className="tab-tip">登录后可使用收藏同步；未登录模式下不会显示收藏页签与星标入口。</p>
+          <p className="tab-tip">登录后可使用收藏同步；控制台仅对 editor 及以上角色可见。</p>
         )}
         {favorites.favoriteSyncWarning && <p className="favorite-sync-warning">{favorites.favoriteSyncWarning}</p>}
 
-        {tab !== "console" ? (
+        {!showConsolePanel ? (
           <>
             <div className="table-wrap">
               <table className={showFavoriteColumn ? "table-with-fav" : "table-no-fav"}>

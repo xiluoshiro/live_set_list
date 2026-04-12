@@ -31,6 +31,8 @@
 - 前端首页列表和详情接口均可匿名访问
 - 前端已接入 `AuthProvider`、`FavoriteProvider`、登录弹窗、`/api/auth/me` 启动恢复和服务端收藏切换
 - 前端未登录时已隐藏“收藏”页签与星标入口
+- 前端控制台入口已按角色可见性控制：仅 `editor+` 显示；未登录和 `viewer` 不显示
+- 前端已增加控制台页签的状态层兜底拦截，避免通过开发者工具强行切 tab 绕过页面权限
 - 控制台录入界面当前仍是前端 mock，尚未接入真实写接口
 - 后端认证骨架已落地：已新增用户表、会话表、认证路由和默认 admin 加载机制
 - 后端当前数据库连接已拆分为只读连接、普通用户写连接和高权限业务写连接
@@ -651,11 +653,12 @@ flowchart TD
 - 所有请求已统一带 `credentials: "include"`
 - 收藏页改为调用 `/api/me/favorites/lives`
 - 星标切换改为调用服务端收藏接口，不再使用 `localStorage`
+- 控制台入口改为 `editor+` 可见（当前仅 `admin` 可见），并增加前端状态层兜底拦截
 - 已完成前端测试更新，并已通过整仓 `run_checks functional`
 
 ### 阶段 D：控制台权限与写接口
 
-- [x] D1. 未登录时隐藏或拦截“控制台”页签
+- [x] D1. 控制台页签可见性与前端拦截：未登录/`viewer` 隐藏，`editor+` 可见
 - [ ] D2. 新增 `/api/admin/songs`
 - [ ] D3. 新增 `/api/admin/lives`
 - [ ] D4. 新增 `/api/admin/lives/{live_id}`
