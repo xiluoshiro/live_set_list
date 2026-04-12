@@ -10,7 +10,6 @@ import {
   MOCK_LIVES,
   MOCK_SONGS,
   MOCK_VENUES,
-  TIMEZONE_OPTIONS,
 } from "./console/constants";
 import { buildOtherMemberPayload, getBandMembersTemplate, getDerivedSegments } from "./console/helpers";
 import type {
@@ -57,7 +56,9 @@ export function ConsoleInsertPanel() {
   const [liveUrl, setLiveUrl] = useState("");
   const [openingTime, setOpeningTime] = useState("18:00");
   const [startTime, setStartTime] = useState("19:00");
-  const [timezone, setTimezone] = useState(TIMEZONE_OPTIONS[0] ?? "+08:00");
+  const [timezone, setTimezone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
+  );
   const [selectedVenueId, setSelectedVenueId] = useState<number>(MOCK_VENUES[0]?.venue_id ?? 0);
   const [venueQueryText, setVenueQueryText] = useState("");
   const [venueOpen, setVenueOpen] = useState(false);
@@ -595,7 +596,6 @@ export function ConsoleInsertPanel() {
           selectedVenueId={selectedVenueId}
           venueQueryText={venueQueryText}
           venues={MOCK_VENUES}
-          timezoneOptions={TIMEZONE_OPTIONS}
           liveTypeOptions={LIVE_TYPE_OPTIONS}
           venueOpen={venueOpen}
           venueMenuPos={venueMenuPos}

@@ -262,9 +262,9 @@
 
 .live-admin-form-table th:nth-child(1),
 .live-admin-form-table td:nth-child(1) {
-  width: 136px;
-  min-width: 136px;
-  max-width: 136px;
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
 }
 
 .live-admin-form-table th:nth-child(2),
@@ -282,12 +282,17 @@
 .live-admin-form-table th:nth-child(5),
 .live-admin-form-table td:nth-child(5),
 .live-admin-form-table th:nth-child(6),
-.live-admin-form-table td:nth-child(6),
-.live-admin-form-table th:nth-child(7),
-.live-admin-form-table td:nth-child(7) {
+.live-admin-form-table td:nth-child(6) {
   width: 112px;
   min-width: 112px;
   max-width: 112px;
+}
+
+.live-admin-form-table th:nth-child(7),
+.live-admin-form-table td:nth-child(7) {
+  width: 180px;
+  min-width: 180px;
+  max-width: 180px;
 }
 
 .live-create-tools {
@@ -311,6 +316,18 @@
   font-size: 13px;
   background: var(--surface-input);
   color: var(--text-main);
+}
+
+.console-antd-picker {
+  width: 100%;
+}
+
+.console-antd-select {
+  width: 100%;
+}
+
+.console-timezone-dropdown .ant-select-item {
+  white-space: nowrap;
 }
 
 .live-admin-insert-row {
