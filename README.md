@@ -112,6 +112,13 @@ npm run typecheck
 
 脚本化检查入口说明见 [scripts/README.md](D:/Code/PythonCode/5%20LiveSetList/scripts/README.md)。
 
+## 风险与覆盖边界
+
+- 现有前端测试以功能行为断言为主（组件渲染、交互、文案），不等价于视觉回归测试。
+- `ConsoleInsertPanel` 用例主要覆盖控制台局部逻辑，无法自动看护 `main.tsx` 这类全局入口样式变更。
+- 引入第三方组件库时，若增加全局 reset/base CSS，可能影响非控制台页面；即使功能测试通过，也可能出现样式回归。
+- 本次已记录一例“全局样式改动未被现有测试拦截”的复盘，见 [docs/fails/frontend-global-style-coverage-gap.md](D:/Code/PythonCode/5%20LiveSetList/docs/fails/frontend-global-style-coverage-gap.md)（含 `TODO/待实现` 清单）。
+
 ## 日志位置
 
 - 后端日志默认写入 [backend/logs/app.log](D:/Code/PythonCode/5%20LiveSetList/backend/logs/app.log)
