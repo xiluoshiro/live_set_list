@@ -1,7 +1,9 @@
-import type { BandOption, LiveInsertRow, SetlistDraftRow, SongInsertRow } from "./types";
+import type { BandOption, LiveInsertRow, SetlistDraftRow, SongInsertRow, VenueOption } from "./types";
 
 export const SEGMENT_OPTIONS = ["M", "EN", "SP"];
 export const DEFAULT_BAND_MEMBERS = ["主唱", "吉他", "贝斯", "鼓手", "键盘"];
+export const LIVE_TYPE_OPTIONS = ["专场", "拼盘", "对邦", "活动", "其他"];
+export const TIMEZONE_OPTIONS = ["+08:00", "+09:00", "+00:00", "-05:00"];
 
 export const MOCK_BANDS: BandOption[] = [
   { band_id: 1, band_name: "Poppin'Party" },
@@ -21,6 +23,12 @@ export const MOCK_SONGS: SongInsertRow[] = [
   { song_id: 202, song_name: "逆光海岸", band_id: 2, cover: false },
 ];
 
+export const MOCK_VENUES: VenueOption[] = [
+  { venue_id: 301, venue_name: "武道馆" },
+  { venue_id: 302, venue_name: "Zepp Haneda" },
+  { venue_id: 303, venue_name: "有明Arena" },
+];
+
 export const INITIAL_SETLIST_ROWS: SetlistDraftRow[] = [
   {
     row_key: 1,
@@ -30,7 +38,6 @@ export const INITIAL_SETLIST_ROWS: SetlistDraftRow[] = [
     is_short: false,
     band_member: { "Poppin'Party": [...DEFAULT_BAND_MEMBERS] },
     other_member: [{ entry_id: 1, member_key: "", member_value: "" }],
-    comment: "",
   },
   {
     row_key: 2,
@@ -40,7 +47,6 @@ export const INITIAL_SETLIST_ROWS: SetlistDraftRow[] = [
     is_short: false,
     band_member: { Afterglow: [...DEFAULT_BAND_MEMBERS] },
     other_member: [{ entry_id: 2, member_key: "", member_value: "" }],
-    comment: "",
   },
   {
     row_key: 3,
@@ -50,6 +56,5 @@ export const INITIAL_SETLIST_ROWS: SetlistDraftRow[] = [
     is_short: true,
     band_member: { Roselia: ["主唱", "吉他", "贝斯", "鼓手"] },
     other_member: [{ entry_id: 3, member_key: "键盘支援", member_value: "远程连线" }],
-    comment: "短版",
   },
 ];
