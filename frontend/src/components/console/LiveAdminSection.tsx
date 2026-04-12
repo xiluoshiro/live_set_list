@@ -1,4 +1,8 @@
-import type { RefObject } from "react";
+import { useMemo, type RefObject } from "react";
+import { ConfigProvider, DatePicker, Select, TimePicker } from "antd";
+import zhCN from "antd/locale/zh_CN";
+import dayjs, { type Dayjs } from "dayjs";
+import "dayjs/locale/zh-cn";
 
 import type { Position, VenueOption } from "./types";
 
@@ -13,7 +17,6 @@ type LiveAdminSectionProps = {
   selectedVenueId: number;
   venueQueryText: string;
   venues: VenueOption[];
-  timezoneOptions: string[];
   liveTypeOptions: string[];
   venueOpen: boolean;
   venueMenuPos: Position | null;
@@ -47,6 +50,54 @@ type LiveAdminSectionProps = {
   submitInsertDisabled: boolean;
 };
 
+type TimezoneOption = {
+  value: string;
+  label: string;
+  offsetMinutes: number;
+};
+
+function getSupportedTimeZones(): string[] {
+  const intlWithSupportedValues = Intl as unknown as {
+    supportedValuesOf?: (key: string) => string[];
+  };
+  const supported = intlWithSupportedValues.supportedValuesOf?.("timeZone");
+  if (supported && supported.length > 0) {
+    return supported;
+  }
+  return ["UTC", "Asia/Shanghai", "Asia/Tokyo", "Europe/London", "America/New_York"];
+}
+
+function getUtcOffsetInfo(timeZone: string): { label: string; minutes: number } {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "shortOffset",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date());
+    const rawOffset = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+    const match = rawOffset.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
+    if (!match) return { label: "UTC+00:00", minutes: 0 };
+    const [, sign, hourText, minuteText] = match;
+    const hour = hourText.padStart(2, "0");
+    const minute = (minuteText ?? "00").padStart(2, "0");
+    const offsetMinutes = Number(hour) * 60 + Number(minute);
+    const minutes = sign === "-" ? -offsetMinutes : offsetMinutes;
+    return { label: `UTC${sign}${hour}:${minute}`, minutes };
+  } catch {
+    return { label: "UTC+00:00", minutes: 0 };
+  }
+}
+
+function formatTimezoneLabel(timeZone: string): string {
+  const offsetLabel = getUtcOffsetInfo(timeZone).label;
+  const zoneLabel = timeZone.replace(/_/g, " ").replace("/", "，");
+  return `(${offsetLabel}) ${zoneLabel}`;
+}
+
+dayjs.locale("zh-cn");
+
 export function LiveAdminSection({
   liveDate,
   liveTitle,
@@ -58,7 +109,6 @@ export function LiveAdminSection({
   selectedVenueId,
   venueQueryText,
   venues,
-  timezoneOptions,
   liveTypeOptions,
   venueOpen,
   venueMenuPos,
@@ -81,6 +131,45 @@ export function LiveAdminSection({
   queryInsertDisabled,
   submitInsertDisabled,
 }: LiveAdminSectionProps) {
+  const parseDateValue = (value: string): Dayjs | null => {
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+    const parsed = dayjs(trimmed);
+    return parsed.isValid() ? parsed : null;
+  };
+
+  const parseTimeValue = (value: string): Dayjs | null => {
+    const trimmed = value.trim();
+    if (!/^\d{2}:\d{2}$/.test(trimmed)) return null;
+    const [hours, minutes] = trimmed.split(":").map((part) => Number(part));
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return dayjs().hour(hours).minute(minutes).second(0).millisecond(0);
+  };
+
+  const dateValue = parseDateValue(liveDate);
+
+  const timezoneOptions = useMemo<TimezoneOption[]>(() => {
+    const zones = getSupportedTimeZones();
+    if (timezone.trim() !== "" && !zones.includes(timezone)) {
+      zones.push(timezone);
+    }
+    return zones
+      .map((zone) => {
+        const offsetInfo = getUtcOffsetInfo(zone);
+        return {
+          value: zone,
+          label: formatTimezoneLabel(zone),
+          offsetMinutes: offsetInfo.minutes,
+        };
+      })
+      .sort((a, b) => {
+        if (a.offsetMinutes !== b.offsetMinutes) {
+          return a.offsetMinutes - b.offsetMinutes;
+        }
+        return a.value.localeCompare(b.value, "zh-Hans-CN");
+      });
+  }, [timezone]);
+
   const selectedVenueText = (() => {
     const selected = venues.find((venue) => venue.venue_id === selectedVenueId);
     if (!selected) return "请选择 venue";
@@ -88,7 +177,7 @@ export function LiveAdminSection({
   })();
 
   return (
-    <>
+    <ConfigProvider locale={zhCN}>
       <div className="live-id-selector live-create-query-row">
         <label htmlFor="venue-query-input">查询 venue</label>
         <input
@@ -136,7 +225,14 @@ export function LiveAdminSection({
           <tbody>
             <tr>
               <td>
-                <input type="date" value={liveDate} onChange={(e) => onLiveDateChange(e.target.value)} />
+                <DatePicker
+                  className="console-antd-picker"
+                  value={dateValue}
+                  format="YYYY-MM-DD"
+                  inputReadOnly
+                  allowClear={false}
+                  onChange={(_, dateString) => onLiveDateChange(typeof dateString === "string" ? dateString : "")}
+                />
               </td>
               <td>
                 <input value={liveTitle} onChange={(e) => onLiveTitleChange(e.target.value)} placeholder="请输入Live标题" />
@@ -154,19 +250,38 @@ export function LiveAdminSection({
                 <input value={liveUrl} onChange={(e) => onLiveUrlChange(e.target.value)} placeholder="https://..." />
               </td>
               <td>
-                <input type="time" value={openingTime} onChange={(e) => onOpeningTimeChange(e.target.value)} />
+                <TimePicker
+                  className="console-antd-picker"
+                  value={parseTimeValue(openingTime)}
+                  format="HH:mm"
+                  allowClear={false}
+                  onChange={(_, timeString) =>
+                    onOpeningTimeChange(typeof timeString === "string" ? timeString : "")
+                  }
+                />
               </td>
               <td>
-                <input type="time" value={startTime} onChange={(e) => onStartTimeChange(e.target.value)} />
+                <TimePicker
+                  className="console-antd-picker"
+                  value={parseTimeValue(startTime)}
+                  format="HH:mm"
+                  allowClear={false}
+                  onChange={(_, timeString) => onStartTimeChange(typeof timeString === "string" ? timeString : "")}
+                />
               </td>
               <td>
-                <select value={timezone} onChange={(e) => onTimezoneChange(e.target.value)}>
-                  {timezoneOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  className="console-antd-select"
+                  value={timezone}
+                  showSearch
+                  optionFilterProp="label"
+                  popupMatchSelectWidth={false}
+                  classNames={{ popup: { root: "console-timezone-dropdown" } }}
+                  styles={{ popup: { root: { minWidth: 320, maxWidth: 420 } } }}
+                  onChange={(value) => onTimezoneChange(value)}
+                  options={timezoneOptions.map((option) => ({ value: option.value, label: option.label }))}
+                  placeholder="选择时区"
+                />
               </td>
             </tr>
           </tbody>
@@ -239,6 +354,6 @@ export function LiveAdminSection({
           </tbody>
         </table>
       </div>
-    </>
+    </ConfigProvider>
   );
 }
