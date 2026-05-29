@@ -131,13 +131,13 @@
 这意味着：
 
 - 认证和收藏链路已有较稳的回归保护。
-- 控制台已有局部测试，但真实写链路、后端 admin 接口和完整权限闭环仍没有测试覆盖。
+- 控制台已有局部测试，但真实写链路、后端 console 接口和完整权限闭环仍没有测试覆盖。
 
 ## 3. 当前未实现内容
 
 结合 README、`auth-design.md` 和代码现状，控制台仍缺少以下核心部分。
 
-### 3.1 缺少后端 admin 写接口
+### 3.1 后端 console 写接口已落地，但前端尚未接线
 
 当前后端只注册了以下路由：
 
@@ -145,20 +145,17 @@
 - `/api/lives`
 - `/api/auth`
 - `/api/me`
+- `/api/console`
 
-尚不存在 `/api/admin` 路由。
+当前已经落地的控制台写接口包括：
 
-根据现有设计，后续应优先补齐：
+- `POST /api/console/songs`
+- `POST /api/console/lives`
+- `POST /api/console/lives/{live_id}/setlist`
 
-- `POST /api/admin/songs`
-- `POST /api/admin/lives`
-- `PUT /api/admin/lives/{live_id}`
-
-其中：
-
-- `POST /api/admin/songs` 对应“新增歌曲”
-- `POST /api/admin/lives` 对应“新增 Live”
-- `PUT /api/admin/lives/{live_id}` 可承接“为指定 Live 写入或更新 setlist”等控制台更新动作
+- `POST /api/console/songs` 对应“新增歌曲”
+- `POST /api/console/lives` 对应“新增 Live”
+- `POST /api/console/lives/{live_id}/setlist` 对应“为指定 Live 追加 setlist 行”
 
 ### 3.2 角色控制尚未形成真正闭环
 
@@ -182,7 +179,7 @@
 
 - 提交 Live 的 API
 - 提交 Song 的 API
-- 提交或更新 Setlist 的 API
+- 提交 Setlist 的 API
 - 相应的错误处理和成功态同步
 
 ### 3.4 参数校验与错误处理仍不完整
@@ -199,7 +196,7 @@
 - `song_name` 重复时如何处理
 - `live_id` 不存在时如何处理
 - setlist 中 `song_id` 非法时如何处理
-- `editor` 可否覆盖已有数据
+- `editor` 可否向已有 live 继续追加数据
 
 这些都需要在真实接口层明确。
 
@@ -229,7 +226,7 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
   - 可进入控制台
   - 可新增歌曲
   - 可新增 Live
-  - 可写入或更新 setlist
+  - 可向指定 live 追加 setlist 行
   - 不可执行用户管理
 - `admin`
   - 拥有 `editor` 的全部能力
@@ -240,7 +237,7 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 
 ## 5. 推荐的后端接口边界
 
-### 5.1 `POST /api/admin/songs`
+### 5.1 `POST /api/console/songs`
 
 建议用途：
 
@@ -266,7 +263,7 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 - `resource_type = song`
 - `resource_id = 新 song_id`
 
-### 5.2 `POST /api/admin/lives`
+### 5.2 `POST /api/console/lives`
 
 建议用途：
 
@@ -296,12 +293,12 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 - `resource_type = live`
 - `resource_id = 新 live_id`
 
-### 5.3 `PUT /api/admin/lives/{live_id}`
+### 5.3 `POST /api/console/lives/{live_id}/setlist`
 
 建议用途：
 
-- 对指定 Live 写入或更新 setlist
-- 后续也可扩展到更新 Live 附属信息
+- 对指定 Live 追加新的 setlist 行
+- 明确只插入，不删除、不覆盖已有行
 
 建议最小字段：
 
@@ -323,11 +320,12 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 - `live_id` 必须存在
 - `song_id` 必须存在
 - 顺序字段合法
+- `absolute_order` 不得与当前 live 里已有行冲突
 - `band_member / other_member` JSON 结构合法
 
 建议审计：
 
-- `action = live_setlist_upsert`
+- `action = live_setlist_append`
 - `resource_type = live`
 - `resource_id = live_id`
 
@@ -364,7 +362,7 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 
 ### 阶段 1：把后端接口骨架补齐
 
-- 新增 `/api/admin` router
+- 新增 `/api/console` router
 - 注册到 `FastAPI`
 - 为 3 个接口接入：
   - 登录校验
@@ -400,6 +398,6 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 
 最重要的判断是：
 
-- 当前最大空白不在前端交互，而在后端 `/api/admin` 写接口。
+- 当前最大空白不在前端交互，而在后端 `/api/console` 写接口。
 - 当前最推荐的下一步不是重写控制台，而是把已有控制台页面接到真实写接口上。
 - 在这之后，再补 venue 联动、详情复用和管理员用户管理，整体推进成本最低。

@@ -7,11 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import ensure_default_admin_user
 from app.logging_config import get_logger, setup_logging
-from app.schemas import RootResponse
 from app.routers.auth import router as auth_router
+from app.routers.console import router as console_router
 from app.routers.health import router as health_router
 from app.routers.lives import router as lives_router
 from app.routers.me import router as me_router
+from app.schemas import RootResponse
 
 setup_logging()
 logger = get_logger(__name__)
@@ -19,6 +20,7 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Prepare startup-only state before the API begins serving requests."""
     ensure_default_admin_user()
     yield
 
@@ -37,10 +39,12 @@ app.include_router(health_router)
 app.include_router(lives_router)
 app.include_router(auth_router)
 app.include_router(me_router)
+app.include_router(console_router)
 
 
 @app.middleware("http")
 async def log_api_requests(request: Request, call_next):
+    """Emit one access log per request and keep uncaught exception logging in one place."""
     start = perf_counter()
     query_string = request.url.query or "-"
     client_ip = request.client.host if request.client else "-"
@@ -80,6 +84,7 @@ async def log_api_requests(request: Request, call_next):
     description="用于确认后端服务已启动，不访问数据库。",
 )
 def root():
+    """Return a lightweight startup confirmation message without touching the database."""
     return {"message": "LiveSetList backend is running"}
 
 

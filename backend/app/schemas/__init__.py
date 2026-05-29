@@ -1,6 +1,18 @@
-﻿from app.schemas.common import ErrorResponse, RootResponse, ValidationErrorItem, ValidationErrorResponse
-from app.schemas.health import HealthResponse
+from app.schemas.console import (
+    ConsoleLiveCreateRequest,
+    ConsoleLiveItem,
+    ConsoleLiveMutationResponse,
+    ConsoleLiveSetlistAppendItem,
+    ConsoleLiveSetlistAppendRequest,
+    ConsoleLiveSetlistAppendResponse,
+    ConsoleLiveSetlistRowRequest,
+    ConsoleSongCreateRequest,
+    ConsoleSongItem,
+    ConsoleSongMutationResponse,
+)
+from app.schemas.common import ErrorResponse, RootResponse, ValidationErrorItem, ValidationErrorResponse
 from app.schemas.favorites import FavoriteBatchRequest, FavoriteBatchResponse
+from app.schemas.health import HealthResponse
 from app.schemas.lives import (
     LiveDetailBandMember,
     LiveDetailBatchRequest,
@@ -21,6 +33,16 @@ __all__ = [
     'HealthResponse',
     'FavoriteBatchRequest',
     'FavoriteBatchResponse',
+    'ConsoleSongCreateRequest',
+    'ConsoleSongItem',
+    'ConsoleSongMutationResponse',
+    'ConsoleLiveCreateRequest',
+    'ConsoleLiveItem',
+    'ConsoleLiveMutationResponse',
+    'ConsoleLiveSetlistAppendRequest',
+    'ConsoleLiveSetlistAppendItem',
+    'ConsoleLiveSetlistAppendResponse',
+    'ConsoleLiveSetlistRowRequest',
     'LiveItem',
     'LivesPagination',
     'LivesResponse',
