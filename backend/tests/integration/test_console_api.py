@@ -1,0 +1,443 @@
+import pytest
+
+from app.auth import hash_password, normalize_username
+
+pytestmark = pytest.mark.integration
+TEST_DEFAULT_ADMIN_USERNAME = "admin"
+TEST_DEFAULT_ADMIN_PASSWORD = "test-admin-pass"
+
+
+def _login_and_get_csrf_for(
+    integration_test_client,
+    *,
+    username: str,
+    password: str,
+) -> str:
+    """Log in through the auth API and return the CSRF token used by console write calls."""
+    response = integration_test_client.post(
+        "/api/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert response.status_code == 200
+    return response.json()["csrf_token"]
+
+
+def _create_user(
+    integration_admin_connection,
+    *,
+    username: str,
+    password: str,
+    display_name: str,
+    role: str,
+) -> int:
+    """Insert one app_users row directly so integration tests can prepare role-specific users."""
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO app_users (username, password_hash, display_name, role)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                normalize_username(username),
+                hash_password(password),
+                display_name,
+                role,
+            ),
+        )
+        row = cursor.fetchone()
+
+    assert row is not None
+    return int(row[0])
+
+
+def _get_latest_audit_row(
+    integration_admin_connection,
+    *,
+    user_id: int,
+) -> tuple[str, str | None, dict[str, object] | None]:
+    """Read the newest audit_logs row for one user so tests can assert console side effects."""
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT action, resource_id, payload_json
+            FROM audit_logs
+            WHERE user_id = %s
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        row = cursor.fetchone()
+
+    assert row is not None
+    return (
+        str(row[0]),
+        str(row[1]) if row[1] is not None else None,
+        row[2] if isinstance(row[2], dict) else None,
+    )
+
+
+# 测试点：`editor+` 调用新增歌曲接口时，应写入 song_list 并追加 song_create 审计。
+def test_console_create_song_persists_row_and_audit_log(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify the console song-create endpoint inserts one song and one matching audit log row."""
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    response = integration_test_client.post(
+        "/api/console/songs",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"song_name": "FIRE BIRD", "band_id": 2, "cover": False},
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "ok": True,
+        "item": {
+            "song_id": 5,
+            "song_name": "FIRE BIRD",
+            "band_id": 2,
+            "cover": False,
+        },
+    }
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT id, song_name, band_id, is_cover FROM song_list WHERE id = %s",
+            (5,),
+        )
+        row = cursor.fetchone()
+
+    assert row == (5, "FIRE BIRD", 2, False)
+    assert _get_latest_audit_row(integration_admin_connection, user_id=1) == (
+        "song_create",
+        "5",
+        {"band_id": 2, "cover": False},
+    )
+
+
+# 测试点：新增歌曲接口应拒绝 viewer 和缺失 CSRF 的写请求，防止前端可见性绕过后直接落库。
+def test_console_create_song_requires_editor_role_and_csrf(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify the console song-create endpoint blocks viewer writes and missing CSRF headers."""
+    _create_user(
+        integration_admin_connection,
+        username="viewer_console_api",
+        password="viewer-pass",
+        display_name="Viewer Console API",
+        role="viewer",
+    )
+    viewer_csrf = _login_and_get_csrf_for(
+        integration_test_client,
+        username="viewer_console_api",
+        password="viewer-pass",
+    )
+    viewer_response = integration_test_client.post(
+        "/api/console/songs",
+        headers={"X-CSRF-Token": viewer_csrf},
+        json={"song_name": "Viewer Forbidden Song", "band_id": 1, "cover": False},
+    )
+
+    editor_user_id = _create_user(
+        integration_admin_connection,
+        username="editor_song_api",
+        password="editor-pass",
+        display_name="Editor Song API",
+        role="editor",
+    )
+    editor_login_response = integration_test_client.post(
+        "/api/auth/login",
+        json={"username": "editor_song_api", "password": "editor-pass"},
+    )
+    assert editor_login_response.status_code == 200
+    missing_csrf_response = integration_test_client.post(
+        "/api/console/songs",
+        json={"song_name": "Missing CSRF Song", "band_id": 1, "cover": False},
+    )
+
+    assert viewer_response.status_code == 403
+    assert viewer_response.json()["detail"]["code"] == "AUTH_FORBIDDEN"
+    assert missing_csrf_response.status_code == 403
+    assert missing_csrf_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
+
+
+# 测试点：新增 Live 接口应写入 live_attrs，并保留当前控制台 UI 的 `type` 兼容字段但不持久化。
+def test_console_create_live_persists_live_row(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify the console live-create endpoint inserts one live row and keeps ui_type in audit."""
+    editor_user_id = _create_user(
+        integration_admin_connection,
+        username="editor_live_api",
+        password="editor-live-pass",
+        display_name="Editor Live API",
+        role="editor",
+    )
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_live_api",
+        password="editor-live-pass",
+    )
+
+    response = integration_test_client.post(
+        "/api/console/lives",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "live_date": "2026-05-01",
+            "live_title": "Console Created Live",
+            "type": "专场",
+            "url": "https://example.com/lives/console-created",
+            "opening_time": "18:00",
+            "start_time": "19:00:30",
+            "timezone": "+09:00",
+            "venue_id": 2,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "ok": True,
+        "item": {
+            "live_id": 3,
+            "live_date": "2026-05-01",
+            "live_title": "Console Created Live",
+            "url": "https://example.com/lives/console-created",
+            "opening_time": "18:00:00+09:00",
+            "start_time": "19:00:30+09:00",
+            "venue_id": 2,
+        },
+    }
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, live_date::text, live_title, is_internal, url, opening_time::text, start_time::text, venue_id
+            FROM live_attrs
+            WHERE id = %s
+            """,
+            (3,),
+        )
+        row = cursor.fetchone()
+
+    assert row == (
+        3,
+        "2026-05-01",
+        "Console Created Live",
+        False,
+        "https://example.com/lives/console-created",
+        "18:00:00+09",
+        "19:00:30+09",
+        2,
+    )
+    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
+        "live_create",
+        "3",
+        {
+            "venue_id": 2,
+            "opening_time": "18:00:00+09:00",
+            "start_time": "19:00:30+09:00",
+            "ui_type": "专场",
+        },
+    )
+
+
+# 测试点：追加 setlist 接口应只插入新行，不删除旧行，并把控制台里的 `EN / SP` 片段编码归一化到库内值。
+def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify the console setlist endpoint appends rows only and leaves earlier setlist rows untouched."""
+    editor_user_id = _create_user(
+        integration_admin_connection,
+        username="editor_setlist_api",
+        password="editor-setlist-pass",
+        display_name="Editor Setlist API",
+        role="editor",
+    )
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_setlist_api",
+        password="editor-setlist-pass",
+    )
+
+    response = integration_test_client.post(
+        "/api/console/lives/1/setlist",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "setlist_rows": [
+                {
+                    "song_id": 4,
+                    "absolute_order": 3,
+                    "segment_type": "EN",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_member": {"Poppin'Party": ["Kasumi", "Tae", "Saaya", "Arisa"]},
+                    "other_member": {"嘉宾": ["MASKING", "LOCK"]},
+                    "comment": "appended encore",
+                },
+                {
+                    "song_id": 2,
+                    "absolute_order": 4,
+                    "segment_type": "SP",
+                    "sub_order": 1,
+                    "is_short": True,
+                    "band_member": {"Roselia": ["Yukina", "Sayo", "Lisa"]},
+                    "other_member": {"支援": "Keyboard"},
+                    "comment": None,
+                },
+            ]
+        },
+    )
+    detail_response = integration_test_client.get("/api/lives/1")
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "ok": True,
+        "item": {
+            "live_id": 1,
+            "inserted_row_count": 2,
+            "total_setlist_row_count": 4,
+        },
+    }
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT absolute_order, segment_type, sub_order, is_short, band_member, other_member, comment
+            FROM live_setlist
+            WHERE live_id = %s
+            ORDER BY absolute_order
+            """,
+            (1,),
+        )
+        rows = cursor.fetchall()
+
+    assert rows == [
+        (
+            1,
+            "main",
+            1,
+            False,
+            {"Poppin'Party": ["Kasumi", "Tae", "Rimi", "Saaya", "Arisa"]},
+            {"嘉宾": ["CHU2"]},
+            "opening song",
+        ),
+        (
+            2,
+            "main",
+            2,
+            True,
+            {"Roselia": ["Yukina", "Sayo", "Lisa", "Ako"]},
+            None,
+            "short version",
+        ),
+        (
+            3,
+            "encore",
+            1,
+            False,
+            {"Poppin'Party": ["Kasumi", "Tae", "Saaya", "Arisa"]},
+            {"嘉宾": ["MASKING", "LOCK"]},
+            "appended encore",
+        ),
+        (
+            4,
+            "special",
+            1,
+            True,
+            {"Roselia": ["Yukina", "Sayo", "Lisa"]},
+            {"支援": "Keyboard"},
+            None,
+        ),
+    ]
+    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
+        "live_setlist_append",
+        "1",
+        {"inserted_row_count": 2, "total_setlist_row_count": 4},
+    )
+
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert [row["row_id"] for row in detail_payload["detail_rows"]] == ["main1", "main2", "encore1", "special1"]
+    assert detail_payload["detail_rows"][0]["song_name"] == "Yes! BanG_Dream!"
+    assert detail_payload["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["CHU2"]}]
+    assert detail_payload["detail_rows"][2]["song_name"] == "STAR BEAT!〜ホシノコドウ〜"
+    assert detail_payload["detail_rows"][2]["other_members"] == [{"key": "嘉宾", "value": ["MASKING", "LOCK"]}]
+    assert detail_payload["detail_rows"][3]["comments"] == ["短版"]
+    assert detail_payload["detail_rows"][3]["other_members"] == [{"key": "支援", "value": ["Keyboard"]}]
+
+
+# 测试点：新增歌曲唯一键冲突、缺失 song_id 和已有 absolute_order 冲突都应返回明确错误，而不是吞掉数据库异常。
+def test_console_endpoints_surface_conflict_and_missing_song_errors(
+    integration_test_client,
+):
+    """Verify console write endpoints surface explicit conflict and missing-resource errors."""
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    duplicate_song_response = integration_test_client.post(
+        "/api/console/songs",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"song_name": "Yes! BanG_Dream!", "band_id": 1, "cover": False},
+    )
+    missing_song_response = integration_test_client.post(
+        "/api/console/lives/1/setlist",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "setlist_rows": [
+                {
+                    "song_id": 999,
+                    "absolute_order": 1,
+                    "segment_type": "main",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "other_member": {},
+                    "comment": None,
+                }
+            ]
+        },
+    )
+    conflicting_order_response = integration_test_client.post(
+        "/api/console/lives/1/setlist",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "setlist_rows": [
+                {
+                    "song_id": 3,
+                    "absolute_order": 1,
+                    "segment_type": "main",
+                    "sub_order": 3,
+                    "is_short": False,
+                    "band_member": {"MyGO!!!!!": ["Tomori"]},
+                    "other_member": {},
+                    "comment": None,
+                }
+            ]
+        },
+    )
+
+    assert duplicate_song_response.status_code == 409
+    assert duplicate_song_response.json()["detail"] == "Song name already exists: Yes! BanG_Dream!"
+    assert missing_song_response.status_code == 404
+    assert missing_song_response.json()["detail"] == "Song ids not found: 999"
+    assert conflicting_order_response.status_code == 409
+    assert conflicting_order_response.json()["detail"] == "absolute_order already exists for live 1: 1"

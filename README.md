@@ -127,7 +127,7 @@ npm run typecheck
 ## 数据库版本控制
 
 - Flyway 落地说明见 [docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/flyway.md)
-- 控制台现状与后续设计见 [docs/design/console-admin.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/console-admin.md)
+- 控制台现状与后续设计见 [docs/design/console.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/console.md)
 - 批量收藏实施方案见 [docs/archive/completed-design/favorite-batch-design.md](D:/Code/PythonCode/5%20LiveSetList/docs/archive/completed-design/favorite-batch-design.md)
 - 登录与权限方案见 [docs/archive/completed-design/auth-design.md](D:/Code/PythonCode/5%20LiveSetList/docs/archive/completed-design/auth-design.md)
 - 前端角色权限说明见 [docs/archive/completed-design/frontend-role-permissions.md](D:/Code/PythonCode/5%20LiveSetList/docs/archive/completed-design/frontend-role-permissions.md)
