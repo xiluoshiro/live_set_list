@@ -251,15 +251,15 @@ def test_console_create_song_persists_row_and_audit_log(
     response = integration_test_client.post(
         "/api/console/songs",
         headers={"X-CSRF-Token": csrf_token},
-        json={"song_name": "FIRE BIRD", "band_id": 2, "cover": False},
+        json={"song_name": "Console Created Song", "band_id": 2, "cover": False},
     )
 
     assert response.status_code == 201
     assert response.json() == {
         "ok": True,
         "item": {
-            "song_id": 5,
-            "song_name": "FIRE BIRD",
+            "song_id": 203,
+            "song_name": "Console Created Song",
             "band_id": 2,
             "cover": False,
         },
@@ -269,14 +269,14 @@ def test_console_create_song_persists_row_and_audit_log(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             "SELECT id, song_name, band_id, is_cover FROM song_list WHERE id = %s",
-            (5,),
+            (203,),
         )
         row = cursor.fetchone()
 
-    assert row == (5, "FIRE BIRD", 2, False)
+    assert row == (203, "Console Created Song", 2, False)
     assert _get_latest_audit_row(integration_admin_connection, user_id=1) == (
         "song_create",
-        "5",
+        "203",
         {"band_id": 2, "cover": False},
     )
 
@@ -431,7 +431,7 @@ def test_console_create_live_persists_live_row(
     assert response.json() == {
         "ok": True,
         "item": {
-            "live_id": 3,
+            "live_id": 39,
             "live_date": "2026-05-01",
             "live_title": "Console Created Live",
             "url": "https://example.com/lives/console-created",
@@ -449,12 +449,12 @@ def test_console_create_live_persists_live_row(
             FROM live_attrs
             WHERE id = %s
             """,
-            (3,),
+            (39,),
         )
         row = cursor.fetchone()
 
     assert row == (
-        3,
+        39,
         "2026-05-01",
         "Console Created Live",
         False,
@@ -465,7 +465,7 @@ def test_console_create_live_persists_live_row(
     )
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "live_create",
-        "3",
+        "39",
         {
             "venue_id": 2,
             "opening_time": "18:00:00+09:00",
