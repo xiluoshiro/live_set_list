@@ -652,4 +652,73 @@ describe("ConsoleInsertPanel", () => {
     expect(inputs).toHaveLength(1);
     expect(inputs[0]).toHaveValue("");
   });
+
+  test("批量插入弹出确认窗口，已有 sid 的行被忽略，仅创建 sid 为空的行", async () => {
+    // 测试点：sid 已匹配的行直接跳过，仅对 sid 为空的行执行创建。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [
+        { band_id: 1, band_name: "Poppin'Party", band_abbr: "ポピパ", band_members: ["愛美"] },
+        { band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] },
+      ],
+    });
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] })
+      .mockResolvedValueOnce({ items: [] });
+    apiMocks.createConsoleSong
+      .mockResolvedValueOnce({ ok: true, item: { song_id: 902, song_name: "Requiem for Fate", band_id: 2, cover: false } });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT\nM2. Requiem for Fate" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+    await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 1 行。");
+
+    await user.click(screen.getByRole("button", { name: "批量插入" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认批量新增歌曲" });
+    expect(within(dialog).getByText("Requiem for Fate")).toBeInTheDocument();
+    expect(within(dialog).queryByText("BLACK SHOUT")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await waitFor(() => expect(apiMocks.createConsoleSong).toHaveBeenCalledWith(
+      { song_name: "Requiem for Fate", band_id: 2, cover: false },
+      "csrf-token",
+    ));
+    expect(apiMocks.createConsoleSong).toHaveBeenCalledTimes(1);
+  });
+
+  test("批量插入在乐队不为 1 支时报错并禁用提交", async () => {
+    // 测试点：确认窗口上侧列出校验错误，确认提交按钮 disabled。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+    await screen.findByText(/查询歌曲完成/);
+
+    await user.click(screen.getByRole("button", { name: "批量插入" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认批量新增歌曲" });
+    expect(within(dialog).getByText("BLACK SHOUT")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "确认提交" })).not.toBeDisabled();
+  });
 });

@@ -42,6 +42,7 @@ import type {
   ConsoleMode,
   LiveInsertBundle,
   LiveInsertRow,
+  OtherMemberDraft,
   Position,
   SetlistDraftRow,
   SongInsertRow,
@@ -68,6 +69,15 @@ type SetlistConfirmRow = ConsoleLiveSetlistRowPayload & {
   song_name: string;
 };
 
+type BatchSongConfirmRow = {
+  song_name: string;
+  band_id: number;
+  band_name: string;
+  cover: boolean;
+  band_member: Record<string, string[]>;
+  other_member: OtherMemberDraft[];
+};
+
 type PendingConfirmation =
   | {
       kind: "venue";
@@ -92,6 +102,12 @@ type PendingConfirmation =
       live: LiveInsertRow;
       payload: ConsoleLiveSetlistAppendPayload;
       previewRows: SetlistConfirmRow[];
+    }
+  | {
+      kind: "batch_song";
+      title: string;
+      rows: BatchSongConfirmRow[];
+      errors: string[];
     };
 
 function toSongInsertRow(item: ConsoleSongItem): SongInsertRow {
@@ -1017,6 +1033,87 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     }
   };
 
+  const requestBatchSongInsert = () => {
+    if (!auth.isAuthenticated || !auth.csrfToken) {
+      setMessage("批量插入失败：登录态已失效，请重新登录。");
+      return;
+    }
+
+    const rows = setlistRows.filter((row) => row.song_name.trim() !== "");
+    if (rows.length === 0) return;
+
+    const errors: string[] = [];
+    const confirmRows: BatchSongConfirmRow[] = [];
+    let skipped = 0;
+
+    rows.forEach((row) => {
+      const sid = row.song_id.trim();
+      if (sid !== "") {
+        skipped += 1;
+        return;
+      }
+
+      const bandNames = Object.keys(row.band_member).filter(
+        (name) => row.band_member[name] && row.band_member[name].length > 0,
+      );
+      if (bandNames.length !== 1) {
+        errors.push(
+          `"${row.song_name}" 的乐队数量不为 1（当前 ${bandNames.length} 支：${bandNames.join("、") || "无"}）。`,
+        );
+        return;
+      }
+
+      const bandName = bandNames[0];
+      const band = bands.find((b) => b.band_name === bandName);
+      if (!band) {
+        errors.push(`"${row.song_name}" 的乐队 "${bandName}" 未匹配到有效 band_id。`);
+        return;
+      }
+
+      confirmRows.push({
+        song_name: row.song_name.trim(),
+        band_id: band.band_id,
+        band_name: bandName,
+        cover: false,
+        band_member: row.band_member,
+        other_member: row.other_member,
+      });
+    });
+
+    if (confirmRows.length === 0 && errors.length === 0) {
+      setMessage(skipped > 0 ? "所有行已有 sid，无需批量插入。" : "没有可插入的行。");
+      return;
+    }
+
+    setPendingConfirmation({
+      kind: "batch_song",
+      title: "确认批量新增歌曲",
+      rows: confirmRows,
+      errors,
+    });
+  };
+
+  const executeBatchSongInsert = async (rows: BatchSongConfirmRow[], csrfToken: string) => {
+    let created = 0;
+    let failed = 0;
+    for (const row of rows) {
+      try {
+        const response = await createConsoleSong(
+          { song_name: row.song_name, band_id: row.band_id, cover: row.cover },
+          csrfToken,
+        );
+        const newSong = toSongInsertRow(response.item);
+        setSongs((prev) => sortById([newSong, ...prev.filter((s) => s.song_id !== newSong.song_id)], (s) => s.song_id));
+        setInsertedSongs((prev) => sortById([newSong, ...prev.filter((s) => s.song_id !== newSong.song_id)], (s) => s.song_id));
+        created += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    setMessage(`批量新增完成：成功 ${created} 首，失败 ${failed} 首。`);
+    await querySongsForSetlist();
+  };
+
   const closePendingConfirmation = () => {
     if (confirmationSubmitting) return;
     setPendingConfirmation(null);
@@ -1038,6 +1135,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
         await insertLive(pendingConfirmation.payload, auth.csrfToken);
       } else if (pendingConfirmation.kind === "song") {
         await submitSong(pendingConfirmation.payload, auth.csrfToken);
+      } else if (pendingConfirmation.kind === "batch_song") {
+        await executeBatchSongInsert(pendingConfirmation.rows, auth.csrfToken);
       } else {
         await insertSetlist(
           pendingConfirmation.live,
@@ -1097,6 +1196,46 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
         ["band_name", pendingConfirmation.bandName],
         ["cover", payload.cover],
       ]);
+    }
+
+    if (pendingConfirmation.kind === "batch_song") {
+      return (
+        <>
+          {pendingConfirmation.errors.length > 0 && (
+            <ul className="setlist-paste-warnings" style={{ marginBottom: 12 }}>
+              {pendingConfirmation.errors.map((error, index) => (
+                <li key={index}>{error}</li>
+              ))}
+            </ul>
+          )}
+          <div className="console-table-wrap console-confirm-setlist-wrap">
+            <table className="console-admin-table console-confirm-setlist-table">
+              <thead>
+                <tr>
+                  <th>song_name</th>
+                  <th>band_id</th>
+                  <th>band_name</th>
+                  <th>cover</th>
+                  <th>band_member</th>
+                  <th>other_member</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingConfirmation.rows.map((row, index) => (
+                  <tr key={index}>
+                    <td>{row.song_name}</td>
+                    <td>{row.band_id}</td>
+                    <td>{row.band_name}</td>
+                    <td>{String(row.cover)}</td>
+                    <td><code>{JSON.stringify(row.band_member)}</code></td>
+                    <td><code>{JSON.stringify(buildOtherMemberPayloadObject(row.other_member))}</code></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      );
     }
 
     return (
@@ -1316,6 +1455,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           onAddSetlistRow={addSetlistRow}
           onRemoveLastSetlistRow={removeLastSetlistRow}
           onClearSetlistData={clearSetlistData}
+          onBatchInsertSongs={requestBatchSongInsert}
           onQuerySongsForSetlist={querySongsForSetlist}
           onSubmitLiveWithSetlist={requestSetlistConfirmation}
           submitDisabled={isSetlistSubmitDisabled}
@@ -1371,7 +1511,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
                 type="button"
                 className="console-submit-btn"
                 onClick={() => void confirmPendingInsert()}
-                disabled={confirmationSubmitting}
+                disabled={confirmationSubmitting || (pendingConfirmation.kind === "batch_song" && pendingConfirmation.errors.length > 0)}
               >
                 {confirmationSubmitting ? "提交中..." : "确认提交"}
               </button>
