@@ -210,7 +210,11 @@ export function LiveInsertTab({
             <button type="button" className="console-ghost-btn" onClick={onClearSetlistPaste}>
               清空
             </button>
-            <button type="button" className="console-ghost-btn" onClick={onPreviewSetlistPaste}>
+            <button
+              type="button"
+              className={setlistPasteText.trim() !== "" && !hasParsed ? "console-submit-btn" : "console-ghost-btn"}
+              onClick={onPreviewSetlistPaste}
+            >
               解析
             </button>
             <button
