@@ -150,7 +150,9 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "<Roselia>\nM1. BLACK SHOUT" },
     });
+    await user.click(screen.getByRole("button", { name: "解析预览" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
@@ -488,6 +490,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     expect(screen.getByDisplayValue("BLACK SHOUT")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Requiem for Fate")).toBeInTheDocument();
@@ -534,5 +537,90 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.scroll(menu.closest(".bands-floating-menu") as HTMLElement);
 
     expect(screen.getByText("9 - Scrollable Band")).toBeInTheDocument();
+  });
+
+  test("未解析时应用到表格按钮为禁用态", () => {
+    // 测试点：必须先点"解析预览"才能点"应用到表格"，避免未确认结果就直接应用。
+    render(<ConsoleInsertPanel />);
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT" },
+    });
+
+    expect(screen.getByRole("button", { name: "应用到表格" })).toBeDisabled();
+  });
+
+  test("应用到表格弹出确认窗口，确认提交后才替换下方表格", async () => {
+    // 测试点：确认窗口展示预览内容，取消不应用，确认提交才真正写入下方表格。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "＜Roselia×愛美 from Poppin'Party＞\nM1. BLACK SHOUT\nM2. Requiem for Fate" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+
+    const confirmDialog = screen.getByRole("dialog", { name: "确认应用到表格" });
+    expect(confirmDialog).toBeInTheDocument();
+    expect(within(confirmDialog).getByText("BLACK SHOUT")).toBeInTheDocument();
+    expect(within(confirmDialog).getByText("Requiem for Fate")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    expect(screen.getByDisplayValue("BLACK SHOUT")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Requiem for Fate")).toBeInTheDocument();
+  });
+
+  test("应用到表格确认窗口可取消", async () => {
+    // 测试点：点击取消后弹窗关闭，下方表格不被更新。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+
+    expect(screen.getByRole("dialog", { name: "确认应用到表格" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("dialog", { name: "确认应用到表格" })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
+  });
+
+  test("≤3行时显示详情按钮可打开完整预览", async () => {
+    // 测试点：≤3行时显示"显示详情"，点击后弹出与查看全部相同的完整预览。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT\nM2. Requiem for Fate" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析预览" }));
+
+    await user.click(screen.getByRole("button", { name: "显示详情" }));
+
+    const dialog = screen.getByRole("dialog", { name: "完整 Setlist 解析预览" });
+    expect(within(dialog).getByText("BLACK SHOUT")).toBeInTheDocument();
+    expect(within(dialog).getByText("Requiem for Fate")).toBeInTheDocument();
   });
 });
