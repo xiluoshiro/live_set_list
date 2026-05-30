@@ -9,6 +9,8 @@ export type Position = {
 export type BandOption = {
   band_id: number;
   band_name: string;
+  band_abbr?: string;
+  band_members?: string[];
 };
 
 export type VenueOption = {

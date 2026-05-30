@@ -291,7 +291,9 @@ export function LiveInsertTab({
           {mockBands.map((band) => {
             const selected = editingBandRow.band_member[band.band_name] ?? [];
             const bandChecked = selected.length > 0;
-            const memberOptions = getBandMembersTemplate(band.band_name);
+            const memberOptions = band.band_members && band.band_members.length > 0
+              ? band.band_members
+              : getBandMembersTemplate(band.band_name);
             return (
               <div key={band.band_id} className="band-member-block">
                 <label className="band-member-main">

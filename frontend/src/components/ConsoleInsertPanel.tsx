@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  getConsoleBands,
+  getConsoleSongs,
+  getConsoleVenues,
+  type ConsoleBandItem,
+  type ConsoleSongItem,
+  type ConsoleVenueItem,
+} from "../api";
 import { LiveAdminSection } from "./console/LiveAdminSection";
 import { LiveInsertTab } from "./console/LiveInsertTab";
 import { SongAdminSection } from "./console/SongAdminSection";
@@ -14,12 +22,14 @@ import {
 } from "./console/constants";
 import { buildOtherMemberPayload, getBandMembersTemplate, getDerivedSegments } from "./console/helpers";
 import type {
+  BandOption,
   ConsoleMode,
   LiveInsertBundle,
   LiveInsertRow,
   Position,
   SetlistDraftRow,
   SongInsertRow,
+  VenueOption,
 } from "./console/types";
 
 type LiveInsertDraft = {
@@ -34,10 +44,48 @@ type LiveInsertDraft = {
   venue_id: number;
 };
 
+function toSongInsertRow(item: ConsoleSongItem): SongInsertRow {
+  return {
+    song_id: item.song_id,
+    song_name: item.song_name,
+    band_id: item.band_id,
+    cover: item.cover,
+  };
+}
+
+function toBandOption(item: ConsoleBandItem): BandOption {
+  return {
+    band_id: item.band_id,
+    band_name: item.band_name,
+    band_abbr: item.band_abbr,
+    band_members: item.band_members,
+  };
+}
+
+function toVenueOption(item: ConsoleVenueItem): VenueOption {
+  return {
+    venue_id: item.venue_id,
+    venue_name: item.venue_name,
+  };
+}
+
+function mergeSongs(existingSongs: SongInsertRow[], remoteSongs: SongInsertRow[]): SongInsertRow[] {
+  const merged = new Map<number, SongInsertRow>();
+  existingSongs.forEach((song) => merged.set(song.song_id, song));
+  remoteSongs.forEach((song) => merged.set(song.song_id, song));
+  return [...merged.values()];
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function ConsoleInsertPanel() {
   const [mode, setMode] = useState<ConsoleMode>("setlist");
   const [lives, setLives] = useState<LiveInsertRow[]>(MOCK_LIVES);
   const [songs, setSongs] = useState<SongInsertRow[]>(MOCK_SONGS);
+  const [bands, setBands] = useState<BandOption[]>(MOCK_BANDS);
+  const [venues, setVenues] = useState<VenueOption[]>(MOCK_VENUES);
   const [submittedBundles, setSubmittedBundles] = useState<LiveInsertBundle[]>([]);
   const [displayedBundle, setDisplayedBundle] = useState<LiveInsertBundle | null>(null);
   const [message, setMessage] = useState<string>("当前为前端 Mock 插入，后续可接后端写入接口。");
@@ -115,6 +163,38 @@ export function ConsoleInsertPanel() {
     });
   // 校验规则 4：新增歌曲的“提交插入”要求 song_name 与 band_id 均非空。
   const isSongSubmitDisabled = songName.trim() === "" || songBandId === null;
+
+  useEffect(() => {
+    let canceled = false;
+
+    const loadConsoleLookups = async () => {
+      const [songResult, bandResult, venueResult] = await Promise.allSettled([
+        getConsoleSongs(undefined, 100),
+        getConsoleBands(undefined, 100),
+        getConsoleVenues(undefined, 100),
+      ]);
+      if (canceled) return;
+
+      if (songResult.status === "fulfilled") {
+        setSongs((prev) => mergeSongs(prev, songResult.value.items.map(toSongInsertRow)));
+      }
+      if (bandResult.status === "fulfilled" && bandResult.value.items.length > 0) {
+        setBands(bandResult.value.items.map(toBandOption));
+      }
+      if (venueResult.status === "fulfilled" && venueResult.value.items.length > 0) {
+        const nextVenues = venueResult.value.items.map(toVenueOption);
+        setVenues(nextVenues);
+        setSelectedVenueId((prev) =>
+          nextVenues.some((venue) => venue.venue_id === prev) ? prev : nextVenues[0]?.venue_id ?? 0,
+        );
+      }
+    };
+
+    void loadConsoleLookups();
+    return () => {
+      canceled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!songBandOpen) return;
@@ -243,14 +323,24 @@ export function ConsoleInsertPanel() {
     );
   };
 
-  const querySongsForSetlist = () => {
+  const querySongsForSetlist = async () => {
+    const queryNames = [...new Set(setlistRows.map((row) => row.song_name.trim()).filter((name) => name !== ""))];
     const songMap = new Map<string, number>();
-    songs.forEach((song) => {
-      const normalized = song.song_name.trim().toLowerCase();
-      if (normalized !== "" && !songMap.has(normalized)) {
-        songMap.set(normalized, song.song_id);
-      }
-    });
+
+    try {
+      const responses = await Promise.all(queryNames.map((name) => getConsoleSongs(name, 10)));
+      const remoteSongs = responses.flatMap((response) => response.items.map(toSongInsertRow));
+      setSongs((prev) => mergeSongs(prev, remoteSongs));
+      remoteSongs.forEach((song) => {
+        const normalized = song.song_name.trim().toLowerCase();
+        if (normalized !== "" && !songMap.has(normalized)) {
+          songMap.set(normalized, song.song_id);
+        }
+      });
+    } catch (error) {
+      setMessage(`查询歌曲失败：${errorMessage(error)}`);
+      return;
+    }
 
     let matched = 0;
     let missing = 0;
@@ -335,7 +425,11 @@ export function ConsoleInsertPanel() {
         if (next[bandName]) {
           delete next[bandName];
         } else {
-          next[bandName] = getBandMembersTemplate(bandName);
+          const matchedBand = bands.find((band) => band.band_name === bandName);
+          next[bandName] =
+            matchedBand?.band_members && matchedBand.band_members.length > 0
+              ? [...matchedBand.band_members]
+              : getBandMembersTemplate(bandName);
         }
         return { ...row, band_member: next };
       }),
@@ -461,8 +555,19 @@ export function ConsoleInsertPanel() {
     setMessage(`已为Live #${targetLive.live_id} 插入 ${setlistPayload.length} 条 setlist(mock)`);
   };
 
-  const queryVid = () => {
-    setMessage(`查询完成：关键词“${venueQueryText.trim() || "-"}” (mock)。`);
+  const queryVid = async () => {
+    try {
+      const response = await getConsoleVenues(venueQueryText, 20);
+      const nextVenues = response.items.map(toVenueOption);
+      setVenues(nextVenues);
+      setSelectedVenueId((prev) =>
+        nextVenues.some((venue) => venue.venue_id === prev) ? prev : nextVenues[0]?.venue_id ?? 0,
+      );
+      setVenueOpen(nextVenues.length > 0);
+      setMessage(`查询venue完成：返回 ${nextVenues.length} 个候选。`);
+    } catch (error) {
+      setMessage(`查询venue失败：${errorMessage(error)}`);
+    }
   };
 
   const insertLive = () => {
@@ -526,7 +631,7 @@ export function ConsoleInsertPanel() {
 
   const renderSongAdminSection = () => (
     <SongAdminSection
-      mockBands={MOCK_BANDS}
+      mockBands={bands}
       nextSongId={nextSongId}
       insertedSongs={insertedSongs}
       songName={songName}
@@ -594,7 +699,7 @@ export function ConsoleInsertPanel() {
           timezone={timezone}
           selectedVenueId={selectedVenueId}
           venueQueryText={venueQueryText}
-          venues={MOCK_VENUES}
+          venues={venues}
           timezoneOptions={TIMEZONE_OPTIONS}
           liveTypeOptions={LIVE_TYPE_OPTIONS}
           venueOpen={venueOpen}
@@ -632,7 +737,7 @@ export function ConsoleInsertPanel() {
           derivedSegments={derivedSegments}
           submittedBundles={submittedBundles}
           displayedBundle={displayedBundle}
-          mockBands={MOCK_BANDS}
+          mockBands={bands}
           editingBandRow={editingBandRow}
           editingOtherRow={editingOtherRow}
           bandMemberMenuPos={bandMemberMenuPos}
