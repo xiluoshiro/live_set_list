@@ -1,3 +1,4 @@
+import argparse
 import os
 import signal
 import shutil
@@ -13,6 +14,16 @@ ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = ROOT / "backend"
 FRONTEND_DIR = ROOT / "frontend"
 PG_ENV_PATH = ROOT / "infra" / "postgres" / ".env.pg-migrate"
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="启动本地后端与前端开发服务。")
+    parser.add_argument(
+        "--test-db",
+        action="store_true",
+        help="仅后端进程连接测试库；默认使用 TEST_DB_NAME 或 live_statistic_test。",
+    )
+    return parser.parse_args(argv)
 
 
 def build_backend_command() -> list[str]:
@@ -35,6 +46,19 @@ def get_postgres_container_name() -> str:
     env_values = dotenv_values(PG_ENV_PATH)
     container_name = str(env_values.get("POSTGRES_CONTAINER_NAME", "")).strip()
     return container_name
+
+
+def get_test_db_name() -> str:
+    env_values = dotenv_values(PG_ENV_PATH)
+    return str(os.getenv("TEST_DB_NAME") or env_values.get("TEST_DB_NAME") or "live_statistic_test")
+
+
+def build_backend_env(*, use_test_db: bool) -> dict[str, str] | None:
+    if not use_test_db:
+        return None
+    backend_env = os.environ.copy()
+    backend_env["DB_NAME"] = get_test_db_name()
+    return backend_env
 
 
 def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
@@ -106,7 +130,8 @@ def terminate_process(proc: subprocess.Popen) -> None:
         proc.terminate()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     if not BACKEND_DIR.exists() or not FRONTEND_DIR.exists():
         print("backend 或 frontend 目录不存在，请先生成项目骨架。")
         return 1
@@ -115,14 +140,18 @@ def main() -> int:
 
     backend_cmd = build_backend_command()
     frontend_cmd = build_frontend_command()
+    backend_env = build_backend_env(use_test_db=args.test_db)
 
     print(f"[backend] {' '.join(backend_cmd)}")
+    if backend_env is not None:
+        print(f"[backend] DB_NAME={backend_env['DB_NAME']}（测试库，仅注入后端进程）")
     print(f"[frontend] {' '.join(frontend_cmd)}")
     print("启动中... 按 Ctrl+C 可一起关闭前后端。")
 
     backend_proc = subprocess.Popen(
         backend_cmd,
         cwd=BACKEND_DIR,
+        env=backend_env,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
     )
     frontend_proc = subprocess.Popen(
