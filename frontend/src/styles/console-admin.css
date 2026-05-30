@@ -131,6 +131,90 @@
   font-size: 13px;
 }
 
+.modal.console-confirm-modal {
+  height: auto;
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+}
+
+.console-confirm-modal.compact {
+  width: fit-content;
+  min-width: min(320px, calc(100vw - 40px));
+  max-width: min(720px, calc(100vw - 40px));
+}
+
+.console-confirm-modal.venue {
+  min-width: min(340px, calc(100vw - 40px));
+  max-width: min(420px, calc(100vw - 40px));
+}
+
+.console-confirm-modal.song {
+  min-width: min(420px, calc(100vw - 40px));
+  max-width: min(520px, calc(100vw - 40px));
+}
+
+.console-confirm-modal.live {
+  width: min(680px, calc(100vw - 40px));
+}
+
+.console-confirm-modal.wide {
+  width: min(1080px, calc(100vw - 40px));
+  max-width: min(1080px, calc(100vw - 40px));
+  height: min(84vh, 760px);
+}
+
+.console-confirm-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.console-confirm-table-wrap {
+  overflow-x: auto;
+}
+
+.console-confirm-table {
+  width: auto;
+  min-width: 0;
+}
+
+.console-confirm-table th {
+  width: 120px;
+  color: var(--text-table-head);
+  white-space: nowrap;
+}
+
+.console-confirm-table td {
+  max-width: min(420px, calc(100vw - 220px));
+  overflow-wrap: anywhere;
+}
+
+.console-confirm-setlist-wrap {
+  max-height: min(52vh, 520px);
+  overflow: auto;
+}
+
+.console-confirm-setlist-table {
+  min-width: 960px;
+}
+
+.console-confirm-setlist-table code {
+  display: block;
+  max-width: 280px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.console-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
 .console-band-icon {
   width: 18px;
   height: 18px;
