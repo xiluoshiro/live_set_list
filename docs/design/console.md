@@ -4,8 +4,8 @@
 
 当前结论：
 
-- 前端控制台原型已经较完整，包含入口权限、录入表单、局部校验、mock 提交和局部测试。
-- 后端 `/api/console` 已提供真实写接口，并新增只读查询接口；当前剩余主线是把前端 mock 接到真实 API。
+- 前端控制台已经从纯 mock 进入“部分真实 API 接线”阶段：只读候选、venue 新增、Live 新增和 setlist 详情弹窗已接真实接口。
+- 后端 `/api/console` 已提供真实写接口和只读查询接口；当前剩余主线是把“新增歌曲”和“新增 Setlist 提交”继续接到真实写 API。
 - 认证、session、CSRF、默认管理账号、收藏接口和数据库运行时账号拆分已经落地，可作为控制台真实录入链路的基础。
 
 ## 0. 本次只读查询 API 设计方案
@@ -67,7 +67,7 @@
 
 其中默认进入 `新增Setlist` 视图。
 
-### 2.3 新增 Live 的前端原型
+### 2.3 新增 Live 的前端实现
 
 `新增Live` 已具备以下表单字段和交互：
 
@@ -82,15 +82,19 @@
 
 同时已经具备：
 
-- venue 查询输入框与按钮占位
-- venue 选择浮层
+- venue 查询输入框与真实候选查询
+- venue 快捷新增，调用 `POST /api/console/venues`
+- venue 选择浮层，候选按 `venue_id` 升序展示
 - 前端字段必填校验
-- 本地“已新增 Live 记录”展示
+- 提交新增 Live，调用 `POST /api/console/lives`
+- 使用后端返回的数据库自增 `live_id` 更新“已新增 Live 记录”和 live 候选
+- `timezone` 默认值为 `+09:00`
+- `live_date` 仍使用浏览器原生日期控件，并限制最小日期为 `2015-01-01`
 
 当前限制：
 
-- “查询 venue” 仅保留了输入和按钮位，还没有把查询结果与“选择 venue”联动起来。
-- 提交后只写入前端状态，不写数据库。
+- 新增 Live 成功后当前只追加到前端当前页候选，不会主动刷新 `GET /api/lives` 分页总数。
+- 原生日期控件的月份/年份滚动体验由浏览器控制，前端只能通过 `min` 等标准属性做有限约束。
 
 ### 2.4 新增 Setlist 的前端原型
 
@@ -109,7 +113,7 @@
 当前限制：
 
 - 提交的 setlist 只会在前端本地形成 payload 和预览，不会调用真实后端接口。
-- “显示详细信息”弹窗仍是占位状态，尚未复用主界面的详情结构。
+- “显示详细信息”弹窗已复用 `GET /api/lives/{live_id}` 和主界面的详情表格。
 
 ### 2.5 新增歌曲的前端原型
 
@@ -161,17 +165,21 @@
 - 前端登录态恢复与收藏切换
 - 前端控制台入口权限显示
 - 控制台局部组件渲染与最小 mock 提交路径
+- 前端控制台只读候选查询接线
+- 前端 venue 新增真实 API 接线
+- 前端 Live 新增真实 API 接线，并验证使用后端返回的 `live_id`
+- setlist 批量粘贴解析、详情弹窗和关键交互
 
 这意味着：
 
 - 认证和收藏链路已有较稳的回归保护。
-- 控制台已有局部测试，但真实写链路、后端 console 接口和完整权限闭环仍没有测试覆盖。
+- 控制台已有读接口、venue 写入和 Live 写入的前端回归保护；新增歌曲与新增 Setlist 的真实写链路仍待补前端测试。
 
 ## 3. 当前未实现内容
 
 结合 README、`auth-design.md` 和代码现状，控制台仍缺少以下核心部分。
 
-### 3.1 后端 console 接口已落地，但前端尚未接线
+### 3.1 后端 console 接口已落地，前端已完成部分接线
 
 当前后端只注册了以下路由：
 
@@ -205,17 +213,23 @@
 
 后续仍需要补的是用户管理能力，而不是 console 录入接口本身的角色闭环。
 
-### 3.3 控制台尚未接入真实 API 客户端
+### 3.3 控制台已部分接入真实 API 客户端
 
-当前 `frontend/src/api.ts` 中还没有控制台相关接口封装。
+当前 `frontend/src/api.ts` 已经包含部分控制台接口封装。
 
-这意味着前端控制台缺少：
+已接入：
 
-- 提交 Live 的 API
-- 提交 Song 的 API
-- 提交 Setlist 的 API
 - 查询 Song/Band/Venue 候选项的 API
-- 相应的错误处理和成功态同步
+- 新增 Venue 的 API
+- 新增 Live 的 API
+- 相应的基础错误处理和成功态同步
+
+仍缺少：
+
+- 提交 Song 的 API 接线
+- 提交 Setlist 的 API 接线
+- 写接口 loading 态与防重复提交
+- 更细的错误展示，例如字段级错误和冲突错误
 
 ### 3.4 前端错误处理仍不完整
 
@@ -418,13 +432,13 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 
 ### 6.1 先保持现有控制台 UI，不立即重做结构
 
-当前控制台页面虽然是 mock，但交互结构已经足够承接第一版真实写接口。
+当前控制台页面虽然仍保留部分 mock 提交流程，但交互结构已经足够承接第一版真实写接口。
 
 因此推荐做法不是重写控制台，而是：
 
 1. 保留现有 `ConsoleInsertPanel`
-2. 在 `api.ts` 中新增控制台请求函数
-3. 将 `submitSong / submitInsertLive / submitSetlist` 从本地状态写入改为真实请求
+2. 在 `api.ts` 中继续补齐控制台请求函数
+3. 将尚未接线的 `submitSong / submitSetlist` 从本地状态写入改为真实请求
 4. 请求成功后再决定是否保留本地历史表作为“刚提交记录”
 
 这样改动范围更可控，也能最大化复用现有测试和交互。
@@ -433,35 +447,37 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 
 推荐按下面顺序推进：
 
-1. 先接只读候选查询：`songs / bands / venues`
-2. 再接 `新增歌曲`
-3. 再接 `新增Live`
-4. 最后接 `新增Setlist`
+1. 已完成：只读候选查询 `songs / bands / venues`
+2. 已完成：`新增Live`
+3. 下一步：`新增歌曲`
+4. 最后接：`新增Setlist`
 
 原因：
 
 - 只读候选查询不改变数据，最适合作为第一条前端真实 API 接线。
-- `新增歌曲` payload 最简单，最适合打通第一条真实写链路
-- `新增Live` 次之，字段较多但结构清晰
+- `新增Live` 已经打通真实写链路，并使用后端返回的数据库自增 `live_id`
+- `新增歌曲` payload 最简单，适合作为下一条真实写链路
 - `新增Setlist` 最复杂，涉及多行 payload、排序和 JSON 字段，适合放在最后
 
 ### 6.3 当前 mock 到真实 API 的对应关系
 
-现在可以直接接入真实 API 的前端位置：
+当前 mock 到真实 API 的接线状态：
 
-- `querySongsForSetlist` / `MOCK_SONGS` -> `GET /api/console/songs`
-- 新增歌曲与 setlist 的 band 选择 / `MOCK_BANDS` -> `GET /api/console/bands`
-- `queryVid` / `MOCK_VENUES` -> `GET /api/console/venues`
-- `submitSong` -> `POST /api/console/songs`
-- `insertLive` / `submitInsertLive` -> `POST /api/console/lives`
-- `submitSetlist` -> `POST /api/console/lives/{live_id}/setlist`
-- setlist 详细信息弹窗 -> 可复用 `GET /api/lives/{live_id}`
-- live 下拉候选 -> 可先复用 `GET /api/lives`
+- 已接：`querySongsForSetlist` / `MOCK_SONGS` -> `GET /api/console/songs`
+- 已接：新增歌曲与 setlist 的 band 选择 / `MOCK_BANDS` -> `GET /api/console/bands`
+- 已接：`queryVid` / `MOCK_VENUES` -> `GET /api/console/venues`
+- 已接：venue 快捷插入 -> `POST /api/console/venues`
+- 已接：`insertLive` / `submitInsertLive` -> `POST /api/console/lives`
+- 已接：setlist 详细信息弹窗 -> `GET /api/lives/{live_id}`
+- 已接：live 下拉候选 -> `GET /api/lives`
+- 待接：`submitSong` -> `POST /api/console/songs`
+- 待接：`submitSetlist` -> `POST /api/console/lives/{live_id}/setlist`
 
 接线时需要注意：
 
 - `submitSetlist` 当前把 `band_member` 和 `other_member` 处理成 JSON 字符串；后端真实接口期望对象，需要在前端请求前改成对象。
 - 只读查询接口不需要 CSRF token；写接口仍必须带 `X-CSRF-Token`。
+- `POST /api/console/lives` 请求体不包含 `live_id`；前端必须使用后端返回的 `live_id`，避免再次出现 mock id 与数据库序列不一致。
 
 ### 6.4 新增 Setlist 批量粘贴解析设计
 
@@ -665,18 +681,23 @@ warning 设计：
 
 ### 阶段 2：接通前端真实 API 链路
 
-- 在 `frontend/src/api.ts` 新增控制台只读查询请求
-- 在 `frontend/src/api.ts` 新增控制台写请求
-- 用真实请求替换当前 mock 查询函数
-- 用真实请求替换当前 mock 提交函数
+- 已在 `frontend/src/api.ts` 新增控制台只读查询请求
+- 已在 `frontend/src/api.ts` 新增 venue / Live 写请求
+- 已用真实请求替换当前候选查询函数
+- 已用真实请求替换 venue 快捷新增和 Live 新增提交
+- 待用真实请求替换新增歌曲提交
+- 待用真实请求替换新增 Setlist 提交
 - 补充 loading / success / failure 提示
 
-状态：下一步。
+状态：进行中。
 
 ### 阶段 3：完善控制台内部空白点
 
-- venue 查询结果与“选择 venue”联动
-- setlist 详细信息弹窗复用主界面详情结构
+- 已完成 venue 查询结果与“选择 venue”联动
+- 已完成 setlist 详细信息弹窗复用主界面详情结构
+- 已完成新增 Live 默认 `timezone = +09:00`
+- 已完成 `live_date` 原生日期输入最小值限制为 `2015-01-01`
+- 已完成删除末行时的全局顶部 toast 告警
 - 前端错误态、空态、加载态补齐
 
 ### 阶段 4：补管理员用户管理
@@ -690,10 +711,10 @@ warning 设计：
 
 ## 8. 总结
 
-当前控制台已经完成了“可进入、可操作、可 mock 演示”的前端阶段，也已经完成第一版“可落库、可审计、可鉴权、可查询候选项”的后端阶段。
+当前控制台已经完成了“可进入、可操作、可查询候选、可新增 venue、可新增 Live”的前端阶段，也已经完成第一版“可落库、可审计、可鉴权、可查询候选项”的后端阶段。
 
 最重要的判断是：
 
-- 当前最大空白已经转移到前端 API 接线。
-- 当前最推荐的下一步不是重写控制台，而是把已有控制台页面接到真实读写接口上。
-- 在这之后，再补 venue 联动、详情复用和管理员用户管理，整体推进成本最低。
+- 当前最大空白已经收敛到新增歌曲与新增 Setlist 的真实写接口接线。
+- 当前最推荐的下一步不是重写控制台，而是继续在已有控制台页面上接 `POST /api/console/songs`。
+- 在新增歌曲稳定后，再接 `POST /api/console/lives/{live_id}/setlist`，最后补管理员用户管理，整体推进成本最低。
