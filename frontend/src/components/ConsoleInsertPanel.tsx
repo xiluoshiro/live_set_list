@@ -456,6 +456,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     });
   };
 
+  const clearSetlistData = () => {
+    setSetlistRows(INITIAL_SETLIST_ROWS.map((row) => ({ ...row, row_key: 1 })));
+    setSetlistRowKey(1000);
+    setOtherMemberEntryKey(100);
+    setDidSongLookup(false);
+  };
+
   const updateSetlistRow = <K extends keyof SetlistDraftRow>(
     rowKey: number,
     key: K,
@@ -1308,6 +1315,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           onShowCurrentSetlist={showCurrentSetlistDetail}
           onAddSetlistRow={addSetlistRow}
           onRemoveLastSetlistRow={removeLastSetlistRow}
+          onClearSetlistData={clearSetlistData}
           onQuerySongsForSetlist={querySongsForSetlist}
           onSubmitLiveWithSetlist={requestSetlistConfirmation}
           submitDisabled={isSetlistSubmitDisabled}
