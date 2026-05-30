@@ -37,6 +37,10 @@ vi.mock("../api", () => ({
   favoriteLive: vi.fn(),
   favoriteLivesBatch: vi.fn(),
   unfavoriteLive: vi.fn(),
+  createConsoleVenue: vi.fn().mockResolvedValue({ ok: true, item: { venue_id: 1, venue_name: "Mock Venue" } }),
+  getConsoleSongs: vi.fn().mockResolvedValue({ items: [] }),
+  getConsoleBands: vi.fn().mockResolvedValue({ items: [] }),
+  getConsoleVenues: vi.fn().mockResolvedValue({ items: [] }),
   ApiError: class ApiError extends Error {
     status: number;
     code: string | null;

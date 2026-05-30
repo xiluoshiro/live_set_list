@@ -20,6 +20,8 @@ from app.schemas.console import (
     ConsoleLiveSetlistAppendResponse,
     ConsoleSongCreateRequest,
     ConsoleSongMutationResponse,
+    ConsoleVenueCreateRequest,
+    ConsoleVenueMutationResponse,
 )
 
 router = APIRouter()
@@ -211,6 +213,73 @@ def create_song(
             "song_name": payload.song_name,
             "band_id": payload.band_id,
             "cover": payload.cover,
+        },
+    }
+
+
+@router.post(
+    "/venues",
+    status_code=201,
+    response_model=ConsoleVenueMutationResponse,
+    summary="新增场地",
+    description="`editor+` 用户新增 venue_list 场地。当前表结构的 NOT NULL 列为 `venue`，`id` 由 sequence 自动生成。",
+    responses={
+        401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
+        403: {"model": AuthErrorResponse, "description": "缺少权限或 CSRF 校验失败"},
+        422: {"model": ValidationErrorResponse, "description": "请求体验证失败"},
+        500: {"model": ErrorResponse, "description": "数据库一般错误"},
+        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
+    },
+)
+def create_venue(
+    payload: ConsoleVenueCreateRequest,
+    request: Request,
+    _: Any = Depends(require_role("editor")),
+    context: AuthSessionContext = Depends(get_current_auth_context),
+):
+    """Insert one venue_list row from the console venue quick-insert control and audit it."""
+    assert_valid_csrf(request, context)
+
+    try:
+        with get_write_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO venue_list (venue)
+                    VALUES (%s)
+                    RETURNING id
+                    """,
+                    (payload.venue_name,),
+                )
+                created_row = cur.fetchone()
+                assert created_row is not None
+                venue_id = int(created_row[0])
+
+                _write_console_audit_log(
+                    cur,
+                    user_id=context.user.id,
+                    action="venue_create",
+                    resource_type="venue",
+                    resource_id=str(venue_id),
+                    payload_json={"venue_name": payload.venue_name},
+                )
+    except QueryCanceled as exc:
+        logger.exception("create_venue timeout user_id=%s venue_name=%s", context.user.id, payload.venue_name)
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        logger.exception("create_venue operational error user_id=%s venue_name=%s", context.user.id, payload.venue_name)
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        logger.exception("create_venue failed user_id=%s venue_name=%s", context.user.id, payload.venue_name)
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+    return {
+        "ok": True,
+        "item": {
+            "venue_id": venue_id,
+            "venue_name": payload.venue_name,
         },
     }
 

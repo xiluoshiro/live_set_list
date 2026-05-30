@@ -78,6 +78,28 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/console/venues?limit=20");
   });
 
+  test("createConsoleVenue 会携带 CSRF 写入 venue", async () => {
+    // 测试点：新增场地封装应调用 console venue 写接口，并传递后端要求的 CSRF header。
+    fetchMock.mockResolvedValueOnce(
+      makeJsonResponse({
+        ok: true,
+        item: { venue_id: 9, venue_name: "New Venue" },
+      }, true, 201),
+    );
+    const { createConsoleVenue } = await import("../api");
+
+    const payload = await createConsoleVenue("New Venue", "csrf-token");
+
+    expect(payload.item).toEqual({ venue_id: 9, venue_name: "New Venue" });
+    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/console/venues");
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
+      credentials: "include",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      body: JSON.stringify({ venue_name: "New Venue" }),
+    }));
+  });
+
   test("console lookup 错误响应会转换为 ApiError", async () => {
     // 测试点：只读查询遇到后端结构化认证错误时，应沿用统一 ApiError 解析。
     fetchMock.mockResolvedValueOnce(

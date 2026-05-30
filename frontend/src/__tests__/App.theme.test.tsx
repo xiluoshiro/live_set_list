@@ -20,6 +20,10 @@ vi.mock("../api", () => ({
   getLiveDetailsBatch: vi.fn(),
   peekMyFavoriteLives: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
+  createConsoleVenue: vi.fn().mockResolvedValue({ ok: true, item: { venue_id: 1, venue_name: "Mock Venue" } }),
+  getConsoleSongs: vi.fn().mockResolvedValue({ items: [] }),
+  getConsoleBands: vi.fn().mockResolvedValue({ items: [] }),
+  getConsoleVenues: vi.fn().mockResolvedValue({ items: [] }),
 }));
 
 const getLivesMock = vi.mocked(getLives);

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ConsoleInsertPanel } from "../ConsoleInsertPanel";
 
 const apiMocks = vi.hoisted(() => ({
+  createConsoleVenue: vi.fn(),
   getConsoleSongs: vi.fn(),
   getConsoleBands: vi.fn(),
   getConsoleVenues: vi.fn(),
@@ -12,7 +13,15 @@ const apiMocks = vi.hoisted(() => ({
   getLives: vi.fn(),
 }));
 
+vi.mock("../../auth/AuthProvider", () => ({
+  useAuth: () => ({
+    isAuthenticated: true,
+    csrfToken: "csrf-token",
+  }),
+}));
+
 vi.mock("../../api", () => ({
+  createConsoleVenue: apiMocks.createConsoleVenue,
   getConsoleSongs: apiMocks.getConsoleSongs,
   getConsoleBands: apiMocks.getConsoleBands,
   getConsoleVenues: apiMocks.getConsoleVenues,
@@ -22,6 +31,7 @@ vi.mock("../../api", () => ({
 
 describe("ConsoleInsertPanel", () => {
   beforeEach(() => {
+    apiMocks.createConsoleVenue.mockReset();
     apiMocks.getConsoleSongs.mockReset();
     apiMocks.getConsoleBands.mockReset();
     apiMocks.getConsoleVenues.mockReset();
@@ -30,6 +40,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs.mockResolvedValue({ items: [] });
     apiMocks.getConsoleBands.mockResolvedValue({ items: [] });
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [] });
+    apiMocks.createConsoleVenue.mockResolvedValue({ ok: true, item: { venue_id: 88, venue_name: "New Venue" } });
     apiMocks.getLiveDetail.mockResolvedValue({
       live_id: 101,
       live_date: "2026-03-30",
@@ -211,6 +222,21 @@ describe("ConsoleInsertPanel", () => {
     const venueMenu = screen.getByText("301 - Later Venue").closest(".bands-floating-menu") as HTMLElement;
     const venueOptions = within(venueMenu).getAllByText(/Venue$/).map((node) => node.textContent);
     expect(venueOptions).toEqual(["101 - Early Venue", "301 - Later Venue"]);
+  });
+
+  test("查询venue旁的插入按钮会新增venue而不是提交Live", async () => {
+    // 测试点：venue 快捷插入应调用新增 venue API，并自动选中新建场地，不能误触发新增 Live 校验。
+    const user = userEvent.setup();
+    render(<ConsoleInsertPanel />);
+
+    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    await user.type(screen.getByLabelText("查询 venue"), "New Venue");
+    await user.click(screen.getByRole("button", { name: "插入" }));
+
+    await waitFor(() => expect(apiMocks.createConsoleVenue).toHaveBeenCalledWith("New Venue", "csrf-token"));
+    expect(screen.getByText("已新增venue #88（New Venue）")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "88 - New Venue" })).toBeInTheDocument();
+    expect(screen.queryByText("新增Live失败：live_date 与 live_title 为必填项。")).not.toBeInTheDocument();
   });
 
   test("live_id 候选支持20条分页切换", async () => {

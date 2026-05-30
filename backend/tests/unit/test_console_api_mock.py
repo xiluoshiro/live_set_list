@@ -92,6 +92,13 @@ def _valid_live_payload(**overrides):
     return payload
 
 
+def _valid_venue_payload(**overrides):
+    """Return a minimal valid venue-create request body with optional field overrides."""
+    payload = {"venue_name": "Mock Venue"}
+    payload.update(overrides)
+    return payload
+
+
 def _valid_setlist_payload(**row_overrides):
     """Return a minimal valid setlist append request body with optional first-row overrides."""
     row = {
@@ -210,6 +217,7 @@ def test_console_lookup_mock_surfaces_database_errors(exc: Exception, expected_s
     ("method", "path", "json_body"),
     [
         ("post", "/api/console/songs", _valid_song_payload()),
+        ("post", "/api/console/venues", _valid_venue_payload()),
         ("post", "/api/console/lives", _valid_live_payload()),
         ("post", "/api/console/lives/1/setlist", _valid_setlist_payload()),
     ],
@@ -231,6 +239,7 @@ def test_console_insert_mock_requires_authenticated_editor_role(method: str, pat
     ("path", "json_body"),
     [
         ("/api/console/songs", _valid_song_payload()),
+        ("/api/console/venues", _valid_venue_payload()),
         ("/api/console/lives", _valid_live_payload()),
         ("/api/console/lives/1/setlist", _valid_setlist_payload()),
     ],
@@ -256,6 +265,8 @@ def test_console_insert_mock_requires_valid_csrf(path: str, json_body: dict):
         ("/api/console/songs", _valid_song_payload(song_name="   ")),
         ("/api/console/songs", _valid_song_payload(band_id=0)),
         ("/api/console/songs", _valid_song_payload(cover="not-bool")),
+        ("/api/console/venues", {}),
+        ("/api/console/venues", _valid_venue_payload(venue_name="   ")),
         ("/api/console/lives", {}),
         ("/api/console/lives", _valid_live_payload(live_date="not-date")),
         ("/api/console/lives", _valid_live_payload(venue_id=0)),
@@ -330,6 +341,30 @@ def test_console_create_song_mock_business_errors():
     assert missing_band_response.json()["detail"] == "Band id 999 not found"
     assert duplicate_response.status_code == 409
     assert duplicate_response.json()["detail"] == "Song name already exists: Yes! BanG_Dream!"
+
+
+# 测试点：新增 venue 成功时应只写入 venue_list 的 NOT NULL 业务列 venue，并记录审计日志。
+def test_console_create_venue_mock_success_persists_and_audits():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(fetchone_side_effect=[(88,)])
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/venues",
+            json=_valid_venue_payload(venue_name="  New Venue  "),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "ok": True,
+        "item": {"venue_id": 88, "venue_name": "New Venue"},
+    }
+    assert cursor.execute.call_count == 2
+    assert "INSERT INTO venue_list (venue)" in cursor.execute.call_args_list[0].args[0]
+    assert cursor.execute.call_args_list[0].args[1] == ("New Venue",)
+    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[1].args[0]
 
 
 # 测试点：新增 Live 成功时应补齐时间秒数和时区，并返回创建结果。
