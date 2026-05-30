@@ -776,3 +776,67 @@ def test_console_append_live_setlist_rolls_back_when_one_row_is_invalid(
         (1, 3, 4),
     ) == 0
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
+
+
+def test_console_append_live_setlist_normalizes_new_segment_types(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify OP/ED/WEN segment types are normalized to opening/ending/w_encore in DB."""
+    editor_user_id = _create_user(
+        integration_admin_connection,
+        username="editor_segtype_api",
+        password="editor-segtype-pass",
+        display_name="Editor SegType API",
+        role="editor",
+    )
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_segtype_api",
+        password="editor-segtype-pass",
+    )
+
+    response = integration_test_client.post(
+        "/api/console/lives/1/setlist",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "setlist_rows": [
+                {
+                    "song_id": 4,
+                    "absolute_order": 5,
+                    "segment_type": "OP",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "other_member": {},
+                    "comment": "opening track",
+                },
+                {
+                    "song_id": 29,
+                    "absolute_order": 6,
+                    "segment_type": "WEN",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_member": {"Roselia": ["Yukina"]},
+                    "other_member": {},
+                    "comment": "w encore",
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["item"]["inserted_row_count"] == 2
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT absolute_order, segment_type, sub_order, comment FROM live_setlist WHERE live_id = %s AND absolute_order >= 5 ORDER BY absolute_order",
+            (1,),
+        )
+        rows = cursor.fetchall()
+
+    assert rows == [
+        (5, "opening", 1, "opening track"),
+        (6, "w_encore", 1, "w encore"),
+    ]

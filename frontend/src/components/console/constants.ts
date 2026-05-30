@@ -1,6 +1,6 @@
 import type { BandOption, LiveInsertRow, SetlistDraftRow, SongInsertRow, VenueOption } from "./types";
 
-export const SEGMENT_OPTIONS = ["M", "EN", "SP"];
+export const SEGMENT_OPTIONS = ["M", "OP", "ED", "EN", "WEN", "SP"];
 export const DEFAULT_BAND_MEMBERS = ["主唱", "吉他", "贝斯", "鼓手", "键盘"];
 export const LIVE_TYPE_OPTIONS = ["专场", "拼盘", "对邦", "活动", "其他"];
 export const TIMEZONE_OPTIONS = ["+08:00", "+09:00", "+00:00", "-05:00"];

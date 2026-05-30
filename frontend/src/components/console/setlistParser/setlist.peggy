@@ -25,7 +25,7 @@ PerformerLine
     }
 
 SongLine
-  = _ segment:("EN" / "SP" / "M") order:Digits "." _ name:LineText NewLine? {
+  = _ segment:("OP" / "ED" / "WEN" / "EN" / "SP" / "M") order:Digits ("." / " ") _ name:LineText NewLine? {
       return {
         type: "song_entry",
         segmentType: segment,

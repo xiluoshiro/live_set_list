@@ -395,6 +395,34 @@ VALUES
         }$$::jsonb,
         NULL,
         NULL
+    ),
+    (
+        'b8a3d5f1-2c4e-4a7b-9d1e-3f8c6a0b5d2e'::uuid,
+        38,
+        30,
+        16,
+        'OP',
+        1,
+        false,
+        $${
+          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
+        }$$::jsonb,
+        NULL,
+        NULL
+    ),
+    (
+        'c9b4e6f2-3d5f-4b8c-0e2f-4a9d7b1c6e3f'::uuid,
+        38,
+        102,
+        17,
+        'WEN',
+        1,
+        false,
+        $${
+          "Poppin'Party": ["愛美", "伊藤彩沙"]
+        }$$::jsonb,
+        NULL,
+        NULL
     );
 
 SELECT setval('public.live_attrs_id_seq', (SELECT MAX(id) FROM public.live_attrs), true);

@@ -32,12 +32,18 @@ TIMEZONE_PATTERN = re.compile(r"^[+-]\d{2}:\d{2}$")
 SEGMENT_TYPE_ALIASES = {
     "M": "main",
     "MAIN": "main",
+    "OP": "opening",
+    "OPENING": "opening",
+    "ED": "ending",
+    "ENDING": "ending",
     "EN": "encore",
     "ENCORE": "encore",
+    "WEN": "w_encore",
+    "W_ENCORE": "w_encore",
     "SP": "special",
     "SPECIAL": "special",
 }
-CANONICAL_SEGMENT_TYPES = {"main", "encore", "special"}
+CANONICAL_SEGMENT_TYPES = {"main", "opening", "ending", "encore", "w_encore", "special"}
 
 
 def _write_console_audit_log(
