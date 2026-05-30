@@ -142,6 +142,11 @@
   color: var(--text-main);
 }
 
+.live-page-status {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .setlist-input-wrap {
   margin-top: 12px;
 }

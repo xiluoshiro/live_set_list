@@ -7,6 +7,10 @@ import type { BandOption, DerivedSegment, LiveInsertBundle, LiveInsertRow, Posit
 type LiveInsertTabProps = {
   lives: LiveInsertRow[];
   selectedLiveId: number;
+  livePage: number;
+  liveTotal: number;
+  liveTotalPages: number;
+  isLiveLoading: boolean;
   didSongLookup: boolean;
   setlistRows: SetlistDraftRow[];
   derivedSegments: DerivedSegment[];
@@ -23,6 +27,7 @@ type LiveInsertTabProps = {
   otherMemberTriggerRefs: MutableRefObject<Record<number, HTMLButtonElement | null>>;
   otherMemberMenuRef: RefObject<HTMLDivElement>;
   onSelectedLiveIdChange: (liveId: number) => void;
+  onLivePageChange: (page: number) => void;
   onUpdateSetlistSongName: (rowKey: number, value: string) => void;
   onSetSongModalRowKey: (rowKey: number | null) => void;
   onUpdateSetlistSegment: (rowKey: number, value: string) => void;
@@ -51,6 +56,10 @@ type LiveInsertTabProps = {
 export function LiveInsertTab({
   lives,
   selectedLiveId,
+  livePage,
+  liveTotal,
+  liveTotalPages,
+  isLiveLoading,
   didSongLookup,
   setlistRows,
   derivedSegments,
@@ -67,6 +76,7 @@ export function LiveInsertTab({
   otherMemberTriggerRefs,
   otherMemberMenuRef,
   onSelectedLiveIdChange,
+  onLivePageChange,
   onUpdateSetlistSongName,
   onSetSongModalRowKey,
   onUpdateSetlistSegment,
@@ -86,6 +96,10 @@ export function LiveInsertTab({
   onAddOtherMemberEntry,
   renderSongAdminSection,
 }: LiveInsertTabProps) {
+  const normalizedLiveTotalPages = Math.max(liveTotalPages, 1);
+  const isPreviousLivePageDisabled = isLiveLoading || livePage <= 1;
+  const isNextLivePageDisabled = isLiveLoading || livePage >= normalizedLiveTotalPages;
+
   return (
     <>
       <div className="live-id-selector">
@@ -93,14 +107,40 @@ export function LiveInsertTab({
         <select
           id="live-id-select"
           value={selectedLiveId}
+          disabled={isLiveLoading || lives.length === 0}
           onChange={(e) => onSelectedLiveIdChange(Number(e.target.value))}
         >
-          {lives.map((live) => (
-            <option key={live.live_id} value={live.live_id}>
-              {live.live_id} - {live.live_title} ({live.live_date})
-            </option>
-          ))}
+          {isLiveLoading ? (
+            <option value={0}>加载 live 候选中...</option>
+          ) : lives.length === 0 ? (
+            <option value={0}>暂无 live 候选</option>
+          ) : (
+            lives.map((live) => (
+              <option key={live.live_id} value={live.live_id}>
+                {live.live_id} - {live.live_title} ({live.live_date})
+              </option>
+            ))
+          )}
         </select>
+        <span className="live-page-status">
+          第 {livePage} / {normalizedLiveTotalPages} 页，共 {liveTotal} 条
+        </span>
+        <button
+          type="button"
+          className="console-ghost-btn"
+          onClick={() => onLivePageChange(Math.max(1, livePage - 1))}
+          disabled={isPreviousLivePageDisabled}
+        >
+          上一页
+        </button>
+        <button
+          type="button"
+          className="console-ghost-btn"
+          onClick={() => onLivePageChange(livePage + 1)}
+          disabled={isNextLivePageDisabled}
+        >
+          下一页
+        </button>
         <button type="button" className="console-ghost-btn" onClick={onShowCurrentSetlist}>
           显示详细信息
         </button>
@@ -286,14 +326,17 @@ export function LiveInsertTab({
         <div
           className="band-member-floating-menu"
           ref={bandMemberMenuRef}
+          onMouseDown={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
           style={{ top: bandMemberMenuPos.top, left: bandMemberMenuPos.left, width: bandMemberMenuPos.width }}
         >
           {mockBands.map((band) => {
             const selected = editingBandRow.band_member[band.band_name] ?? [];
             const bandChecked = selected.length > 0;
-            const memberOptions = band.band_members && band.band_members.length > 0
-              ? band.band_members
-              : getBandMembersTemplate(band.band_name);
+            const memberOptions =
+              band.band_members && band.band_members.length > 0
+                ? band.band_members
+                : getBandMembersTemplate(band.band_name);
             return (
               <div key={band.band_id} className="band-member-block">
                 <label className="band-member-main">
@@ -330,6 +373,8 @@ export function LiveInsertTab({
         <div
           className="other-member-floating-menu"
           ref={otherMemberMenuRef}
+          onMouseDown={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
           style={{ top: otherMemberMenuPos.top, left: otherMemberMenuPos.left, width: otherMemberMenuPos.width }}
         >
           <div className="other-member-editor">

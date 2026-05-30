@@ -105,7 +105,7 @@ export function LiveAdminSection({
           插入
         </button>
       </div>
-      <p className="console-admin-hint">TODO: 查询结果与“选择 venue”联动（当前仅保留输入与按钮位）。</p>
+      <p className="console-admin-hint">查询结果会同步刷新“选择 venue”的候选列表。</p>
 
       <div className="live-id-selector live-create-tools">
         <label>选择 venue</label>
@@ -183,6 +183,8 @@ export function LiveAdminSection({
         <div
           className="bands-floating-menu"
           ref={venueMenuRef}
+          onMouseDown={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
           style={{ top: venueMenuPos.top, left: venueMenuPos.left, width: venueMenuPos.width }}
         >
           {venues.map((venue) => (

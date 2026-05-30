@@ -4,9 +4,11 @@ import {
   getConsoleBands,
   getConsoleSongs,
   getConsoleVenues,
+  getLives,
   type ConsoleBandItem,
   type ConsoleSongItem,
   type ConsoleVenueItem,
+  type LiveItem,
 } from "../api";
 import { LiveAdminSection } from "./console/LiveAdminSection";
 import { LiveInsertTab } from "./console/LiveInsertTab";
@@ -14,10 +16,6 @@ import { SongAdminSection } from "./console/SongAdminSection";
 import {
   INITIAL_SETLIST_ROWS,
   LIVE_TYPE_OPTIONS,
-  MOCK_BANDS,
-  MOCK_LIVES,
-  MOCK_SONGS,
-  MOCK_VENUES,
   TIMEZONE_OPTIONS,
 } from "./console/constants";
 import { buildOtherMemberPayload, getBandMembersTemplate, getDerivedSegments } from "./console/helpers";
@@ -69,11 +67,32 @@ function toVenueOption(item: ConsoleVenueItem): VenueOption {
   };
 }
 
+function toLiveInsertRow(item: LiveItem): LiveInsertRow {
+  return {
+    live_id: item.live_id,
+    live_date: item.live_date,
+    live_title: item.live_title,
+    bands: item.bands.flatMap((band) => (typeof band === "number" ? [band] : [])),
+    url: item.url,
+  };
+}
+
+function sortById<T>(items: T[], getId: (item: T) => number): T[] {
+  return [...items].sort((left, right) => getId(left) - getId(right));
+}
+
+function sortLivesForConsole(items: LiveInsertRow[]): LiveInsertRow[] {
+  return [...items].sort((left, right) => {
+    const dateOrder = right.live_date.localeCompare(left.live_date);
+    return dateOrder !== 0 ? dateOrder : right.live_id - left.live_id;
+  });
+}
+
 function mergeSongs(existingSongs: SongInsertRow[], remoteSongs: SongInsertRow[]): SongInsertRow[] {
   const merged = new Map<number, SongInsertRow>();
   existingSongs.forEach((song) => merged.set(song.song_id, song));
   remoteSongs.forEach((song) => merged.set(song.song_id, song));
-  return [...merged.values()];
+  return sortById([...merged.values()], (song) => song.song_id);
 }
 
 function errorMessage(error: unknown): string {
@@ -82,15 +101,18 @@ function errorMessage(error: unknown): string {
 
 export function ConsoleInsertPanel() {
   const [mode, setMode] = useState<ConsoleMode>("setlist");
-  const [lives, setLives] = useState<LiveInsertRow[]>(MOCK_LIVES);
-  const [songs, setSongs] = useState<SongInsertRow[]>(MOCK_SONGS);
-  const [bands, setBands] = useState<BandOption[]>(MOCK_BANDS);
-  const [venues, setVenues] = useState<VenueOption[]>(MOCK_VENUES);
+  const [lives, setLives] = useState<LiveInsertRow[]>([]);
+  const [songs, setSongs] = useState<SongInsertRow[]>([]);
+  const [bands, setBands] = useState<BandOption[]>([]);
+  const [venues, setVenues] = useState<VenueOption[]>([]);
   const [submittedBundles, setSubmittedBundles] = useState<LiveInsertBundle[]>([]);
   const [displayedBundle, setDisplayedBundle] = useState<LiveInsertBundle | null>(null);
   const [message, setMessage] = useState<string>("当前为前端 Mock 插入，后续可接后端写入接口。");
 
-  const [selectedLiveId, setSelectedLiveId] = useState<number>(MOCK_LIVES[0]?.live_id ?? 0);
+  const [selectedLiveId, setSelectedLiveId] = useState<number>(0);
+  const [livePage, setLivePage] = useState(1);
+  const [livePagination, setLivePagination] = useState({ page: 1, page_size: 20, total: 0, total_pages: 1 });
+  const [isLiveLoading, setIsLiveLoading] = useState(false);
 
   const [songName, setSongName] = useState("");
   const [songBandId, setSongBandId] = useState<number | null>(null);
@@ -106,7 +128,7 @@ export function ConsoleInsertPanel() {
   const [openingTime, setOpeningTime] = useState("18:00");
   const [startTime, setStartTime] = useState("19:00");
   const [timezone, setTimezone] = useState(TIMEZONE_OPTIONS[0] ?? "+08:00");
-  const [selectedVenueId, setSelectedVenueId] = useState<number>(MOCK_VENUES[0]?.venue_id ?? 0);
+  const [selectedVenueId, setSelectedVenueId] = useState<number>(0);
   const [venueQueryText, setVenueQueryText] = useState("");
   const [venueOpen, setVenueOpen] = useState(false);
   const [venueMenuPos, setVenueMenuPos] = useState<Position | null>(null);
@@ -179,14 +201,22 @@ export function ConsoleInsertPanel() {
         setSongs((prev) => mergeSongs(prev, songResult.value.items.map(toSongInsertRow)));
       }
       if (bandResult.status === "fulfilled" && bandResult.value.items.length > 0) {
-        setBands(bandResult.value.items.map(toBandOption));
+        setBands(sortById(bandResult.value.items.map(toBandOption), (band) => band.band_id));
       }
       if (venueResult.status === "fulfilled" && venueResult.value.items.length > 0) {
-        const nextVenues = venueResult.value.items.map(toVenueOption);
+        const nextVenues = sortById(venueResult.value.items.map(toVenueOption), (venue) => venue.venue_id);
         setVenues(nextVenues);
         setSelectedVenueId((prev) =>
           nextVenues.some((venue) => venue.venue_id === prev) ? prev : nextVenues[0]?.venue_id ?? 0,
         );
+      }
+      const failures = [
+        songResult.status === "rejected" ? `songs: ${errorMessage(songResult.reason)}` : "",
+        bandResult.status === "rejected" ? `bands: ${errorMessage(bandResult.reason)}` : "",
+        venueResult.status === "rejected" ? `venues: ${errorMessage(venueResult.reason)}` : "",
+      ].filter(Boolean);
+      if (failures.length > 0) {
+        setMessage(`加载控制台候选失败：${failures.join("；")}`);
       }
     };
 
@@ -195,6 +225,38 @@ export function ConsoleInsertPanel() {
       canceled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let canceled = false;
+    setIsLiveLoading(true);
+
+    const loadLivePage = async () => {
+      try {
+        const response = await getLives(livePage, 20);
+        if (canceled) return;
+        const nextLives = sortLivesForConsole(response.items.map(toLiveInsertRow));
+        setLives(nextLives);
+        setLivePagination(response.pagination);
+        setSelectedLiveId((prev) =>
+          nextLives.some((live) => live.live_id === prev) ? prev : nextLives[0]?.live_id ?? 0,
+        );
+      } catch (error) {
+        if (canceled) return;
+        setLives([]);
+        setSelectedLiveId(0);
+        setMessage(`加载live候选失败：${errorMessage(error)}`);
+      } finally {
+        if (!canceled) {
+          setIsLiveLoading(false);
+        }
+      }
+    };
+
+    void loadLivePage();
+    return () => {
+      canceled = true;
+    };
+  }, [livePage]);
 
   useEffect(() => {
     if (!songBandOpen) return;
@@ -207,11 +269,9 @@ export function ConsoleInsertPanel() {
     const close = () => setSongBandOpen(false);
     window.addEventListener("mousedown", onDown);
     window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
     return () => {
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
     };
   }, [songBandOpen]);
 
@@ -226,11 +286,9 @@ export function ConsoleInsertPanel() {
     const close = () => setVenueOpen(false);
     window.addEventListener("mousedown", onDown);
     window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
     return () => {
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
     };
   }, [venueOpen]);
 
@@ -250,11 +308,9 @@ export function ConsoleInsertPanel() {
     };
     window.addEventListener("mousedown", onDown);
     window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
     return () => {
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
     };
   }, [editingBandRowKey]);
 
@@ -274,11 +330,9 @@ export function ConsoleInsertPanel() {
     };
     window.addEventListener("mousedown", onDown);
     window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
     return () => {
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
     };
   }, [editingOtherRowKey]);
 
@@ -558,7 +612,7 @@ export function ConsoleInsertPanel() {
   const queryVid = async () => {
     try {
       const response = await getConsoleVenues(venueQueryText, 20);
-      const nextVenues = response.items.map(toVenueOption);
+      const nextVenues = sortById(response.items.map(toVenueOption), (venue) => venue.venue_id);
       setVenues(nextVenues);
       setSelectedVenueId((prev) =>
         nextVenues.some((venue) => venue.venue_id === prev) ? prev : nextVenues[0]?.venue_id ?? 0,
@@ -566,6 +620,9 @@ export function ConsoleInsertPanel() {
       setVenueOpen(nextVenues.length > 0);
       setMessage(`查询venue完成：返回 ${nextVenues.length} 个候选。`);
     } catch (error) {
+      setVenues([]);
+      setSelectedVenueId(0);
+      setVenueOpen(false);
       setMessage(`查询venue失败：${errorMessage(error)}`);
     }
   };
@@ -594,7 +651,20 @@ export function ConsoleInsertPanel() {
     };
 
     setInsertedLives((prev) => [inserted, ...prev]);
-    setLives((prev) => [{ live_id: inserted.live_id, live_date: inserted.live_date, live_title: inserted.live_title, bands: [], url: inserted.url }, ...prev]);
+    setLives((prev) =>
+      sortLivesForConsole(
+        [
+          {
+            live_id: inserted.live_id,
+            live_date: inserted.live_date,
+            live_title: inserted.live_title,
+            bands: [],
+            url: inserted.url,
+          },
+          ...prev,
+        ],
+      ),
+    );
     setSelectedLiveId(inserted.live_id);
     setMessage(`已新增Live #${inserted.live_id}（${inserted.live_title}）`);
   };
@@ -614,8 +684,8 @@ export function ConsoleInsertPanel() {
       return;
     }
     const row: SongInsertRow = { song_id: nextSongId, song_name: name, band_id: songBandId, cover: songCover };
-    setSongs((prev) => [row, ...prev]);
-    setInsertedSongs((prev) => [row, ...prev]);
+    setSongs((prev) => sortById([row, ...prev], (song) => song.song_id));
+    setInsertedSongs((prev) => sortById([row, ...prev], (song) => song.song_id));
     setSongName("");
     setSongCover(false);
     setSongBandOpen(false);
@@ -732,6 +802,10 @@ export function ConsoleInsertPanel() {
         <LiveInsertTab
           lives={lives}
           selectedLiveId={selectedLiveId}
+          livePage={livePagination.page}
+          liveTotal={livePagination.total}
+          liveTotalPages={livePagination.total_pages}
+          isLiveLoading={isLiveLoading}
           didSongLookup={didSongLookup}
           setlistRows={setlistRows}
           derivedSegments={derivedSegments}
@@ -748,6 +822,7 @@ export function ConsoleInsertPanel() {
           otherMemberTriggerRefs={otherMemberTriggerRefs}
           otherMemberMenuRef={otherMemberMenuRef}
           onSelectedLiveIdChange={setSelectedLiveId}
+          onLivePageChange={setLivePage}
           onUpdateSetlistSongName={updateSetlistSongName}
           onSetSongModalRowKey={setSongModalRowKey}
           onUpdateSetlistSegment={(rowKey, value) => updateSetlistRow(rowKey, "segment_start_type", value)}
@@ -794,7 +869,7 @@ export function ConsoleInsertPanel() {
               <span>{selectedLiveId}</span>
             </p>
             <div className="detail-table-wrap">
-              <p className="empty-cell">TODO: 复用主界面详细信息内容结构（当前内部留空）。</p>
+              <p className="empty-cell">详细信息展示将在写入接口接入后复用主界面结构。</p>
             </div>
           </div>
         </div>

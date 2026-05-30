@@ -94,6 +94,8 @@ export function SongAdminSection({
         <div
           className="bands-floating-menu"
           ref={songBandMenuRef}
+          onMouseDown={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
           style={{ top: songBandMenuPos.top, left: songBandMenuPos.left, width: songBandMenuPos.width }}
         >
           {mockBands.map((band) => (
