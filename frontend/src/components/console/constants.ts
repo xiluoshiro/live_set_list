@@ -32,29 +32,11 @@ export const MOCK_VENUES: VenueOption[] = [
 export const INITIAL_SETLIST_ROWS: SetlistDraftRow[] = [
   {
     row_key: 1,
-    song_name: "春日序曲",
-    song_id: "201",
+    song_name: "",
+    song_id: "",
     segment_start_type: "M",
     is_short: false,
-    band_member: { "Poppin'Party": [...DEFAULT_BAND_MEMBERS] },
+    band_member: {},
     other_member: [{ entry_id: 1, member_key: "", member_value: "" }],
-  },
-  {
-    row_key: 2,
-    song_name: "逆光海岸",
-    song_id: "202",
-    segment_start_type: "",
-    is_short: false,
-    band_member: { Afterglow: [...DEFAULT_BAND_MEMBERS] },
-    other_member: [{ entry_id: 2, member_key: "", member_value: "" }],
-  },
-  {
-    row_key: 3,
-    song_name: "春日序曲",
-    song_id: "201",
-    segment_start_type: "EN",
-    is_short: true,
-    band_member: { Roselia: ["主唱", "吉他", "贝斯", "鼓手"] },
-    other_member: [{ entry_id: 3, member_key: "键盘支援", member_value: "远程连线" }],
   },
 ];
