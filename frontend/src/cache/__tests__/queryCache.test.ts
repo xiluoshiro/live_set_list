@@ -35,6 +35,18 @@ describe("LruRequestCache", () => {
     expect(cache.getInFlight("k1")).toBeUndefined();
   });
 
+  test("delete 只清理指定 key", () => {
+    // 测试点：单条失效不能误删其他缓存项。
+    const cache = new LruRequestCache<number>(5);
+
+    cache.setData("k1", 1);
+    cache.setData("k2", 2);
+    cache.delete("k1");
+
+    expect(cache.getFresh("k1", 1000)).toBeUndefined();
+    expect(cache.getFresh("k2", 1000)).toBe(2);
+  });
+
   test("超过 maxSize 时淘汰最久未使用项（LRU）", () => {
     // 测试点：LRU 淘汰顺序正确。
     const now = new Date("2026-04-05T02:00:00Z");

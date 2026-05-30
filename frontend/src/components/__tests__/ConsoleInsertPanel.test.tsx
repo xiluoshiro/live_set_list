@@ -301,13 +301,14 @@ describe("ConsoleInsertPanel", () => {
   });
 
   test("新增Live会调用真实写入接口并使用后端返回的live_id", async () => {
-    // 测试点：新增 Live 应交给后端自增 live_id，并默认使用日本时区提交。
+    // 测试点：新增 Live 应交给后端自增 live_id，成功后同步候选分页并通知外层刷新。
     const user = userEvent.setup();
+    const onLiveDataChanged = vi.fn();
     apiMocks.getConsoleVenues.mockResolvedValue({
       items: [{ venue_id: 88, venue_name: "New Venue" }],
     });
 
-    render(<ConsoleInsertPanel />);
+    render(<ConsoleInsertPanel onLiveDataChanged={onLiveDataChanged} />);
 
     await user.click(screen.getByRole("tab", { name: "新增Live" }));
     await screen.findByRole("button", { name: "88 - New Venue" });
@@ -330,6 +331,10 @@ describe("ConsoleInsertPanel", () => {
     ));
     expect(screen.getByText("已新增Live #39（Inserted Live）")).toBeInTheDocument();
     expect(screen.getByText("39")).toBeInTheDocument();
+    expect(onLiveDataChanged).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
+    expect(screen.getByText("第 1 / 1 页，共 2 条")).toBeInTheDocument();
   });
 
   test("新增歌曲会调用真实写入接口并使用后端返回的song_id", async () => {

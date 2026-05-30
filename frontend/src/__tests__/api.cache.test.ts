@@ -133,6 +133,67 @@ describe("api cache behavior", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  test("createConsoleLive 成功后会清理列表缓存", async () => {
+    // 测试点：控制台新增 Live 后，下一次列表读取必须回源而不是命中旧分页缓存。
+    fetchMock
+      .mockResolvedValueOnce(
+        makeJsonResponse({
+          items: [],
+          pagination: { page: 1, page_size: 20, total: 3, total_pages: 1 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeJsonResponse({
+          ok: true,
+          item: {
+            live_id: 41,
+            live_date: "2026-05-30",
+            live_title: "Console Draft Live",
+            url: "https://example.com/lives/console-draft",
+            opening_time: "17:00:00+09:00",
+            start_time: "18:00:00+09:00",
+            venue_id: 1,
+          },
+        }, true, 201),
+      )
+      .mockResolvedValueOnce(
+        makeJsonResponse({
+          items: [
+            {
+              live_id: 41,
+              live_date: "2026-05-30",
+              live_title: "Console Draft Live",
+              bands: [],
+              url: "https://example.com/lives/console-draft",
+              is_favorite: false,
+            },
+          ],
+          pagination: { page: 1, page_size: 20, total: 4, total_pages: 1 },
+        }),
+      );
+    const { createConsoleLive, getLives } = await import("../api");
+
+    await getLives(1, 20);
+    await createConsoleLive(
+      {
+        live_date: "2026-05-30",
+        live_title: "Console Draft Live",
+        type: "专场",
+        url: "https://example.com/lives/console-draft",
+        opening_time: "17:00",
+        start_time: "18:00",
+        timezone: "+09:00",
+        venue_id: 1,
+      },
+      "csrf-token",
+    );
+    const refreshed = await getLives(1, 20);
+
+    expect(refreshed.pagination.total).toBe(4);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2][0]).toBe("http://localhost:8000/api/lives?page=1&page_size=20");
+  });
+
   test("getLiveDetail 命中缓存，不重复请求同一 live_id", async () => {
     // 测试点：详情缓存按 live_id 生效。
     fetchMock.mockResolvedValue(

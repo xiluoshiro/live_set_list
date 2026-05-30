@@ -410,6 +410,15 @@ export function clearMyFavoriteLivesCache(): void {
   favoriteLivesCache.clear();
 }
 
+export function clearLivesCache(): void {
+  livesCache.clear();
+}
+
+function clearLiveCollectionCaches(): void {
+  clearLivesCache();
+  clearMyFavoriteLivesCache();
+}
+
 export async function getMyFavoriteLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
   const requestedKey = favoriteLivesCacheKey(page, pageSize);
   const fresh = favoriteLivesCache.getFresh(requestedKey, LIVES_CACHE_TTL_MS);
@@ -634,7 +643,9 @@ export async function createConsoleLive(
       method: "POST",
     },
   );
-  return expectJsonResponse<ConsoleLiveMutationResponse>(response);
+  const responsePayload = await expectJsonResponse<ConsoleLiveMutationResponse>(response);
+  clearLiveCollectionCaches();
+  return responsePayload;
 }
 
 export async function appendConsoleLiveSetlist(
@@ -654,7 +665,10 @@ export async function appendConsoleLiveSetlist(
       method: "POST",
     },
   );
-  return expectJsonResponse<ConsoleLiveSetlistAppendResponse>(response);
+  const responsePayload = await expectJsonResponse<ConsoleLiveSetlistAppendResponse>(response);
+  clearLiveCollectionCaches();
+  detailCache.delete(detailCacheKey(liveId));
+  return responsePayload;
 }
 
 export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {

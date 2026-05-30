@@ -1,10 +1,12 @@
+import os
+
 import pytest
 
 from app.auth import hash_password, normalize_username
 
 pytestmark = pytest.mark.integration
-TEST_DEFAULT_ADMIN_USERNAME = "admin"
-TEST_DEFAULT_ADMIN_PASSWORD = "test-admin-pass"
+TEST_DEFAULT_ADMIN_USERNAME = os.getenv("AUTH_DEFAULT_ADMIN_USERNAME", "admin").strip().lower()
+TEST_DEFAULT_ADMIN_PASSWORD = os.getenv("AUTH_DEFAULT_ADMIN_PASSWORD", "test-admin-pass")
 
 
 def _login_and_get_csrf_for(

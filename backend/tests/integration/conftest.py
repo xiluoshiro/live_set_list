@@ -15,6 +15,7 @@ from app.main import app
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SEED_SQL_PATH = ROOT_DIR / "backend" / "db" / "postgres" / "seed" / "base_seed.sql"
 PG_MIGRATE_ENV_PATH = ROOT_DIR / "infra" / "postgres" / ".env.pg-migrate"
+AUTH_ENV_PATH = ROOT_DIR / "infra" / "auth" / ".env.auth"
 
 
 def _load_integration_db_config() -> dict[str, str] | None:
@@ -59,6 +60,19 @@ def _load_integration_db_config() -> dict[str, str] | None:
         "user_rw_password": str(values.get("APP_USER_RW_PASSWORD") or values.get("POSTGRES_PASSWORD") or password),
         "admin_user": str(values.get("TEST_DB_ADMIN_USER") or values.get("TEST_ADMIN_USER") or "live_project_test_admin"),
         "admin_password": str(values.get("TEST_DB_ADMIN_PASSWORD") or values.get("TEST_ADMIN_PASSWORD") or values.get("POSTGRES_PASSWORD") or password),
+    }
+
+
+def _load_integration_auth_config() -> dict[str, str]:
+    values = dotenv_values(AUTH_ENV_PATH) if AUTH_ENV_PATH.exists() else {}
+    return {
+        "username": str(os.getenv("AUTH_DEFAULT_ADMIN_USERNAME") or values.get("AUTH_DEFAULT_ADMIN_USERNAME") or "admin"),
+        "password": str(os.getenv("AUTH_DEFAULT_ADMIN_PASSWORD") or values.get("AUTH_DEFAULT_ADMIN_PASSWORD") or "test-admin-pass"),
+        "display_name": str(
+            os.getenv("AUTH_DEFAULT_ADMIN_DISPLAY_NAME")
+            or values.get("AUTH_DEFAULT_ADMIN_DISPLAY_NAME")
+            or "Administrator"
+        ),
     }
 
 
@@ -111,8 +125,9 @@ def integration_test_client(
     monkeypatch.setenv("DB_CONNECT_TIMEOUT_SECONDS", "5")
     monkeypatch.setenv("DB_STATEMENT_TIMEOUT_MS", "10000")
     monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
-    monkeypatch.setenv("AUTH_DEFAULT_ADMIN_USERNAME", "admin")
-    monkeypatch.setenv("AUTH_DEFAULT_ADMIN_PASSWORD", "test-admin-pass")
-    monkeypatch.setenv("AUTH_DEFAULT_ADMIN_DISPLAY_NAME", "Administrator")
+    auth_config = _load_integration_auth_config()
+    monkeypatch.setenv("AUTH_DEFAULT_ADMIN_USERNAME", auth_config["username"])
+    monkeypatch.setenv("AUTH_DEFAULT_ADMIN_PASSWORD", auth_config["password"])
+    monkeypatch.setenv("AUTH_DEFAULT_ADMIN_DISPLAY_NAME", auth_config["display_name"])
     with TestClient(app) as client:
         yield client
