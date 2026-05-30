@@ -552,7 +552,7 @@ export function LiveInsertTab({
                       <td>{index + 1}</td>
                       <td>{row.segment_start_type || "-"}</td>
                       <td>{row.song_name}</td>
-                      <td>{summarizeBandMember(row)}</td>
+                      <td><code>{JSON.stringify(row.band_member)}</code></td>
                       <td>{summarizeOtherMember(row)}</td>
                     </tr>
                   ))}
