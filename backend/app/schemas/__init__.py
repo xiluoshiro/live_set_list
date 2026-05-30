@@ -14,6 +14,8 @@ from app.schemas.console import (
     ConsoleSongMutationResponse,
     ConsoleVenueItem,
     ConsoleVenueListResponse,
+    ConsoleVenueCreateRequest,
+    ConsoleVenueMutationResponse,
 )
 from app.schemas.common import ErrorResponse, RootResponse, ValidationErrorItem, ValidationErrorResponse
 from app.schemas.favorites import FavoriteBatchRequest, FavoriteBatchResponse
@@ -46,6 +48,8 @@ __all__ = [
     'ConsoleSongMutationResponse',
     'ConsoleVenueItem',
     'ConsoleVenueListResponse',
+    'ConsoleVenueCreateRequest',
+    'ConsoleVenueMutationResponse',
     'ConsoleLiveCreateRequest',
     'ConsoleLiveItem',
     'ConsoleLiveMutationResponse',

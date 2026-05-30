@@ -329,6 +329,53 @@ def test_console_create_song_requires_editor_role_and_csrf(
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
 
 
+# 测试点：新增 venue 接口应写入 venue_list 的 NOT NULL 列 venue，并追加 venue_create 审计。
+def test_console_create_venue_persists_row_and_audit_log(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify the console venue-create endpoint inserts one venue row and one matching audit log row."""
+    editor_user_id = _create_user(
+        integration_admin_connection,
+        username="editor_venue_api",
+        password="editor-venue-pass",
+        display_name="Editor Venue API",
+        role="editor",
+    )
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_venue_api",
+        password="editor-venue-pass",
+    )
+
+    response = integration_test_client.post(
+        "/api/console/venues",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"venue_name": "Console Created Venue"},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["item"]["venue_name"] == "Console Created Venue"
+    venue_id = int(payload["item"]["venue_id"])
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT id, venue FROM venue_list WHERE id = %s",
+            (venue_id,),
+        )
+        row = cursor.fetchone()
+
+    assert row == (venue_id, "Console Created Venue")
+    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
+        "venue_create",
+        str(venue_id),
+        {"venue_name": "Console Created Venue"},
+    )
+
+
 # 测试点：新增 Live 和追加 setlist 连到测试库时缺少 CSRF 应被拒绝，并且不会落库。
 def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
     integration_test_client,

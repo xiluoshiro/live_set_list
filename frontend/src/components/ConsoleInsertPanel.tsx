@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useAuth } from "../auth/AuthProvider";
 import {
+  createConsoleVenue,
   getConsoleBands,
   getConsoleSongs,
   getConsoleVenues,
@@ -124,6 +126,7 @@ function formatTimedLabel(value: string | null | undefined): string {
 }
 
 export function ConsoleInsertPanel() {
+  const auth = useAuth();
   const [mode, setMode] = useState<ConsoleMode>("setlist");
   const [lives, setLives] = useState<LiveInsertRow[]>([]);
   const [songs, setSongs] = useState<SongInsertRow[]>([]);
@@ -747,6 +750,29 @@ export function ConsoleInsertPanel() {
     }
   };
 
+  const insertVenue = async () => {
+    const venueName = venueQueryText.trim();
+    if (venueName === "") {
+      setMessage("新增venue失败：venue 名称不能为空。");
+      return;
+    }
+    if (!auth.isAuthenticated || !auth.csrfToken) {
+      setMessage("新增venue失败：登录态已失效，请重新登录。");
+      return;
+    }
+
+    try {
+      const response = await createConsoleVenue(venueName, auth.csrfToken);
+      const inserted = toVenueOption(response.item);
+      setVenues((prev) => sortById([inserted, ...prev.filter((venue) => venue.venue_id !== inserted.venue_id)], (venue) => venue.venue_id));
+      setSelectedVenueId(inserted.venue_id);
+      setVenueOpen(false);
+      setMessage(`已新增venue #${inserted.venue_id}（${inserted.venue_name}）`);
+    } catch (error) {
+      setMessage(`新增venue失败：${errorMessage(error)}`);
+    }
+  };
+
   const insertLive = () => {
     if (liveDate.trim() === "" || liveTitle.trim() === "") {
       setMessage("新增Live失败：live_date 与 live_title 为必填项。");
@@ -921,7 +947,7 @@ export function ConsoleInsertPanel() {
             setVenueOpen(false);
           }}
           onQueryVid={queryVid}
-          onInsertLive={insertLive}
+          onInsertVenue={() => void insertVenue()}
           onSubmitInsertLive={submitInsertLive}
           queryInsertDisabled={isVenueQuickInsertDisabled}
           submitInsertDisabled={isLiveSubmitDisabled}

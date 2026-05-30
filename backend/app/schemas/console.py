@@ -59,6 +59,21 @@ class ConsoleVenueListResponse(BaseModel):
     items: list[ConsoleVenueItem] = Field(..., description="Venues available for console lookup")
 
 
+class ConsoleVenueCreateRequest(BaseModel):
+    venue_name: str = Field(..., min_length=1, max_length=255, description="Venue display name")
+
+    @field_validator("venue_name")
+    @classmethod
+    def validate_venue_name(cls, value: str) -> str:
+        """Normalize venue_name before the console venue-create endpoint stores it."""
+        return _strip_required_text(value)
+
+
+class ConsoleVenueMutationResponse(BaseModel):
+    ok: bool = Field(..., description="Whether the write succeeded")
+    item: ConsoleVenueItem = Field(..., description="Created venue payload")
+
+
 class ConsoleLiveCreateRequest(BaseModel):
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., min_length=1, max_length=255, description="Live title")

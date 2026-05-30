@@ -134,6 +134,11 @@ export type ConsoleVenueListResponse = {
   items: ConsoleVenueItem[];
 };
 
+export type ConsoleVenueMutationResponse = {
+  ok: boolean;
+  item: ConsoleVenueItem;
+};
+
 type AuthErrorPayload = {
   detail?: string | { code?: string; message?: string };
 };
@@ -152,7 +157,8 @@ type RequestKind =
   | "favorite_remove"
   | "console_songs"
   | "console_bands"
-  | "console_venues";
+  | "console_venues"
+  | "console_venue_create";
 
 type RequestLogMeta = {
   requestKind: RequestKind;
@@ -508,6 +514,25 @@ export async function getConsoleVenues(q?: string, limit = 20): Promise<ConsoleV
     requestKind: "console_venues",
   });
   return expectJsonResponse<ConsoleVenueListResponse>(response);
+}
+
+export async function createConsoleVenue(
+  venueName: string,
+  csrfToken: string,
+): Promise<ConsoleVenueMutationResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/venues`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify({ venue_name: venueName }),
+    },
+    {
+      requestKind: "console_venue_create",
+      method: "POST",
+    },
+  );
+  return expectJsonResponse<ConsoleVenueMutationResponse>(response);
 }
 
 export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
