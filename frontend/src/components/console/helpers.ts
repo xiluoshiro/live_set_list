@@ -5,14 +5,18 @@ export function getBandMembersTemplate(_bandName: string): string[] {
   return [...DEFAULT_BAND_MEMBERS];
 }
 
-export function buildOtherMemberPayload(entries: OtherMemberDraft[]): string {
+export function buildOtherMemberPayloadObject(entries: OtherMemberDraft[]): Record<string, string> {
   const pairs = entries
     .map((entry) => ({
       key: entry.member_key.trim(),
       value: entry.member_value.trim(),
     }))
     .filter((entry) => entry.key !== "");
-  return JSON.stringify(Object.fromEntries(pairs.map((entry) => [entry.key, entry.value])));
+  return Object.fromEntries(pairs.map((entry) => [entry.key, entry.value]));
+}
+
+export function buildOtherMemberPayload(entries: OtherMemberDraft[]): string {
+  return JSON.stringify(buildOtherMemberPayloadObject(entries));
 }
 
 export function summarizeBandMember(row: SetlistDraftRow): string {

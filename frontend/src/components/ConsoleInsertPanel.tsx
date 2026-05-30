@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../auth/AuthProvider";
 import {
+  appendConsoleLiveSetlist,
   createConsoleLive,
+  createConsoleSong,
   createConsoleVenue,
   getConsoleBands,
   getConsoleSongs,
@@ -24,7 +26,11 @@ import {
   LIVE_TYPE_OPTIONS,
   TIMEZONE_OPTIONS,
 } from "./console/constants";
-import { buildOtherMemberPayload, getBandMembersTemplate, getDerivedSegments } from "./console/helpers";
+import {
+  buildOtherMemberPayloadObject,
+  getBandMembersTemplate,
+  getDerivedSegments,
+} from "./console/helpers";
 import { parseSetlistText } from "./console/setlistParser/parseSetlistText";
 import type { ParsedSetlistWarning } from "./console/setlistParser/types";
 import type {
@@ -702,7 +708,7 @@ export function ConsoleInsertPanel() {
     }
   };
 
-  const submitSetlist = () => {
+  const submitSetlist = async () => {
     const targetLive = lives.find((live) => live.live_id === selectedLiveId);
     if (!targetLive) {
       setMessage("提交setlist失败：未选择有效的 live_id。");
@@ -721,6 +727,10 @@ export function ConsoleInsertPanel() {
       setMessage(`提交setlist失败：还有 ${unresolvedCount} 行 sid 未匹配，请先点击“查询歌曲”。`);
       return;
     }
+    if (!auth.isAuthenticated || !auth.csrfToken) {
+      setMessage("提交setlist失败：登录态已失效，请重新登录。");
+      return;
+    }
 
     const validDerivedSegments = getDerivedSegments(validRows);
     const setlistPayload = validRows.map((row, payloadIndex) => {
@@ -731,15 +741,31 @@ export function ConsoleInsertPanel() {
         segment_type: derived.segmentType,
         sub_order: derived.subOrder,
         is_short: row.is_short,
-        band_member: JSON.stringify(row.band_member),
-        other_member: buildOtherMemberPayload(row.other_member),
+        band_member: row.band_member,
+        other_member: buildOtherMemberPayloadObject(row.other_member),
       };
     });
+    const previewRows = setlistPayload.map((row) => ({
+      ...row,
+      band_member: JSON.stringify(row.band_member),
+      other_member: JSON.stringify(row.other_member),
+    }));
 
-    const newBundle = { live: targetLive, setlist_rows: setlistPayload };
-    setSubmittedBundles((prev) => [newBundle, ...prev]);
-    setDisplayedBundle(newBundle);
-    setMessage(`已为Live #${targetLive.live_id} 插入 ${setlistPayload.length} 条 setlist(mock)`);
+    try {
+      const response = await appendConsoleLiveSetlist(
+        targetLive.live_id,
+        { setlist_rows: setlistPayload },
+        auth.csrfToken,
+      );
+      const newBundle = { live: targetLive, setlist_rows: previewRows };
+      setSubmittedBundles((prev) => [newBundle, ...prev]);
+      setDisplayedBundle(newBundle);
+      setMessage(
+        `已为Live #${targetLive.live_id} 插入 ${response.item.inserted_row_count} 条 setlist，总计 ${response.item.total_setlist_row_count} 条。`,
+      );
+    } catch (error) {
+      setMessage(`提交setlist失败：${errorMessage(error)}`);
+    }
   };
 
   const queryVid = async () => {
@@ -849,7 +875,7 @@ export function ConsoleInsertPanel() {
     void insertLive();
   };
 
-  const submitSong = () => {
+  const submitSong = async () => {
     const name = songName.trim();
     if (name === "") {
       setMessage("新增歌曲失败：song_name 不能为空。");
@@ -859,13 +885,30 @@ export function ConsoleInsertPanel() {
       setMessage("新增歌曲失败：请先选择 band_id。");
       return;
     }
-    const row: SongInsertRow = { song_id: nextSongId, song_name: name, band_id: songBandId, cover: songCover };
-    setSongs((prev) => sortById([row, ...prev], (song) => song.song_id));
-    setInsertedSongs((prev) => sortById([row, ...prev], (song) => song.song_id));
-    setSongName("");
-    setSongCover(false);
-    setSongBandOpen(false);
-    setMessage(`已新增歌曲 #${row.song_id}`);
+    if (!auth.isAuthenticated || !auth.csrfToken) {
+      setMessage("新增歌曲失败：登录态已失效，请重新登录。");
+      return;
+    }
+
+    try {
+      const response = await createConsoleSong(
+        {
+          song_name: name,
+          band_id: songBandId,
+          cover: songCover,
+        },
+        auth.csrfToken,
+      );
+      const row = toSongInsertRow(response.item);
+      setSongs((prev) => sortById([row, ...prev.filter((song) => song.song_id !== row.song_id)], (song) => song.song_id));
+      setInsertedSongs((prev) => sortById([row, ...prev.filter((song) => song.song_id !== row.song_id)], (song) => song.song_id));
+      setSongName("");
+      setSongCover(false);
+      setSongBandOpen(false);
+      setMessage(`已新增歌曲 #${row.song_id}`);
+    } catch (error) {
+      setMessage(`新增歌曲失败：${errorMessage(error)}`);
+    }
   };
 
   const editingBandRow = editingBandRowKey === null
@@ -904,7 +947,7 @@ export function ConsoleInsertPanel() {
         setSongBandId(bandId);
         setSongBandOpen(false);
       }}
-      onSubmitSong={submitSong}
+      onSubmitSong={() => void submitSong()}
       submitDisabled={isSongSubmitDisabled}
     />
   );
