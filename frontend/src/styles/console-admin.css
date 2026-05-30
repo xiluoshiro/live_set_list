@@ -160,7 +160,7 @@
 .console-confirm-modal.wide {
   width: min(1080px, calc(100vw - 40px));
   max-width: min(1080px, calc(100vw - 40px));
-  height: min(84vh, 760px);
+  height: auto;
 }
 
 .console-confirm-body {

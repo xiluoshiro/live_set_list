@@ -329,6 +329,7 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.createConsoleLive).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "确认新增 Live" })).toBeInTheDocument();
     expect(screen.getByText("Inserted Live")).toBeInTheDocument();
+    expect(screen.getByText("New Venue")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(

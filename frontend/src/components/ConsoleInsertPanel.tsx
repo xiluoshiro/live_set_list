@@ -78,6 +78,7 @@ type PendingConfirmation =
       kind: "live";
       title: string;
       payload: ConsoleLiveCreatePayload;
+      venueName: string;
     }
   | {
       kind: "song";
@@ -892,6 +893,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       return;
     }
 
+    const selectedVenue = venues.find((venue) => venue.venue_id === selectedVenueId);
     setPendingConfirmation({
       kind: "live",
       title: "确认新增 Live",
@@ -905,6 +907,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
         timezone,
         venue_id: selectedVenueId,
       },
+      venueName: selectedVenue?.venue_name ?? "-",
     });
   };
 
@@ -1075,6 +1078,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
         ["start_time", payload.start_time],
         ["timezone", payload.timezone],
         ["venue_id", payload.venue_id],
+        ["venue_name", pendingConfirmation.venueName],
       ]);
     }
 
