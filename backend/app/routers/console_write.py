@@ -18,6 +18,8 @@ from app.schemas.console import (
     ConsoleLiveMutationResponse,
     ConsoleLiveSetlistAppendRequest,
     ConsoleLiveSetlistAppendResponse,
+    ConsoleSongBatchCreateRequest,
+    ConsoleSongBatchCreateResponse,
     ConsoleSongCreateRequest,
     ConsoleSongMutationResponse,
     ConsoleVenueCreateRequest,
@@ -221,6 +223,100 @@ def create_song(
             "cover": payload.cover,
         },
     }
+
+
+@router.post(
+    "/songs:batch",
+    status_code=201,
+    response_model=ConsoleSongBatchCreateResponse,
+    summary="批量新增歌曲",
+    description="`editor+` 用户批量新增歌曲。每个请求项独立处理，一项失败不影响其他项。",
+    responses={
+        401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
+        403: {"model": AuthErrorResponse, "description": "缺少权限或 CSRF 校验失败"},
+        422: {"model": ValidationErrorResponse, "description": "请求体验证失败"},
+        500: {"model": ErrorResponse, "description": "数据库一般错误"},
+        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
+    },
+)
+def create_songs_batch(
+    payload: ConsoleSongBatchCreateRequest,
+    request: Request,
+    _: Any = Depends(require_role("editor")),
+    context: AuthSessionContext = Depends(get_current_auth_context),
+):
+    """Insert multiple songs from the console page in one request."""
+    assert_valid_csrf(request, context)
+
+    created: list[dict[str, Any]] = []
+
+    try:
+        with get_write_db_connection() as conn:
+            with conn.cursor() as cur:
+                for song in payload.songs:
+                    cur.execute("SAVEPOINT batch_song_sp")
+                    try:
+                        cur.execute("SELECT 1 FROM band_attrs WHERE id = %s", (song.band_id,))
+                        if cur.fetchone() is None:
+                            logger.warning(
+                                "batch song skip band_not_found user_id=%s song_name=%s band_id=%s",
+                                context.user.id,
+                                song.song_name,
+                                song.band_id,
+                            )
+                            cur.execute("RELEASE SAVEPOINT batch_song_sp")
+                            continue
+
+                        cur.execute(
+                            """
+                            INSERT INTO song_list (song_name, band_id, is_cover)
+                            VALUES (%s, %s, %s)
+                            RETURNING id
+                            """,
+                            (song.song_name, song.band_id, song.cover),
+                        )
+                        created_row = cur.fetchone()
+                        assert created_row is not None
+                        song_id = int(created_row[0])
+
+                        _write_console_audit_log(
+                            cur,
+                            user_id=context.user.id,
+                            action="song_create",
+                            resource_type="song",
+                            resource_id=str(song_id),
+                            payload_json={"band_id": song.band_id, "cover": song.cover},
+                        )
+
+                        created.append({
+                            "song_id": song_id,
+                            "song_name": song.song_name,
+                            "band_id": song.band_id,
+                            "cover": song.cover,
+                        })
+                        cur.execute("RELEASE SAVEPOINT batch_song_sp")
+                    except UniqueViolation:
+                        cur.execute("ROLLBACK TO SAVEPOINT batch_song_sp")
+                        logger.warning(
+                            "batch song skip duplicate user_id=%s song_name=%s",
+                            context.user.id,
+                            song.song_name,
+                        )
+    except HTTPException:
+        raise
+    except QueryCanceled as exc:
+        logger.exception("batch create_songs timeout user_id=%s count=%s", context.user.id, len(payload.songs))
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        logger.exception("batch create_songs operational error user_id=%s", context.user.id)
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        logger.exception("batch create_songs failed user_id=%s", context.user.id)
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+    return {"ok": len(created) == len(payload.songs), "created": created}
 
 
 @router.post(

@@ -39,6 +39,8 @@
   - 单条 Live 详情查询
 - `POST /api/lives/details:batch`
   - 批量详情预读接口
+- `POST /api/console/songs:batch`
+  - 批量新增歌曲，一次写入多条，单项冲突不影响其他项继续写入
 
 说明：
 - 当前后端还挂载了其他路由，例如认证相关接口

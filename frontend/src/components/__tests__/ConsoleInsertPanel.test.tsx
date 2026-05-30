@@ -8,6 +8,7 @@ const apiMocks = vi.hoisted(() => ({
   appendConsoleLiveSetlist: vi.fn(),
   createConsoleLive: vi.fn(),
   createConsoleSong: vi.fn(),
+  createConsoleSongsBatch: vi.fn(),
   createConsoleVenue: vi.fn(),
   getConsoleSongs: vi.fn(),
   getConsoleBands: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock("../../api", () => ({
   appendConsoleLiveSetlist: apiMocks.appendConsoleLiveSetlist,
   createConsoleLive: apiMocks.createConsoleLive,
   createConsoleSong: apiMocks.createConsoleSong,
+  createConsoleSongsBatch: apiMocks.createConsoleSongsBatch,
   createConsoleVenue: apiMocks.createConsoleVenue,
   getConsoleSongs: apiMocks.getConsoleSongs,
   getConsoleBands: apiMocks.getConsoleBands,
@@ -40,6 +42,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.appendConsoleLiveSetlist.mockReset();
     apiMocks.createConsoleLive.mockReset();
     apiMocks.createConsoleSong.mockReset();
+    apiMocks.createConsoleSongsBatch.mockReset();
     apiMocks.createConsoleVenue.mockReset();
     apiMocks.getConsoleSongs.mockReset();
     apiMocks.getConsoleBands.mockReset();
@@ -68,6 +71,10 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.createConsoleSong.mockResolvedValue({
       ok: true,
       item: { song_id: 903, song_name: "新曲", band_id: 2, cover: false },
+    });
+    apiMocks.createConsoleSongsBatch.mockResolvedValue({
+      ok: true,
+      created: [{ song_id: 902, song_name: "Requiem for Fate", band_id: 2, cover: false }],
     });
     apiMocks.createConsoleVenue.mockResolvedValue({ ok: true, item: { venue_id: 88, venue_name: "New Venue" } });
     apiMocks.getLiveDetail.mockResolvedValue({
@@ -666,8 +673,8 @@ describe("ConsoleInsertPanel", () => {
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] })
       .mockResolvedValueOnce({ items: [] });
-    apiMocks.createConsoleSong
-      .mockResolvedValueOnce({ ok: true, item: { song_id: 902, song_name: "Requiem for Fate", band_id: 2, cover: false } });
+    apiMocks.createConsoleSongsBatch
+      .mockResolvedValueOnce({ ok: true, created: [{ song_id: 902, song_name: "Requiem for Fate", band_id: 2, cover: false }] });
 
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
@@ -689,11 +696,11 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
-    await waitFor(() => expect(apiMocks.createConsoleSong).toHaveBeenCalledWith(
-      { song_name: "Requiem for Fate", band_id: 2, cover: false },
+    await waitFor(() => expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledWith(
+      [{ song_name: "Requiem for Fate", band_id: 2, cover: false }],
       "csrf-token",
     ));
-    expect(apiMocks.createConsoleSong).toHaveBeenCalledTimes(1);
+    expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledTimes(1);
   });
 
   test("批量插入在乐队不为 1 支时报错并禁用提交", async () => {

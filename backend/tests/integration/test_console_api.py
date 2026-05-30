@@ -840,3 +840,59 @@ def test_console_append_live_setlist_normalizes_new_segment_types(
         (5, "opening", 1, "opening track"),
         (6, "w_encore", 1, "w encore"),
     ]
+
+
+# 测试点：批量新增歌曲接口应一次写入多条歌曲，部分冲突时跳过冲突项继续写入其余项。
+def test_console_create_songs_batch_persists_and_skips_conflicts(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify batch song creation writes multiple rows and skips duplicates."""
+    editor_user_id = _create_user(
+        integration_admin_connection,
+        username="editor_batch_song_api",
+        password="editor-batch-song-pass",
+        display_name="Editor Batch Song API",
+        role="editor",
+    )
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_batch_song_api",
+        password="editor-batch-song-pass",
+    )
+
+    response = integration_test_client.post(
+        "/api/console/songs:batch",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "songs": [
+                {"song_name": "Batch Song A", "band_id": 2, "cover": False},
+                {"song_name": "Batch Song B", "band_id": 1, "cover": True},
+                {"song_name": "Yes! BanG_Dream!", "band_id": 1, "cover": False},
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["ok"] is False
+    assert len(data["created"]) == 2
+    assert data["created"][0]["song_name"] == "Batch Song A"
+    assert data["created"][0]["band_id"] == 2
+    assert data["created"][1]["song_name"] == "Batch Song B"
+    assert data["created"][1]["cover"] is True
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT id FROM song_list WHERE song_name = %s",
+            ("Batch Song A",),
+        )
+        assert cursor.fetchone() is not None
+        cursor.execute(
+            "SELECT id FROM song_list WHERE song_name = %s",
+            ("Batch Song B",),
+        )
+        assert cursor.fetchone() is not None
+
+    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "song_create"
