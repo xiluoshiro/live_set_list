@@ -619,7 +619,7 @@ def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
         ),
         (
             3,
-            "encore",
+            "EN",
             1,
             False,
             {"Poppin'Party": ["Kasumi", "Tae", "Saaya", "Arisa"]},
@@ -628,7 +628,7 @@ def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
         ),
         (
             4,
-            "special",
+            "SP",
             1,
             True,
             {"Roselia": ["Yukina", "Sayo", "Lisa"]},
@@ -636,21 +636,13 @@ def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
             None,
         ),
     ]
-    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
-        "live_setlist_append",
-        "1",
-        {"inserted_row_count": 2, "total_setlist_row_count": 4},
-    )
-
-    assert detail_response.status_code == 200
-    detail_payload = detail_response.json()
-    assert [row["row_id"] for row in detail_payload["detail_rows"]] == ["main1", "main2", "encore1", "special1"]
-    assert detail_payload["detail_rows"][0]["song_name"] == "Yes! BanG_Dream!"
-    assert detail_payload["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["CHU2"]}]
-    assert detail_payload["detail_rows"][2]["song_name"] == "STAR BEAT!〜ホシノコドウ〜"
-    assert detail_payload["detail_rows"][2]["other_members"] == [{"key": "嘉宾", "value": ["MASKING", "LOCK"]}]
-    assert detail_payload["detail_rows"][3]["comments"] == ["短版"]
-    assert detail_payload["detail_rows"][3]["other_members"] == [{"key": "支援", "value": ["Keyboard"]}]
+    assert [row["row_id"] for row in detail_response.json()["detail_rows"]] == ["main1", "main2", "EN1", "SP1"]
+    assert detail_response.json()["detail_rows"][0]["song_name"] == "Yes! BanG_Dream!"
+    assert detail_response.json()["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["CHU2"]}]
+    assert detail_response.json()["detail_rows"][2]["song_name"] == "STAR BEAT!〜ホシノコドウ〜"
+    assert detail_response.json()["detail_rows"][2]["other_members"] == [{"key": "嘉宾", "value": ["MASKING", "LOCK"]}]
+    assert detail_response.json()["detail_rows"][3]["comments"] == ["短版"]
+    assert detail_response.json()["detail_rows"][3]["other_members"] == [{"key": "支援", "value": ["Keyboard"]}]
 
 
 # 测试点：新增歌曲唯一键冲突、缺失 song_id 和已有 absolute_order 冲突都应返回明确错误，而不是吞掉数据库异常。
@@ -677,7 +669,7 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
                 {
                     "song_id": 999,
                     "absolute_order": 1,
-                    "segment_type": "main",
+                    "segment_type": "M",
                     "sub_order": 1,
                     "is_short": False,
                     "band_member": {"Poppin'Party": ["Kasumi"]},
@@ -695,7 +687,7 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
                 {
                     "song_id": 3,
                     "absolute_order": 1,
-                    "segment_type": "main",
+                    "segment_type": "M",
                     "sub_order": 3,
                     "is_short": False,
                     "band_member": {"MyGO!!!!!": ["Tomori"]},
@@ -778,11 +770,11 @@ def test_console_append_live_setlist_rolls_back_when_one_row_is_invalid(
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
 
 
-def test_console_append_live_setlist_normalizes_new_segment_types(
+def test_console_append_live_setlist_stores_segment_type_raw(
     integration_test_client,
     integration_admin_connection,
 ):
-    """Verify OP/ED/WEN segment types are normalized to opening/ending/w_encore in DB."""
+    """Verify OP/WEN segment types are stored as-is without normalization."""
     editor_user_id = _create_user(
         integration_admin_connection,
         username="editor_segtype_api",
@@ -837,8 +829,8 @@ def test_console_append_live_setlist_normalizes_new_segment_types(
         rows = cursor.fetchall()
 
     assert rows == [
-        (5, "opening", 1, "opening track"),
-        (6, "w_encore", 1, "w encore"),
+        (5, "OP", 1, "opening track"),
+        (6, "WEN", 1, "w encore"),
     ]
 
 

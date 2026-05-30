@@ -452,7 +452,7 @@ def test_console_append_setlist_mock_success_inserts_rows_and_audits():
 @pytest.mark.parametrize(
     ("payload", "expected_status", "expected_detail"),
     [
-        (_valid_setlist_payload(segment_type="BAD"), 400, "Unsupported segment_type: BAD"),
+        (_valid_setlist_payload(segment_type=""), 422, "at least 1 character"),
         (
             {
                 "setlist_rows": [
@@ -477,7 +477,8 @@ def test_console_append_setlist_mock_rejects_pre_db_business_errors(
         response = client.post("/api/console/lives/1/setlist", json=payload, headers={"X-CSRF-Token": CSRF_TOKEN})
 
     assert response.status_code == expected_status
-    assert response.json()["detail"] == expected_detail
+    if expected_detail is not None:
+        assert expected_detail in str(response.json())
     get_connection.assert_not_called()
 
 
