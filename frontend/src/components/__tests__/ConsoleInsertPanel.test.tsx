@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ConsoleInsertPanel } from "../ConsoleInsertPanel";
 
 const apiMocks = vi.hoisted(() => ({
+  appendConsoleLiveSetlist: vi.fn(),
   createConsoleLive: vi.fn(),
+  createConsoleSong: vi.fn(),
   createConsoleVenue: vi.fn(),
   getConsoleSongs: vi.fn(),
   getConsoleBands: vi.fn(),
@@ -22,7 +24,9 @@ vi.mock("../../auth/AuthProvider", () => ({
 }));
 
 vi.mock("../../api", () => ({
+  appendConsoleLiveSetlist: apiMocks.appendConsoleLiveSetlist,
   createConsoleLive: apiMocks.createConsoleLive,
+  createConsoleSong: apiMocks.createConsoleSong,
   createConsoleVenue: apiMocks.createConsoleVenue,
   getConsoleSongs: apiMocks.getConsoleSongs,
   getConsoleBands: apiMocks.getConsoleBands,
@@ -33,7 +37,9 @@ vi.mock("../../api", () => ({
 
 describe("ConsoleInsertPanel", () => {
   beforeEach(() => {
+    apiMocks.appendConsoleLiveSetlist.mockReset();
     apiMocks.createConsoleLive.mockReset();
+    apiMocks.createConsoleSong.mockReset();
     apiMocks.createConsoleVenue.mockReset();
     apiMocks.getConsoleSongs.mockReset();
     apiMocks.getConsoleBands.mockReset();
@@ -43,6 +49,10 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs.mockResolvedValue({ items: [] });
     apiMocks.getConsoleBands.mockResolvedValue({ items: [] });
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [] });
+    apiMocks.appendConsoleLiveSetlist.mockResolvedValue({
+      ok: true,
+      item: { live_id: 101, inserted_row_count: 1, total_setlist_row_count: 12 },
+    });
     apiMocks.createConsoleLive.mockResolvedValue({
       ok: true,
       item: {
@@ -54,6 +64,10 @@ describe("ConsoleInsertPanel", () => {
         start_time: "19:00:00+09:00",
         venue_id: 88,
       },
+    });
+    apiMocks.createConsoleSong.mockResolvedValue({
+      ok: true,
+      item: { song_id: 903, song_name: "新曲", band_id: 2, cover: false },
     });
     apiMocks.createConsoleVenue.mockResolvedValue({ ok: true, item: { venue_id: 88, venue_name: "New Venue" } });
     apiMocks.getLiveDetail.mockResolvedValue({
@@ -121,8 +135,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("选择 live_id")).toBeInTheDocument();
   });
 
-  test("提交新增Setlist后会出现一条mock插入记录", async () => {
-    // 测试点：最小插入路径可用（选择live_id后可提交，且出现插入记录）。
+  test("提交新增Setlist会调用真实追加接口并出现插入记录", async () => {
+    // 测试点：新增 Setlist 应调用后端追加接口，且只在成功后更新本地提交预览。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
@@ -142,7 +156,24 @@ describe("ConsoleInsertPanel", () => {
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
-    expect(screen.getByText(/已为Live #101/)).toBeInTheDocument();
+    await waitFor(() => expect(apiMocks.appendConsoleLiveSetlist).toHaveBeenCalledWith(
+      101,
+      {
+        setlist_rows: [
+          {
+            song_id: 901,
+            absolute_order: 1,
+            segment_type: "M",
+            sub_order: 1,
+            is_short: false,
+            band_member: { Roselia: ["湊友希那"] },
+            other_member: {},
+          },
+        ],
+      },
+      "csrf-token",
+    ));
+    expect(screen.getByText("已为Live #101 插入 1 条 setlist，总计 12 条。")).toBeInTheDocument();
     expect(screen.queryByText("暂无插入记录")).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "setlist_rows" })).toBeInTheDocument();
   });
@@ -299,6 +330,30 @@ describe("ConsoleInsertPanel", () => {
     ));
     expect(screen.getByText("已新增Live #39（Inserted Live）")).toBeInTheDocument();
     expect(screen.getByText("39")).toBeInTheDocument();
+  });
+
+  test("新增歌曲会调用真实写入接口并使用后端返回的song_id", async () => {
+    // 测试点：新增歌曲应调用后端写接口，并用返回的 song_id 更新候选和插入记录。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "rsl", band_members: ["湊友希那"] }],
+    });
+
+    render(<ConsoleInsertPanel />);
+
+    await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
+    await user.type(screen.getByPlaceholderText("请输入歌曲名"), "新曲");
+    await user.click(screen.getByRole("button", { name: "请选择 band_id" }));
+    await user.click(await screen.findByText("2 - Roselia"));
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+
+    await waitFor(() => expect(apiMocks.createConsoleSong).toHaveBeenCalledWith(
+      { song_name: "新曲", band_id: 2, cover: false },
+      "csrf-token",
+    ));
+    expect(screen.getByText("已新增歌曲 #903")).toBeInTheDocument();
+    expect(screen.getByText("903")).toBeInTheDocument();
+    expect(screen.getByText("新曲")).toBeInTheDocument();
   });
 
   test("新增Setlist只剩一行时删除末行会显示自动消失提示", async () => {

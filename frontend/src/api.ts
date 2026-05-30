@@ -114,6 +114,17 @@ export type ConsoleSongListResponse = {
   items: ConsoleSongItem[];
 };
 
+export type ConsoleSongCreatePayload = {
+  song_name: string;
+  band_id: number;
+  cover: boolean;
+};
+
+export type ConsoleSongMutationResponse = {
+  ok: boolean;
+  item: ConsoleSongItem;
+};
+
 export type ConsoleBandItem = {
   band_id: number;
   band_name: string;
@@ -165,6 +176,30 @@ export type ConsoleLiveMutationResponse = {
   item: ConsoleLiveMutationItem;
 };
 
+export type ConsoleLiveSetlistRowPayload = {
+  song_id: number;
+  absolute_order: number;
+  segment_type: string;
+  sub_order: number;
+  is_short: boolean;
+  band_member: Record<string, string[] | string>;
+  other_member?: Record<string, string[] | string> | null;
+  comment?: string | null;
+};
+
+export type ConsoleLiveSetlistAppendPayload = {
+  setlist_rows: ConsoleLiveSetlistRowPayload[];
+};
+
+export type ConsoleLiveSetlistAppendResponse = {
+  ok: boolean;
+  item: {
+    live_id: number;
+    inserted_row_count: number;
+    total_setlist_row_count: number;
+  };
+};
+
 type AuthErrorPayload = {
   detail?: string | { code?: string; message?: string };
 };
@@ -185,7 +220,9 @@ type RequestKind =
   | "console_bands"
   | "console_venues"
   | "console_venue_create"
-  | "console_live_create";
+  | "console_live_create"
+  | "console_song_create"
+  | "console_live_setlist_append";
 
 type RequestLogMeta = {
   requestKind: RequestKind;
@@ -543,6 +580,25 @@ export async function getConsoleVenues(q?: string, limit = 20): Promise<ConsoleV
   return expectJsonResponse<ConsoleVenueListResponse>(response);
 }
 
+export async function createConsoleSong(
+  payload: ConsoleSongCreatePayload,
+  csrfToken: string,
+): Promise<ConsoleSongMutationResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/songs`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    {
+      requestKind: "console_song_create",
+      method: "POST",
+    },
+  );
+  return expectJsonResponse<ConsoleSongMutationResponse>(response);
+}
+
 export async function createConsoleVenue(
   venueName: string,
   csrfToken: string,
@@ -579,6 +635,26 @@ export async function createConsoleLive(
     },
   );
   return expectJsonResponse<ConsoleLiveMutationResponse>(response);
+}
+
+export async function appendConsoleLiveSetlist(
+  liveId: number,
+  payload: ConsoleLiveSetlistAppendPayload,
+  csrfToken: string,
+): Promise<ConsoleLiveSetlistAppendResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/lives/${liveId}/setlist`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    {
+      requestKind: "console_live_setlist_append",
+      method: "POST",
+    },
+  );
+  return expectJsonResponse<ConsoleLiveSetlistAppendResponse>(response);
 }
 
 export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
