@@ -150,6 +150,34 @@ def run_check_steps(steps: list[CheckStep]) -> list[CheckFailure]:
     return failures
 
 
+def restore_test_seed_after_integration() -> CheckFailure | None:
+    python_path = backend_python()
+    restore_script = SCRIPTS_DIR / "internal" / "restore_test_seed.py"
+    code = run_step(
+        "backend",
+        [str(python_path), str(restore_script.relative_to(ROOT))],
+        ROOT,
+    )
+    if code != 0:
+        print(f"backend 检查失败：restore test seed，退出码: {code}", flush=True)
+        return ("backend", "restore test seed", code)
+    return None
+
+
+def run_backend_check_steps(steps: list[CheckStep]) -> list[CheckFailure]:
+    failures: list[CheckFailure] = []
+    for label, step_name, command, cwd, retries in steps:
+        code = run_step(label, command, cwd, retries=retries)
+        if code != 0:
+            print(f"{label} 检查失败：{step_name}，退出码: {code}", flush=True)
+            failures.append((label, step_name, code))
+        if label == "backend" and step_name == "pytest tests/integration":
+            restore_failure = restore_test_seed_after_integration()
+            if restore_failure is not None:
+                failures.append(restore_failure)
+    return failures
+
+
 def run_scripts_syntax_steps() -> list[CheckFailure]:
     failures: list[CheckFailure] = []
     if not SCRIPTS_DIR.exists():
@@ -202,7 +230,7 @@ def print_summary(target: str, failures: list[CheckFailure]) -> int:
 
 def run_backend_checks() -> int:
     steps, failures = build_backend_steps(mode="all")
-    failures.extend(run_check_steps(steps))
+    failures.extend(run_backend_check_steps(steps))
     return print_summary("backend", failures)
 
 
@@ -214,7 +242,7 @@ def run_backend_unit_checks() -> int:
 
 def run_backend_integration_checks() -> int:
     steps, failures = build_backend_steps(mode="integration")
-    failures.extend(run_check_steps(steps))
+    failures.extend(run_backend_check_steps(steps))
     return print_summary("backend-integration", failures)
 
 
@@ -253,7 +281,7 @@ def run_functional_checks() -> int:
     frontend_steps, frontend_failures = build_frontend_steps()
     failures.extend(run_scripts_syntax_steps())
     failures.extend(backend_failures)
-    failures.extend(run_check_steps(backend_steps))
+    failures.extend(run_backend_check_steps(backend_steps))
     failures.extend(frontend_failures)
     failures.extend(run_check_steps(frontend_steps))
     return print_summary("functional", failures)
@@ -266,7 +294,7 @@ def run_full_checks() -> int:
     recovery_steps, recovery_failures = build_recovery_steps(mode="all")
     failures.extend(run_scripts_syntax_steps())
     failures.extend(backend_failures)
-    failures.extend(run_check_steps(backend_steps))
+    failures.extend(run_backend_check_steps(backend_steps))
     failures.extend(frontend_failures)
     failures.extend(run_check_steps(frontend_steps))
     failures.extend(recovery_failures)

@@ -47,6 +47,8 @@ python scripts/run_checks.py <arguments>
 - `functional`：运行功能测试集，包含 `scripts + frontend + backend`
 - `full`：运行全部检查，等于 `scripts + frontend + backend + recovery`
 
+后端 integration 测试结束后，`run_checks.py` 会调用内部脚本 `scripts/internal/restore_test_seed.py`，重新导入测试库 seed，并按 `infra/auth/.env.auth` 恢复默认 admin，避免测试执行污染手工联调用的测试库状态。
+
 ## 导出 OpenAPI
 
 在项目根目录执行：
