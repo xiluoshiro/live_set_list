@@ -1,10 +1,12 @@
 import argparse
+import ast
 import os
 import subprocess
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = ROOT / "scripts"
 FRONTEND_DIR = ROOT / "frontend"
 BACKEND_DIR = ROOT / "backend"
 RECOVERY_TEST_DIR = ROOT / "recovery" / "tests"
@@ -148,6 +150,24 @@ def run_check_steps(steps: list[CheckStep]) -> list[CheckFailure]:
     return failures
 
 
+def run_scripts_syntax_steps() -> list[CheckFailure]:
+    failures: list[CheckFailure] = []
+    if not SCRIPTS_DIR.exists():
+        print("scripts 目录不存在。")
+        return [("scripts", "目录检查", 1)]
+
+    script_paths = sorted(SCRIPTS_DIR.glob("*.py"))
+    for script_path in script_paths:
+        relative_path = script_path.relative_to(ROOT)
+        print(f"[scripts] syntax {relative_path}", flush=True)
+        try:
+            ast.parse(script_path.read_text(encoding="utf-8"), filename=str(script_path))
+        except SyntaxError as exc:
+            print(f"{relative_path} 语法错误：{exc.msg} ({exc.lineno}:{exc.offset})", flush=True)
+            failures.append(("scripts", f"syntax {relative_path}", 1))
+    return failures
+
+
 def print_summary(target: str, failures: list[CheckFailure]) -> int:
     if not failures:
         if target == "backend-unit":
@@ -164,10 +184,12 @@ def print_summary(target: str, failures: list[CheckFailure]) -> int:
             print("恢复脚本检查完成：recovery-unit + recovery-integration 全部通过。")
         elif target == "frontend":
             print("前端检查完成：typecheck + test 全部通过。")
+        elif target == "scripts":
+            print("脚本检查完成：scripts/*.py 语法全部通过。")
         elif target == "functional":
-            print("功能检查完成：frontend + backend 全部通过。")
+            print("功能检查完成：scripts + frontend + backend 全部通过。")
         elif target == "full":
-            print("全量检查完成：frontend + backend + recovery 全部通过。")
+            print("全量检查完成：scripts + frontend + backend + recovery 全部通过。")
         else:
             print("检查全部通过。")
         return 0
@@ -202,6 +224,11 @@ def run_frontend_checks() -> int:
     return print_summary("frontend", failures)
 
 
+def run_scripts_checks() -> int:
+    failures = run_scripts_syntax_steps()
+    return print_summary("scripts", failures)
+
+
 def run_recovery_checks() -> int:
     steps, failures = build_recovery_steps(mode="unit")
     failures.extend(run_check_steps(steps))
@@ -224,6 +251,7 @@ def run_functional_checks() -> int:
     failures: list[CheckFailure] = []
     backend_steps, backend_failures = build_backend_steps(mode="all")
     frontend_steps, frontend_failures = build_frontend_steps()
+    failures.extend(run_scripts_syntax_steps())
     failures.extend(backend_failures)
     failures.extend(run_check_steps(backend_steps))
     failures.extend(frontend_failures)
@@ -236,6 +264,7 @@ def run_full_checks() -> int:
     backend_steps, backend_failures = build_backend_steps(mode="all")
     frontend_steps, frontend_failures = build_frontend_steps()
     recovery_steps, recovery_failures = build_recovery_steps(mode="all")
+    failures.extend(run_scripts_syntax_steps())
     failures.extend(backend_failures)
     failures.extend(run_check_steps(backend_steps))
     failures.extend(frontend_failures)
@@ -249,8 +278,19 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run project checks.")
     parser.add_argument(
         "target",
-        choices=["frontend", "backend", "backend-unit", "backend-integration", "recovery-unit", "recovery-integration", "recovery", "functional", "full"],
-        help="Check target: frontend / backend / backend-unit / backend-integration / recovery-unit / recovery-integration / recovery / functional / full.",
+        choices=[
+            "frontend",
+            "backend",
+            "backend-unit",
+            "backend-integration",
+            "recovery-unit",
+            "recovery-integration",
+            "recovery",
+            "scripts",
+            "functional",
+            "full",
+        ],
+        help="Check target: frontend / backend / backend-unit / backend-integration / recovery-unit / recovery-integration / recovery / scripts / functional / full.",
     )
     return parser.parse_args()
 
@@ -271,6 +311,8 @@ def main() -> int:
         return run_recovery_all_checks()
     if args.target == "frontend":
         return run_frontend_checks()
+    if args.target == "scripts":
+        return run_scripts_checks()
     if args.target == "functional":
         return run_functional_checks()
     if args.target == "full":

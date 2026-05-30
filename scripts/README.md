@@ -10,6 +10,14 @@
 python scripts/run_dev.py
 ```
 
+如果希望本次启动的后端连接测试库：
+
+```powershell
+python scripts/run_dev.py --test-db
+```
+
+`--test-db` 只会给后端进程注入 `DB_NAME=<TEST_DB_NAME>`，默认值为 `live_statistic_test`；不会修改 `.env` 文件，也不会改变前端请求地址。
+
 或：
 
 ```powershell
@@ -29,14 +37,15 @@ python scripts/run_checks.py <arguments>
 ```
 
 - `frontend`：只运行前端 `typecheck + test`
+- `scripts`：只运行 `scripts/*.py` 语法检查，不写入 `__pycache__`
 - `backend-unit`：运行后端单元测试集
 - `backend-integration`：运行后端 `mypy(app + tests) + pytest tests/integration`
 - `backend`：相当于运行 `backend-unit + backend-integration`
 - `recovery-unit`：运行恢复脚本的 mock/命令契约测试
 - `recovery-integration`：运行恢复脚本的 Docker 沙箱集成测试
 - `recovery`：相当于运行 `recovery-unit + recovery-integration`，这组检查会真实操作独立 Docker 沙箱，明显更重
-- `functional`：运行功能测试集，只包含 `frontend + backend`
-- `full`：运行全部检查，等于 `frontend + backend + recovery`
+- `functional`：运行功能测试集，包含 `scripts + frontend + backend`
+- `full`：运行全部检查，等于 `scripts + frontend + backend + recovery`
 
 ## 导出 OpenAPI
 
