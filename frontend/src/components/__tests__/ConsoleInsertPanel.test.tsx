@@ -8,6 +8,7 @@ const apiMocks = vi.hoisted(() => ({
   getConsoleSongs: vi.fn(),
   getConsoleBands: vi.fn(),
   getConsoleVenues: vi.fn(),
+  getLiveDetail: vi.fn(),
   getLives: vi.fn(),
 }));
 
@@ -15,6 +16,7 @@ vi.mock("../../api", () => ({
   getConsoleSongs: apiMocks.getConsoleSongs,
   getConsoleBands: apiMocks.getConsoleBands,
   getConsoleVenues: apiMocks.getConsoleVenues,
+  getLiveDetail: apiMocks.getLiveDetail,
   getLives: apiMocks.getLives,
 }));
 
@@ -23,10 +25,41 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs.mockReset();
     apiMocks.getConsoleBands.mockReset();
     apiMocks.getConsoleVenues.mockReset();
+    apiMocks.getLiveDetail.mockReset();
     apiMocks.getLives.mockReset();
     apiMocks.getConsoleSongs.mockResolvedValue({ items: [] });
     apiMocks.getConsoleBands.mockResolvedValue({ items: [] });
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [] });
+    apiMocks.getLiveDetail.mockResolvedValue({
+      live_id: 101,
+      live_date: "2026-03-30",
+      live_title: "春日联合公演",
+      venue: "Test Venue",
+      opening_time: "18:00:00+09",
+      start_time: "19:00:00+09",
+      bands: [1],
+      band_names: ["Poppin'Party"],
+      url: "https://example.com/live/101",
+      is_favorite: false,
+      detail_rows: [
+        {
+          row_id: "main1",
+          song_name: "真实详情歌曲",
+          band_members: [
+            {
+              band_id: 1,
+              band_name: "Poppin'Party",
+              present_members: ["Kasumi"],
+              present_count: 1,
+              total_count: 5,
+              is_full: false,
+            },
+          ],
+          other_members: [],
+          comments: [],
+        },
+      ],
+    });
     apiMocks.getLives.mockResolvedValue({
       items: [
         {
@@ -220,6 +253,21 @@ describe("ConsoleInsertPanel", () => {
     expect(await screen.findByText("24 - Page Two Live (2026-03-20)")).toBeInTheDocument();
     expect(screen.getByText("第 2 / 2 页，共 21 条")).toBeInTheDocument();
     expect(apiMocks.getLives).toHaveBeenCalledWith(2, 20);
+  });
+
+  test("显示详细信息会复用主页详情API与详情表格", async () => {
+    // 测试点：新增Setlist的详情按钮应请求真实 live detail API，并渲染与主页一致的成员表格。
+    const user = userEvent.setup();
+    render(<ConsoleInsertPanel />);
+
+    await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20));
+    await user.click(screen.getByRole("button", { name: "显示详细信息" }));
+
+    await waitFor(() => expect(apiMocks.getLiveDetail).toHaveBeenCalledWith(101));
+    expect(await screen.findByText("春日联合公演")).toBeInTheDocument();
+    expect(screen.getByText("Test Venue")).toBeInTheDocument();
+    expect(screen.getByText("Poppin'Party")).toBeInTheDocument();
+    expect(screen.getByText("真实详情歌曲")).toBeInTheDocument();
   });
 
   test("候选下拉框自身滚动时不会关闭", async () => {
