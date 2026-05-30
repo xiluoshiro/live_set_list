@@ -49,6 +49,7 @@ type LiveInsertTabProps = {
   onAddSetlistRow: () => void;
   onRemoveLastSetlistRow: () => void;
   onClearSetlistData: () => void;
+  onBatchInsertSongs: () => void;
   onQuerySongsForSetlist: () => void;
   onSubmitLiveWithSetlist: () => void;
   submitDisabled: boolean;
@@ -109,6 +110,7 @@ export function LiveInsertTab({
   onAddSetlistRow,
   onRemoveLastSetlistRow,
   onClearSetlistData,
+  onBatchInsertSongs,
   onQuerySongsForSetlist,
   onSubmitLiveWithSetlist,
   submitDisabled,
@@ -373,6 +375,14 @@ export function LiveInsertTab({
         <button type="button" className="console-ghost-btn" onClick={onAddSetlistRow}>新增一行</button>
         <button type="button" className="console-ghost-btn" onClick={onRemoveLastSetlistRow}>删除末行</button>
         <button type="button" className="console-ghost-btn" onClick={onClearSetlistData}>清空数据</button>
+        <button
+          type="button"
+          className="console-submit-btn"
+          onClick={onBatchInsertSongs}
+          disabled={!didSongLookup}
+        >
+          批量插入
+        </button>
       </div>
 
       <div className="console-submit-row">
