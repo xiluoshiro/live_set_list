@@ -56,6 +56,10 @@ type LiveInsertDraft = {
   venue_id: number;
 };
 
+type ConsoleInsertPanelProps = {
+  onLiveDataChanged?: () => void;
+};
+
 function toSongInsertRow(item: ConsoleSongItem): SongInsertRow {
   return {
     song_id: item.song_id,
@@ -132,7 +136,7 @@ function formatTimedLabel(value: string | null | undefined): string {
   return `${timePart}(${timezoneLabel})`;
 }
 
-export function ConsoleInsertPanel() {
+export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProps = {}) {
   const auth = useAuth();
   const [mode, setMode] = useState<ConsoleMode>("setlist");
   const [lives, setLives] = useState<LiveInsertRow[]>([]);
@@ -760,6 +764,7 @@ export function ConsoleInsertPanel() {
       const newBundle = { live: targetLive, setlist_rows: previewRows };
       setSubmittedBundles((prev) => [newBundle, ...prev]);
       setDisplayedBundle(newBundle);
+      onLiveDataChanged?.();
       setMessage(
         `已为Live #${targetLive.live_id} 插入 ${response.item.inserted_row_count} 条 setlist，总计 ${response.item.total_setlist_row_count} 条。`,
       );
@@ -864,7 +869,16 @@ export function ConsoleInsertPanel() {
           ],
         ),
       );
+      setLivePagination((prev) => {
+        const total = prev.total + 1;
+        return {
+          ...prev,
+          total,
+          total_pages: Math.max(1, Math.ceil(total / prev.page_size)),
+        };
+      });
       setSelectedLiveId(inserted.live_id);
+      onLiveDataChanged?.();
       setMessage(`已新增Live #${inserted.live_id}（${inserted.live_title}）`);
     } catch (error) {
       setMessage(`新增Live失败：${errorMessage(error)}`);

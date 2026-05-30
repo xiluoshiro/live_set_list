@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import App from "../App";
 import {
+  clearLivesCache,
   clearMyFavoriteLivesCache,
   getLiveDetail,
   getLiveDetailsBatch,
@@ -19,6 +20,7 @@ vi.mock("../api", () => ({
   getLiveDetail: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
   peekMyFavoriteLives: vi.fn(),
+  clearLivesCache: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
   createConsoleVenue: vi.fn().mockResolvedValue({ ok: true, item: { venue_id: 1, venue_name: "Mock Venue" } }),
   getConsoleSongs: vi.fn().mockResolvedValue({ items: [] }),
@@ -30,6 +32,7 @@ const getLivesMock = vi.mocked(getLives);
 const getLiveDetailMock = vi.mocked(getLiveDetail);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
+const clearLivesCacheMock = vi.mocked(clearLivesCache);
 const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
 
 type MatchMediaController = {
@@ -142,6 +145,7 @@ describe("App dark mode", () => {
     getLiveDetailMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
     peekMyFavoriteLivesMock.mockReset();
+    clearLivesCacheMock.mockReset();
     clearMyFavoriteLivesCacheMock.mockReset();
 
     getLivesMock.mockResolvedValue(makeResponse());

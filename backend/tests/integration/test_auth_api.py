@@ -1,8 +1,10 @@
+import os
+
 import pytest
 
 pytestmark = pytest.mark.integration
-TEST_DEFAULT_ADMIN_USERNAME = "admin"
-TEST_DEFAULT_ADMIN_PASSWORD = "test-admin-pass"
+TEST_DEFAULT_ADMIN_USERNAME = os.getenv("AUTH_DEFAULT_ADMIN_USERNAME", "admin").strip().lower()
+TEST_DEFAULT_ADMIN_PASSWORD = os.getenv("AUTH_DEFAULT_ADMIN_PASSWORD", "test-admin-pass")
 
 # 测试点：真实测试库中登录成功后，应返回用户信息、csrf_token，并写入会话 cookie。
 def test_auth_login_success_against_test_database(

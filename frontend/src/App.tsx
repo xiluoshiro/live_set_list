@@ -6,6 +6,7 @@ import { MemberStatusTable } from "./components/DetailMemberTable";
 import { LoginDialog } from "./components/LoginDialog";
 import {
   ApiError,
+  clearLivesCache,
   clearMyFavoriteLivesCache,
   getLiveDetail,
   getLives,
@@ -412,6 +413,12 @@ function App() {
     setPage(1);
   };
 
+  const handleConsoleLiveDataChanged = () => {
+    listSnapshotsRef.current = {};
+    clearLivesCache();
+    clearMyFavoriteLivesCache();
+  };
+
   // 页签切换统一做权限闸门，防止未登录或低权限用户进入受限页。
   const handleTabChange = (nextTab: TabKey) => {
     if (nextTab === "favorites" && !canUseFavoriteFeatures) {
@@ -789,7 +796,7 @@ function App() {
             </footer>
           </>
         ) : (
-          <ConsoleInsertPanel />
+          <ConsoleInsertPanel onLiveDataChanged={handleConsoleLiveDataChanged} />
         )}
       </section>
 
