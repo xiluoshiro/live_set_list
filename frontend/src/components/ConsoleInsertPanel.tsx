@@ -12,7 +12,11 @@ import {
   getLiveDetail,
   getLives,
   type ConsoleBandItem,
+  type ConsoleLiveCreatePayload,
+  type ConsoleLiveSetlistAppendPayload,
+  type ConsoleLiveSetlistRowPayload,
   type ConsoleSongItem,
+  type ConsoleSongCreatePayload,
   type ConsoleVenueItem,
   type LiveDetailResponse,
   type LiveItem,
@@ -59,6 +63,35 @@ type LiveInsertDraft = {
 type ConsoleInsertPanelProps = {
   onLiveDataChanged?: () => void;
 };
+
+type SetlistConfirmRow = ConsoleLiveSetlistRowPayload & {
+  song_name: string;
+};
+
+type PendingConfirmation =
+  | {
+      kind: "venue";
+      title: string;
+      payload: { venue_name: string };
+    }
+  | {
+      kind: "live";
+      title: string;
+      payload: ConsoleLiveCreatePayload;
+    }
+  | {
+      kind: "song";
+      title: string;
+      payload: ConsoleSongCreatePayload;
+      bandName: string;
+    }
+  | {
+      kind: "setlist";
+      title: string;
+      live: LiveInsertRow;
+      payload: ConsoleLiveSetlistAppendPayload;
+      previewRows: SetlistConfirmRow[];
+    };
 
 function toSongInsertRow(item: ConsoleSongItem): SongInsertRow {
   return {
@@ -147,6 +180,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const [displayedBundle, setDisplayedBundle] = useState<LiveInsertBundle | null>(null);
   const [message, setMessage] = useState<string>("当前为前端 Mock 插入，后续可接后端写入接口。");
   const [transientNotice, setTransientNotice] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const [confirmationSubmitting, setConfirmationSubmitting] = useState(false);
 
   const [selectedLiveId, setSelectedLiveId] = useState<number>(0);
   const [livePage, setLivePage] = useState(1);
@@ -712,7 +747,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     }
   };
 
-  const submitSetlist = async () => {
+  const requestSetlistConfirmation = () => {
     const targetLive = lives.find((live) => live.live_id === selectedLiveId);
     if (!targetLive) {
       setMessage("提交setlist失败：未选择有效的 live_id。");
@@ -751,17 +786,38 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     });
     const previewRows = setlistPayload.map((row) => ({
       ...row,
-      band_member: JSON.stringify(row.band_member),
-      other_member: JSON.stringify(row.other_member),
+      song_name: validRows[row.absolute_order - 1]?.song_name.trim() ?? "",
     }));
 
+    setPendingConfirmation({
+      kind: "setlist",
+      title: `确认提交 Setlist：#${targetLive.live_id} ${targetLive.live_title}`,
+      live: targetLive,
+      payload: { setlist_rows: setlistPayload },
+      previewRows,
+    });
+  };
+
+  const insertSetlist = async (
+    targetLive: LiveInsertRow,
+    payload: ConsoleLiveSetlistAppendPayload,
+    previewRows: SetlistConfirmRow[],
+    csrfToken: string,
+  ) => {
     try {
       const response = await appendConsoleLiveSetlist(
         targetLive.live_id,
-        { setlist_rows: setlistPayload },
-        auth.csrfToken,
+        payload,
+        csrfToken,
       );
-      const newBundle = { live: targetLive, setlist_rows: previewRows };
+      const newBundle = {
+        live: targetLive,
+        setlist_rows: previewRows.map((row) => ({
+          ...row,
+          band_member: JSON.stringify(row.band_member),
+          other_member: JSON.stringify(row.other_member),
+        })),
+      };
       setSubmittedBundles((prev) => [newBundle, ...prev]);
       setDisplayedBundle(newBundle);
       onLiveDataChanged?.();
@@ -791,7 +847,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     }
   };
 
-  const insertVenue = async () => {
+  const requestVenueConfirmation = () => {
     const venueName = venueQueryText.trim();
     if (venueName === "") {
       setMessage("新增venue失败：venue 名称不能为空。");
@@ -802,8 +858,16 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       return;
     }
 
+    setPendingConfirmation({
+      kind: "venue",
+      title: "确认新增 Venue",
+      payload: { venue_name: venueName },
+    });
+  };
+
+  const insertVenue = async (payload: { venue_name: string }, csrfToken: string) => {
     try {
-      const response = await createConsoleVenue(venueName, auth.csrfToken);
+      const response = await createConsoleVenue(payload.venue_name, csrfToken);
       const inserted = toVenueOption(response.item);
       setVenues((prev) => sortById([inserted, ...prev.filter((venue) => venue.venue_id !== inserted.venue_id)], (venue) => venue.venue_id));
       setSelectedVenueId(inserted.venue_id);
@@ -814,7 +878,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     }
   };
 
-  const insertLive = async () => {
+  const requestLiveConfirmation = () => {
     if (liveDate.trim() === "" || liveTitle.trim() === "") {
       setMessage("新增Live失败：live_date 与 live_title 为必填项。");
       return;
@@ -828,29 +892,37 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       return;
     }
 
+    setPendingConfirmation({
+      kind: "live",
+      title: "确认新增 Live",
+      payload: {
+        live_date: liveDate,
+        live_title: liveTitle.trim(),
+        type: liveType,
+        url: liveUrl.trim(),
+        opening_time: openingTime,
+        start_time: startTime,
+        timezone,
+        venue_id: selectedVenueId,
+      },
+    });
+  };
+
+  const insertLive = async (payload: ConsoleLiveCreatePayload, csrfToken: string) => {
     try {
       const response = await createConsoleLive(
-        {
-          live_date: liveDate,
-          live_title: liveTitle.trim(),
-          type: liveType,
-          url: liveUrl.trim(),
-          opening_time: openingTime,
-          start_time: startTime,
-          timezone,
-          venue_id: selectedVenueId,
-        },
-        auth.csrfToken,
+        payload,
+        csrfToken,
       );
       const inserted: LiveInsertDraft = {
         live_id: response.item.live_id,
         live_date: response.item.live_date,
         live_title: response.item.live_title,
-        type: liveType,
+        type: payload.type,
         url: response.item.url,
         opening_time: response.item.opening_time,
         start_time: response.item.start_time,
-        timezone,
+        timezone: payload.timezone,
         venue_id: response.item.venue_id,
       };
 
@@ -886,10 +958,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   };
 
   const submitInsertLive = () => {
-    void insertLive();
+    requestLiveConfirmation();
   };
 
-  const submitSong = async () => {
+  const requestSongConfirmation = () => {
     const name = songName.trim();
     if (name === "") {
       setMessage("新增歌曲失败：song_name 不能为空。");
@@ -904,14 +976,24 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       return;
     }
 
+    const selectedBand = bands.find((band) => band.band_id === songBandId);
+    setPendingConfirmation({
+      kind: "song",
+      title: "确认新增歌曲",
+      payload: {
+        song_name: name,
+        band_id: songBandId,
+        cover: songCover,
+      },
+      bandName: selectedBand?.band_name ?? "-",
+    });
+  };
+
+  const submitSong = async (payload: ConsoleSongCreatePayload, csrfToken: string) => {
     try {
       const response = await createConsoleSong(
-        {
-          song_name: name,
-          band_id: songBandId,
-          cover: songCover,
-        },
-        auth.csrfToken,
+        payload,
+        csrfToken,
       );
       const row = toSongInsertRow(response.item);
       setSongs((prev) => sortById([row, ...prev.filter((song) => song.song_id !== row.song_id)], (song) => song.song_id));
@@ -923,6 +1005,137 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     } catch (error) {
       setMessage(`新增歌曲失败：${errorMessage(error)}`);
     }
+  };
+
+  const closePendingConfirmation = () => {
+    if (confirmationSubmitting) return;
+    setPendingConfirmation(null);
+  };
+
+  const confirmPendingInsert = async () => {
+    if (!pendingConfirmation) return;
+    if (!auth.isAuthenticated || !auth.csrfToken) {
+      setPendingConfirmation(null);
+      setMessage("提交失败：登录态已失效，请重新登录。");
+      return;
+    }
+
+    setConfirmationSubmitting(true);
+    try {
+      if (pendingConfirmation.kind === "venue") {
+        await insertVenue(pendingConfirmation.payload, auth.csrfToken);
+      } else if (pendingConfirmation.kind === "live") {
+        await insertLive(pendingConfirmation.payload, auth.csrfToken);
+      } else if (pendingConfirmation.kind === "song") {
+        await submitSong(pendingConfirmation.payload, auth.csrfToken);
+      } else {
+        await insertSetlist(
+          pendingConfirmation.live,
+          pendingConfirmation.payload,
+          pendingConfirmation.previewRows,
+          auth.csrfToken,
+        );
+      }
+      setPendingConfirmation(null);
+    } finally {
+      setConfirmationSubmitting(false);
+    }
+  };
+
+  const renderCompactConfirmation = (rows: Array<[string, string | number | boolean]>) => (
+    <div className="console-confirm-table-wrap">
+      <table className="console-admin-table console-confirm-table">
+        <tbody>
+          {rows.map(([label, value]) => (
+            <tr key={label}>
+              <th>{label}</th>
+              <td>{String(value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderPendingConfirmationBody = () => {
+    if (!pendingConfirmation) return null;
+
+    if (pendingConfirmation.kind === "venue") {
+      return renderCompactConfirmation([["venue_name", pendingConfirmation.payload.venue_name]]);
+    }
+
+    if (pendingConfirmation.kind === "live") {
+      const payload = pendingConfirmation.payload;
+      return renderCompactConfirmation([
+        ["live_date", payload.live_date],
+        ["live_title", payload.live_title],
+        ["type", payload.type],
+        ["url", payload.url],
+        ["opening_time", payload.opening_time],
+        ["start_time", payload.start_time],
+        ["timezone", payload.timezone],
+        ["venue_id", payload.venue_id],
+      ]);
+    }
+
+    if (pendingConfirmation.kind === "song") {
+      const payload = pendingConfirmation.payload;
+      return renderCompactConfirmation([
+        ["song_name", payload.song_name],
+        ["band_id", payload.band_id],
+        ["band_name", pendingConfirmation.bandName],
+        ["cover", payload.cover],
+      ]);
+    }
+
+    return (
+      <>
+        <p className="detail-row">
+          <strong>{pendingConfirmation.live.live_title}</strong>
+          <span>#{pendingConfirmation.live.live_id}</span>
+        </p>
+        <div className="detail-meta-line">
+          <p className="detail-inline-item detail-inline-item-date">
+            <strong>日期：</strong>
+            <span>{pendingConfirmation.live.live_date}</span>
+          </p>
+          <p className="detail-inline-item">
+            <strong>待提交：</strong>
+            <span>{pendingConfirmation.previewRows.length} 行</span>
+          </p>
+        </div>
+        <div className="console-table-wrap console-confirm-setlist-wrap">
+          <table className="console-admin-table console-confirm-setlist-table">
+            <thead>
+              <tr>
+                <th>abs</th>
+                <th>song_id</th>
+                <th>song_name</th>
+                <th>seg</th>
+                <th>sub</th>
+                <th>short</th>
+                <th>band_member</th>
+                <th>other_member</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingConfirmation.previewRows.map((row) => (
+                <tr key={row.absolute_order}>
+                  <td>{row.absolute_order}</td>
+                  <td>{row.song_id}</td>
+                  <td>{row.song_name}</td>
+                  <td>{row.segment_type}</td>
+                  <td>{row.sub_order}</td>
+                  <td>{row.is_short ? "true" : "false"}</td>
+                  <td><code>{JSON.stringify(row.band_member)}</code></td>
+                  <td><code>{JSON.stringify(row.other_member ?? {})}</code></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
   };
 
   const editingBandRow = editingBandRowKey === null
@@ -961,7 +1174,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
         setSongBandId(bandId);
         setSongBandOpen(false);
       }}
-      onSubmitSong={() => void submitSong()}
+      onSubmitSong={requestSongConfirmation}
       submitDisabled={isSongSubmitDisabled}
     />
   );
@@ -1040,7 +1253,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
             setVenueOpen(false);
           }}
           onQueryVid={queryVid}
-          onInsertVenue={() => void insertVenue()}
+          onInsertVenue={requestVenueConfirmation}
           onSubmitInsertLive={submitInsertLive}
           queryInsertDisabled={isVenueQuickInsertDisabled}
           submitInsertDisabled={isLiveSubmitDisabled}
@@ -1092,7 +1305,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           onAddSetlistRow={addSetlistRow}
           onRemoveLastSetlistRow={removeLastSetlistRow}
           onQuerySongsForSetlist={querySongsForSetlist}
-          onSubmitLiveWithSetlist={submitSetlist}
+          onSubmitLiveWithSetlist={requestSetlistConfirmation}
           submitDisabled={isSetlistSubmitDisabled}
           onToggleBandForSetlistRow={toggleBandForSetlistRow}
           onToggleBandMemberForSetlistRow={toggleBandMemberForSetlistRow}
@@ -1105,6 +1318,54 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
 
       {mode === "song" && (
         renderSongAdminSection()
+      )}
+
+      {pendingConfirmation && (
+        <div className="modal-mask" onClick={closePendingConfirmation}>
+          <div
+            className={`modal console-confirm-modal ${pendingConfirmation.kind === "setlist" ? "wide" : "compact"} ${pendingConfirmation.kind}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="console-confirm-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h2 id="console-confirm-title">{pendingConfirmation.title}</h2>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="modal-action-btn close"
+                  aria-label="关闭"
+                  onClick={closePendingConfirmation}
+                  disabled={confirmationSubmitting}
+                >
+                  <span className="modal-action-glyph close">✕</span>
+                </button>
+              </div>
+            </div>
+            <div className="console-confirm-body">
+              {renderPendingConfirmationBody()}
+            </div>
+            <div className="console-confirm-actions">
+              <button
+                type="button"
+                className="console-ghost-btn"
+                onClick={closePendingConfirmation}
+                disabled={confirmationSubmitting}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="console-submit-btn"
+                onClick={() => void confirmPendingInsert()}
+                disabled={confirmationSubmitting}
+              >
+                {confirmationSubmitting ? "提交中..." : "确认提交"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {setlistDetailOpen && (

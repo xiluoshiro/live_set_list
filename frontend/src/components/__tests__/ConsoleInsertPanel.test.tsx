@@ -156,6 +156,11 @@ describe("ConsoleInsertPanel", () => {
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
+    expect(apiMocks.appendConsoleLiveSetlist).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: /确认提交 Setlist/ })).toBeInTheDocument();
+    expect(screen.getByText("BLACK SHOUT")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
     await waitFor(() => expect(apiMocks.appendConsoleLiveSetlist).toHaveBeenCalledWith(
       101,
       {
@@ -294,6 +299,11 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByLabelText("查询 venue"), "New Venue");
     await user.click(screen.getByRole("button", { name: "插入" }));
 
+    expect(apiMocks.createConsoleVenue).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "确认新增 Venue" })).toBeInTheDocument();
+    expect(screen.getByText("New Venue")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
     await waitFor(() => expect(apiMocks.createConsoleVenue).toHaveBeenCalledWith("New Venue", "csrf-token"));
     expect(screen.getByText("已新增venue #88（New Venue）")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "88 - New Venue" })).toBeInTheDocument();
@@ -315,6 +325,11 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Inserted Live");
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/inserted");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
+
+    expect(apiMocks.createConsoleLive).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "确认新增 Live" })).toBeInTheDocument();
+    expect(screen.getByText("Inserted Live")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
       {
@@ -351,6 +366,11 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "请选择 band_id" }));
     await user.click(await screen.findByText("2 - Roselia"));
     await user.click(screen.getByRole("button", { name: "提交插入" }));
+
+    expect(apiMocks.createConsoleSong).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "确认新增歌曲" })).toBeInTheDocument();
+    expect(screen.getByText("新曲")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleSong).toHaveBeenCalledWith(
       { song_name: "新曲", band_id: 2, cover: false },
