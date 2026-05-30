@@ -45,7 +45,7 @@ SELECT
     ) AS band_ids,
     l.url AS url
 FROM live_attrs l
-JOIN live_setlist ls
+LEFT JOIN live_setlist ls
     ON l.id = ls.live_id
 LEFT JOIN LATERAL (
     SELECT jsonb_object_keys(ls.band_member) AS key

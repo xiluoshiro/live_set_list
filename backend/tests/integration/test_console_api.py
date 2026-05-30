@@ -475,10 +475,12 @@ def test_console_create_live_persists_live_row(
     )
 
     assert response.status_code == 201
-    assert response.json() == {
+    response_payload = response.json()
+    live_id = response_payload["item"]["live_id"]
+    assert response_payload == {
         "ok": True,
         "item": {
-            "live_id": 39,
+            "live_id": live_id,
             "live_date": "2026-05-01",
             "live_title": "Console Created Live",
             "url": "https://example.com/lives/console-created",
@@ -496,12 +498,12 @@ def test_console_create_live_persists_live_row(
             FROM live_attrs
             WHERE id = %s
             """,
-            (39,),
+            (live_id,),
         )
         row = cursor.fetchone()
 
     assert row == (
-        39,
+        live_id,
         "2026-05-01",
         "Console Created Live",
         False,
@@ -512,7 +514,7 @@ def test_console_create_live_persists_live_row(
     )
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "live_create",
-        "39",
+        str(live_id),
         {
             "venue_id": 2,
             "opening_time": "18:00:00+09:00",
