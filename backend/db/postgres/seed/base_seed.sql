@@ -86,6 +86,16 @@ VALUES
         TIME WITH TIME ZONE '17:00:00+09',
         TIME WITH TIME ZONE '18:00:00+09',
         24
+    ),
+    (
+        41,
+        DATE '2026-05-30',
+        'Console Draft Live',
+        false,
+        'https://example.com/lives/console-draft',
+        TIME WITH TIME ZONE '17:00:00+09',
+        TIME WITH TIME ZONE '18:00:00+09',
+        1
     );
 
 INSERT INTO public.live_setlist (

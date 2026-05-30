@@ -33,7 +33,7 @@ SELECT
 FROM user_live_favorites f
 JOIN live_attrs l
     ON l.id = f.live_id
-JOIN live_setlist ls
+LEFT JOIN live_setlist ls
     ON l.id = ls.live_id
 LEFT JOIN LATERAL (
     SELECT jsonb_object_keys(ls.band_member) AS key
