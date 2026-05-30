@@ -223,6 +223,11 @@ export function LiveInsertTab({
                     ... 还有 {setlistParsePreviewRows.length - 3} 行，查看全部
                   </button>
                 )}
+                {setlistParsePreviewRows.length <= 3 && (
+                  <button type="button" className="setlist-preview-more-btn" onClick={onOpenFullSetlistPreview}>
+                    显示详情
+                  </button>
+                )}
               </div>
             )}
           </div>
