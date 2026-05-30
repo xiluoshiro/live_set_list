@@ -31,21 +31,6 @@ logger = get_logger(__name__)
 
 TIME_PATTERN = re.compile(r"^\d{2}:\d{2}(?::\d{2})?$")
 TIMEZONE_PATTERN = re.compile(r"^[+-]\d{2}:\d{2}$")
-SEGMENT_TYPE_ALIASES = {
-    "M": "main",
-    "MAIN": "main",
-    "OP": "opening",
-    "OPENING": "opening",
-    "ED": "ending",
-    "ENDING": "ending",
-    "EN": "encore",
-    "ENCORE": "encore",
-    "WEN": "w_encore",
-    "W_ENCORE": "w_encore",
-    "SP": "special",
-    "SPECIAL": "special",
-}
-CANONICAL_SEGMENT_TYPES = {"main", "opening", "ending", "encore", "w_encore", "special"}
 
 
 def _write_console_audit_log(
@@ -83,14 +68,11 @@ def _normalize_time_with_timezone(value: str, timezone: str) -> str:
 
 
 def _normalize_segment_type(value: str) -> str:
-    """Map console shorthand like M/EN/SP into canonical live_setlist.segment_type values."""
+    """Reject blank segment_type; pass through valid values directly."""
     raw = value.strip()
     if raw == "":
         _raise_business_error(status.HTTP_400_BAD_REQUEST, "segment_type must not be blank")
-    mapped = SEGMENT_TYPE_ALIASES.get(raw.upper(), raw.lower())
-    if mapped not in CANONICAL_SEGMENT_TYPES:
-        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Unsupported segment_type: {value}")
-    return mapped
+    return raw
 
 
 def _to_string_list(raw: Any) -> list[str]:
