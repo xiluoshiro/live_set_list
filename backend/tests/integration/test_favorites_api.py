@@ -136,7 +136,7 @@ def test_lives_endpoints_return_is_favorite_false_for_anonymous_user(
 
     assert list_response.status_code == 200
     list_payload = list_response.json()
-    assert [item["is_favorite"] for item in list_payload["items"]] == [False, False]
+    assert [item["is_favorite"] for item in list_payload["items"]] == [False, False, False]
 
     assert detail_response.status_code == 200
     assert detail_response.json()["is_favorite"] is False

@@ -29,12 +29,13 @@ def test_get_lives_returns_seeded_items(integration_test_client):
     assert payload["pagination"] == {
         "page": 1,
         "page_size": 20,
-        "total": 2,
+        "total": 3,
         "total_pages": 1,
     }
-    assert [item["live_id"] for item in payload["items"]] == [2, 1]
+    assert [item["live_id"] for item in payload["items"]] == [2, 1, 38]
     assert payload["items"][0]["bands"] == [1, 3]
     assert payload["items"][1]["bands"] == [1, 2]
+    assert payload["items"][2]["bands"] == [1]
 
 
 def test_get_lives_large_page_clamps_to_last_page(integration_test_client):
@@ -46,10 +47,10 @@ def test_get_lives_large_page_clamps_to_last_page(integration_test_client):
     assert payload["pagination"] == {
         "page": 1,
         "page_size": 20,
-        "total": 2,
+        "total": 3,
         "total_pages": 1,
     }
-    assert [item["live_id"] for item in payload["items"]] == [2, 1]
+    assert [item["live_id"] for item in payload["items"]] == [2, 1, 38]
 
 
 def test_get_lives_empty_result_returns_empty_items(
