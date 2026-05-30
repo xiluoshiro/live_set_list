@@ -4,12 +4,15 @@ import {
   getConsoleBands,
   getConsoleSongs,
   getConsoleVenues,
+  getLiveDetail,
   getLives,
   type ConsoleBandItem,
   type ConsoleSongItem,
   type ConsoleVenueItem,
+  type LiveDetailResponse,
   type LiveItem,
 } from "../api";
+import { MemberStatusTable } from "./DetailMemberTable";
 import { LiveAdminSection } from "./console/LiveAdminSection";
 import { LiveInsertTab } from "./console/LiveInsertTab";
 import { SongAdminSection } from "./console/SongAdminSection";
@@ -99,6 +102,25 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function formatTimedLabel(value: string | null | undefined): string {
+  const raw = value?.trim();
+  if (!raw) return "-";
+
+  const match = raw.match(/^(\d{2}:\d{2})(?::\d{2})?(?:([+-]\d{2})(?::?(\d{2}))?)?$/);
+  if (!match) return raw;
+
+  const [, timePart, offsetHour, offsetMinute] = match;
+  if (!offsetHour) return timePart;
+
+  const normalizedOffset = `${offsetHour}:${offsetMinute ?? "00"}`;
+  const timezoneLabelMap: Record<string, string> = {
+    "+08:00": "CN",
+    "+09:00": "JP",
+  };
+  const timezoneLabel = timezoneLabelMap[normalizedOffset] ?? `UTC${normalizedOffset}`;
+  return `${timePart}(${timezoneLabel})`;
+}
+
 export function ConsoleInsertPanel() {
   const [mode, setMode] = useState<ConsoleMode>("setlist");
   const [lives, setLives] = useState<LiveInsertRow[]>([]);
@@ -134,6 +156,9 @@ export function ConsoleInsertPanel() {
   const [venueMenuPos, setVenueMenuPos] = useState<Position | null>(null);
   const [insertedLives, setInsertedLives] = useState<LiveInsertDraft[]>([]);
   const [setlistDetailOpen, setSetlistDetailOpen] = useState(false);
+  const [setlistDetailData, setSetlistDetailData] = useState<LiveDetailResponse | null>(null);
+  const [setlistDetailLoading, setSetlistDetailLoading] = useState(false);
+  const [setlistDetailError, setSetlistDetailError] = useState<string | null>(null);
 
   const [setlistRows, setSetlistRows] = useState<SetlistDraftRow[]>(INITIAL_SETLIST_ROWS);
   const [setlistRowKey, setSetlistRowKey] = useState(1000);
@@ -558,15 +583,27 @@ export function ConsoleInsertPanel() {
     );
   };
 
-  const showCurrentSetlistDetail = () => {
-    const target = submittedBundles.find((bundle) => bundle.live.live_id === selectedLiveId) ?? null;
-    setDisplayedBundle(target);
-    if (!target) {
-      setMessage(`Live #${selectedLiveId} 暂无可展示的 setlist 详细信息(mock)。`);
+  const showCurrentSetlistDetail = async () => {
+    if (selectedLiveId <= 0) {
+      setMessage("显示详细信息失败：未选择有效的 live_id。");
       return;
     }
+
     setSetlistDetailOpen(true);
-    setMessage(`Live #${selectedLiveId} 可查看详细信息(mock)。`);
+    setSetlistDetailLoading(true);
+    setSetlistDetailError(null);
+    setSetlistDetailData(null);
+    try {
+      const detail = await getLiveDetail(selectedLiveId);
+      setSetlistDetailData(detail);
+      setMessage(`Live #${selectedLiveId} 详细信息已加载。`);
+    } catch (error) {
+      const message = errorMessage(error);
+      setSetlistDetailError(message === "Request timeout" ? "请求超时，请稍后重试" : message);
+      setMessage(`加载Live #${selectedLiveId} 详细信息失败：${message}`);
+    } finally {
+      setSetlistDetailLoading(false);
+    }
   };
 
   const submitSetlist = () => {
@@ -698,6 +735,16 @@ export function ConsoleInsertPanel() {
   const editingOtherRow = editingOtherRowKey === null
     ? null
     : setlistRows.find((row) => row.row_key === editingOtherRowKey) ?? null;
+  const selectedLive = lives.find((live) => live.live_id === selectedLiveId) ?? null;
+  const setlistDetailTitle = setlistDetailData?.live_title ?? selectedLive?.live_title ?? `Live #${selectedLiveId}`;
+  const setlistDetailDate = setlistDetailData?.live_date ?? selectedLive?.live_date ?? "-";
+  const setlistOpeningTimeText = formatTimedLabel(setlistDetailData?.opening_time);
+  const setlistStartTimeText = formatTimedLabel(setlistDetailData?.start_time);
+  const setlistVenueText = setlistDetailData?.venue ?? "-";
+  const setlistBandNamesText =
+    setlistDetailData?.band_names && setlistDetailData.band_names.length > 0
+      ? setlistDetailData.band_names.join(" / ")
+      : "-";
 
   const renderSongAdminSection = () => (
     <SongAdminSection
@@ -865,11 +912,38 @@ export function ConsoleInsertPanel() {
               </div>
             </div>
             <p className="detail-row">
-              <strong>live_id：</strong>
-              <span>{selectedLiveId}</span>
+              <strong>{setlistDetailTitle}</strong>
+              <span>#{setlistDetailData?.live_id ?? selectedLiveId}</span>
+            </p>
+            <div className="detail-meta-line">
+              <p className="detail-inline-item detail-inline-item-date">
+                <strong>日期：</strong>
+                <span>{setlistDetailDate}</span>
+              </p>
+              <p className="detail-inline-item">
+                <strong>开场：</strong>
+                <span>{setlistOpeningTimeText}</span>
+              </p>
+              <p className="detail-inline-item">
+                <strong>开演：</strong>
+                <span>{setlistStartTimeText}</span>
+              </p>
+              <p className="detail-inline-item detail-inline-item-venue">
+                <strong>场地：</strong>
+                <span>{setlistVenueText}</span>
+              </p>
+            </div>
+            <p className="detail-row">
+              <strong>乐队：</strong>
+              <span>{setlistBandNamesText}</span>
             </p>
             <div className="detail-table-wrap">
-              <p className="empty-cell">详细信息展示将在写入接口接入后复用主界面结构。</p>
+              <MemberStatusTable
+                rows={setlistDetailData?.detail_rows ?? []}
+                loading={setlistDetailLoading}
+                error={setlistDetailError}
+                seed={selectedLiveId}
+              />
             </div>
           </div>
         </div>
