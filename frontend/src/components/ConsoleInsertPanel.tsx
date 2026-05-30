@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../auth/AuthProvider";
 import {
+  createConsoleLive,
   createConsoleVenue,
   getConsoleBands,
   getConsoleSongs,
@@ -155,7 +156,7 @@ export function ConsoleInsertPanel() {
   const [liveUrl, setLiveUrl] = useState("");
   const [openingTime, setOpeningTime] = useState("18:00");
   const [startTime, setStartTime] = useState("19:00");
-  const [timezone, setTimezone] = useState(TIMEZONE_OPTIONS[0] ?? "+08:00");
+  const [timezone, setTimezone] = useState("+09:00");
   const [selectedVenueId, setSelectedVenueId] = useState<number>(0);
   const [venueQueryText, setVenueQueryText] = useState("");
   const [venueOpen, setVenueOpen] = useState(false);
@@ -197,11 +198,6 @@ export function ConsoleInsertPanel() {
     () => songs.reduce((maxId, row) => Math.max(maxId, row.song_id), 200) + 1,
     [songs],
   );
-  const nextLiveId = useMemo(
-    () => lives.reduce((maxId, row) => Math.max(maxId, row.live_id), 100) + 1,
-    [lives],
-  );
-
   const derivedSegments = useMemo(() => getDerivedSegments(setlistRows), [setlistRows]);
   // 校验规则 1：查询 venue 行若当前查询输入为空，禁用该行“插入”。
   const isVenueQuickInsertDisabled = venueQueryText.trim() === "";
@@ -787,7 +783,7 @@ export function ConsoleInsertPanel() {
     }
   };
 
-  const insertLive = () => {
+  const insertLive = async () => {
     if (liveDate.trim() === "" || liveTitle.trim() === "") {
       setMessage("新增Live失败：live_date 与 live_title 为必填项。");
       return;
@@ -796,41 +792,61 @@ export function ConsoleInsertPanel() {
       setMessage("新增Live失败：请先选择 venue。");
       return;
     }
+    if (!auth.isAuthenticated || !auth.csrfToken) {
+      setMessage("新增Live失败：登录态已失效，请重新登录。");
+      return;
+    }
 
-    const liveId = nextLiveId;
-    const inserted: LiveInsertDraft = {
-      live_id: liveId,
-      live_date: liveDate,
-      live_title: liveTitle.trim(),
-      type: liveType,
-      url: liveUrl.trim() || null,
-      opening_time: openingTime,
-      start_time: startTime,
-      timezone,
-      venue_id: selectedVenueId,
-    };
+    try {
+      const response = await createConsoleLive(
+        {
+          live_date: liveDate,
+          live_title: liveTitle.trim(),
+          type: liveType,
+          url: liveUrl.trim(),
+          opening_time: openingTime,
+          start_time: startTime,
+          timezone,
+          venue_id: selectedVenueId,
+        },
+        auth.csrfToken,
+      );
+      const inserted: LiveInsertDraft = {
+        live_id: response.item.live_id,
+        live_date: response.item.live_date,
+        live_title: response.item.live_title,
+        type: liveType,
+        url: response.item.url,
+        opening_time: response.item.opening_time,
+        start_time: response.item.start_time,
+        timezone,
+        venue_id: response.item.venue_id,
+      };
 
-    setInsertedLives((prev) => [inserted, ...prev]);
-    setLives((prev) =>
-      sortLivesForConsole(
-        [
-          {
-            live_id: inserted.live_id,
-            live_date: inserted.live_date,
-            live_title: inserted.live_title,
-            bands: [],
-            url: inserted.url,
-          },
-          ...prev,
-        ],
-      ),
-    );
-    setSelectedLiveId(inserted.live_id);
-    setMessage(`已新增Live #${inserted.live_id}（${inserted.live_title}）`);
+      setInsertedLives((prev) => [inserted, ...prev]);
+      setLives((prev) =>
+        sortLivesForConsole(
+          [
+            {
+              live_id: inserted.live_id,
+              live_date: inserted.live_date,
+              live_title: inserted.live_title,
+              bands: [],
+              url: inserted.url,
+            },
+            ...prev,
+          ],
+        ),
+      );
+      setSelectedLiveId(inserted.live_id);
+      setMessage(`已新增Live #${inserted.live_id}（${inserted.live_title}）`);
+    } catch (error) {
+      setMessage(`新增Live失败：${errorMessage(error)}`);
+    }
   };
 
   const submitInsertLive = () => {
-    insertLive();
+    void insertLive();
   };
 
   const submitSong = () => {

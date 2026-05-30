@@ -139,6 +139,32 @@ export type ConsoleVenueMutationResponse = {
   item: ConsoleVenueItem;
 };
 
+export type ConsoleLiveCreatePayload = {
+  live_date: string;
+  live_title: string;
+  type: string;
+  url: string;
+  opening_time: string;
+  start_time: string;
+  timezone: string;
+  venue_id: number;
+};
+
+export type ConsoleLiveMutationItem = {
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  url: string;
+  opening_time: string;
+  start_time: string;
+  venue_id: number;
+};
+
+export type ConsoleLiveMutationResponse = {
+  ok: boolean;
+  item: ConsoleLiveMutationItem;
+};
+
 type AuthErrorPayload = {
   detail?: string | { code?: string; message?: string };
 };
@@ -158,7 +184,8 @@ type RequestKind =
   | "console_songs"
   | "console_bands"
   | "console_venues"
-  | "console_venue_create";
+  | "console_venue_create"
+  | "console_live_create";
 
 type RequestLogMeta = {
   requestKind: RequestKind;
@@ -533,6 +560,25 @@ export async function createConsoleVenue(
     },
   );
   return expectJsonResponse<ConsoleVenueMutationResponse>(response);
+}
+
+export async function createConsoleLive(
+  payload: ConsoleLiveCreatePayload,
+  csrfToken: string,
+): Promise<ConsoleLiveMutationResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/lives`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    {
+      requestKind: "console_live_create",
+      method: "POST",
+    },
+  );
+  return expectJsonResponse<ConsoleLiveMutationResponse>(response);
 }
 
 export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {

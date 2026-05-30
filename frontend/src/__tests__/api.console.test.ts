@@ -100,6 +100,46 @@ describe("console lookup api", () => {
     }));
   });
 
+  test("createConsoleLive 会携带 CSRF 写入 live 并透传后端自增 id", async () => {
+    // 测试点：新增 Live 封装不生成 live_id，应使用后端返回的自增 id。
+    fetchMock.mockResolvedValueOnce(
+      makeJsonResponse({
+        ok: true,
+        item: {
+          live_id: 39,
+          live_date: "2026-03-30",
+          live_title: "Inserted Live",
+          url: "https://example.com/inserted",
+          opening_time: "18:00:00+09:00",
+          start_time: "19:00:00+09:00",
+          venue_id: 88,
+        },
+      }, true, 201),
+    );
+    const { createConsoleLive } = await import("../api");
+    const requestPayload = {
+      live_date: "2026-03-30",
+      live_title: "Inserted Live",
+      type: "专场",
+      url: "https://example.com/inserted",
+      opening_time: "18:00",
+      start_time: "19:00",
+      timezone: "+09:00",
+      venue_id: 88,
+    };
+
+    const payload = await createConsoleLive(requestPayload, "csrf-token");
+
+    expect(payload.item.live_id).toBe(39);
+    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/console/lives");
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
+      credentials: "include",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      body: JSON.stringify(requestPayload),
+    }));
+  });
+
   test("console lookup 错误响应会转换为 ApiError", async () => {
     // 测试点：只读查询遇到后端结构化认证错误时，应沿用统一 ApiError 解析。
     fetchMock.mockResolvedValueOnce(

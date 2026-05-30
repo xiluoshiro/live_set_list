@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ConsoleInsertPanel } from "../ConsoleInsertPanel";
 
 const apiMocks = vi.hoisted(() => ({
+  createConsoleLive: vi.fn(),
   createConsoleVenue: vi.fn(),
   getConsoleSongs: vi.fn(),
   getConsoleBands: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock("../../auth/AuthProvider", () => ({
 }));
 
 vi.mock("../../api", () => ({
+  createConsoleLive: apiMocks.createConsoleLive,
   createConsoleVenue: apiMocks.createConsoleVenue,
   getConsoleSongs: apiMocks.getConsoleSongs,
   getConsoleBands: apiMocks.getConsoleBands,
@@ -31,6 +33,7 @@ vi.mock("../../api", () => ({
 
 describe("ConsoleInsertPanel", () => {
   beforeEach(() => {
+    apiMocks.createConsoleLive.mockReset();
     apiMocks.createConsoleVenue.mockReset();
     apiMocks.getConsoleSongs.mockReset();
     apiMocks.getConsoleBands.mockReset();
@@ -40,6 +43,18 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs.mockResolvedValue({ items: [] });
     apiMocks.getConsoleBands.mockResolvedValue({ items: [] });
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [] });
+    apiMocks.createConsoleLive.mockResolvedValue({
+      ok: true,
+      item: {
+        live_id: 39,
+        live_date: "2026-03-30",
+        live_title: "Inserted Live",
+        url: "https://example.com/inserted",
+        opening_time: "18:00:00+09:00",
+        start_time: "19:00:00+09:00",
+        venue_id: 88,
+      },
+    });
     apiMocks.createConsoleVenue.mockResolvedValue({ ok: true, item: { venue_id: 88, venue_name: "New Venue" } });
     apiMocks.getLiveDetail.mockResolvedValue({
       live_id: 101,
@@ -252,6 +267,38 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("已新增venue #88（New Venue）")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "88 - New Venue" })).toBeInTheDocument();
     expect(screen.queryByText("新增Live失败：live_date 与 live_title 为必填项。")).not.toBeInTheDocument();
+  });
+
+  test("新增Live会调用真实写入接口并使用后端返回的live_id", async () => {
+    // 测试点：新增 Live 应交给后端自增 live_id，并默认使用日本时区提交。
+    const user = userEvent.setup();
+    apiMocks.getConsoleVenues.mockResolvedValue({
+      items: [{ venue_id: 88, venue_name: "New Venue" }],
+    });
+
+    render(<ConsoleInsertPanel />);
+
+    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    await screen.findByRole("button", { name: "88 - New Venue" });
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), "Inserted Live");
+    await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/inserted");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+
+    await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
+      {
+        live_date: "2026-03-30",
+        live_title: "Inserted Live",
+        type: "专场",
+        url: "https://example.com/inserted",
+        opening_time: "18:00",
+        start_time: "19:00",
+        timezone: "+09:00",
+        venue_id: 88,
+      },
+      "csrf-token",
+    ));
+    expect(screen.getByText("已新增Live #39（Inserted Live）")).toBeInTheDocument();
+    expect(screen.getByText("39")).toBeInTheDocument();
   });
 
   test("新增Setlist只剩一行时删除末行会显示自动消失提示", async () => {
