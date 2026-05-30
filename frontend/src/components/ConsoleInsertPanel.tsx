@@ -22,6 +22,8 @@ import {
   TIMEZONE_OPTIONS,
 } from "./console/constants";
 import { buildOtherMemberPayload, getBandMembersTemplate, getDerivedSegments } from "./console/helpers";
+import { parseSetlistText } from "./console/setlistParser/parseSetlistText";
+import type { ParsedSetlistWarning } from "./console/setlistParser/types";
 import type {
   BandOption,
   ConsoleMode,
@@ -162,6 +164,14 @@ export function ConsoleInsertPanel() {
 
   const [setlistRows, setSetlistRows] = useState<SetlistDraftRow[]>(INITIAL_SETLIST_ROWS);
   const [setlistRowKey, setSetlistRowKey] = useState(1000);
+  const [setlistPasteText, setSetlistPasteText] = useState("");
+  const [setlistParseWarnings, setSetlistParseWarnings] = useState<ParsedSetlistWarning[]>([]);
+  const [setlistParsePreviewRows, setSetlistParsePreviewRows] = useState<SetlistDraftRow[]>([]);
+  const [setlistParsePreviewOpen, setSetlistParsePreviewOpen] = useState(false);
+  const [setlistParsePreviewMeta, setSetlistParsePreviewMeta] = useState<{
+    nextRowKey: number;
+    nextOtherMemberEntryKey: number;
+  } | null>(null);
   const [didSongLookup, setDidSongLookup] = useState(false);
   const [otherMemberEntryKey, setOtherMemberEntryKey] = useState(100);
   const [editingBandRowKey, setEditingBandRowKey] = useState<number | null>(null);
@@ -440,6 +450,79 @@ export function ConsoleInsertPanel() {
     setSetlistRows(nextRows);
     setDidSongLookup(true);
     setMessage(`查询歌曲完成：匹配 ${matched} 行，未匹配 ${missing} 行。`);
+  };
+
+  const updateSetlistPasteText = (value: string) => {
+    setSetlistPasteText(value);
+    setSetlistParseWarnings([]);
+    setSetlistParsePreviewRows([]);
+    setSetlistParsePreviewOpen(false);
+    setSetlistParsePreviewMeta(null);
+  };
+
+  const buildSetlistPastePreview = () => {
+    const rawText = setlistPasteText.trim();
+    if (rawText === "") {
+      setMessage("解析失败：请先粘贴 setlist 文本。");
+      return null;
+    }
+
+    try {
+      const result = parseSetlistText(rawText, bands, setlistRowKey, otherMemberEntryKey);
+      setSetlistParseWarnings(result.warnings);
+      setSetlistParsePreviewRows(result.rows);
+      setSetlistParsePreviewOpen(false);
+      setSetlistParsePreviewMeta({
+        nextRowKey: result.nextRowKey,
+        nextOtherMemberEntryKey: result.nextOtherMemberEntryKey,
+      });
+      setMessage(`解析完成：生成 ${result.rows.length} 行草稿，${result.warnings.length} 条提示。`);
+      return result;
+    } catch (error) {
+      setSetlistParseWarnings([{ line: 1, message: errorMessage(error) }]);
+      setSetlistParsePreviewRows([]);
+      setSetlistParsePreviewOpen(false);
+      setSetlistParsePreviewMeta(null);
+      setMessage(`解析失败：${errorMessage(error)}`);
+      return null;
+    }
+  };
+
+  const applySetlistPastePreview = () => {
+    const result =
+      setlistParsePreviewRows.length > 0 && setlistParsePreviewMeta
+        ? {
+            rows: setlistParsePreviewRows,
+            warnings: setlistParseWarnings,
+            nextRowKey: setlistParsePreviewMeta.nextRowKey,
+            nextOtherMemberEntryKey: setlistParsePreviewMeta.nextOtherMemberEntryKey,
+          }
+        : buildSetlistPastePreview();
+    if (!result || result.rows.length === 0) return;
+
+    setSetlistRows(result.rows);
+    setSetlistRowKey(result.nextRowKey);
+    setOtherMemberEntryKey(result.nextOtherMemberEntryKey);
+    setSetlistParseWarnings([]);
+    setSetlistParsePreviewRows([]);
+    setSetlistParsePreviewOpen(false);
+    setSetlistParsePreviewMeta(null);
+    setDidSongLookup(false);
+    setEditingBandRowKey(null);
+    setEditingOtherRowKey(null);
+    setBandMemberMenuPos(null);
+    setOtherMemberMenuPos(null);
+    setDisplayedBundle(null);
+    setMessage(`已应用批量解析结果：${result.rows.length} 行，请继续点击“查询歌曲”匹配 sid。`);
+  };
+
+  const clearSetlistPastePreview = () => {
+    setSetlistPasteText("");
+    setSetlistParseWarnings([]);
+    setSetlistParsePreviewRows([]);
+    setSetlistParsePreviewOpen(false);
+    setSetlistParsePreviewMeta(null);
+    setMessage("已清空批量粘贴内容。");
   };
 
   const openSongBandMenu = () => {
@@ -868,8 +951,18 @@ export function ConsoleInsertPanel() {
           bandMemberMenuRef={bandMemberMenuRef}
           otherMemberTriggerRefs={otherMemberTriggerRefs}
           otherMemberMenuRef={otherMemberMenuRef}
+          setlistPasteText={setlistPasteText}
+          setlistParseWarnings={setlistParseWarnings}
+          setlistParsePreviewRows={setlistParsePreviewRows}
+          setlistParsePreviewOpen={setlistParsePreviewOpen}
           onSelectedLiveIdChange={setSelectedLiveId}
           onLivePageChange={setLivePage}
+          onSetlistPasteTextChange={updateSetlistPasteText}
+          onPreviewSetlistPaste={buildSetlistPastePreview}
+          onApplySetlistPaste={applySetlistPastePreview}
+          onClearSetlistPaste={clearSetlistPastePreview}
+          onOpenFullSetlistPreview={() => setSetlistParsePreviewOpen(true)}
+          onCloseFullSetlistPreview={() => setSetlistParsePreviewOpen(false)}
           onUpdateSetlistSongName={updateSetlistSongName}
           onSetSongModalRowKey={setSongModalRowKey}
           onUpdateSetlistSegment={(rowKey, value) => updateSetlistRow(rowKey, "segment_start_type", value)}

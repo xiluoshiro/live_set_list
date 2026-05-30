@@ -151,6 +151,122 @@
   margin-top: 12px;
 }
 
+.setlist-paste-panel {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-1);
+}
+
+.setlist-paste-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.setlist-paste-head h4 {
+  margin: 0 0 4px;
+  color: var(--text-heading);
+  font-size: 14px;
+}
+
+.setlist-paste-head p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.setlist-paste-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.setlist-paste-textarea {
+  width: 100%;
+  min-height: 132px;
+  border: 1px solid var(--border-normal);
+  border-radius: 10px;
+  padding: 10px 12px;
+  resize: vertical;
+  background: var(--surface-input);
+  color: var(--text-main);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.setlist-paste-preview {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-chip-soft);
+}
+
+.setlist-paste-summary {
+  margin: 0 0 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.setlist-paste-warnings {
+  margin: 0 0 8px;
+  padding-left: 20px;
+  color: var(--accent-warning-strip);
+  font-size: 12px;
+}
+
+.setlist-paste-preview-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.setlist-paste-preview-list span {
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--surface-input);
+  color: var(--text-secondary);
+  font-size: 12px;
+  flex: 0 1 auto;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setlist-preview-more-btn {
+  border: 1px solid var(--border-normal);
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: var(--surface-input);
+  color: var(--accent-primary);
+  font-size: 12px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.setlist-full-preview-modal {
+  width: min(960px, 94vw);
+}
+
+.setlist-full-preview-table-wrap {
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.setlist-full-preview-table {
+  min-width: 760px;
+}
+
 .setlist-table {
   min-width: 980px;
 }

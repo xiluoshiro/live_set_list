@@ -270,6 +270,62 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("真实详情歌曲")).toBeInTheDocument();
   });
 
+  test("批量粘贴Setlist可解析预览并应用到草稿表格", async () => {
+    // 测试点：批量粘贴只在点击应用后替换表格，并正确处理 from 成员归属。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [
+        { band_id: 1, band_name: "Poppin'Party", band_abbr: "ポピパ", band_members: ["戸山香澄", "花園たえ"] },
+        { band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那", "氷川紗夜"] },
+      ],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: {
+        value: "＜Roselia×戸山香澄 from Poppin'Party＞\nM1. BLACK SHOUT\nM2. Requiem for Fate",
+      },
+    });
+    expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    expect(screen.getByText("预览：2 行，提示 0 条")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+
+    expect(screen.getByDisplayValue("BLACK SHOUT")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Requiem for Fate")).toBeInTheDocument();
+    expect(screen.getAllByText("2支 / 3人").length).toBeGreaterThan(0);
+    expect(screen.queryByText("预览：2 行，提示 0 条")).not.toBeInTheDocument();
+    expect(screen.getByText(/请继续点击“查询歌曲”匹配 sid/)).toBeInTheDocument();
+  });
+
+  test("批量粘贴长列表可打开完整预览弹窗", async () => {
+    // 测试点：预览超过摘要数量时，用户可以打开弹窗查看全部解析行。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
+
+    const lines = Array.from({ length: 7 }, (_, index) => `M${index + 1}. Song ${index + 1}`).join("\n");
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: `<Roselia>\n${lines}` },
+    });
+    await user.click(screen.getByRole("button", { name: "解析预览" }));
+
+    await user.click(screen.getByRole("button", { name: "... 还有 4 行，查看全部" }));
+
+    const dialog = screen.getByRole("dialog", { name: "完整 Setlist 解析预览" });
+    expect(within(dialog).getByText("Song 1")).toBeInTheDocument();
+    expect(within(dialog).getByText("Song 7")).toBeInTheDocument();
+  });
+
   test("候选下拉框自身滚动时不会关闭", async () => {
     // 测试点：滚动浮层内容本身不会触发外部关闭逻辑，避免滚轮或滚动条无法使用。
     const user = userEvent.setup();

@@ -2,6 +2,7 @@ import type { MutableRefObject, ReactNode, RefObject } from "react";
 
 import { SEGMENT_OPTIONS } from "./constants";
 import { getBandMembersTemplate, summarizeBandMember, summarizeOtherMember } from "./helpers";
+import type { ParsedSetlistWarning } from "./setlistParser/types";
 import type { BandOption, DerivedSegment, LiveInsertBundle, LiveInsertRow, Position, SetlistDraftRow } from "./types";
 
 type LiveInsertTabProps = {
@@ -26,8 +27,18 @@ type LiveInsertTabProps = {
   bandMemberMenuRef: RefObject<HTMLDivElement>;
   otherMemberTriggerRefs: MutableRefObject<Record<number, HTMLButtonElement | null>>;
   otherMemberMenuRef: RefObject<HTMLDivElement>;
+  setlistPasteText: string;
+  setlistParseWarnings: ParsedSetlistWarning[];
+  setlistParsePreviewRows: SetlistDraftRow[];
+  setlistParsePreviewOpen: boolean;
   onSelectedLiveIdChange: (liveId: number) => void;
   onLivePageChange: (page: number) => void;
+  onSetlistPasteTextChange: (value: string) => void;
+  onPreviewSetlistPaste: () => void;
+  onApplySetlistPaste: () => void;
+  onClearSetlistPaste: () => void;
+  onOpenFullSetlistPreview: () => void;
+  onCloseFullSetlistPreview: () => void;
   onUpdateSetlistSongName: (rowKey: number, value: string) => void;
   onSetSongModalRowKey: (rowKey: number | null) => void;
   onUpdateSetlistSegment: (rowKey: number, value: string) => void;
@@ -75,8 +86,18 @@ export function LiveInsertTab({
   bandMemberMenuRef,
   otherMemberTriggerRefs,
   otherMemberMenuRef,
+  setlistPasteText,
+  setlistParseWarnings,
+  setlistParsePreviewRows,
+  setlistParsePreviewOpen,
   onSelectedLiveIdChange,
   onLivePageChange,
+  onSetlistPasteTextChange,
+  onPreviewSetlistPaste,
+  onApplySetlistPaste,
+  onClearSetlistPaste,
+  onOpenFullSetlistPreview,
+  onCloseFullSetlistPreview,
   onUpdateSetlistSongName,
   onSetSongModalRowKey,
   onUpdateSetlistSegment,
@@ -145,6 +166,68 @@ export function LiveInsertTab({
           显示详细信息
         </button>
       </div>
+
+      <section className="setlist-paste-panel" aria-label="批量粘贴 Setlist">
+        <div className="setlist-paste-head">
+          <div>
+            <h4>批量粘贴 Setlist</h4>
+            <p>粘贴官网文本后先解析预览，确认无误再应用到下方表格。</p>
+          </div>
+          <div className="setlist-paste-actions">
+            <button type="button" className="console-ghost-btn" onClick={onPreviewSetlistPaste}>
+              解析预览
+            </button>
+            <button
+              type="button"
+              className="console-submit-btn"
+              onClick={onApplySetlistPaste}
+              disabled={setlistPasteText.trim() === ""}
+            >
+              应用到表格
+            </button>
+            <button type="button" className="console-ghost-btn" onClick={onClearSetlistPaste}>
+              清空
+            </button>
+          </div>
+        </div>
+        <textarea
+          className="setlist-paste-textarea"
+          aria-label="批量粘贴 Setlist 文本"
+          value={setlistPasteText}
+          onChange={(event) => onSetlistPasteTextChange(event.target.value)}
+          placeholder="例如：&#10;＜Roselia×戸山香澄 from Poppin'Party＞&#10;M1. BLACK SHOUT&#10;EN1. BRAVE JEWEL"
+        />
+        {(setlistParsePreviewRows.length > 0 || setlistParseWarnings.length > 0) && (
+          <div className="setlist-paste-preview">
+            <p className="setlist-paste-summary">
+              预览：{setlistParsePreviewRows.length} 行，提示 {setlistParseWarnings.length} 条
+            </p>
+            {setlistParseWarnings.length > 0 && (
+              <ul className="setlist-paste-warnings">
+                {setlistParseWarnings.slice(0, 6).map((warning, index) => (
+                  <li key={`${warning.line}-${index}`}>
+                    第 {warning.line} 行：{warning.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {setlistParsePreviewRows.length > 0 && (
+              <div className="setlist-paste-preview-list">
+                {setlistParsePreviewRows.slice(0, 3).map((row, index) => (
+                  <span key={row.row_key}>
+                    {index + 1}. {row.segment_start_type || "-"} {row.song_name} / {summarizeBandMember(row)}
+                  </span>
+                ))}
+                {setlistParsePreviewRows.length > 3 && (
+                  <button type="button" className="setlist-preview-more-btn" onClick={onOpenFullSetlistPreview}>
+                    ... 还有 {setlistParsePreviewRows.length - 3} 行，查看全部
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       <div className="console-table-wrap setlist-input-wrap">
         <table className="console-admin-table setlist-table">
@@ -429,6 +512,53 @@ export function LiveInsertTab({
               </button>
             </div>
             {renderSongAdminSection()}
+          </div>
+        </div>
+      )}
+
+      {setlistParsePreviewOpen && (
+        <div className="song-modal-backdrop" role="presentation" onClick={onCloseFullSetlistPreview}>
+          <div
+            className="song-modal setlist-full-preview-modal"
+            role="dialog"
+            aria-label="完整 Setlist 解析预览"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="song-modal-header">
+              <strong>完整 Setlist 解析预览</strong>
+              <button
+                type="button"
+                className="modal-action-btn close"
+                aria-label="关闭完整预览"
+                onClick={onCloseFullSetlistPreview}
+              >
+                <span className="modal-action-glyph close">✕</span>
+              </button>
+            </div>
+            <div className="console-table-wrap setlist-full-preview-table-wrap">
+              <table className="console-admin-table setlist-full-preview-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>seg</th>
+                    <th>song_name</th>
+                    <th>band_member</th>
+                    <th>other_member</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {setlistParsePreviewRows.map((row, index) => (
+                    <tr key={row.row_key}>
+                      <td>{index + 1}</td>
+                      <td>{row.segment_start_type || "-"}</td>
+                      <td>{row.song_name}</td>
+                      <td>{summarizeBandMember(row)}</td>
+                      <td>{summarizeOtherMember(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

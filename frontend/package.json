@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "generate:setlist-parser": "peggy --format es --output src/components/console/setlistParser/generatedParser.js src/components/console/setlistParser/setlist.peggy",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false && tsc -p tsconfig.node.json --noEmit --pretty false",
     "preview": "vite preview",
     "test": "vitest run",
@@ -19,13 +20,14 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/react": "^18.3.11",
-    "@types/react-dom": "^18.3.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.2",
     "jsdom": "^25.0.1",
+    "peggy": "^5.1.0",
     "typescript": "^5.6.2",
     "vite": "^7.3.1",
     "vitest": "^2.1.2"
