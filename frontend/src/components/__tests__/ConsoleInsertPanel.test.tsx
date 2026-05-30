@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -109,9 +109,21 @@ describe("ConsoleInsertPanel", () => {
   test("提交新增Setlist后会出现一条mock插入记录", async () => {
     // 测试点：最小插入路径可用（选择live_id后可提交，且出现插入记录）。
     const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
 
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT" },
+    });
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+    await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
@@ -143,11 +155,14 @@ describe("ConsoleInsertPanel", () => {
     expect(await screen.findByText("9 - Real Band")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
+    await user.type(screen.getByPlaceholderText("请输入歌曲名"), "春日序曲");
+    await user.click(screen.getByRole("button", { name: "新增一行" }));
+    await user.type(screen.getAllByPlaceholderText("请输入歌曲名")[1], "逆光海岸");
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
 
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("春日序曲", 10));
     expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("逆光海岸", 10);
-    expect(await screen.findByText("查询歌曲完成：匹配 3 行，未匹配 0 行。")).toBeInTheDocument();
+    expect(await screen.findByText("查询歌曲完成：匹配 2 行，未匹配 0 行。")).toBeInTheDocument();
   });
 
   test("只读候选请求失败时展示错误且不回退到mock候选", async () => {
@@ -239,6 +254,30 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText("新增Live失败：live_date 与 live_title 为必填项。")).not.toBeInTheDocument();
   });
 
+  test("新增Setlist只剩一行时删除末行会显示自动消失提示", async () => {
+    // 测试点：最后一行 setlist 草稿不能删除，用户应看到脱离页面布局的全局告警。
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        fireEvent.click(screen.getByRole("button", { name: "删除末行" }));
+      });
+
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveClass("console-toast");
+      expect(alert.closest(".console-admin")).toBeNull();
+      expect(alert).toHaveTextContent("至少保留一行 setlist 草稿。");
+      act(() => {
+        vi.advanceTimersByTime(2600);
+      });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("live_id 候选支持20条分页切换", async () => {
     // 测试点：live_id 选择器按 20 条一页请求，并可切换到下一页候选。
     const user = userEvent.setup();
@@ -301,7 +340,7 @@ describe("ConsoleInsertPanel", () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [
-        { band_id: 1, band_name: "Poppin'Party", band_abbr: "ポピパ", band_members: ["戸山香澄", "花園たえ"] },
+        { band_id: 1, band_name: "Poppin'Party", band_abbr: "ポピパ", band_members: ["愛美", "大塚紗英"] },
         { band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那", "氷川紗夜"] },
       ],
     });
@@ -311,7 +350,7 @@ describe("ConsoleInsertPanel", () => {
 
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: {
-        value: "＜Roselia×戸山香澄 from Poppin'Party＞\nM1. BLACK SHOUT\nM2. Requiem for Fate",
+        value: "＜Roselia×愛美 from Poppin'Party＞\nM1. BLACK SHOUT\nM2. Requiem for Fate",
       },
     });
     expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();

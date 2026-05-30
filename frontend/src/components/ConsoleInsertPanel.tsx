@@ -135,6 +135,7 @@ export function ConsoleInsertPanel() {
   const [submittedBundles, setSubmittedBundles] = useState<LiveInsertBundle[]>([]);
   const [displayedBundle, setDisplayedBundle] = useState<LiveInsertBundle | null>(null);
   const [message, setMessage] = useState<string>("当前为前端 Mock 插入，后续可接后端写入接口。");
+  const [transientNotice, setTransientNotice] = useState<string | null>(null);
 
   const [selectedLiveId, setSelectedLiveId] = useState<number>(0);
   const [livePage, setLivePage] = useState(1);
@@ -374,6 +375,16 @@ export function ConsoleInsertPanel() {
     };
   }, [editingOtherRowKey]);
 
+  useEffect(() => {
+    if (transientNotice === null) return;
+    const timer = window.setTimeout(() => setTransientNotice(null), 2600);
+    return () => window.clearTimeout(timer);
+  }, [transientNotice]);
+
+  const showTransientNotice = (notice: string) => {
+    setTransientNotice(notice);
+  };
+
   const addSetlistRow = () => {
     setDidSongLookup(false);
     const newRowKey = setlistRowKey + 1;
@@ -395,7 +406,10 @@ export function ConsoleInsertPanel() {
   const removeLastSetlistRow = () => {
     setDidSongLookup(false);
     setSetlistRows((prev) => {
-      if (prev.length <= 1) return prev;
+      if (prev.length <= 1) {
+        showTransientNotice("至少保留一行 setlist 草稿。");
+        return prev;
+      }
       return prev.slice(0, -1);
     });
   };
@@ -880,7 +894,13 @@ export function ConsoleInsertPanel() {
   );
 
   return (
-    <section className="console-admin">
+    <>
+      {transientNotice && (
+        <div className="console-toast" role="alert" aria-live="assertive">
+          {transientNotice}
+        </div>
+      )}
+      <section className="console-admin">
       <h3>控制台录入</h3>
       <p className="console-admin-hint">{message}</p>
 
@@ -1067,6 +1087,7 @@ export function ConsoleInsertPanel() {
           </div>
         </div>
       )}
-    </section>
+      </section>
+    </>
   );
 }

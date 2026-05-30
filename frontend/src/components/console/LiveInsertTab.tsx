@@ -195,7 +195,7 @@ export function LiveInsertTab({
           aria-label="批量粘贴 Setlist 文本"
           value={setlistPasteText}
           onChange={(event) => onSetlistPasteTextChange(event.target.value)}
-          placeholder="例如：&#10;＜Roselia×戸山香澄 from Poppin'Party＞&#10;M1. BLACK SHOUT&#10;EN1. BRAVE JEWEL"
+          placeholder="例如：&#10;＜Roselia×愛美 from Poppin'Party＞&#10;M1. BLACK SHOUT&#10;EN1. BRAVE JEWEL"
         />
         {(setlistParsePreviewRows.length > 0 || setlistParseWarnings.length > 0) && (
           <div className="setlist-paste-preview">

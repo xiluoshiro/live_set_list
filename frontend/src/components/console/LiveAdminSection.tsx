@@ -105,8 +105,6 @@ export function LiveAdminSection({
           插入
         </button>
       </div>
-      <p className="console-admin-hint">查询结果会同步刷新“选择 venue”的候选列表。</p>
-
       <div className="live-id-selector live-create-tools">
         <label>选择 venue</label>
         <button
@@ -136,7 +134,13 @@ export function LiveAdminSection({
           <tbody>
             <tr>
               <td>
-                <input type="date" value={liveDate} onChange={(e) => onLiveDateChange(e.target.value)} />
+                <input
+                  type="date"
+                  aria-label="live_date"
+                  min="2015-01-01"
+                  value={liveDate}
+                  onChange={(e) => onLiveDateChange(e.target.value)}
+                />
               </td>
               <td>
                 <input value={liveTitle} onChange={(e) => onLiveTitleChange(e.target.value)} placeholder="请输入Live标题" />
