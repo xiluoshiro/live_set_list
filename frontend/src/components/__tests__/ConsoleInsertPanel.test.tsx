@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -8,12 +8,14 @@ const apiMocks = vi.hoisted(() => ({
   getConsoleSongs: vi.fn(),
   getConsoleBands: vi.fn(),
   getConsoleVenues: vi.fn(),
+  getLives: vi.fn(),
 }));
 
 vi.mock("../../api", () => ({
   getConsoleSongs: apiMocks.getConsoleSongs,
   getConsoleBands: apiMocks.getConsoleBands,
   getConsoleVenues: apiMocks.getConsoleVenues,
+  getLives: apiMocks.getLives,
 }));
 
 describe("ConsoleInsertPanel", () => {
@@ -21,15 +23,30 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs.mockReset();
     apiMocks.getConsoleBands.mockReset();
     apiMocks.getConsoleVenues.mockReset();
+    apiMocks.getLives.mockReset();
     apiMocks.getConsoleSongs.mockResolvedValue({ items: [] });
     apiMocks.getConsoleBands.mockResolvedValue({ items: [] });
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [] });
+    apiMocks.getLives.mockResolvedValue({
+      items: [
+        {
+          live_id: 101,
+          live_date: "2026-03-30",
+          live_title: "春日联合公演",
+          bands: [1, 2],
+          url: "https://example.com/live/101",
+          is_favorite: false,
+        },
+      ],
+      pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+    });
   });
 
   test("默认渲染新增入口与Setlist字段表格", async () => {
     // 测试点：控制台基础结构存在，且默认是新增Setlist录入视图。
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20));
 
     expect(screen.getByRole("tab", { name: "新增Live" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "新增Setlist" })).toBeInTheDocument();
@@ -87,5 +104,138 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("春日序曲", 10));
     expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("逆光海岸", 10);
     expect(await screen.findByText("查询歌曲完成：匹配 3 行，未匹配 0 行。")).toBeInTheDocument();
+  });
+
+  test("只读候选请求失败时展示错误且不回退到mock候选", async () => {
+    // 测试点：只读接口失败时，控制台直接展示错误，不展示本地 mock 候选。
+    apiMocks.getConsoleBands.mockRejectedValue(new Error("bands offline"));
+    apiMocks.getConsoleVenues.mockRejectedValue(new Error("venues offline"));
+
+    render(<ConsoleInsertPanel />);
+
+    expect(await screen.findByText(/加载控制台候选失败/)).toHaveTextContent("bands: bands offline");
+    await userEvent.click(screen.getByRole("tab", { name: "新增歌曲" }));
+    await userEvent.click(screen.getByRole("button", { name: "请选择 band_id" }));
+    expect(screen.queryByText(/1 - /)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: "新增Live" }));
+    expect(screen.getByRole("button", { name: "请选择 venue" })).toBeInTheDocument();
+    expect(screen.queryByText(/301 - /)).not.toBeInTheDocument();
+  });
+
+  test("候选按各自约定排序展示", async () => {
+    // 测试点：live 候选按时间/id倒序，band 与 venue 候选按 id 升序呈现。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [
+        { band_id: 9, band_name: "Later Band", band_abbr: "later", band_members: [] },
+        { band_id: 2, band_name: "Early Band", band_abbr: "early", band_members: [] },
+      ],
+    });
+    apiMocks.getConsoleVenues.mockResolvedValue({
+      items: [
+        { venue_id: 301, venue_name: "Later Venue" },
+        { venue_id: 101, venue_name: "Early Venue" },
+      ],
+    });
+    apiMocks.getLives.mockResolvedValue({
+      items: [
+        {
+          live_id: 302,
+          live_date: "2026-04-02",
+          live_title: "Later Live",
+          bands: [],
+          url: null,
+          is_favorite: false,
+        },
+        {
+          live_id: 101,
+          live_date: "2026-04-01",
+          live_title: "Early Live",
+          bands: [],
+          url: null,
+          is_favorite: false,
+        },
+      ],
+      pagination: { page: 1, page_size: 20, total: 2, total_pages: 1 },
+    });
+
+    render(<ConsoleInsertPanel />);
+
+    const liveSelect = await screen.findByLabelText("选择 live_id");
+    await waitFor(() => expect(within(liveSelect).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "302 - Later Live (2026-04-02)",
+      "101 - Early Live (2026-04-01)",
+    ]));
+
+    await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
+    await user.click(screen.getByRole("button", { name: "请选择 band_id" }));
+    const bandOptions = screen.getAllByText(/Band$/).map((node) => node.textContent);
+    expect(bandOptions).toEqual(["2 - Early Band", "9 - Later Band"]);
+
+    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    await user.click(screen.getByRole("button", { name: "101 - Early Venue" }));
+    const venueMenu = screen.getByText("301 - Later Venue").closest(".bands-floating-menu") as HTMLElement;
+    const venueOptions = within(venueMenu).getAllByText(/Venue$/).map((node) => node.textContent);
+    expect(venueOptions).toEqual(["101 - Early Venue", "301 - Later Venue"]);
+  });
+
+  test("live_id 候选支持20条分页切换", async () => {
+    // 测试点：live_id 选择器按 20 条一页请求，并可切换到下一页候选。
+    const user = userEvent.setup();
+    apiMocks.getLives.mockImplementation(async (page: number) => ({
+      items:
+        page === 1
+          ? [
+              {
+                live_id: 44,
+                live_date: "2026-04-20",
+                live_title: "Page One Live",
+                bands: [],
+                url: null,
+                is_favorite: false,
+              },
+            ]
+          : [
+              {
+                live_id: 24,
+                live_date: "2026-03-20",
+                live_title: "Page Two Live",
+                bands: [],
+                url: null,
+                is_favorite: false,
+              },
+            ],
+      pagination: { page, page_size: 20, total: 21, total_pages: 2 },
+    }));
+
+    render(<ConsoleInsertPanel />);
+
+    expect(await screen.findByText("44 - Page One Live (2026-04-20)")).toBeInTheDocument();
+    expect(screen.getByText("第 1 / 2 页，共 21 条")).toBeInTheDocument();
+    expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20);
+
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+
+    expect(await screen.findByText("24 - Page Two Live (2026-03-20)")).toBeInTheDocument();
+    expect(screen.getByText("第 2 / 2 页，共 21 条")).toBeInTheDocument();
+    expect(apiMocks.getLives).toHaveBeenCalledWith(2, 20);
+  });
+
+  test("候选下拉框自身滚动时不会关闭", async () => {
+    // 测试点：滚动浮层内容本身不会触发外部关闭逻辑，避免滚轮或滚动条无法使用。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 9, band_name: "Scrollable Band", band_abbr: "scroll", band_members: [] }],
+    });
+
+    render(<ConsoleInsertPanel />);
+
+    await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
+    await user.click(screen.getByRole("button", { name: "请选择 band_id" }));
+    const menu = await screen.findByText("9 - Scrollable Band");
+    fireEvent.scroll(menu.closest(".bands-floating-menu") as HTMLElement);
+
+    expect(screen.getByText("9 - Scrollable Band")).toBeInTheDocument();
   });
 });
