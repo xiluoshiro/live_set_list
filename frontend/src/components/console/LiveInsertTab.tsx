@@ -207,8 +207,11 @@ export function LiveInsertTab({
             <p>粘贴官网文本后先解析预览，确认无误再应用到下方表格。</p>
           </div>
           <div className="setlist-paste-actions">
+            <button type="button" className="console-ghost-btn" onClick={onClearSetlistPaste}>
+              清空
+            </button>
             <button type="button" className="console-ghost-btn" onClick={onPreviewSetlistPaste}>
-              解析预览
+              解析
             </button>
             <button
               type="button"
@@ -217,9 +220,6 @@ export function LiveInsertTab({
               disabled={setlistPasteText.trim() === "" || !hasParsed}
             >
               应用到表格
-            </button>
-            <button type="button" className="console-ghost-btn" onClick={onClearSetlistPaste}>
-              清空
             </button>
           </div>
         </div>

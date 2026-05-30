@@ -150,7 +150,7 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "<Roselia>\nM1. BLACK SHOUT" },
     });
-    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
@@ -485,7 +485,7 @@ describe("ConsoleInsertPanel", () => {
     });
     expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    await user.click(screen.getByRole("button", { name: "解析" }));
     expect(screen.getByText("预览：2 行，提示 0 条")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
 
@@ -513,7 +513,7 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: `<Roselia>\n${lines}` },
     });
-    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    await user.click(screen.getByRole("button", { name: "解析" }));
 
     await user.click(screen.getByRole("button", { name: "... 还有 4 行，查看全部" }));
 
@@ -540,7 +540,7 @@ describe("ConsoleInsertPanel", () => {
   });
 
   test("未解析时应用到表格按钮为禁用态", () => {
-    // 测试点：必须先点"解析预览"才能点"应用到表格"，避免未确认结果就直接应用。
+    // 测试点：必须先点"解析"才能点"应用到表格"，避免未确认结果就直接应用。
     render(<ConsoleInsertPanel />);
 
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
@@ -563,7 +563,7 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "＜Roselia×愛美 from Poppin'Party＞\nM1. BLACK SHOUT\nM2. Requiem for Fate" },
     });
-    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
 
     const confirmDialog = screen.getByRole("dialog", { name: "确认应用到表格" });
@@ -591,7 +591,7 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "<Roselia>\nM1. BLACK SHOUT" },
     });
-    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
 
     expect(screen.getByRole("dialog", { name: "确认应用到表格" })).toBeInTheDocument();
@@ -615,7 +615,7 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "<Roselia>\nM1. BLACK SHOUT\nM2. Requiem for Fate" },
     });
-    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    await user.click(screen.getByRole("button", { name: "解析" }));
 
     await user.click(screen.getByRole("button", { name: "显示详情" }));
 
@@ -637,7 +637,7 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "＜Roselia×愛美 from Poppin'Party＞\nM1. BLACK SHOUT\nM2. Requiem for Fate" },
     });
-    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
