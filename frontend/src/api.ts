@@ -103,6 +103,37 @@ export type FavoriteBatchResponse = {
   not_found_live_ids: number[];
 };
 
+export type ConsoleSongItem = {
+  song_id: number;
+  song_name: string;
+  band_id: number;
+  cover: boolean;
+};
+
+export type ConsoleSongListResponse = {
+  items: ConsoleSongItem[];
+};
+
+export type ConsoleBandItem = {
+  band_id: number;
+  band_name: string;
+  band_abbr: string;
+  band_members: string[];
+};
+
+export type ConsoleBandListResponse = {
+  items: ConsoleBandItem[];
+};
+
+export type ConsoleVenueItem = {
+  venue_id: number;
+  venue_name: string;
+};
+
+export type ConsoleVenueListResponse = {
+  items: ConsoleVenueItem[];
+};
+
 type AuthErrorPayload = {
   detail?: string | { code?: string; message?: string };
 };
@@ -118,7 +149,10 @@ type RequestKind =
   | "auth_login"
   | "auth_logout"
   | "favorite_add"
-  | "favorite_remove";
+  | "favorite_remove"
+  | "console_songs"
+  | "console_bands"
+  | "console_venues";
 
 type RequestLogMeta = {
   requestKind: RequestKind;
@@ -442,6 +476,38 @@ export async function favoriteLivesBatch(
     },
   );
   return expectJsonResponse<FavoriteBatchResponse>(response);
+}
+
+function consoleLookupQuery(q?: string, limit = 20): string {
+  const query = new URLSearchParams({
+    limit: String(limit),
+  });
+  const normalizedQuery = q?.trim();
+  if (normalizedQuery) {
+    query.set("q", normalizedQuery);
+  }
+  return query.toString();
+}
+
+export async function getConsoleSongs(q?: string, limit = 20): Promise<ConsoleSongListResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/songs?${consoleLookupQuery(q, limit)}`, undefined, {
+    requestKind: "console_songs",
+  });
+  return expectJsonResponse<ConsoleSongListResponse>(response);
+}
+
+export async function getConsoleBands(q?: string, limit = 20): Promise<ConsoleBandListResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/bands?${consoleLookupQuery(q, limit)}`, undefined, {
+    requestKind: "console_bands",
+  });
+  return expectJsonResponse<ConsoleBandListResponse>(response);
+}
+
+export async function getConsoleVenues(q?: string, limit = 20): Promise<ConsoleVenueListResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/venues?${consoleLookupQuery(q, limit)}`, undefined, {
+    requestKind: "console_venues",
+  });
+  return expectJsonResponse<ConsoleVenueListResponse>(response);
 }
 
 export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
