@@ -1,4 +1,6 @@
 from app.schemas.console import (
+    ConsoleBandItem,
+    ConsoleBandListResponse,
     ConsoleLiveCreateRequest,
     ConsoleLiveItem,
     ConsoleLiveMutationResponse,
@@ -6,9 +8,12 @@ from app.schemas.console import (
     ConsoleLiveSetlistAppendRequest,
     ConsoleLiveSetlistAppendResponse,
     ConsoleLiveSetlistRowRequest,
+    ConsoleSongListResponse,
     ConsoleSongCreateRequest,
     ConsoleSongItem,
     ConsoleSongMutationResponse,
+    ConsoleVenueItem,
+    ConsoleVenueListResponse,
 )
 from app.schemas.common import ErrorResponse, RootResponse, ValidationErrorItem, ValidationErrorResponse
 from app.schemas.favorites import FavoriteBatchRequest, FavoriteBatchResponse
@@ -33,9 +38,14 @@ __all__ = [
     'HealthResponse',
     'FavoriteBatchRequest',
     'FavoriteBatchResponse',
+    'ConsoleBandItem',
+    'ConsoleBandListResponse',
     'ConsoleSongCreateRequest',
     'ConsoleSongItem',
+    'ConsoleSongListResponse',
     'ConsoleSongMutationResponse',
+    'ConsoleVenueItem',
+    'ConsoleVenueListResponse',
     'ConsoleLiveCreateRequest',
     'ConsoleLiveItem',
     'ConsoleLiveMutationResponse',

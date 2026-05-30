@@ -35,6 +35,30 @@ class ConsoleSongMutationResponse(BaseModel):
     item: ConsoleSongItem = Field(..., description="Created song payload")
 
 
+class ConsoleSongListResponse(BaseModel):
+    items: list[ConsoleSongItem] = Field(..., description="Songs available for console lookup")
+
+
+class ConsoleBandItem(BaseModel):
+    band_id: int = Field(..., description="band_attrs.id")
+    band_name: str = Field(..., description="Band display name")
+    band_abbr: str = Field(..., description="Band abbreviation")
+    band_members: list[str] = Field(..., description="Members used by the console member selector")
+
+
+class ConsoleBandListResponse(BaseModel):
+    items: list[ConsoleBandItem] = Field(..., description="Bands available for console lookup")
+
+
+class ConsoleVenueItem(BaseModel):
+    venue_id: int = Field(..., description="venue_list.id")
+    venue_name: str = Field(..., description="Venue display name")
+
+
+class ConsoleVenueListResponse(BaseModel):
+    items: list[ConsoleVenueItem] = Field(..., description="Venues available for console lookup")
+
+
 class ConsoleLiveCreateRequest(BaseModel):
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., min_length=1, max_length=255, description="Live title")

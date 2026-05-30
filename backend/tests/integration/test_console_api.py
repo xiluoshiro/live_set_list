@@ -80,6 +80,162 @@ def _get_latest_audit_row(
     )
 
 
+def _count_rows(
+    integration_admin_connection,
+    query: str,
+    params: tuple[object, ...] = (),
+) -> int:
+    """Return one COUNT(*) value from the integration database."""
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+
+    assert row is not None
+    return int(row[0])
+
+
+# 测试点：`editor+` 只读查询接口应返回前端控制台下拉与搜索所需的 seed 数据。
+def test_console_lookup_endpoints_return_seeded_options(
+    integration_test_client,
+):
+    """Verify console lookup endpoints expose songs, bands, and venues for editor users."""
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    songs_response = integration_test_client.get("/api/console/songs?q=BanG&limit=10")
+    bands_response = integration_test_client.get("/api/console/bands?q=Roselia&limit=10")
+    venues_response = integration_test_client.get("/api/console/venues?q=Shinjuku&limit=10")
+
+    assert songs_response.status_code == 200
+    assert songs_response.json() == {
+        "items": [
+            {
+                "song_id": 1,
+                "song_name": "Yes! BanG_Dream!",
+                "band_id": 1,
+                "cover": False,
+            }
+        ]
+    }
+
+    assert bands_response.status_code == 200
+    assert bands_response.json() == {
+        "items": [
+            {
+                "band_id": 2,
+                "band_name": "Roselia",
+                "band_abbr": "rsl",
+                "band_members": ["Yukina", "Sayo", "Lisa", "Ako", "Rinko"],
+            }
+        ]
+    }
+
+    assert venues_response.status_code == 200
+    assert venues_response.json() == {
+        "items": [
+            {
+                "venue_id": 2,
+                "venue_name": "Zepp Shinjuku",
+            }
+        ]
+    }
+
+
+# 测试点：只读查询接口也必须执行后端 `editor+` 权限校验，不能只依赖前端隐藏入口。
+def test_console_lookup_endpoints_require_editor_role(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify viewer users cannot call console lookup endpoints directly."""
+    _create_user(
+        integration_admin_connection,
+        username="viewer_console_lookup_api",
+        password="viewer-lookup-pass",
+        display_name="Viewer Console Lookup API",
+        role="viewer",
+    )
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username="viewer_console_lookup_api",
+        password="viewer-lookup-pass",
+    )
+
+    songs_response = integration_test_client.get("/api/console/songs")
+    bands_response = integration_test_client.get("/api/console/bands")
+    venues_response = integration_test_client.get("/api/console/venues")
+
+    assert songs_response.status_code == 403
+    assert songs_response.json()["detail"]["code"] == "AUTH_FORBIDDEN"
+    assert bands_response.status_code == 403
+    assert bands_response.json()["detail"]["code"] == "AUTH_FORBIDDEN"
+    assert venues_response.status_code == 403
+    assert venues_response.json()["detail"]["code"] == "AUTH_FORBIDDEN"
+
+
+# 测试点：只读查询接口应限制返回数量，避免前端误传超大 limit 造成查询压力。
+def test_console_lookup_endpoints_validate_limit(
+    integration_test_client,
+):
+    """Verify console lookup endpoints reject oversized limit values."""
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    songs_response = integration_test_client.get("/api/console/songs?limit=101")
+    bands_response = integration_test_client.get("/api/console/bands?limit=101")
+    venues_response = integration_test_client.get("/api/console/venues?limit=101")
+
+    assert songs_response.status_code == 422
+    assert bands_response.status_code == 422
+    assert venues_response.status_code == 422
+
+
+# 测试点：只读查询接口连到测试库时不应产生审计日志，也不应改动候选数据。
+def test_console_lookup_endpoints_do_not_mutate_database(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify console lookup endpoints have no DB side effects beyond the login setup."""
+    editor_user_id = _create_user(
+        integration_admin_connection,
+        username="editor_lookup_side_effect_api",
+        password="editor-lookup-side-effect-pass",
+        display_name="Editor Lookup Side Effect API",
+        role="editor",
+    )
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_lookup_side_effect_api",
+        password="editor-lookup-side-effect-pass",
+    )
+    audit_count_before = _count_rows(
+        integration_admin_connection,
+        "SELECT COUNT(*) FROM audit_logs WHERE user_id = %s",
+        (editor_user_id,),
+    )
+    song_count_before = _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM song_list")
+    band_count_before = _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM band_attrs")
+    venue_count_before = _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM venue_list")
+
+    songs_response = integration_test_client.get("/api/console/songs?q=STAR")
+    bands_response = integration_test_client.get("/api/console/bands?q=mygo")
+    venues_response = integration_test_client.get("/api/console/venues?q=WWW")
+
+    assert songs_response.status_code == 200
+    assert bands_response.status_code == 200
+    assert venues_response.status_code == 200
+    assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM audit_logs WHERE user_id = %s", (editor_user_id,)) == audit_count_before
+    assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM song_list") == song_count_before
+    assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM band_attrs") == band_count_before
+    assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM venue_list") == venue_count_before
+
+
 # 测试点：`editor+` 调用新增歌曲接口时，应写入 song_list 并追加 song_create 审计。
 def test_console_create_song_persists_row_and_audit_log(
     integration_test_client,
@@ -170,6 +326,70 @@ def test_console_create_song_requires_editor_role_and_csrf(
     assert viewer_response.json()["detail"]["code"] == "AUTH_FORBIDDEN"
     assert missing_csrf_response.status_code == 403
     assert missing_csrf_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
+
+
+# 测试点：新增 Live 和追加 setlist 连到测试库时缺少 CSRF 应被拒绝，并且不会落库。
+def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify missing-CSRF write attempts do not insert live_attrs or live_setlist rows."""
+    editor_user_id = _create_user(
+        integration_admin_connection,
+        username="editor_write_csrf_api",
+        password="editor-write-csrf-pass",
+        display_name="Editor Write CSRF API",
+        role="editor",
+    )
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_write_csrf_api",
+        password="editor-write-csrf-pass",
+    )
+    live_count_before = _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM live_attrs")
+    setlist_count_before = _count_rows(
+        integration_admin_connection,
+        "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s",
+        (1,),
+    )
+
+    live_response = integration_test_client.post(
+        "/api/console/lives",
+        json={
+            "live_date": "2026-05-02",
+            "live_title": "Missing CSRF Live",
+            "url": "https://example.com/lives/missing-csrf",
+            "opening_time": "18:00",
+            "start_time": "19:00",
+            "timezone": "+09:00",
+            "venue_id": 1,
+        },
+    )
+    setlist_response = integration_test_client.post(
+        "/api/console/lives/1/setlist",
+        json={
+            "setlist_rows": [
+                {
+                    "song_id": 4,
+                    "absolute_order": 3,
+                    "segment_type": "EN",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "other_member": {},
+                    "comment": None,
+                }
+            ]
+        },
+    )
+
+    assert live_response.status_code == 403
+    assert live_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+    assert setlist_response.status_code == 403
+    assert setlist_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+    assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM live_attrs") == live_count_before
+    assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s", (1,)) == setlist_count_before
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
 
 
@@ -441,3 +661,67 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
     assert missing_song_response.json()["detail"] == "Song ids not found: 999"
     assert conflicting_order_response.status_code == 409
     assert conflicting_order_response.json()["detail"] == "absolute_order already exists for live 1: 1"
+
+
+# 测试点：追加 setlist 连到测试库时若批次内存在缺失 song_id，应整批回滚且不插入有效行。
+def test_console_append_live_setlist_rolls_back_when_one_row_is_invalid(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify a mixed valid/invalid setlist append does not partially persist rows."""
+    editor_user_id = _create_user(
+        integration_admin_connection,
+        username="editor_setlist_rollback_api",
+        password="editor-setlist-rollback-pass",
+        display_name="Editor Setlist Rollback API",
+        role="editor",
+    )
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_setlist_rollback_api",
+        password="editor-setlist-rollback-pass",
+    )
+    setlist_count_before = _count_rows(
+        integration_admin_connection,
+        "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s",
+        (1,),
+    )
+
+    response = integration_test_client.post(
+        "/api/console/lives/1/setlist",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "setlist_rows": [
+                {
+                    "song_id": 4,
+                    "absolute_order": 3,
+                    "segment_type": "EN",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_member": {"Poppin'Party": ["Kasumi", "Tae"]},
+                    "other_member": {},
+                    "comment": "should rollback",
+                },
+                {
+                    "song_id": 999,
+                    "absolute_order": 4,
+                    "segment_type": "SP",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_member": {"Roselia": ["Yukina"]},
+                    "other_member": {},
+                    "comment": "missing song",
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Song ids not found: 999"
+    assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s", (1,)) == setlist_count_before
+    assert _count_rows(
+        integration_admin_connection,
+        "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s AND absolute_order IN (%s, %s)",
+        (1, 3, 4),
+    ) == 0
+    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
