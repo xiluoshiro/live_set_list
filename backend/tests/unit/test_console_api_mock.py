@@ -1,0 +1,488 @@
+import hashlib
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock, call, patch
+
+import pytest
+from fastapi.testclient import TestClient
+from psycopg2 import Error, OperationalError
+from psycopg2.errors import QueryCanceled, UniqueViolation
+
+from app.auth import AuthSessionContext, AuthUser, get_current_auth_context, get_current_user
+from app.main import app
+
+
+CSRF_TOKEN = "csrf-token"
+
+
+@pytest.fixture(autouse=True)
+def _clear_dependency_overrides():
+    """Keep FastAPI dependency overrides isolated between mock console API tests."""
+    app.dependency_overrides.clear()
+    yield
+    app.dependency_overrides.clear()
+
+
+def _csrf_hash(token: str = CSRF_TOKEN) -> str:
+    """Build the same CSRF hash shape used by the auth layer for mock contexts."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _make_user(role: str = "editor") -> AuthUser:
+    """Create a role-specific authenticated user for FastAPI dependency overrides."""
+    return AuthUser(id=42, username=f"{role}_user", display_name=f"{role.title()} User", role=role, is_active=True)
+
+
+def _make_context(role: str = "editor") -> AuthSessionContext:
+    """Create an authenticated session context with a valid CSRF hash for write calls."""
+    return AuthSessionContext(
+        session_id=7,
+        user=_make_user(role),
+        csrf_token_hash=_csrf_hash(),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+
+
+def _set_authenticated_role(role: str = "editor") -> None:
+    """Override auth dependencies so mock tests can exercise role-specific HTTP behavior."""
+    user = _make_user(role)
+    context = AuthSessionContext(
+        session_id=7,
+        user=user,
+        csrf_token_hash=_csrf_hash(),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_auth_context] = lambda: context
+
+
+def _build_connection_mock(
+    *,
+    fetchone_side_effect: list[tuple | None] | None = None,
+    fetchall_side_effect: list[list[tuple]] | None = None,
+) -> tuple[MagicMock, MagicMock]:
+    """Create a context-manager DB connection mock with configurable cursor reads."""
+    conn = MagicMock()
+    cursor = MagicMock()
+    conn.__enter__.return_value = conn
+    conn.cursor.return_value.__enter__.return_value = cursor
+    cursor.fetchone.side_effect = fetchone_side_effect or []
+    cursor.fetchall.side_effect = fetchall_side_effect or []
+    return conn, cursor
+
+
+def _valid_song_payload(**overrides):
+    """Return a minimal valid song-create request body with optional field overrides."""
+    payload = {"song_name": "Mock Song", "band_id": 1, "cover": False}
+    payload.update(overrides)
+    return payload
+
+
+def _valid_live_payload(**overrides):
+    """Return a minimal valid live-create request body with optional field overrides."""
+    payload = {
+        "live_date": "2026-05-29",
+        "live_title": "Mock Live",
+        "url": "https://example.com/mock-live",
+        "opening_time": "18:00",
+        "start_time": "19:00:30",
+        "timezone": "+09:00",
+        "venue_id": 2,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _valid_setlist_payload(**row_overrides):
+    """Return a minimal valid setlist append request body with optional first-row overrides."""
+    row = {
+        "song_id": 1,
+        "absolute_order": 3,
+        "segment_type": "EN",
+        "sub_order": 1,
+        "is_short": False,
+        "band_member": {"Poppin'Party": ["Kasumi", "Tae"]},
+        "other_member": {},
+        "comment": "mock encore",
+    }
+    row.update(row_overrides)
+    return {"setlist_rows": [row]}
+
+
+# 测试点：console 只读查询接口在未登录和低权限时应被后端拒绝。
+def test_console_lookup_mock_requires_authenticated_editor_role():
+    client = TestClient(app)
+
+    anonymous_response = client.get("/api/console/songs")
+    _set_authenticated_role("viewer")
+    viewer_response = client.get("/api/console/songs")
+
+    assert anonymous_response.status_code == 401
+    assert anonymous_response.json()["detail"]["code"] == "AUTH_SESSION_EXPIRED"
+    assert viewer_response.status_code == 403
+    assert viewer_response.json()["detail"]["code"] == "AUTH_FORBIDDEN"
+
+
+# 测试点：console 只读查询接口不需要 CSRF，并应返回稳定的 items 响应结构。
+def test_console_lookup_mock_returns_items_without_csrf_for_editor():
+    _set_authenticated_role("editor")
+    songs_conn, _ = _build_connection_mock(
+        fetchall_side_effect=[[(1, "Yes! BanG_Dream!", 1, False)]],
+    )
+    bands_conn, _ = _build_connection_mock(
+        fetchall_side_effect=[[(2, "Roselia", "rsl", ["Yukina", "Sayo"])]],
+    )
+    venues_conn, _ = _build_connection_mock(
+        fetchall_side_effect=[[(3, "Zepp Shinjuku")]],
+    )
+
+    with patch("app.routers.console_read.get_db_connection", side_effect=[songs_conn, bands_conn, venues_conn]):
+        client = TestClient(app)
+        songs_response = client.get("/api/console/songs?q=BanG&limit=10")
+        bands_response = client.get("/api/console/bands?q=rsl&limit=10")
+        venues_response = client.get("/api/console/venues?q=Zepp&limit=10")
+
+    assert songs_response.status_code == 200
+    assert songs_response.json() == {
+        "items": [{"song_id": 1, "song_name": "Yes! BanG_Dream!", "band_id": 1, "cover": False}]
+    }
+    assert bands_response.status_code == 200
+    assert bands_response.json() == {
+        "items": [{"band_id": 2, "band_name": "Roselia", "band_abbr": "rsl", "band_members": ["Yukina", "Sayo"]}]
+    }
+    assert venues_response.status_code == 200
+    assert venues_response.json() == {"items": [{"venue_id": 3, "venue_name": "Zepp Shinjuku"}]}
+
+
+# 测试点：console 只读查询接口在无匹配结果时应返回空 items，而不是报错。
+def test_console_lookup_mock_returns_empty_items_for_no_match():
+    _set_authenticated_role("admin")
+    conn, _ = _build_connection_mock(fetchall_side_effect=[[]])
+
+    with patch("app.routers.console_read.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.get("/api/console/venues?q=not-found")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": []}
+
+
+# 测试点：console 只读查询接口应拒绝非法 limit，避免一次性返回过多数据。
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/console/songs?limit=0",
+        "/api/console/bands?limit=-1",
+        "/api/console/venues?limit=101",
+        "/api/console/songs?limit=abc",
+    ],
+)
+def test_console_lookup_mock_rejects_invalid_limit(path: str):
+    _set_authenticated_role("editor")
+
+    client = TestClient(app)
+    response = client.get(path)
+
+    assert response.status_code == 422
+
+
+# 测试点：console 只读查询接口应把数据库超时和一般错误映射为稳定错误响应。
+@pytest.mark.parametrize(
+    ("exc", "expected_status", "expected_detail"),
+    [
+        (QueryCanceled("statement timeout"), 504, "Database query timeout"),
+        (OperationalError("timeout expired"), 504, "Database connection timeout"),
+        (Error("db down"), 500, "Database error"),
+    ],
+)
+def test_console_lookup_mock_surfaces_database_errors(exc: Exception, expected_status: int, expected_detail: str):
+    _set_authenticated_role("editor")
+
+    with patch("app.routers.console_read.get_db_connection", side_effect=exc):
+        client = TestClient(app)
+        response = client.get("/api/console/songs")
+
+    assert response.status_code == expected_status
+    assert expected_detail in response.json()["detail"]
+
+
+# 测试点：console 插入接口在未登录和低权限时应被后端拒绝。
+@pytest.mark.parametrize(
+    ("method", "path", "json_body"),
+    [
+        ("post", "/api/console/songs", _valid_song_payload()),
+        ("post", "/api/console/lives", _valid_live_payload()),
+        ("post", "/api/console/lives/1/setlist", _valid_setlist_payload()),
+    ],
+)
+def test_console_insert_mock_requires_authenticated_editor_role(method: str, path: str, json_body: dict):
+    client = TestClient(app)
+    anonymous_response = getattr(client, method)(path, json=json_body, headers={"X-CSRF-Token": CSRF_TOKEN})
+    _set_authenticated_role("viewer")
+    viewer_response = getattr(client, method)(path, json=json_body, headers={"X-CSRF-Token": CSRF_TOKEN})
+
+    assert anonymous_response.status_code == 401
+    assert anonymous_response.json()["detail"]["code"] == "AUTH_SESSION_EXPIRED"
+    assert viewer_response.status_code == 403
+    assert viewer_response.json()["detail"]["code"] == "AUTH_FORBIDDEN"
+
+
+# 测试点：console 插入接口必须校验 CSRF token，缺失或错误 token 都应拒绝。
+@pytest.mark.parametrize(
+    ("path", "json_body"),
+    [
+        ("/api/console/songs", _valid_song_payload()),
+        ("/api/console/lives", _valid_live_payload()),
+        ("/api/console/lives/1/setlist", _valid_setlist_payload()),
+    ],
+)
+def test_console_insert_mock_requires_valid_csrf(path: str, json_body: dict):
+    _set_authenticated_role("editor")
+
+    client = TestClient(app)
+    missing_response = client.post(path, json=json_body)
+    invalid_response = client.post(path, json=json_body, headers={"X-CSRF-Token": "wrong-token"})
+
+    assert missing_response.status_code == 403
+    assert missing_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+    assert invalid_response.status_code == 403
+    assert invalid_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+
+
+# 测试点：console 插入接口应通过请求 schema 拒绝缺失字段、错误类型和非法边界值。
+@pytest.mark.parametrize(
+    ("path", "json_body"),
+    [
+        ("/api/console/songs", {}),
+        ("/api/console/songs", _valid_song_payload(song_name="   ")),
+        ("/api/console/songs", _valid_song_payload(band_id=0)),
+        ("/api/console/songs", _valid_song_payload(cover="not-bool")),
+        ("/api/console/lives", {}),
+        ("/api/console/lives", _valid_live_payload(live_date="not-date")),
+        ("/api/console/lives", _valid_live_payload(venue_id=0)),
+        ("/api/console/lives/1/setlist", {}),
+        ("/api/console/lives/1/setlist", {"setlist_rows": []}),
+        ("/api/console/lives/1/setlist", _valid_setlist_payload(song_id=0)),
+        ("/api/console/lives/1/setlist", _valid_setlist_payload(absolute_order=0)),
+        ("/api/console/lives/1/setlist", _valid_setlist_payload(band_member={})),
+    ],
+)
+def test_console_insert_mock_rejects_schema_invalid_payloads(path: str, json_body: dict):
+    _set_authenticated_role("editor")
+
+    client = TestClient(app)
+    response = client.post(path, json=json_body, headers={"X-CSRF-Token": CSRF_TOKEN})
+
+    assert response.status_code == 422
+
+
+# 测试点：新增歌曲成功时应返回创建结果，并写入歌曲行和审计日志。
+def test_console_create_song_mock_success_persists_and_audits():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (99,)])
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/songs",
+            json=_valid_song_payload(song_name="FIRE BIRD", band_id=2, cover=True),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "ok": True,
+        "item": {"song_id": 99, "song_name": "FIRE BIRD", "band_id": 2, "cover": True},
+    }
+    assert cursor.execute.call_count == 3
+    assert "INSERT INTO song_list" in cursor.execute.call_args_list[1].args[0]
+    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
+
+
+# 测试点：新增歌曲应区分关联 band 不存在和歌曲唯一键冲突。
+def test_console_create_song_mock_business_errors():
+    _set_authenticated_role("editor")
+    missing_band_conn, _ = _build_connection_mock(fetchone_side_effect=[None])
+
+    duplicate_conn, duplicate_cursor = _build_connection_mock(fetchone_side_effect=[(1,)])
+
+    def duplicate_execute(query: str, params=None):
+        if "INSERT INTO song_list" in query:
+            raise UniqueViolation("duplicate song")
+
+    duplicate_cursor.execute.side_effect = duplicate_execute
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=missing_band_conn):
+        client = TestClient(app)
+        missing_band_response = client.post(
+            "/api/console/songs",
+            json=_valid_song_payload(band_id=999),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=duplicate_conn):
+        duplicate_response = client.post(
+            "/api/console/songs",
+            json=_valid_song_payload(song_name="Yes! BanG_Dream!"),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert missing_band_response.status_code == 404
+    assert missing_band_response.json()["detail"] == "Band id 999 not found"
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json()["detail"] == "Song name already exists: Yes! BanG_Dream!"
+
+
+# 测试点：新增 Live 成功时应补齐时间秒数和时区，并返回创建结果。
+def test_console_create_live_mock_success_normalizes_times_and_audits():
+    _set_authenticated_role("admin")
+    conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (77,)])
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/lives",
+            json=_valid_live_payload(opening_time="18:00", start_time="19:00:30", timezone="+09:00", type="专场"),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["item"] == {
+        "live_id": 77,
+        "live_date": "2026-05-29",
+        "live_title": "Mock Live",
+        "url": "https://example.com/mock-live",
+        "opening_time": "18:00:00+09:00",
+        "start_time": "19:00:30+09:00",
+        "venue_id": 2,
+    }
+    assert "INSERT INTO live_attrs" in cursor.execute.call_args_list[1].args[0]
+    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
+
+
+# 测试点：新增 Live 应拒绝非法时间、非法时区和不存在的 venue。
+@pytest.mark.parametrize(
+    ("payload", "expected_status", "expected_detail"),
+    [
+        (_valid_live_payload(opening_time="18:0x"), 400, "Invalid time format: 18:0x"),
+        (_valid_live_payload(timezone="+9"), 422, None),
+        (_valid_live_payload(venue_id=999), 404, "Venue id 999 not found"),
+    ],
+)
+def test_console_create_live_mock_business_errors(payload: dict, expected_status: int, expected_detail: str | None):
+    _set_authenticated_role("editor")
+    conn, _ = _build_connection_mock(fetchone_side_effect=[None])
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post("/api/console/lives", json=payload, headers={"X-CSRF-Token": CSRF_TOKEN})
+
+    assert response.status_code == expected_status
+    if expected_detail is not None:
+        assert response.json()["detail"] == expected_detail
+
+
+# 测试点：追加 setlist 成功时应只追加新行，并返回插入行数和当前总行数。
+def test_console_append_setlist_mock_success_inserts_rows_and_audits():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(
+        fetchone_side_effect=[(1,), (4,)],
+        fetchall_side_effect=[[(1,), (2,)], []],
+    )
+    payload = {
+        "setlist_rows": [
+            _valid_setlist_payload(song_id=1, absolute_order=3, segment_type="EN")["setlist_rows"][0],
+            _valid_setlist_payload(song_id=2, absolute_order=4, segment_type="SP", is_short=True)["setlist_rows"][0],
+        ]
+    }
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post("/api/console/lives/1/setlist", json=payload, headers={"X-CSRF-Token": CSRF_TOKEN})
+
+    insert_setlist_calls = [
+        execute_call for execute_call in cursor.execute.call_args_list if "INSERT INTO live_setlist" in execute_call.args[0]
+    ]
+    assert response.status_code == 201
+    assert response.json() == {
+        "ok": True,
+        "item": {"live_id": 1, "inserted_row_count": 2, "total_setlist_row_count": 4},
+    }
+    assert len(insert_setlist_calls) == 2
+    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[-1].args[0]
+
+
+# 测试点：追加 setlist 在请求内片段或顺序非法时，应在访问数据库前拒绝。
+@pytest.mark.parametrize(
+    ("payload", "expected_status", "expected_detail"),
+    [
+        (_valid_setlist_payload(segment_type="BAD"), 400, "Unsupported segment_type: BAD"),
+        (
+            {
+                "setlist_rows": [
+                    _valid_setlist_payload(song_id=1, absolute_order=3)["setlist_rows"][0],
+                    _valid_setlist_payload(song_id=2, absolute_order=3)["setlist_rows"][0],
+                ]
+            },
+            400,
+            "Duplicate absolute_order in setlist_rows: 3",
+        ),
+    ],
+)
+def test_console_append_setlist_mock_rejects_pre_db_business_errors(
+    payload: dict,
+    expected_status: int,
+    expected_detail: str,
+):
+    _set_authenticated_role("editor")
+
+    with patch("app.routers.console_write.get_write_db_connection") as get_connection:
+        client = TestClient(app)
+        response = client.post("/api/console/lives/1/setlist", json=payload, headers={"X-CSRF-Token": CSRF_TOKEN})
+
+    assert response.status_code == expected_status
+    assert response.json()["detail"] == expected_detail
+    get_connection.assert_not_called()
+
+
+# 测试点：追加 setlist 若任一 song_id 缺失，应整批拒绝且不插入任何 setlist 行。
+def test_console_append_setlist_mock_missing_song_rejects_batch_without_partial_insert():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(
+        fetchone_side_effect=[(1,)],
+        fetchall_side_effect=[[(1,)]],
+    )
+    payload = {
+        "setlist_rows": [
+            _valid_setlist_payload(song_id=1, absolute_order=3)["setlist_rows"][0],
+            _valid_setlist_payload(song_id=999, absolute_order=4)["setlist_rows"][0],
+        ]
+    }
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post("/api/console/lives/1/setlist", json=payload, headers={"X-CSRF-Token": CSRF_TOKEN})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Song ids not found: 999"
+    assert all("INSERT INTO live_setlist" not in execute_call.args[0] for execute_call in cursor.execute.call_args_list)
+
+
+# 测试点：追加 setlist 若 absolute_order 与已有行冲突，应返回 409 且不插入新行。
+def test_console_append_setlist_mock_existing_order_conflict_rejects_without_insert():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(
+        fetchone_side_effect=[(1,)],
+        fetchall_side_effect=[[(1,)], [(3,)]],
+    )
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/lives/1/setlist",
+            json=_valid_setlist_payload(song_id=1, absolute_order=3),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "absolute_order already exists for live 1: 3"
+    assert all("INSERT INTO live_setlist" not in execute_call.args[0] for execute_call in cursor.execute.call_args_list)
