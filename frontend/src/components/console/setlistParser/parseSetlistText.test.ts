@@ -85,4 +85,38 @@ describe("parseSetlistText", () => {
       "M 段落编号不从 1 开始，请人工确认。",
     ]);
   });
+
+  test("支持 OP/ED/WEN 段类型并标记 segment_start_type", () => {
+    // 测试点：新增的 OP/ED/WEN 段类型应与已有类型一致地生成 segment_start_type。
+    const result = parseSetlistText(
+      "<Roselia>\nOP1. Opening\nM1. Song A\nED1. Ending\nEN1. Encore\nWEN1. W Encore",
+      bands,
+      1,
+      1,
+    );
+
+    expect(result.rows).toHaveLength(5);
+    expect(result.rows[0]).toMatchObject({ song_name: "Opening", segment_start_type: "OP" });
+    expect(result.rows[1]).toMatchObject({ song_name: "Song A", segment_start_type: "M" });
+    expect(result.rows[2]).toMatchObject({ song_name: "Ending", segment_start_type: "ED" });
+    expect(result.rows[3]).toMatchObject({ song_name: "Encore", segment_start_type: "EN" });
+    expect(result.rows[4]).toMatchObject({ song_name: "W Encore", segment_start_type: "WEN" });
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("支持无点号格式 M1 SP1 等", () => {
+    // 测试点：M1 空格格式应能正确解析，与 M1.点号格式等价。
+    const result = parseSetlistText(
+      "＜Roselia×戸山香澄 from Poppin'Party＞\nM1 キラキラ\nM2 ときめき",
+      bands,
+      10,
+      20,
+    );
+
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0]?.song_name).toBe("キラキラ");
+    expect(result.rows[0]?.segment_start_type).toBe("M");
+    expect(result.rows[1]?.song_name).toBe("ときめき");
+    expect(result.rows[1]?.segment_start_type).toBe("");
+  });
 });

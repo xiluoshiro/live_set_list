@@ -421,12 +421,14 @@ def test_console_append_setlist_mock_success_inserts_rows_and_audits():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
         fetchone_side_effect=[(1,), (4,)],
-        fetchall_side_effect=[[(1,), (2,)], []],
+        fetchall_side_effect=[[(1,), (2,), (3,), (4,)], []],
     )
     payload = {
         "setlist_rows": [
             _valid_setlist_payload(song_id=1, absolute_order=3, segment_type="EN")["setlist_rows"][0],
             _valid_setlist_payload(song_id=2, absolute_order=4, segment_type="SP", is_short=True)["setlist_rows"][0],
+            _valid_setlist_payload(song_id=3, absolute_order=5, segment_type="OP")["setlist_rows"][0],
+            _valid_setlist_payload(song_id=4, absolute_order=6, segment_type="WEN")["setlist_rows"][0],
         ]
     }
 
@@ -440,9 +442,9 @@ def test_console_append_setlist_mock_success_inserts_rows_and_audits():
     assert response.status_code == 201
     assert response.json() == {
         "ok": True,
-        "item": {"live_id": 1, "inserted_row_count": 2, "total_setlist_row_count": 4},
+        "item": {"live_id": 1, "inserted_row_count": 4, "total_setlist_row_count": 4},
     }
-    assert len(insert_setlist_calls) == 2
+    assert len(insert_setlist_calls) == 4
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[-1].args[0]
 
 
