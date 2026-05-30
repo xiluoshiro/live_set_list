@@ -35,6 +35,17 @@ class ConsoleSongMutationResponse(BaseModel):
     item: ConsoleSongItem = Field(..., description="Created song payload")
 
 
+class ConsoleSongBatchCreateRequest(BaseModel):
+    songs: list[ConsoleSongCreateRequest] = Field(
+        ..., min_length=1, max_length=100, description="Songs to create in batch"
+    )
+
+
+class ConsoleSongBatchCreateResponse(BaseModel):
+    ok: bool = Field(..., description="Whether all creates succeeded")
+    created: list[ConsoleSongItem] = Field(default_factory=list, description="Successfully created songs")
+
+
 class ConsoleSongListResponse(BaseModel):
     items: list[ConsoleSongItem] = Field(..., description="Songs available for console lookup")
 

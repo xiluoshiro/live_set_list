@@ -125,6 +125,11 @@ export type ConsoleSongMutationResponse = {
   item: ConsoleSongItem;
 };
 
+export type ConsoleSongBatchCreateResponse = {
+  ok: boolean;
+  created: ConsoleSongItem[];
+};
+
 export type ConsoleBandItem = {
   band_id: number;
   band_name: string;
@@ -222,6 +227,7 @@ type RequestKind =
   | "console_venue_create"
   | "console_live_create"
   | "console_song_create"
+  | "console_song_batch_create"
   | "console_live_setlist_append";
 
 type RequestLogMeta = {
@@ -606,6 +612,25 @@ export async function createConsoleSong(
     },
   );
   return expectJsonResponse<ConsoleSongMutationResponse>(response);
+}
+
+export async function createConsoleSongsBatch(
+  songs: ConsoleSongCreatePayload[],
+  csrfToken: string,
+): Promise<ConsoleSongBatchCreateResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/songs:batch`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify({ songs }),
+    },
+    {
+      requestKind: "console_song_batch_create",
+      method: "POST",
+    },
+  );
+  return expectJsonResponse<ConsoleSongBatchCreateResponse>(response);
 }
 
 export async function createConsoleVenue(

@@ -5,6 +5,7 @@ import {
   appendConsoleLiveSetlist,
   createConsoleLive,
   createConsoleSong,
+  createConsoleSongsBatch,
   createConsoleVenue,
   getConsoleBands,
   getConsoleSongs,
@@ -1094,23 +1095,23 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   };
 
   const executeBatchSongInsert = async (rows: BatchSongConfirmRow[], csrfToken: string) => {
-    let created = 0;
-    let failed = 0;
-    for (const row of rows) {
-      try {
-        const response = await createConsoleSong(
-          { song_name: row.song_name, band_id: row.band_id, cover: row.cover },
-          csrfToken,
-        );
-        const newSong = toSongInsertRow(response.item);
+    try {
+      const payload = rows.map((row) => ({
+        song_name: row.song_name,
+        band_id: row.band_id,
+        cover: row.cover,
+      }));
+      const response = await createConsoleSongsBatch(payload, csrfToken);
+      response.created.forEach((item) => {
+        const newSong = toSongInsertRow(item);
         setSongs((prev) => sortById([newSong, ...prev.filter((s) => s.song_id !== newSong.song_id)], (s) => s.song_id));
         setInsertedSongs((prev) => sortById([newSong, ...prev.filter((s) => s.song_id !== newSong.song_id)], (s) => s.song_id));
-        created += 1;
-      } catch {
-        failed += 1;
-      }
+      });
+      const skipped = rows.length - response.created.length;
+      setMessage(`批量新增完成：成功 ${response.created.length} 首${skipped > 0 ? `，跳过 ${skipped} 首` : ""}。`);
+    } catch (error) {
+      setMessage(`批量新增失败：${errorMessage(error)}`);
     }
-    setMessage(`批量新增完成：成功 ${created} 首，失败 ${failed} 首。`);
     await querySongsForSetlist();
   };
 
