@@ -623,4 +623,33 @@ describe("ConsoleInsertPanel", () => {
     expect(within(dialog).getByText("BLACK SHOUT")).toBeInTheDocument();
     expect(within(dialog).getByText("Requiem for Fate")).toBeInTheDocument();
   });
+
+  test("清空数据将表格还原为初始一行空状态", async () => {
+    // 测试点：点击清空数据后，setlist 表格只保留一行空草稿，原有数据全部清除。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "＜Roselia×愛美 from Poppin'Party＞\nM1. BLACK SHOUT\nM2. Requiem for Fate" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析预览" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    expect(screen.getByDisplayValue("BLACK SHOUT")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Requiem for Fate")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "清空数据" }));
+
+    expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Requiem for Fate")).not.toBeInTheDocument();
+    const inputs = screen.getAllByPlaceholderText("请输入歌曲名");
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).toHaveValue("");
+  });
 });
