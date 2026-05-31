@@ -24,33 +24,13 @@ def _login_and_get_csrf_for(
     return response.json()["csrf_token"]
 
 
-def _create_user(
-    integration_admin_connection,
-    *,
-    username: str,
-    password: str,
-    display_name: str,
-    role: str,
-) -> int:
-    """Insert one app_users row directly so integration tests can prepare role-specific users."""
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cursor:
-        cursor.execute(
-            """
-            INSERT INTO app_users (username, password_hash, display_name, role)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id
-            """,
-            (
-                normalize_username(username),
-                hash_password(password),
-                display_name,
-                role,
-            ),
-        )
+def _get_user_id(conn, username: str) -> int:
+    """Look up the pre-seeded user ID by username."""
+    conn.autocommit = True
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT id FROM app_users WHERE username = %s", (username,))
         row = cursor.fetchone()
-
-    assert row is not None
+    assert row is not None, f"User {username} not found"
     return int(row[0])
 
 
@@ -153,17 +133,10 @@ def test_console_lookup_endpoints_require_editor_role(
     integration_admin_connection,
 ):
     """Verify viewer users cannot call console lookup endpoints directly."""
-    _create_user(
-        integration_admin_connection,
-        username="viewer_console_lookup_api",
-        password="viewer-lookup-pass",
-        display_name="Viewer Console Lookup API",
-        role="viewer",
-    )
     _login_and_get_csrf_for(
         integration_test_client,
-        username="viewer_console_lookup_api",
-        password="viewer-lookup-pass",
+        username="viewer_tester",
+        password="viewer-test-pass",
     )
 
     songs_response = integration_test_client.get("/api/console/songs")
@@ -204,17 +177,11 @@ def test_console_lookup_endpoints_do_not_mutate_database(
     integration_admin_connection,
 ):
     """Verify console lookup endpoints have no DB side effects beyond the login setup."""
-    editor_user_id = _create_user(
-        integration_admin_connection,
-        username="editor_lookup_side_effect_api",
-        password="editor-lookup-side-effect-pass",
-        display_name="Editor Lookup Side Effect API",
-        role="editor",
-    )
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     _login_and_get_csrf_for(
         integration_test_client,
-        username="editor_lookup_side_effect_api",
-        password="editor-lookup-side-effect-pass",
+        username="editor_tester",
+        password="editor-test-pass",
     )
     audit_count_before = _count_rows(
         integration_admin_connection,
@@ -289,17 +256,10 @@ def test_console_create_song_requires_editor_role_and_csrf(
     integration_admin_connection,
 ):
     """Verify the console song-create endpoint blocks viewer writes and missing CSRF headers."""
-    _create_user(
-        integration_admin_connection,
-        username="viewer_console_api",
-        password="viewer-pass",
-        display_name="Viewer Console API",
-        role="viewer",
-    )
     viewer_csrf = _login_and_get_csrf_for(
         integration_test_client,
-        username="viewer_console_api",
-        password="viewer-pass",
+        username="viewer_tester",
+        password="viewer-test-pass",
     )
     viewer_response = integration_test_client.post(
         "/api/console/songs",
@@ -307,16 +267,10 @@ def test_console_create_song_requires_editor_role_and_csrf(
         json={"song_name": "Viewer Forbidden Song", "band_id": 1, "cover": False},
     )
 
-    editor_user_id = _create_user(
-        integration_admin_connection,
-        username="editor_song_api",
-        password="editor-pass",
-        display_name="Editor Song API",
-        role="editor",
-    )
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     editor_login_response = integration_test_client.post(
         "/api/auth/login",
-        json={"username": "editor_song_api", "password": "editor-pass"},
+        json={"username": "editor_tester", "password": "editor-test-pass"},
     )
     assert editor_login_response.status_code == 200
     missing_csrf_response = integration_test_client.post(
@@ -337,17 +291,11 @@ def test_console_create_venue_persists_row_and_audit_log(
     integration_admin_connection,
 ):
     """Verify the console venue-create endpoint inserts one venue row and one matching audit log row."""
-    editor_user_id = _create_user(
-        integration_admin_connection,
-        username="editor_venue_api",
-        password="editor-venue-pass",
-        display_name="Editor Venue API",
-        role="editor",
-    )
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     csrf_token = _login_and_get_csrf_for(
         integration_test_client,
-        username="editor_venue_api",
-        password="editor-venue-pass",
+        username="editor_tester",
+        password="editor-test-pass",
     )
 
     response = integration_test_client.post(
@@ -384,17 +332,11 @@ def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
     integration_admin_connection,
 ):
     """Verify missing-CSRF write attempts do not insert live_attrs or live_setlist rows."""
-    editor_user_id = _create_user(
-        integration_admin_connection,
-        username="editor_write_csrf_api",
-        password="editor-write-csrf-pass",
-        display_name="Editor Write CSRF API",
-        role="editor",
-    )
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     _login_and_get_csrf_for(
         integration_test_client,
-        username="editor_write_csrf_api",
-        password="editor-write-csrf-pass",
+        username="editor_tester",
+        password="editor-test-pass",
     )
     live_count_before = _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM live_attrs")
     setlist_count_before = _count_rows(
@@ -448,17 +390,11 @@ def test_console_create_live_persists_live_row(
     integration_admin_connection,
 ):
     """Verify the console live-create endpoint inserts one live row and keeps ui_type in audit."""
-    editor_user_id = _create_user(
-        integration_admin_connection,
-        username="editor_live_api",
-        password="editor-live-pass",
-        display_name="Editor Live API",
-        role="editor",
-    )
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     csrf_token = _login_and_get_csrf_for(
         integration_test_client,
-        username="editor_live_api",
-        password="editor-live-pass",
+        username="editor_tester",
+        password="editor-test-pass",
     )
 
     response = integration_test_client.post(
@@ -532,17 +468,11 @@ def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
     integration_admin_connection,
 ):
     """Verify the console setlist endpoint appends rows only and leaves earlier setlist rows untouched."""
-    editor_user_id = _create_user(
-        integration_admin_connection,
-        username="editor_setlist_api",
-        password="editor-setlist-pass",
-        display_name="Editor Setlist API",
-        role="editor",
-    )
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     csrf_token = _login_and_get_csrf_for(
         integration_test_client,
-        username="editor_setlist_api",
-        password="editor-setlist-pass",
+        username="editor_tester",
+        password="editor-test-pass",
     )
 
     response = integration_test_client.post(
@@ -712,17 +642,11 @@ def test_console_append_live_setlist_rolls_back_when_one_row_is_invalid(
     integration_admin_connection,
 ):
     """Verify a mixed valid/invalid setlist append does not partially persist rows."""
-    editor_user_id = _create_user(
-        integration_admin_connection,
-        username="editor_setlist_rollback_api",
-        password="editor-setlist-rollback-pass",
-        display_name="Editor Setlist Rollback API",
-        role="editor",
-    )
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     csrf_token = _login_and_get_csrf_for(
         integration_test_client,
-        username="editor_setlist_rollback_api",
-        password="editor-setlist-rollback-pass",
+        username="editor_tester",
+        password="editor-test-pass",
     )
     setlist_count_before = _count_rows(
         integration_admin_connection,
@@ -775,17 +699,11 @@ def test_console_append_live_setlist_stores_segment_type_raw(
     integration_admin_connection,
 ):
     """Verify OP/WEN segment types are stored as-is without normalization."""
-    editor_user_id = _create_user(
-        integration_admin_connection,
-        username="editor_segtype_api",
-        password="editor-segtype-pass",
-        display_name="Editor SegType API",
-        role="editor",
-    )
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     csrf_token = _login_and_get_csrf_for(
         integration_test_client,
-        username="editor_segtype_api",
-        password="editor-segtype-pass",
+        username="editor_tester",
+        password="editor-test-pass",
     )
 
     response = integration_test_client.post(
@@ -840,17 +758,11 @@ def test_console_create_songs_batch_persists_and_skips_conflicts(
     integration_admin_connection,
 ):
     """Verify batch song creation writes multiple rows and skips duplicates."""
-    editor_user_id = _create_user(
-        integration_admin_connection,
-        username="editor_batch_song_api",
-        password="editor-batch-song-pass",
-        display_name="Editor Batch Song API",
-        role="editor",
-    )
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     csrf_token = _login_and_get_csrf_for(
         integration_test_client,
-        username="editor_batch_song_api",
-        password="editor-batch-song-pass",
+        username="editor_tester",
+        password="editor-test-pass",
     )
 
     response = integration_test_client.post(

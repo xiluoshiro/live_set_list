@@ -1,5 +1,6 @@
 import os
 from collections.abc import Generator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import psycopg2
@@ -9,6 +10,7 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("APP_LOG_LEVEL", "CRITICAL")
 
+from app.auth import hash_password, normalize_username
 from app.main import app
 
 
@@ -131,3 +133,24 @@ def integration_test_client(
     monkeypatch.setenv("AUTH_DEFAULT_ADMIN_DISPLAY_NAME", auth_config["display_name"])
     with TestClient(app) as client:
         yield client
+
+
+@pytest.fixture(autouse=True)
+def seed_test_users(integration_test_client, integration_admin_connection):
+    """Insert pre-seeded test users after admin is created by lifespan."""
+    now_utc = datetime.now(UTC)
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        for username, password, display_name, role in [
+            ("editor_tester", "editor-test-pass", "Editor Tester", "editor"),
+            ("viewer_tester", "viewer-test-pass", "Viewer Tester", "viewer"),
+            ("viewer_a_tester", "viewer-a-test-pass", "Viewer A Tester", "viewer"),
+        ]:
+            cursor.execute(
+                """
+                INSERT INTO app_users (username, password_hash, display_name, role, is_active, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, true, %s, %s)
+                ON CONFLICT (username) DO NOTHING
+                """,
+                (normalize_username(username), hash_password(password), display_name, role, now_utc, now_utc),
+            )

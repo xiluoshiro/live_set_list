@@ -41,32 +41,13 @@ def _logout(integration_test_client, csrf_token: str) -> None:
     assert response.status_code == 204
 
 
-def _create_user(
-    integration_admin_connection,
-    *,
-    username: str,
-    password: str,
-    display_name: str,
-    role: str = "viewer",
-) -> int:
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cursor:
-        cursor.execute(
-            """
-            INSERT INTO app_users (username, password_hash, display_name, role)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id
-            """,
-            (
-                normalize_username(username),
-                hash_password(password),
-                display_name,
-                role,
-            ),
-        )
+def _get_user_id(conn, username: str) -> int:
+    """Look up the pre-seeded user ID by username."""
+    conn.autocommit = True
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT id FROM app_users WHERE username = %s", (username,))
         row = cursor.fetchone()
-
-    assert row is not None
+    assert row is not None, f"User {username} not found"
     return int(row[0])
 
 
@@ -236,16 +217,10 @@ def test_get_my_favorite_lives_returns_empty_items_for_new_user(
     integration_test_client,
     integration_admin_connection,
 ):
-    _create_user(
-        integration_admin_connection,
-        username="viewer_empty",
-        password="test-viewer-pass",
-        display_name="Viewer Empty",
-    )
     _login_and_get_csrf_for(
         integration_test_client,
-        username="viewer_empty",
-        password="test-viewer-pass",
+        username="viewer_tester",
+        password="viewer-test-pass",
     )
 
     response = integration_test_client.get(
@@ -452,23 +427,10 @@ def test_favorite_batch_endpoint_isolates_state_between_users(
     integration_test_client,
     integration_admin_connection,
 ):
-    _create_user(
-        integration_admin_connection,
-        username="viewer_batch_a",
-        password="test-viewer-batch-a-pass",
-        display_name="Viewer Batch A",
-    )
-    _create_user(
-        integration_admin_connection,
-        username="viewer_batch_b",
-        password="test-viewer-batch-b-pass",
-        display_name="Viewer Batch B",
-    )
-
     csrf_token_a = _login_and_get_csrf_for(
         integration_test_client,
-        username="viewer_batch_a",
-        password="test-viewer-batch-a-pass",
+        username="viewer_tester",
+        password="viewer-test-pass",
     )
     add_response_a = integration_test_client.post(
         "/api/me/favorites/lives:batch",
@@ -483,8 +445,8 @@ def test_favorite_batch_endpoint_isolates_state_between_users(
 
     _login_and_get_csrf_for(
         integration_test_client,
-        username="viewer_batch_b",
-        password="test-viewer-batch-b-pass",
+        username="viewer_a_tester",
+        password="viewer-a-test-pass",
     )
     favorites_response_b = integration_test_client.get(
         "/api/me/favorites/lives",
@@ -676,23 +638,10 @@ def test_favorites_are_isolated_between_users(
     integration_test_client,
     integration_admin_connection,
 ):
-    _create_user(
-        integration_admin_connection,
-        username="viewer_a",
-        password="test-viewer-a-pass",
-        display_name="Viewer A",
-    )
-    _create_user(
-        integration_admin_connection,
-        username="viewer_b",
-        password="test-viewer-b-pass",
-        display_name="Viewer B",
-    )
-
     csrf_token_a = _login_and_get_csrf_for(
         integration_test_client,
-        username="viewer_a",
-        password="test-viewer-a-pass",
+        username="viewer_tester",
+        password="viewer-test-pass",
     )
     favorite_response_a = integration_test_client.put(
         "/api/me/favorites/lives/1",
@@ -702,7 +651,7 @@ def test_favorites_are_isolated_between_users(
 
     login_response_b = integration_test_client.post(
         "/api/auth/login",
-        json={"username": "viewer_b", "password": "test-viewer-b-pass"},
+        json={"username": "viewer_a_tester", "password": "viewer-a-test-pass"},
     )
     csrf_token_b = login_response_b.json()["csrf_token"]
     favorites_response_b = integration_test_client.get(
@@ -715,8 +664,8 @@ def test_favorites_are_isolated_between_users(
 
     csrf_token_a_again = _login_and_get_csrf_for(
         integration_test_client,
-        username="viewer_a",
-        password="test-viewer-a-pass",
+        username="viewer_tester",
+        password="viewer-test-pass",
     )
     favorites_response_a = integration_test_client.get(
         "/api/me/favorites/lives",
@@ -789,16 +738,11 @@ def test_live_project_user_rw_permission_contract(
     integration_admin_connection,
     integration_db_config,
 ):
-    user_id = _create_user(
-        integration_admin_connection,
-        username="viewer_perm",
-        password="test-viewer-perm-pass",
-        display_name="Viewer Perm",
-    )
+    user_id = _get_user_id(integration_admin_connection, "viewer_tester")
     _login_and_get_csrf_for(
         integration_test_client,
-        username="viewer_perm",
-        password="test-viewer-perm-pass",
+        username="viewer_tester",
+        password="viewer-test-pass",
     )
 
     with psycopg2.connect(
