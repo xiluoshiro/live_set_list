@@ -120,15 +120,7 @@
 - 后续若 UI 文案调整，不需要迁移历史数据。
 - API 消费方能依赖稳定枚举值。
 
-兼容规则：
-
-- 新前端应发送 `live_type`，值为上表 code。
-- 后端短期继续接受旧字段 `type`。
-- 旧字段 `type` 可以接受现有中文值，也可以接受 code。
-- 如果请求同时带 `live_type` 和 `type`，两者归一化后必须一致，否则返回 400。
-- 响应统一只返回 `live_type`，不再返回 `type`。
-
-建议归一化映射：
+后端只做枚举校验，由前端负责发送 code：
 
 ```text
 专场 -> oneman
@@ -413,12 +405,12 @@ export function formatLiveType(value: string): string {
 2. [x] 人工回填已有 `live_attrs.live_type` 数据，能判断的填真实类型，确实无法判断的才填 `other`。
 3. [x] 新增 Flyway `V9__require_live_type_on_live_attrs.sql`，把 `live_type` 收紧为 `NOT NULL`，并把 CHECK 改为不允许 NULL。
 4. [x] 更新 seed 数据，让测试样例覆盖至少 `oneman`、`multi_act` 和 `festival` 三种类型。
-5. [ ] 后端 console schema/router 写入 `live_type`，并保持旧 `type` 兼容。
-6. [ ] 后端 lives/me 读接口全部返回 `live_type`。
-7. [ ] 更新后端单元和集成测试。
+5. [x] 后端 console schema/router 写入 `live_type`。前端直接传 code，后端只做枚举校验，不做中文 label 转 code。
+6. [x] 后端 lives/me 读接口全部返回 `live_type`。
+7. [x] 更新后端单元和集成测试。
 8. [ ] 更新前端 API 类型和控制台新增 Live 表单。
 9. [ ] 选择是否把类型展示到主详情弹窗。
-10. [ ] 跑 `python scripts/run_checks.py functional`。
+10. [x] 跑 `python scripts/run_checks.py functional`。
 
 由于本改动涉及 `backend/app/**`、`backend/db/**`、`backend/tests/**`、`frontend/src/**`，实际实施时最终验证必须跑 `python scripts/run_checks.py functional`。
 

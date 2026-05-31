@@ -159,6 +159,7 @@ def test_favorite_live_adds_server_side_state_and_marks_lives_responses(
             "live_id": 1,
             "live_date": "2026-03-28",
             "live_title": "BanG Dream! Unit Live",
+            "live_type": "multi_act",
             "bands": [1, 2],
             "url": "https://example.com/lives/1",
             "is_favorite": True,

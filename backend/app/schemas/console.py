@@ -2,6 +2,18 @@ from datetime import date
 
 from pydantic import BaseModel, Field, field_validator
 
+LIVE_TYPE_VALUES = ("oneman", "taiban", "multi_act", "festival", "event", "other")
+
+
+def _validate_live_type(value: str) -> str:
+    """Trim and reject non-empty live_type that is not a known code."""
+    normalized = value.strip()
+    if normalized == "":
+        raise ValueError("live_type must not be blank")
+    if normalized not in LIVE_TYPE_VALUES:
+        raise ValueError(f"live_type must be one of {LIVE_TYPE_VALUES}, got '{normalized}'")
+    return normalized
+
 
 def _strip_required_text(value: str) -> str:
     """Trim console form input and reject values that become blank after stripping."""
@@ -93,10 +105,11 @@ class ConsoleLiveCreateRequest(BaseModel):
     start_time: str = Field(..., min_length=5, max_length=8, description="Start time, e.g. 19:00 or 19:00:00")
     timezone: str = Field(..., min_length=6, max_length=6, description="UTC offset, e.g. +09:00")
     venue_id: int = Field(..., ge=1, description="venue_list.id")
-    type: str | None = Field(
-        default=None,
-        max_length=64,
-        description="Reserved field from the current console UI; accepted for compatibility but not persisted yet.",
+    live_type: str = Field(
+        ...,
+        min_length=1,
+        max_length=32,
+        description="Live type code: oneman, taiban, multi_act, festival, event, other.",
     )
 
     @field_validator("live_title", "url")
@@ -105,20 +118,18 @@ class ConsoleLiveCreateRequest(BaseModel):
         """Normalize required text fields before the console live-create endpoint uses them."""
         return _strip_required_text(value)
 
-    @field_validator("type")
+    @field_validator("live_type")
     @classmethod
-    def validate_optional_type(cls, value: str | None) -> str | None:
-        """Trim the optional UI-only type field while preserving omitted values as None."""
-        if value is None:
-            return None
-        normalized = value.strip()
-        return normalized or None
+    def validate_live_type(cls, value: str) -> str:
+        """Reject blank or unknown live_type values."""
+        return _validate_live_type(value)
 
 
 class ConsoleLiveItem(BaseModel):
     live_id: int = Field(..., description="Created live ID")
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., description="Live title")
+    live_type: str = Field(..., description="Stable live type code")
     url: str = Field(..., description="Live URL")
     opening_time: str = Field(..., description="Opening time with timezone")
     start_time: str = Field(..., description="Start time with timezone")

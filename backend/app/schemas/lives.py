@@ -12,6 +12,7 @@ class LiveItem(BaseModel):
         description='Live date; rendered as a date-formatted string in OpenAPI and JSON responses',
     )
     live_title: str = Field(..., description='Live title')
+    live_type: str = Field(..., description='Stable live type code')
     bands: list[int] = Field(..., description='Deduplicated band IDs sorted ascending')
     url: str | None = Field(default=None, description='Live URL from live_attrs.url')
     is_favorite: bool = Field(..., description='Whether the current user has favorited this live')
@@ -58,6 +59,7 @@ class LiveDetailResponse(BaseModel):
         description='Live date; rendered as a date-formatted string in OpenAPI and JSON responses',
     )
     live_title: str = Field(..., description='Live title')
+    live_type: str = Field(..., description='Stable live type code')
     venue: str | None = Field(default=None, description='Venue name')
     opening_time: str | None = Field(default=None, description='Opening time')
     start_time: str | None = Field(default=None, description='Start time')
