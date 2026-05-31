@@ -690,7 +690,7 @@ describe("ConsoleInsertPanel", () => {
   });
 
   test("批量插入弹出确认窗口，已有 sid 的行被忽略，仅创建 sid 为空的行", async () => {
-    // 测试点：sid 已匹配的行直接跳过，仅对 sid 为空的行执行创建。
+    // 测试点：批量新增歌曲确认窗口只保留后端会接收的歌曲字段，并允许在确认前勾选 cover。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [
@@ -722,11 +722,26 @@ describe("ConsoleInsertPanel", () => {
     const dialog = screen.getByRole("dialog", { name: "确认批量新增歌曲" });
     expect(within(dialog).getByText("Requiem for Fate")).toBeInTheDocument();
     expect(within(dialog).queryByText("BLACK SHOUT")).not.toBeInTheDocument();
+    expect(within(dialog).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "song_name",
+      "bid",
+      "band_name",
+      "cover",
+      "band_member",
+    ]);
+    expect(within(dialog).queryByRole("columnheader", { name: "other_member" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("columnheader", { name: "short" })).not.toBeInTheDocument();
+    expect(dialog).toHaveClass("batch_song");
+    const coverCheckbox = within(dialog).getByRole("checkbox", { name: "batch_song_cover-1" });
+    expect(coverCheckbox).toHaveClass("is-short-check");
+    expect(coverCheckbox).not.toBeChecked();
+
+    await user.click(coverCheckbox);
 
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledWith(
-      [{ song_name: "Requiem for Fate", band_id: 2, cover: false }],
+      [{ song_name: "Requiem for Fate", band_id: 2, cover: true }],
       "csrf-token",
     ));
     expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledTimes(1);
