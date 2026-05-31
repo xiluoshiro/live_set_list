@@ -43,7 +43,8 @@ SELECT
             FILTER (WHERE b.id IS NOT NULL),
         ARRAY[]::int[]
     ) AS band_ids,
-    l.url AS url
+    l.url AS url,
+    l.live_type
 FROM live_attrs l
 LEFT JOIN live_setlist ls
     ON l.id = ls.live_id
@@ -53,7 +54,7 @@ LEFT JOIN LATERAL (
 ) t ON true
 LEFT JOIN band_attrs b
     ON b.band_name = t.key
-GROUP BY l.id, l.live_date, l.live_title, l.url
+GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url
 """
 
 LIVES_COUNT_QUERY = f"""
@@ -108,7 +109,8 @@ SELECT
         ),
         ARRAY[]::text[]
     ) AS band_names,
-    to_jsonb(l) ->> 'url' AS url
+    to_jsonb(l) ->> 'url' AS url,
+    l.live_type
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -169,7 +171,8 @@ SELECT
         ),
         ARRAY[]::text[]
     ) AS band_names,
-    to_jsonb(l) ->> 'url' AS url
+    to_jsonb(l) ->> 'url' AS url,
+    l.live_type
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -432,6 +435,7 @@ def _build_live_detail_payload(
         "live_id": int(header_row[0]),
         "live_date": header_row[1],
         "live_title": str(header_row[2]),
+        "live_type": str(header_row[9]),
         "venue": header_row[3],
         "opening_time": header_row[4],
         "start_time": header_row[5],
@@ -565,6 +569,7 @@ def get_lives(
             "live_id": row[0],
             "live_date": row[1],
             "live_title": row[2],
+            "live_type": row[5],
             "bands": row[3] or [],
             "url": row[4],
             "is_favorite": int(row[0]) in favorite_live_ids if current_user is not None else False,
@@ -716,6 +721,7 @@ def get_live_details_batch(
                         "live_id": int(header_row[0]),
                         "live_date": header_row[1],
                         "live_title": str(header_row[2]),
+                        "live_type": str(header_row[9]),
                         "venue": header_row[3],
                         "opening_time": header_row[4],
                         "start_time": header_row[5],

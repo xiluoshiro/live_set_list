@@ -49,6 +49,7 @@ def test_get_lives_includes_seeded_live_without_setlist(integration_test_client)
         "live_id": 41,
         "live_date": "2026-05-30",
         "live_title": "Console Draft Live",
+        "live_type": "other",
         "bands": [],
         "url": "https://example.com/lives/console-draft",
         "is_favorite": False,

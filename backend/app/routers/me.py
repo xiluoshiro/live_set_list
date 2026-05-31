@@ -29,7 +29,8 @@ SELECT
             FILTER (WHERE b.id IS NOT NULL),
         ARRAY[]::int[]
     ) AS band_ids,
-    l.url AS url
+    l.url AS url,
+    l.live_type
 FROM user_live_favorites f
 JOIN live_attrs l
     ON l.id = f.live_id
@@ -42,7 +43,7 @@ LEFT JOIN LATERAL (
 LEFT JOIN band_attrs b
     ON b.band_name = t.key
 WHERE f.user_id = %s
-GROUP BY l.id, l.live_date, l.live_title, l.url
+GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url
 """
 
 FAVORITE_LIVES_COUNT_QUERY = f"""
@@ -179,6 +180,7 @@ def get_my_favorite_lives(
             "live_id": row[0],
             "live_date": row[1],
             "live_title": row[2],
+            "live_type": row[5],
             "bands": row[3] or [],
             "url": row[4],
             "is_favorite": True,

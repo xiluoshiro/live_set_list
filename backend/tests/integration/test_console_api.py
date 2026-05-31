@@ -376,6 +376,7 @@ def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
         json={
             "live_date": "2026-05-02",
             "live_title": "Missing CSRF Live",
+            "live_type": "oneman",
             "url": "https://example.com/lives/missing-csrf",
             "opening_time": "18:00",
             "start_time": "19:00",
@@ -410,12 +411,12 @@ def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
 
 
-# 测试点：新增 Live 接口应写入 live_attrs，并保留当前控制台 UI 的 `type` 兼容字段但不持久化。
+# 测试点：新增 Live 接口应写入 live_attrs 并持久化 live_type；兼容旧字段 type 的中文输入。
 def test_console_create_live_persists_live_row(
     integration_test_client,
     integration_admin_connection,
 ):
-    """Verify the console live-create endpoint inserts one live row and keeps ui_type in audit."""
+    """Verify the console live-create endpoint inserts one live row with live_type and audits it."""
     editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     csrf_token = _login_and_get_csrf_for(
         integration_test_client,
@@ -429,7 +430,7 @@ def test_console_create_live_persists_live_row(
         json={
             "live_date": "2026-05-01",
             "live_title": "Console Created Live",
-            "type": "专场",
+            "live_type": "oneman",
             "url": "https://example.com/lives/console-created",
             "opening_time": "18:00",
             "start_time": "19:00:30",
@@ -447,6 +448,7 @@ def test_console_create_live_persists_live_row(
             "live_id": live_id,
             "live_date": "2026-05-01",
             "live_title": "Console Created Live",
+            "live_type": "oneman",
             "url": "https://example.com/lives/console-created",
             "opening_time": "18:00:00+09:00",
             "start_time": "19:00:30+09:00",
@@ -458,7 +460,7 @@ def test_console_create_live_persists_live_row(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT id, live_date::text, live_title, is_internal, url, opening_time::text, start_time::text, venue_id
+            SELECT id, live_date::text, live_title, live_type, is_internal, url, opening_time::text, start_time::text, venue_id
             FROM live_attrs
             WHERE id = %s
             """,
@@ -470,6 +472,7 @@ def test_console_create_live_persists_live_row(
         live_id,
         "2026-05-01",
         "Console Created Live",
+        "oneman",
         False,
         "https://example.com/lives/console-created",
         "18:00:00+09",
@@ -483,7 +486,7 @@ def test_console_create_live_persists_live_row(
             "venue_id": 2,
             "opening_time": "18:00:00+09:00",
             "start_time": "19:00:30+09:00",
-            "ui_type": "专场",
+            "live_type": "oneman",
         },
     )
 

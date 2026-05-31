@@ -55,8 +55,8 @@ def _build_batch_detail_connection_mock(
 def test_get_lives_success_returns_items_and_pagination():
     # 测试点：正常请求时，返回 items 与 pagination，且字段映射符合接口契约。
     rows = [
-        (1, "2026-03-28", "Title 1", [1, 2], "https://example.com/live/1"),
-        (2, "2026-03-27", "Title 2", [], None),
+        (1, "2026-03-28", "Title 1", [1, 2], "https://example.com/live/1", "oneman"),
+        (2, "2026-03-27", "Title 2", [], None, "festival"),
     ]
     conn, cursor = _build_connection_mock(47, rows)
 
@@ -77,6 +77,7 @@ def test_get_lives_success_returns_items_and_pagination():
             "live_id": 1,
             "live_date": "2026-03-28",
             "live_title": "Title 1",
+            "live_type": "oneman",
             "bands": [1, 2],
             "url": "https://example.com/live/1",
             "is_favorite": False,
@@ -85,6 +86,7 @@ def test_get_lives_success_returns_items_and_pagination():
             "live_id": 2,
             "live_date": "2026-03-27",
             "live_title": "Title 2",
+            "live_type": "festival",
             "bands": [],
             "url": None,
             "is_favorite": False,
@@ -97,7 +99,7 @@ def test_get_lives_success_returns_items_and_pagination():
 def test_get_lives_returns_url_from_live_attrs():
     # 测试点：列表接口的 url 应直接透传 live_attrs.url，而不是固定返回空值。
     rows = [
-        (7, "2026-04-08", "Title 7", [3], "https://example.com/live/7?from=list"),
+        (7, "2026-04-08", "Title 7", [3], "https://example.com/live/7?from=list", "multi_act"),
     ]
     conn, _ = _build_connection_mock(1, rows)
 
@@ -205,6 +207,7 @@ def test_get_live_detail_success_maps_rows_and_rules():
         [1, 2],
         ["Poppin'Party", "Afterglow"],
         "https://example.com/live/40",
+        "multi_act",
     )
     detail_rows = [
         (
@@ -327,6 +330,7 @@ def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
         [30, 10, 20],
         ["未映射A", "Band20", "Band10", "未映射B", "Band30"],
         "https://example.com/live/88",
+        "oneman",
     )
     detail_rows = [
         ("M1", "Song 1", {"Band30": ["A"], "Band10": ["B"], "Band20": ["C"]}, None, False),
@@ -356,6 +360,7 @@ def test_get_live_detail_new_fields_and_total_count_fallback_rules():
         [3, 1, 3, 2],
         ["Band2", "未映射", "Band1", "Band1", "Band3"],
         "https://example.com/live/66?from=test",
+        "festival",
     )
     detail_rows = [
         (
@@ -395,8 +400,8 @@ def test_get_live_detail_new_fields_and_total_count_fallback_rules():
 def test_get_live_details_batch_success_and_partial_missing():
     # 测试点：批量详情接口应支持去重、保序、部分缺失，并一次性聚合返回详情。
     header_rows = [
-        (1, "2026-03-28", "Live 1", "场地 1", "16:30", "17:30", [1], ["Poppin'Party"], "https://example.com/live/1"),
-        (2, "2026-03-27", "Live 2", "场地 2", "17:00", "18:00", [2], ["Afterglow"], "https://example.com/live/2"),
+        (1, "2026-03-28", "Live 1", "场地 1", "16:30", "17:30", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman"),
+        (2, "2026-03-27", "Live 2", "场地 2", "17:00", "18:00", [2], ["Afterglow"], "https://example.com/live/2", "festival"),
     ]
     detail_rows = [
         (
@@ -456,6 +461,7 @@ def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
             [30, 10, 20],
             ["未映射A", "Band20", "Band10", "未映射B", "Band30"],
             "https://example.com/live/8",
+            "multi_act",
         ),
     ]
     detail_rows = [
@@ -497,6 +503,7 @@ def test_get_live_details_batch_new_fields_and_total_count_fallback_rules():
             [3, 1, 3, 2],
             ["Band2", "未映射", "Band1", "Band1", "Band3"],
             "https://example.com/live/66?batch=true",
+            "oneman",
         )
     ]
     detail_rows = [
@@ -611,7 +618,7 @@ def test_get_live_details_batch_db_error_returns_500():
 def test_get_live_details_batch_normalizes_band_and_other_members():
     # 测试点：批量接口应过滤非法 band_members 项，并规范化 other_members 字段。
     header_rows = [
-        (1, "2026-03-28", "Live 1", "场地 1", "16:30", "17:30", [1], ["Poppin'Party"], "https://example.com/live/1"),
+        (1, "2026-03-28", "Live 1", "场地 1", "16:30", "17:30", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman"),
     ]
     detail_rows = [
         (

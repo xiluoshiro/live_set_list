@@ -373,7 +373,7 @@ def create_venue(
     status_code=201,
     response_model=ConsoleLiveMutationResponse,
     summary="新增 Live",
-    description="`editor+` 用户新增 Live 基础信息。当前请求体中的 `type` 仅作兼容字段，不会持久化。",
+    description="`editor+` 用户新增 Live 基础信息。`live_type` 为必填字段，值为稳定 code（oneman/taiban/multi_act/festival/event/other）。",
     responses={
         400: {"model": ErrorResponse, "description": "业务参数错误"},
         401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
@@ -408,18 +408,20 @@ def create_live(
                     INSERT INTO live_attrs (
                         live_date,
                         live_title,
+                        live_type,
                         is_internal,
                         url,
                         opening_time,
                         start_time,
                         venue_id
                     )
-                    VALUES (%s, %s, false, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, false, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
                         payload.live_date,
                         payload.live_title,
+                        payload.live_type,
                         payload.url,
                         opening_time,
                         start_time,
@@ -434,9 +436,8 @@ def create_live(
                     "venue_id": payload.venue_id,
                     "opening_time": opening_time,
                     "start_time": start_time,
+                    "live_type": payload.live_type,
                 }
-                if payload.type is not None:
-                    audit_payload["ui_type"] = payload.type
 
                 _write_console_audit_log(
                     cur,
@@ -466,6 +467,7 @@ def create_live(
             "live_id": live_id,
             "live_date": _format_date(payload.live_date),
             "live_title": payload.live_title,
+            "live_type": payload.live_type,
             "url": payload.url,
             "opening_time": opening_time,
             "start_time": start_time,

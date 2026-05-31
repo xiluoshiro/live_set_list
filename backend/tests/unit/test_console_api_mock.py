@@ -82,6 +82,7 @@ def _valid_live_payload(**overrides):
     payload = {
         "live_date": "2026-05-29",
         "live_title": "Mock Live",
+        "live_type": "oneman",
         "url": "https://example.com/mock-live",
         "opening_time": "18:00",
         "start_time": "19:00:30",
@@ -269,6 +270,10 @@ def test_console_insert_mock_requires_valid_csrf(path: str, json_body: dict):
         ("/api/console/venues", _valid_venue_payload(venue_name="   ")),
         ("/api/console/lives", {}),
         ("/api/console/lives", _valid_live_payload(live_date="not-date")),
+        ("/api/console/lives", _valid_live_payload(live_type="")),
+        ("/api/console/lives", _valid_live_payload(live_type="invalid  ")),
+        ("/api/console/lives", _valid_live_payload(live_type="   ")),
+        ("/api/console/lives", _valid_live_payload(live_type="专场")),
         ("/api/console/lives", _valid_live_payload(venue_id=0)),
         ("/api/console/lives/1/setlist", {}),
         ("/api/console/lives/1/setlist", {"setlist_rows": []}),
@@ -367,7 +372,7 @@ def test_console_create_venue_mock_success_persists_and_audits():
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[1].args[0]
 
 
-# 测试点：新增 Live 成功时应补齐时间秒数和时区，并返回创建结果。
+# 测试点：新增 Live 成功时应补齐时间秒数和时区，持久化 live_type，并返回创建结果。
 def test_console_create_live_mock_success_normalizes_times_and_audits():
     _set_authenticated_role("admin")
     conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (77,)])
@@ -376,7 +381,7 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         client = TestClient(app)
         response = client.post(
             "/api/console/lives",
-            json=_valid_live_payload(opening_time="18:00", start_time="19:00:30", timezone="+09:00", type="专场"),
+            json=_valid_live_payload(opening_time="18:00", start_time="19:00:30", timezone="+09:00"),
             headers={"X-CSRF-Token": CSRF_TOKEN},
         )
 
@@ -385,6 +390,7 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         "live_id": 77,
         "live_date": "2026-05-29",
         "live_title": "Mock Live",
+        "live_type": "oneman",
         "url": "https://example.com/mock-live",
         "opening_time": "18:00:00+09:00",
         "start_time": "19:00:30+09:00",
