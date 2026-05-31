@@ -66,6 +66,12 @@ type ConsoleInsertPanelProps = {
   onLiveDataChanged?: () => void;
 };
 
+type ConsoleLogEntry = {
+  id: number;
+  level: "info" | "error";
+  message: string;
+};
+
 type SetlistConfirmRow = ConsoleLiveSetlistRowPayload & {
   song_name: string;
 };
@@ -167,6 +173,22 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function backendFailureDetail(error: unknown): string {
+  const message = errorMessage(error);
+  if (!(error instanceof Error)) {
+    return message;
+  }
+
+  const apiError = error as Error & { status?: number; code?: string | null };
+  const statusText = typeof apiError.status === "number" ? `HTTP ${apiError.status}` : "";
+  const codeText = apiError.code ? apiError.code : "";
+  return [statusText, codeText, message].filter(Boolean).join(" / ");
+}
+
+function formatConsoleLogTime(): string {
+  return new Date().toLocaleTimeString("zh-CN", { hour12: false });
+}
+
 function formatTimedLabel(value: string | null | undefined): string {
   const raw = value?.trim();
   if (!raw) return "-";
@@ -208,6 +230,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const [submittedBundles, setSubmittedBundles] = useState<LiveInsertBundle[]>([]);
   const [displayedBundle, setDisplayedBundle] = useState<LiveInsertBundle | null>(null);
   const [message, setMessage] = useState<string>("");
+  const [consoleLogs, setConsoleLogs] = useState<ConsoleLogEntry[]>([]);
   const [transientNotice, setTransientNotice] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [confirmationSubmitting, setConfirmationSubmitting] = useState(false);
@@ -267,6 +290,20 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const bandMemberMenuRef = useRef<HTMLDivElement | null>(null);
   const otherMemberTriggerRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const otherMemberMenuRef = useRef<HTMLDivElement | null>(null);
+  const consoleLogIdRef = useRef(0);
+
+  const appendConsoleLog = (level: ConsoleLogEntry["level"], messageText: string) => {
+    const id = consoleLogIdRef.current + 1;
+    consoleLogIdRef.current = id;
+    setConsoleLogs((prev) => [
+      {
+        id,
+        level,
+        message: `${formatConsoleLogTime()} ${messageText}`,
+      },
+      ...prev,
+    ].slice(0, 20));
+  };
 
   const nextSongId = useMemo(
     () => songs.reduce((maxId, row) => Math.max(maxId, row.song_id), 200) + 1,
@@ -1082,6 +1119,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const requestBatchSongInsert = () => {
     if (!auth.isAuthenticated || !auth.csrfToken) {
       setMessage("批量插入失败：登录态已失效，请重新登录。");
+      appendConsoleLog("error", "批量插入失败：登录态已失效，请重新登录。");
       return;
     }
 
@@ -1152,11 +1190,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
         setInsertedSongs((prev) => sortById([newSong, ...prev.filter((s) => s.song_id !== newSong.song_id)], (s) => s.song_id));
       });
       const skipped = rows.length - response.created.length;
-      setMessage(`批量新增完成：成功 ${response.created.length} 首${skipped > 0 ? `，跳过 ${skipped} 首` : ""}。`);
+      const summary = `批量新增完成：请求 ${rows.length} 首，成功 ${response.created.length} 首${skipped > 0 ? `，后端跳过 ${skipped} 首` : ""}。`;
+      setMessage(summary);
+      appendConsoleLog("info", `${summary} ${response.created.map((item) => `#${item.song_id} ${item.song_name}`).join("；") || "后端未返回新增歌曲。"}`);
+      await querySongsForSetlist();
     } catch (error) {
-      setMessage(`批量新增失败：${errorMessage(error)}`);
+      const detail = backendFailureDetail(error);
+      setMessage(`批量新增失败：${detail}`);
+      appendConsoleLog("error", `批量插入失败：${detail}`);
     }
-    await querySongsForSetlist();
   };
 
   const updateBatchSongCover = (rowIndex: number, checked: boolean) => {
@@ -1404,6 +1446,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       <section className="console-admin">
       <h3>控制台录入</h3>
       {message && <p className="console-admin-hint">{message}</p>}
+      {consoleLogs.length > 0 && (
+        <div className="console-log-panel" role="log" aria-label="控制台日志" aria-live="polite">
+          {consoleLogs.map((entry) => (
+            <p key={entry.id} className={`console-log-entry ${entry.level}`}>
+              {entry.message}
+            </p>
+          ))}
+        </div>
+      )}
 
       <div className="console-admin-modes" role="tablist" aria-label="控制台录入类型">
         <button

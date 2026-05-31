@@ -14,6 +14,32 @@
   font-size: 13px;
 }
 
+.console-log-panel {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+}
+
+.console-log-entry {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.console-log-entry.error {
+  color: var(--accent-danger);
+}
+
+.console-log-entry.info {
+  color: var(--text-secondary);
+}
+
 .console-toast {
   position: fixed;
   top: 24px;

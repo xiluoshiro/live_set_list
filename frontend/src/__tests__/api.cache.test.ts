@@ -80,6 +80,30 @@ describe("api cache behavior", () => {
     expect(r2.pagination.total).toBe(47);
   });
 
+  test("getAuthMe 并发恢复登录态时复用同一个请求", async () => {
+    // 测试点：并发恢复 session 只刷新一次 CSRF token，避免后到请求覆盖后端 hash。
+    const d = deferred<Response>();
+    fetchMock.mockReturnValue(d.promise);
+    const { getAuthMe } = await import("../api");
+
+    const p1 = getAuthMe();
+    const p2 = getAuthMe();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    d.resolve(
+      makeJsonResponse({
+        authenticated: true,
+        user: { id: 1, username: "admin", display_name: "Admin", role: "admin" },
+        csrf_token: "csrf-token",
+        favorite_live_ids: [],
+      }),
+    );
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(r1).toEqual(r2);
+    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/auth/me");
+  });
+
   test("getLives TTL 过期后会重新请求", async () => {
     // 测试点：超出列表缓存 TTL 后不再命中旧缓存。
     vi.useFakeTimers();
