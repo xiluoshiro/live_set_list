@@ -188,6 +188,9 @@ describe("ConsoleInsertPanel", () => {
       "csrf-token",
     ));
     expect(screen.getByText("已为Live #101 插入 1 条 setlist，总计 12 条。")).toBeInTheDocument();
+    expect(screen.getByLabelText("批量粘贴 Setlist 文本")).toHaveValue("");
+    expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
     expect(screen.queryByText("暂无插入记录")).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "setlist_rows" })).toBeInTheDocument();
   });
@@ -546,9 +549,10 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("9 - Scrollable Band")).toBeInTheDocument();
   });
 
-  test("未解析时应用到表格按钮为禁用态", () => {
+  test("未解析时应用到表格按钮为禁用态", async () => {
     // 测试点：必须先点"解析"才能点"应用到表格"，避免未确认结果就直接应用。
     render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(screen.getByText("101 - 春日联合公演 (2026-03-30)")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "<Roselia>\nM1. BLACK SHOUT" },
