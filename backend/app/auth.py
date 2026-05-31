@@ -185,6 +185,8 @@ def ensure_default_admin_user() -> None:
     username = _default_admin_username()
     display_name = _default_admin_display_name()
     password = _default_admin_password()
+    role = os.getenv("AUTH_DEFAULT_ADMIN_ROLE", "admin").strip()
+    is_active = os.getenv("AUTH_DEFAULT_ADMIN_IS_ACTIVE", "true").strip().lower() in {"1", "true", "yes", "on"}
     if username is None or password is None or display_name is None:
         logger.warning("default admin bootstrap skipped because AUTH_DEFAULT_ADMIN_* is incomplete")
         return
@@ -207,18 +209,18 @@ def ensure_default_admin_user() -> None:
                         created_at,
                         updated_at
                     )
-                    VALUES (%s, %s, %s, 'admin', true, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (username) DO UPDATE
                     SET
                         password_hash = EXCLUDED.password_hash,
                         display_name = EXCLUDED.display_name,
-                        role = 'admin',
-                        is_active = true,
+                        role = EXCLUDED.role,
+                        is_active = EXCLUDED.is_active,
                         updated_at = EXCLUDED.updated_at
                     """,
-                    (username, password_hash, display_name, now, now),
+                    (username, password_hash, display_name, role, is_active, now, now),
                 )
-        logger.info("default admin ensured username=%s", username)
+        logger.info("default admin ensured username=%s role=%s", username, role)
     except Error:
         logger.exception("ensure_default_admin_user failed username=%s", username)
 
