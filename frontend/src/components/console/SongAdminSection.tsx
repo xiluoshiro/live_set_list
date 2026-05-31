@@ -17,6 +17,7 @@ type SongAdminSectionProps = {
   onSongCoverChange: (checked: boolean) => void;
   onOpenSongBandMenu: () => void;
   onSelectSongBand: (bandId: number) => void;
+  onClearSong: () => void;
   onSubmitSong: () => void;
   submitDisabled: boolean;
 };
@@ -36,6 +37,7 @@ export function SongAdminSection({
   onSongCoverChange,
   onOpenSongBandMenu,
   onSelectSongBand,
+  onClearSong,
   onSubmitSong,
   submitDisabled,
 }: SongAdminSectionProps) {
@@ -115,6 +117,9 @@ export function SongAdminSection({
       )}
 
       <div className="console-submit-row song-submit-row">
+        <button type="button" onClick={onClearSong} className="console-ghost-btn">
+          清空数据
+        </button>
         <button type="button" onClick={onSubmitSong} className="console-submit-btn" disabled={submitDisabled}>
           提交插入
         </button>

@@ -50,6 +50,7 @@ type LiveInsertTabProps = {
   onRemoveLastSetlistRow: () => void;
   onClearSetlistData: () => void;
   onBatchInsertSongs: () => void;
+  batchInsertDisabled: boolean;
   onQuerySongsForSetlist: () => void;
   onSubmitLiveWithSetlist: () => void;
   submitDisabled: boolean;
@@ -111,6 +112,7 @@ export function LiveInsertTab({
   onRemoveLastSetlistRow,
   onClearSetlistData,
   onBatchInsertSongs,
+  batchInsertDisabled,
   onQuerySongsForSetlist,
   onSubmitLiveWithSetlist,
   submitDisabled,
@@ -379,7 +381,7 @@ export function LiveInsertTab({
           type="button"
           className="console-submit-btn"
           onClick={onBatchInsertSongs}
-          disabled={!didSongLookup}
+          disabled={batchInsertDisabled}
         >
           批量插入
         </button>
@@ -429,14 +431,14 @@ export function LiveInsertTab({
 
       {displayedBundle && (
         <div className="console-table-wrap setlist-preview-wrap">
-          <table className="console-admin-table setlist-table">
+          <table className="console-admin-table setlist-result-table">
             <thead>
               <tr>
-                <th>song_id</th>
-                <th>absolute_order</th>
-                <th>segment_type</th>
-                <th>sub_order</th>
-                <th>is_short</th>
+                <th>sid</th>
+                <th>abs</th>
+                <th>seg</th>
+                <th>sub</th>
+                <th>short</th>
                 <th>band_member</th>
                 <th>other_member</th>
               </tr>

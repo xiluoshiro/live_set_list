@@ -820,6 +820,28 @@ describe("App", () => {
     });
   });
 
+  test("空 bands 的 live 不渲染默认乐队图标", () => {
+    // 测试点：没有 setlist 乐队信息的 live 应展示空乐队格，不回退成 Band_1 图标。
+    getLivesMock.mockResolvedValue({
+      items: [
+        {
+          live_id: 999,
+          live_date: "2026-05-31",
+          live_title: "No Setlist Live",
+          bands: [],
+          url: null,
+          is_favorite: false,
+        },
+      ],
+      pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+    });
+    renderApp();
+    return waitFor(() => {
+      const bandCell = screen.getByTitle("0 支乐队");
+      expect(within(bandCell).queryByRole("img")).not.toBeInTheDocument();
+    });
+  });
+
   test("首次加载请求参数正确，切换每页数量后重新请求", async () => {
     // 测试点：首次请求应为 page=1&page_size=20，切到 15 后重新请求 page_size=15。
     getLivesMock
