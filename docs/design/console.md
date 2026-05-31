@@ -4,9 +4,12 @@
 
 当前结论：
 
-- 前端控制台已经从纯 mock 进入“部分真实 API 接线”阶段：只读候选、venue 新增、Live 新增和 setlist 详情弹窗已接真实接口。
-- 后端 `/api/console` 已提供真实写接口和只读查询接口；当前剩余主线是把“新增歌曲”和“新增 Setlist 提交”继续接到真实写 API。
-- 认证、session、CSRF、默认管理账号、收藏接口和数据库运行时账号拆分已经落地，可作为控制台真实录入链路的基础。
+- 前端控制台已经完成第一轮真实 API 接线：只读候选、venue 新增、Live 新增、歌曲新增、批量新增歌曲、Setlist 追加和详情弹窗都已接真实接口。
+- 后端 `/api/console` 已提供真实写接口、批量写接口和只读查询接口；写接口统一执行 `editor+` 权限、CSRF 校验和审计日志。
+- 新增 Setlist 已支持 Peggy 批量粘贴解析、歌曲查询回填 sid、未匹配歌曲批量新增、确认弹窗和提交后刷新。
+- 控制台下方已有运行日志区，批量新增歌曲成功/失败会记录请求结果；失败时会展示后端返回的 HTTP 状态、错误码和 message。
+- 已修复 `/api/auth/me` 并发刷新 CSRF token 造成写接口 403 的竞态；根因已同步到 [e2e.md](./e2e.md)。
+- 当前剩余主线不再是录入链路接线，而是 E2E 回归落地、用户管理能力和更细的字段级错误展示。
 
 ## 0. 本次只读查询 API 设计方案
 
@@ -96,7 +99,7 @@
 - 新增 Live 成功后当前只追加到前端当前页候选，不会主动刷新 `GET /api/lives` 分页总数。
 - 原生日期控件的月份/年份滚动体验由浏览器控制，前端只能通过 `min` 等标准属性做有限约束。
 
-### 2.4 新增 Setlist 的前端原型
+### 2.4 新增 Setlist 的前端实现
 
 `新增Setlist` 是当前控制台中完成度最高的部分，已经具备：
 
@@ -108,14 +111,21 @@
 - `is_short` 勾选
 - `band_member` 选择器
 - `other_member` 编辑器
-- mock 提交后的历史记录和预览表
+- Peggy 批量粘贴解析与预览
+- 批量粘贴应用到草稿表格
+- 未匹配歌曲的“批量插入歌曲”确认弹窗
+- 批量插入歌曲时可在确认弹窗内设置 `cover`
+- 调用 `POST /api/console/songs:batch` 批量新增未匹配歌曲
+- 调用 `POST /api/console/lives/{live_id}/setlist` 追加真实 setlist 行
+- 提交后的历史记录和预览表
+- 控制台日志区记录批量插入成功/失败与后端返回原因
 
 当前限制：
 
-- 提交的 setlist 只会在前端本地形成 payload 和预览，不会调用真实后端接口。
 - “显示详细信息”弹窗已复用 `GET /api/lives/{live_id}` 和主界面的详情表格。
+- 批量插入歌曲仍以“单项跳过 + 整体返回 created 列表”为主，前端暂不逐行展示后端跳过原因。
 
-### 2.5 新增歌曲的前端原型
+### 2.5 新增歌曲的前端实现
 
 `新增歌曲` 已具备：
 
@@ -124,11 +134,13 @@
 - `cover`
 - band 选择浮层
 - 前端必填校验
-- mock 提交后的本地历史记录
+- 调用 `POST /api/console/songs` 写入真实数据库
+- 使用后端返回的 `song_id` 更新候选列表和新增记录
+- 提交前确认弹窗
 
 当前限制：
 
-- 提交后只更新前端内存中的 mock 列表，不写数据库。
+- 单首新增失败时展示后端 message，但尚未做字段级错误定位。
 
 ### 2.6 已落地的后端基础能力
 
@@ -168,30 +180,30 @@
 - 前端控制台只读候选查询接线
 - 前端 venue 新增真实 API 接线
 - 前端 Live 新增真实 API 接线，并验证使用后端返回的 `live_id`
+- 前端歌曲新增真实 API 接线
+- 前端 Setlist 追加真实 API 接线
+- 前端批量新增歌曲真实 API 接线和确认弹窗
 - setlist 批量粘贴解析、详情弹窗和关键交互
+- `/api/auth/me` 并发去重，避免 CSRF token 刷新竞态
+- 批量新增歌曲成功/失败日志展示
 
 这意味着：
 
 - 认证和收藏链路已有较稳的回归保护。
-- 控制台已有读接口、venue 写入和 Live 写入的前端回归保护；新增歌曲与新增 Setlist 的真实写链路仍待补前端测试。
+- 控制台读接口、venue 写入、Live 写入、歌曲写入、批量歌曲写入和 Setlist 写入已有前后端回归保护。
+- 尚缺真实浏览器层面的 E2E 回归，尤其是登录恢复、CSRF、控制台批量插入和跨页签状态一致性。
 
 ## 3. 当前未实现内容
 
-结合 README、`auth-design.md` 和代码现状，控制台仍缺少以下核心部分。
+结合 README、`auth-design.md` 和代码现状，控制台当前录入主链路已经接通，剩余工作集中在以下部分。
 
-### 3.1 后端 console 接口已落地，前端已完成部分接线
-
-当前后端只注册了以下路由：
-
-- `/api/health`
-- `/api/lives`
-- `/api/auth`
-- `/api/me`
-- `/api/console`
+### 3.1 控制台录入链路已落地，仍需 E2E 看护
 
 当前已经落地的控制台写接口包括：
 
 - `POST /api/console/songs`
+- `POST /api/console/songs:batch`
+- `POST /api/console/venues`
 - `POST /api/console/lives`
 - `POST /api/console/lives/{live_id}/setlist`
 
@@ -200,6 +212,14 @@
 - `GET /api/console/songs`
 - `GET /api/console/bands`
 - `GET /api/console/venues`
+
+当前仍建议补 E2E 的关键路径：
+
+- 登录 `editor+` 用户后进入控制台。
+- 批量粘贴 Setlist、查询歌曲、批量新增未匹配歌曲。
+- 确认新增歌曲后继续提交 Setlist。
+- 断言日志区出现成功或后端失败原因。
+- 断言不会再因为并发 `/api/auth/me` 刷新 CSRF token 导致写接口 403。
 
 ### 3.2 后端角色控制已覆盖 console 接口
 
@@ -215,25 +235,26 @@
 
 ### 3.3 控制台已部分接入真实 API 客户端
 
-当前 `frontend/src/api.ts` 已经包含部分控制台接口封装。
+当前 `frontend/src/api.ts` 已经包含控制台主要接口封装。
 
 已接入：
 
 - 查询 Song/Band/Venue 候选项的 API
 - 新增 Venue 的 API
 - 新增 Live 的 API
+- 新增 Song 的 API
+- 批量新增 Song 的 API
+- 追加 Live Setlist 的 API
 - 相应的基础错误处理和成功态同步
 
 仍缺少：
 
-- 提交 Song 的 API 接线
-- 提交 Setlist 的 API 接线
 - 写接口 loading 态与防重复提交
 - 更细的错误展示，例如字段级错误和冲突错误
 
 ### 3.4 前端错误处理仍不完整
 
-当前控制台已有前端局部必填校验，后端也已经提供 schema 校验、业务约束校验和明确错误码。
+当前控制台已有前端局部必填校验，后端也已经提供 schema 校验、业务约束校验和明确错误码。批量新增歌曲已把成功/失败写入控制台日志区，失败日志会展示后端状态、错误码和 message。
 
 剩余风险主要在前端接线后如何展示用户可读错误，例如：
 
@@ -242,6 +263,7 @@
 - setlist 中 `song_id` 非法时如何处理
 - 查询候选项为空时如何提示
 - 网络失败或 session 失效时如何引导重新登录
+- 批量接口中“部分成功 / 部分跳过”的逐行原因如何展示
 
 ### 3.5 管理员用户管理能力尚未开始
 
@@ -306,7 +328,46 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 - `resource_type = song`
 - `resource_id = 新 song_id`
 
-### 5.2 `POST /api/console/lives`
+### 5.2 `POST /api/console/songs:batch`
+
+用途：
+
+- 批量新增歌曲基础信息。
+- 服务于新增 Setlist 中“查询歌曲”后仍未匹配 sid 的行。
+
+请求字段：
+
+- `songs`
+
+每个 `songs[]` 项包含：
+
+- `song_name`
+- `band_id`
+- `cover`
+
+校验：
+
+- 仅 `editor+`
+- 必须登录
+- 必须通过 CSRF
+- `songs` 数量为 `1..100`
+- 每项 `song_name` 非空
+- 每项 `band_id` 必须存在
+
+行为：
+
+- 每一项使用 savepoint 独立处理。
+- 关联 band 不存在时跳过该项。
+- `song_name` 唯一键冲突时跳过该项。
+- 其他项继续写入，不因单项冲突整体失败。
+- 响应中的 `ok` 表示是否全部创建成功。
+- 响应中的 `created` 返回成功创建的歌曲。
+
+审计：
+
+- 每个成功创建项写入一条 `song_create` 审计日志。
+
+### 5.3 `POST /api/console/lives`
 
 用途：
 
@@ -336,7 +397,7 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 - `resource_type = live`
 - `resource_id = 新 live_id`
 
-### 5.3 `POST /api/console/lives/{live_id}/setlist`
+### 5.4 `POST /api/console/lives/{live_id}/setlist`
 
 用途：
 
@@ -372,12 +433,13 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 - `resource_type = live`
 - `resource_id = live_id`
 
-### 5.4 `GET /api/console/songs`
+### 5.5 `GET /api/console/songs`
 
 用途：
 
 - 查询控制台可选择的歌曲候选。
 - 支持按 `song_name` 模糊搜索。
+- 精确命中的歌名会排在包含匹配前面，避免短歌名如 `R` 被前 10 个模糊结果挤掉。
 
 查询参数：
 
@@ -391,7 +453,7 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 - `band_id`
 - `cover`
 
-### 5.5 `GET /api/console/bands`
+### 5.6 `GET /api/console/bands`
 
 用途：
 
@@ -411,7 +473,7 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 - `band_abbr`
 - `band_members`
 
-### 5.6 `GET /api/console/venues`
+### 5.7 `GET /api/console/venues`
 
 用途：
 
@@ -430,34 +492,45 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 
 ## 6. 推荐的前端接线方式
 
-### 6.1 先保持现有控制台 UI，不立即重做结构
+### 6.1 当前接线状态
 
-当前控制台页面虽然仍保留部分 mock 提交流程，但交互结构已经足够承接第一版真实写接口。
+当前控制台页面已经完成第一轮真实写接口接线。仍建议继续保持现有 `ConsoleInsertPanel` / `LiveInsertTab` 结构，不在录入链路稳定前重做页面结构。
 
-因此推荐做法不是重写控制台，而是：
+当前已完成：
 
-1. 保留现有 `ConsoleInsertPanel`
-2. 在 `api.ts` 中继续补齐控制台请求函数
-3. 将尚未接线的 `submitSong / submitSetlist` 从本地状态写入改为真实请求
-4. 请求成功后再决定是否保留本地历史表作为“刚提交记录”
+- 只读候选查询 `songs / bands / venues`
+- Venue 快捷新增
+- Live 新增
+- 单首歌曲新增
+- 未匹配歌曲批量新增
+- Live Setlist 追加
+- Live 详情弹窗
+- 批量粘贴 Setlist 解析
+- 批量新增歌曲结果日志
 
-这样改动范围更可控，也能最大化复用现有测试和交互。
+继续推荐的方向是小步补强：
+
+1. 保留现有控制台组件边界。
+2. 补 E2E 覆盖真实浏览器下的登录、CSRF、批量新增和 setlist 提交流程。
+3. 在不改接口契约的前提下增强错误展示。
+4. 最后再考虑管理员用户管理和页面结构优化。
 
 ### 6.2 建议的前端接线顺序
 
-推荐按下面顺序推进：
+历史推进顺序与当前状态：
 
 1. 已完成：只读候选查询 `songs / bands / venues`
 2. 已完成：`新增Live`
-3. 下一步：`新增歌曲`
-4. 最后接：`新增Setlist`
+3. 已完成：`新增歌曲`
+4. 已完成：批量新增歌曲
+5. 已完成：`新增Setlist`
 
 原因：
 
 - 只读候选查询不改变数据，最适合作为第一条前端真实 API 接线。
 - `新增Live` 已经打通真实写链路，并使用后端返回的数据库自增 `live_id`
-- `新增歌曲` payload 最简单，适合作为下一条真实写链路
-- `新增Setlist` 最复杂，涉及多行 payload、排序和 JSON 字段，适合放在最后
+- `新增歌曲` payload 最简单，适合作为早期真实写链路
+- `新增Setlist` 最复杂，涉及多行 payload、排序和 JSON 字段，因此放在最后完成
 
 ### 6.3 当前 mock 到真实 API 的对应关系
 
@@ -470,14 +543,15 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 - 已接：`insertLive` / `submitInsertLive` -> `POST /api/console/lives`
 - 已接：setlist 详细信息弹窗 -> `GET /api/lives/{live_id}`
 - 已接：live 下拉候选 -> `GET /api/lives`
-- 待接：`submitSong` -> `POST /api/console/songs`
-- 待接：`submitSetlist` -> `POST /api/console/lives/{live_id}/setlist`
+- 已接：`submitSong` -> `POST /api/console/songs`
+- 已接：批量新增未匹配歌曲 -> `POST /api/console/songs:batch`
+- 已接：`submitSetlist` -> `POST /api/console/lives/{live_id}/setlist`
 
-接线时需要注意：
+维护时需要注意：
 
-- `submitSetlist` 当前把 `band_member` 和 `other_member` 处理成 JSON 字符串；后端真实接口期望对象，需要在前端请求前改成对象。
 - 只读查询接口不需要 CSRF token；写接口仍必须带 `X-CSRF-Token`。
 - `POST /api/console/lives` 请求体不包含 `live_id`；前端必须使用后端返回的 `live_id`，避免再次出现 mock id 与数据库序列不一致。
+- `/api/auth/me` 会刷新 CSRF token，前端 API 层已对并发 `getAuthMe()` 做 in-flight 复用，避免并发恢复 session 时后端 hash 被后到请求覆盖。
 
 ### 6.4 新增 Setlist 批量粘贴解析设计
 
@@ -682,14 +756,15 @@ warning 设计：
 ### 阶段 2：接通前端真实 API 链路
 
 - 已在 `frontend/src/api.ts` 新增控制台只读查询请求
-- 已在 `frontend/src/api.ts` 新增 venue / Live 写请求
+- 已在 `frontend/src/api.ts` 新增 venue / Live / Song / 批量 Song / Setlist 写请求
 - 已用真实请求替换当前候选查询函数
 - 已用真实请求替换 venue 快捷新增和 Live 新增提交
-- 待用真实请求替换新增歌曲提交
-- 待用真实请求替换新增 Setlist 提交
-- 补充 loading / success / failure 提示
+- 已用真实请求替换新增歌曲提交
+- 已用真实请求替换批量新增歌曲提交
+- 已用真实请求替换新增 Setlist 提交
+- 已补充批量新增歌曲 success / failure 日志
 
-状态：进行中。
+状态：已完成第一轮真实接线。
 
 ### 阶段 3：完善控制台内部空白点
 
@@ -698,7 +773,10 @@ warning 设计：
 - 已完成新增 Live 默认 `timezone = +09:00`
 - 已完成 `live_date` 原生日期输入最小值限制为 `2015-01-01`
 - 已完成删除末行时的全局顶部 toast 告警
-- 前端错误态、空态、加载态补齐
+- 已完成批量粘贴 Setlist 解析与确认应用
+- 已完成批量新增歌曲确认弹窗
+- 已完成批量新增歌曲运行日志
+- 待继续补齐字段级错误态、空态和更细 loading 态
 
 ### 阶段 4：补管理员用户管理
 
@@ -711,10 +789,10 @@ warning 设计：
 
 ## 8. 总结
 
-当前控制台已经完成了“可进入、可操作、可查询候选、可新增 venue、可新增 Live”的前端阶段，也已经完成第一版“可落库、可审计、可鉴权、可查询候选项”的后端阶段。
+当前控制台已经完成了“可进入、可操作、可查询候选、可新增 venue、可新增 Live、可新增歌曲、可批量新增歌曲、可追加 Setlist”的第一轮真实录入阶段，也已经完成第一版“可落库、可审计、可鉴权、可查询候选项”的后端阶段。
 
 最重要的判断是：
 
-- 当前最大空白已经收敛到新增歌曲与新增 Setlist 的真实写接口接线。
-- 当前最推荐的下一步不是重写控制台，而是继续在已有控制台页面上接 `POST /api/console/songs`。
-- 在新增歌曲稳定后，再接 `POST /api/console/lives/{live_id}/setlist`，最后补管理员用户管理，整体推进成本最低。
+- 当前最大空白已经从“真实写接口接线”转移到 E2E 回归、错误展示细化和管理员用户管理。
+- 当前最推荐的下一步不是重写控制台，而是为真实浏览器路径补 Playwright E2E，重点覆盖登录恢复、CSRF、批量新增歌曲和 Setlist 提交流程。
+- 管理员用户管理应在录入链路和 E2E 稳定后推进，整体风险最低。
