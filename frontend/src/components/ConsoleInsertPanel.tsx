@@ -846,6 +846,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       setSubmittedBundles((prev) => [newBundle, ...prev]);
       setDisplayedBundle(newBundle);
       onLiveDataChanged?.();
+      clearSetlistPastePreview();
+      clearSetlistData();
       setMessage(
         `已为Live #${targetLive.live_id} 插入 ${response.item.inserted_row_count} 条 setlist，总计 ${response.item.total_setlist_row_count} 条。`,
       );
