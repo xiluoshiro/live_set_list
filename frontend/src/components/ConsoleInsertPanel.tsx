@@ -196,7 +196,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const [venues, setVenues] = useState<VenueOption[]>([]);
   const [submittedBundles, setSubmittedBundles] = useState<LiveInsertBundle[]>([]);
   const [displayedBundle, setDisplayedBundle] = useState<LiveInsertBundle | null>(null);
-  const [message, setMessage] = useState<string>("当前为前端 Mock 插入，后续可接后端写入接口。");
+  const [message, setMessage] = useState<string>("");
   const [transientNotice, setTransientNotice] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [confirmationSubmitting, setConfirmationSubmitting] = useState(false);
@@ -1310,7 +1310,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
 
   const renderSongAdminSection = () => (
     <SongAdminSection
-      mockBands={bands}
+      bandOptions={bands}
       nextSongId={nextSongId}
       insertedSongs={insertedSongs}
       songName={songName}
@@ -1341,7 +1341,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       )}
       <section className="console-admin">
       <h3>控制台录入</h3>
-      <p className="console-admin-hint">{message}</p>
+      {message && <p className="console-admin-hint">{message}</p>}
 
       <div className="console-admin-modes" role="tablist" aria-label="控制台录入类型">
         <button
@@ -1426,7 +1426,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           derivedSegments={derivedSegments}
           submittedBundles={submittedBundles}
           displayedBundle={displayedBundle}
-          mockBands={bands}
+          bandOptions={bands}
           editingBandRow={editingBandRow}
           editingOtherRow={editingOtherRow}
           bandMemberMenuPos={bandMemberMenuPos}
@@ -1570,7 +1570,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
                 rows={setlistDetailData?.detail_rows ?? []}
                 loading={setlistDetailLoading}
                 error={setlistDetailError}
-                seed={selectedLiveId}
               />
             </div>
           </div>

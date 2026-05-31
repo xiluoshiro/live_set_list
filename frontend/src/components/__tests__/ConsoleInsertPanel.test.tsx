@@ -196,7 +196,7 @@ describe("ConsoleInsertPanel", () => {
   });
 
   test("只读查询接口会加载候选数据并用于歌曲查询", async () => {
-    // 测试点：控制台只读 API 接入后，band 候选与歌曲查询不再只依赖本地 mock。
+    // 测试点：控制台只读 API 接入后，band 候选与歌曲查询不再只依赖本地静态候选。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 9, band_name: "Real Band", band_abbr: "real", band_members: ["Vocal", "Guitar"] }],
@@ -228,8 +228,8 @@ describe("ConsoleInsertPanel", () => {
     expect(await screen.findByText("查询歌曲完成：匹配 2 行，未匹配 0 行。")).toBeInTheDocument();
   });
 
-  test("只读候选请求失败时展示错误且不回退到mock候选", async () => {
-    // 测试点：只读接口失败时，控制台直接展示错误，不展示本地 mock 候选。
+  test("只读候选请求失败时展示错误且不回退到本地候选", async () => {
+    // 测试点：只读接口失败时，控制台直接展示错误，不展示本地静态候选。
     apiMocks.getConsoleBands.mockRejectedValue(new Error("bands offline"));
     apiMocks.getConsoleVenues.mockRejectedValue(new Error("venues offline"));
 
