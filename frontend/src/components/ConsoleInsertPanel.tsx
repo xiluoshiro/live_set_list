@@ -76,7 +76,6 @@ type BatchSongConfirmRow = {
   band_name: string;
   cover: boolean;
   band_member: Record<string, string[]>;
-  other_member: OtherMemberDraft[];
 };
 
 type PendingConfirmation =
@@ -1123,7 +1122,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
         band_name: bandName,
         cover: false,
         band_member: row.band_member,
-        other_member: row.other_member,
       });
     });
 
@@ -1159,6 +1157,18 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       setMessage(`批量新增失败：${errorMessage(error)}`);
     }
     await querySongsForSetlist();
+  };
+
+  const updateBatchSongCover = (rowIndex: number, checked: boolean) => {
+    setPendingConfirmation((current) => {
+      if (!current || current.kind !== "batch_song") {
+        return current;
+      }
+      return {
+        ...current,
+        rows: current.rows.map((row, index) => (index === rowIndex ? { ...row, cover: checked } : row)),
+      };
+    });
   };
 
   const closePendingConfirmation = () => {
@@ -1256,15 +1266,14 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
             </ul>
           )}
           <div className="console-table-wrap console-confirm-setlist-wrap">
-            <table className="console-admin-table console-confirm-setlist-table">
+            <table className="console-admin-table console-confirm-setlist-table console-confirm-batch-song-table">
               <thead>
                 <tr>
                   <th>song_name</th>
-                  <th>band_id</th>
+                  <th>bid</th>
                   <th>band_name</th>
                   <th>cover</th>
                   <th>band_member</th>
-                  <th>other_member</th>
                 </tr>
               </thead>
               <tbody>
@@ -1273,9 +1282,17 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
                     <td>{row.song_name}</td>
                     <td>{row.band_id}</td>
                     <td>{row.band_name}</td>
-                    <td>{String(row.cover)}</td>
+                    <td>
+                      <input
+                        className="is-short-check"
+                        aria-label={`batch_song_cover-${index + 1}`}
+                        type="checkbox"
+                        checked={row.cover}
+                        disabled={confirmationSubmitting}
+                        onChange={(event) => updateBatchSongCover(index, event.target.checked)}
+                      />
+                    </td>
                     <td><code>{JSON.stringify(row.band_member)}</code></td>
-                    <td><code>{JSON.stringify(buildOtherMemberPayloadObject(row.other_member))}</code></td>
                   </tr>
                 ))}
               </tbody>

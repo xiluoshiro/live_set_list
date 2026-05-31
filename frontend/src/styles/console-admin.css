@@ -153,6 +153,11 @@
   max-width: min(520px, calc(100vw - 40px));
 }
 
+.console-confirm-modal.batch_song {
+  width: min(900px, calc(100vw - 40px));
+  max-width: min(900px, calc(100vw - 40px));
+}
+
 .console-confirm-modal.live {
   width: min(680px, calc(100vw - 40px));
 }
@@ -196,6 +201,24 @@
 
 .console-confirm-setlist-table {
   min-width: 960px;
+}
+
+.console-confirm-batch-song-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.console-confirm-batch-song-table th:nth-child(2),
+.console-confirm-batch-song-table td:nth-child(2),
+.console-confirm-batch-song-table th:nth-child(4),
+.console-confirm-batch-song-table td:nth-child(4) {
+  width: 56px;
+}
+
+.console-confirm-batch-song-table th:nth-child(5),
+.console-confirm-batch-song-table td:nth-child(5) {
+  width: 280px;
 }
 
 .console-confirm-setlist-table code {
