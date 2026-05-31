@@ -28,6 +28,11 @@ def _build_lookup_pattern(value: str) -> str:
     return f"%{escaped}%"
 
 
+def _build_exact_lookup_pattern(value: str) -> str:
+    """Build a safe exact ILIKE pattern for ordering exact lookup hits first."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get(
     "/songs",
     response_model=ConsoleSongListResponse,
@@ -58,10 +63,13 @@ def list_songs(
                         SELECT id, song_name, band_id, is_cover
                         FROM song_list
                         WHERE song_name ILIKE %s ESCAPE '\\'
-                        ORDER BY song_name, id
+                        ORDER BY
+                            CASE WHEN song_name ILIKE %s ESCAPE '\\' THEN 0 ELSE 1 END,
+                            song_name,
+                            id
                         LIMIT %s
                         """,
-                        (_build_lookup_pattern(query_text), limit),
+                        (_build_lookup_pattern(query_text), _build_exact_lookup_pattern(query_text), limit),
                     )
                 else:
                     cur.execute(
