@@ -248,6 +248,7 @@ const livesCache = new LruRequestCache<LivesResponse>(LIVES_CACHE_MAX);
 const favoriteLivesCache = new LruRequestCache<LivesResponse>(LIVES_CACHE_MAX);
 const detailCache = new LruRequestCache<LiveDetailResponse>(DETAIL_CACHE_MAX);
 const detailRecentRequest = new RecentPromiseDebouncer<number, LiveDetailResponse>();
+let authMeInFlight: Promise<AuthMeResponse> | null = null;
 
 export class ApiError extends Error {
   status: number;
@@ -476,10 +477,17 @@ async function fetchLiveDetailsBatchRemote(liveIds: number[]): Promise<LiveDetai
 }
 
 export async function getAuthMe(): Promise<AuthMeResponse> {
-  const response = await fetchWithTimeout(`${BASE_URL}/api/auth/me`, undefined, {
-    requestKind: "auth_me",
-  });
-  return expectJsonResponse<AuthMeResponse>(response);
+  if (!authMeInFlight) {
+    authMeInFlight = (async () => {
+      const response = await fetchWithTimeout(`${BASE_URL}/api/auth/me`, undefined, {
+        requestKind: "auth_me",
+      });
+      return expectJsonResponse<AuthMeResponse>(response);
+    })().finally(() => {
+      authMeInFlight = null;
+    });
+  }
+  return authMeInFlight;
 }
 
 export async function login(username: string, password: string): Promise<AuthLoginResponse> {

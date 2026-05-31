@@ -745,6 +745,45 @@ describe("ConsoleInsertPanel", () => {
       "csrf-token",
     ));
     expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledTimes(1);
+    const logPanel = await screen.findByRole("log", { name: "控制台日志" });
+    expect(within(logPanel).getByText(/批量新增完成：请求 1 首，成功 1 首/)).toBeInTheDocument();
+    expect(within(logPanel).getByText(/#902 Requiem for Fate/)).toBeInTheDocument();
+  });
+
+  test("批量插入失败时会在控制台日志保留后端错误原因", async () => {
+    // 测试点：批量新增歌曲写接口失败时，应把后端状态码、错误码和 message 记录到日志区。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [] });
+    apiMocks.createConsoleSongsBatch.mockRejectedValueOnce(
+      Object.assign(new Error("CSRF Token 校验失败"), {
+        status: 403,
+        code: "AUTH_CSRF_INVALID",
+      }),
+    );
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. Requiem for Fate" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+    await screen.findByText("查询歌曲完成：匹配 0 行，未匹配 1 行。");
+    await user.click(screen.getByRole("button", { name: "批量插入" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await screen.findByText("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
+    const logPanel = screen.getByRole("log", { name: "控制台日志" });
+    expect(within(logPanel).getByText(/批量插入失败：HTTP 403 \/ AUTH_CSRF_INVALID \/ CSRF Token 校验失败/)).toBeInTheDocument();
+    expect(apiMocks.getConsoleSongs).toHaveBeenCalledTimes(2);
   });
 
   test("批量插入在乐队不为 1 支时报错并禁用提交", async () => {

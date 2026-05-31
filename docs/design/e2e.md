@@ -31,6 +31,12 @@
 
 这不是单个函数的行为，而是全栈状态流转问题。E2E 的价值正在这里：用真实浏览器跑用户路径，观察最终页面是否符合业务预期。
 
+### 1.1 已发现的 CSRF 竞态根因
+
+控制台“批量插入歌曲”曾出现确认提交后插入失败，后端 access log 显示 `POST /api/console/songs:batch` 返回 403，而同一时刻只读歌曲查询仍为 200。根因不是批量插入 payload 字段错误，也不是数据库写入失败，而是 `/api/auth/me` 每次返回时都会刷新 session 的 `csrf_token_hash`；React StrictMode 或并发 session 恢复会让多个 `/api/auth/me` 请求同时在路上，后完成的请求可能覆盖数据库里的 CSRF hash，使前端当前持有的 token 变旧。后续写接口携带旧 `X-CSRF-Token` 时会被 `AUTH_CSRF_INVALID` 拦截。
+
+这个问题适合进入 E2E 回归：用真实浏览器登录 editor+ 用户，进入控制台批量解析 setlist，查询歌曲后执行“批量插入歌曲 -> 确认提交”，断言写接口成功或日志区展示后端返回原因；同时在 React dev/StrictMode 场景下确认不会因为并发 `/api/auth/me` 造成 CSRF token 失配。
+
 ## 2. 框架选型
 
 推荐 Playwright。
