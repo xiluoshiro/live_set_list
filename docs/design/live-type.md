@@ -44,7 +44,7 @@
 
 ### 1.4 数据库
 
-`backend/db/flyway/sql/B1__baseline_schema.sql` 里的 `live_attrs` 当前列为：
+`backend/db/flyway/sql/B1__baseline_schema.sql` 里的 `live_attrs` 初始列为：
 
 - `id`
 - `live_date`
@@ -55,7 +55,11 @@
 - `start_time`
 - `venue_id`
 
-没有 `type`、`live_type` 或类似列。现有迁移已经到 `V7__reserve_console_setlist_delete_grant_slot.sql`，后续不能修改 B1，只能新增 `V8__...` 迁移。
+当前数据库迁移进度：
+
+- `V8__add_nullable_live_type_to_live_attrs.sql` 已新增 nullable `live_type`，用于人工回填历史数据。
+- `V9__require_live_type_on_live_attrs.sql` 已在回填后把 `live_type` 收紧为 `NOT NULL`，并将 CHECK 约束改为只允许正式枚举值。
+- 后续不能修改 B1、V8 或 V9；如果类型枚举继续变化，应新增后续 `V<n>__...` 迁移。
 
 ### 1.5 后端读接口
 
@@ -92,7 +96,7 @@
 
 1. 本方案不新增 Live 编辑接口。
 2. 本方案不重做控制台新增 Live 的整体 UI。
-3. 本方案不尝试自动判断历史 Live 的真实类型，未知历史数据先统一回填为 `other`。
+3. 本方案不尝试自动判断历史 Live 的真实类型，已有数据先保持 `live_type = NULL`，由人工回填真实类型。
 4. 本方案不引入独立 lookup 表，除非后续类型需要用户自定义或频繁变更。
 
 ## 3. 字段和值域设计
@@ -143,17 +147,65 @@ other -> other
 
 ## 4. 数据库适配方案
 
-新增 Flyway 迁移，当前下一版本应为：
+第一阶段迁移：
 
 ```text
-backend/db/flyway/sql/V8__add_live_type_to_live_attrs.sql
+backend/db/flyway/sql/V8__add_nullable_live_type_to_live_attrs.sql
 ```
 
 推荐迁移内容：
 
 ```sql
 ALTER TABLE public.live_attrs
-    ADD COLUMN live_type text NOT NULL DEFAULT 'other';
+    ADD COLUMN live_type text;
+
+ALTER TABLE public.live_attrs
+    ADD CONSTRAINT live_attrs_live_type_check
+    CHECK (
+        live_type IS NULL
+        OR live_type IN ('oneman', 'taiban', 'multi_act', 'festival', 'event', 'other')
+    );
+
+COMMENT ON COLUMN public.live_attrs.live_type
+    IS 'Stable live type code: oneman, taiban, multi_act, festival, event, other. NULL means legacy row pending classification.';
+```
+
+说明：
+
+- 第一阶段不设置默认值，也不设置 `NOT NULL`，避免把历史数据错误标记为 `other`。
+- `NULL` 只表示已有行尚未分类，不是正式 Live 类型；前端展示时应显示为“未分类”或 `-`。
+- 后续后端写接口落地后，新增 Live 仍应强制写入非空 `live_type`。
+- 待人工回填历史数据并确认不存在 `NULL` 后，再新增迁移收紧为 `NOT NULL`，同时把 CHECK 简化为只允许正式枚举值。
+- 当前仓库使用表级权限，新增列通常不需要额外列级 GRANT；仍需要通过集成测试确认 `live_project_ro`、`live_project_super_ro`、`live_project_user_rw` 的读写行为没有退化。
+- 不要修改 `B1__baseline_schema.sql` 或任何已经执行过的迁移。
+
+如果未来类型需要后台配置，应再引入 `live_type_list` lookup 表。当前固定 6 类用 CHECK 约束更简单。
+
+第二阶段迁移：
+
+```text
+backend/db/flyway/sql/V9__require_live_type_on_live_attrs.sql
+```
+
+推荐迁移内容：
+
+```sql
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM public.live_attrs
+        WHERE live_type IS NULL
+    ) THEN
+        RAISE EXCEPTION 'live_attrs.live_type still contains NULL rows; backfill before applying V9';
+    END IF;
+END $$;
+
+ALTER TABLE public.live_attrs
+    DROP CONSTRAINT live_attrs_live_type_check;
+
+ALTER TABLE public.live_attrs
+    ALTER COLUMN live_type SET NOT NULL;
 
 ALTER TABLE public.live_attrs
     ADD CONSTRAINT live_attrs_live_type_check
@@ -165,12 +217,8 @@ COMMENT ON COLUMN public.live_attrs.live_type
 
 说明：
 
-- 使用 `NOT NULL DEFAULT 'other'` 可以一次性覆盖历史数据和旧客户端遗漏字段的情况。
-- 业务写接口仍应要求新请求明确传入类型，默认值只作为迁移和兼容保护。
-- 当前仓库使用表级权限，新增列通常不需要额外列级 GRANT；仍需要通过集成测试确认 `live_project_ro`、`live_project_super_ro`、`live_project_user_rw` 的读写行为没有退化。
-- 不要修改 `B1__baseline_schema.sql` 或任何已经执行过的迁移。
-
-如果未来类型需要后台配置，应再引入 `live_type_list` lookup 表。当前固定 6 类用 CHECK 约束更简单。
+- V9 先检查是否仍有 NULL，避免漏回填的库被错误推进到正式约束。
+- V9 之后 `live_type` 已是正式必填字段，`NULL` 不再是合法数据库状态。
 
 ## 5. 后端适配点
 
@@ -361,14 +409,16 @@ export function formatLiveType(value: string): string {
 
 ## 8. 推荐实施顺序
 
-1. 新增 Flyway `V8__add_live_type_to_live_attrs.sql`。
-2. 更新 seed 数据，让测试样例覆盖至少 `oneman`、`multi_act` 和 `festival` 三种类型。
-3. 后端 console schema/router 写入 `live_type`，并保持旧 `type` 兼容。
-4. 后端 lives/me 读接口全部返回 `live_type`。
-5. 更新后端单元和集成测试。
-6. 更新前端 API 类型和控制台新增 Live 表单。
-7. 选择是否把类型展示到主详情弹窗。
-8. 跑 `python scripts/run_checks.py functional`。
+1. [x] 新增 Flyway `V8__add_nullable_live_type_to_live_attrs.sql`，只添加 nullable `live_type` 和允许 NULL 的 CHECK。
+2. [x] 人工回填已有 `live_attrs.live_type` 数据，能判断的填真实类型，确实无法判断的才填 `other`。
+3. [x] 新增 Flyway `V9__require_live_type_on_live_attrs.sql`，把 `live_type` 收紧为 `NOT NULL`，并把 CHECK 改为不允许 NULL。
+4. [x] 更新 seed 数据，让测试样例覆盖至少 `oneman`、`multi_act` 和 `festival` 三种类型。
+5. [ ] 后端 console schema/router 写入 `live_type`，并保持旧 `type` 兼容。
+6. [ ] 后端 lives/me 读接口全部返回 `live_type`。
+7. [ ] 更新后端单元和集成测试。
+8. [ ] 更新前端 API 类型和控制台新增 Live 表单。
+9. [ ] 选择是否把类型展示到主详情弹窗。
+10. [ ] 跑 `python scripts/run_checks.py functional`。
 
 由于本改动涉及 `backend/app/**`、`backend/db/**`、`backend/tests/**`、`frontend/src/**`，实际实施时最终验证必须跑 `python scripts/run_checks.py functional`。
 
@@ -376,7 +426,8 @@ export function formatLiveType(value: string): string {
 
 - API 字段命名从 `type` 迁移到 `live_type` 时，要避免前后端同时改动不完整导致 422。
 - `lives.py` 和 `me.py` 的 SQL row index 容易错位，测试要覆盖所有返回路径。
-- 历史数据统一回填 `other` 会降低历史类型准确度，但比猜测更安全。
+- 历史数据不要统一回填 `other`；`other` 只用于确实无法归类或业务上就是其他类型的 Live。
+- 第一阶段允许 `NULL` 会让读接口和前端展示多一种“未分类”状态，前后端落地时要显式处理。
 - 如果直接把中文 label 存库，短期省事，但后续文案和多语言会变成数据迁移问题，不推荐。
 - 如果未来需要类型筛选，`live_type` 可以先不加索引；等出现筛选 SQL 再评估是否加普通 btree 索引。
 

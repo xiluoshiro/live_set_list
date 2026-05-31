@@ -54,7 +54,8 @@ INSERT INTO public.live_attrs (
     url,
     opening_time,
     start_time,
-    venue_id
+    venue_id,
+    live_type
 )
 VALUES
     (
@@ -65,7 +66,8 @@ VALUES
         'https://example.com/lives/1',
         TIME WITH TIME ZONE '16:30:00+09',
         TIME WITH TIME ZONE '17:30:00+09',
-        1
+        1,
+        'multi_act'
     ),
     (
         2,
@@ -75,7 +77,8 @@ VALUES
         'https://example.com/lives/2',
         TIME WITH TIME ZONE '15:00:00+09',
         TIME WITH TIME ZONE '16:00:00+09',
-        2
+        2,
+        'festival'
     ),
     (
         38,
@@ -85,7 +88,8 @@ VALUES
         'https://bang-dream.com/events/ppp_live2026/',
         TIME WITH TIME ZONE '17:00:00+09',
         TIME WITH TIME ZONE '18:00:00+09',
-        24
+        24,
+        'oneman'
     ),
     (
         41,
@@ -95,7 +99,8 @@ VALUES
         'https://example.com/lives/console-draft',
         TIME WITH TIME ZONE '17:00:00+09',
         TIME WITH TIME ZONE '18:00:00+09',
-        1
+        1,
+        'other'
     );
 
 INSERT INTO public.live_setlist (
