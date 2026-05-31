@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./auth/AuthProvider";
-import { BAND_ICON_COUNT, BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
+import { BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { MemberStatusTable } from "./components/DetailMemberTable";
 import { LoginDialog } from "./components/LoginDialog";
@@ -156,10 +156,7 @@ function App() {
     liveId: item.live_id,
     liveDate: item.live_date,
     liveTitle: item.live_title,
-    icons:
-      item.bands && item.bands.length > 0
-        ? item.bands
-        : Array.from({ length: 1 }, (_, n) => ((n % BAND_ICON_COUNT) + 1).toString()),
+    icons: item.bands ?? [],
     url: item.url,
   });
 

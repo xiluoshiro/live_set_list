@@ -37,6 +37,14 @@ vi.mock("../../api", () => ({
   getLives: apiMocks.getLives,
 }));
 
+function getTodayDateInputValue(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 describe("ConsoleInsertPanel", () => {
   beforeEach(() => {
     apiMocks.appendConsoleLiveSetlist.mockReset();
@@ -162,6 +170,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "确认提交" }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
+    expect(screen.getByRole("button", { name: "批量插入" })).toBeDisabled();
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
@@ -193,6 +202,14 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
     expect(screen.queryByText("暂无插入记录")).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "setlist_rows" })).toBeInTheDocument();
+    const resultTable = document.querySelector(".setlist-preview-wrap table") as HTMLElement;
+    expect(resultTable).not.toBeNull();
+    expect(within(resultTable).getByRole("columnheader", { name: "sid" })).toBeInTheDocument();
+    expect(within(resultTable).getByRole("columnheader", { name: "abs" })).toBeInTheDocument();
+    expect(within(resultTable).getByRole("columnheader", { name: "seg" })).toBeInTheDocument();
+    expect(within(resultTable).getByRole("columnheader", { name: "sub" })).toBeInTheDocument();
+    expect(within(resultTable).getByRole("columnheader", { name: "short" })).toBeInTheDocument();
+    expect(within(resultTable).queryByRole("columnheader", { name: "song_id" })).not.toBeInTheDocument();
   });
 
   test("只读查询接口会加载候选数据并用于歌曲查询", async () => {
@@ -326,6 +343,7 @@ describe("ConsoleInsertPanel", () => {
     // 测试点：新增 Live 应交给后端自增 live_id，成功后同步候选分页并通知外层刷新。
     const user = userEvent.setup();
     const onLiveDataChanged = vi.fn();
+    const todayDate = getTodayDateInputValue();
     apiMocks.getConsoleVenues.mockResolvedValue({
       items: [{ venue_id: 88, venue_name: "New Venue" }],
     });
@@ -334,6 +352,8 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(screen.getByRole("tab", { name: "新增Live" }));
     await screen.findByRole("button", { name: "88 - New Venue" });
+    expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
+    fireEvent.change(screen.getByLabelText("live_date"), { target: { value: "2026-04-01" } });
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Inserted Live");
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/inserted");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
@@ -346,7 +366,7 @@ describe("ConsoleInsertPanel", () => {
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
       {
-        live_date: "2026-03-30",
+        live_date: "2026-04-01",
         live_title: "Inserted Live",
         type: "专场",
         url: "https://example.com/inserted",
@@ -359,6 +379,9 @@ describe("ConsoleInsertPanel", () => {
     ));
     expect(screen.getByText("已新增Live #39（Inserted Live）")).toBeInTheDocument();
     expect(screen.getByText("39")).toBeInTheDocument();
+    expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
+    expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("");
+    expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
     expect(onLiveDataChanged).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
@@ -392,6 +415,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("已新增歌曲 #903")).toBeInTheDocument();
     expect(screen.getByText("903")).toBeInTheDocument();
     expect(screen.getByText("新曲")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "请选择 band_id" })).toBeInTheDocument();
   });
 
   test("新增Setlist只剩一行时删除末行会显示自动消失提示", async () => {

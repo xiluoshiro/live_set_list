@@ -592,6 +592,43 @@
   margin-top: 12px;
 }
 
+.setlist-result-table {
+  min-width: 980px;
+  table-layout: fixed;
+}
+
+.setlist-result-table th:nth-child(1),
+.setlist-result-table td:nth-child(1) {
+  width: 64px;
+}
+
+.setlist-result-table th:nth-child(2),
+.setlist-result-table td:nth-child(2),
+.setlist-result-table th:nth-child(3),
+.setlist-result-table td:nth-child(3),
+.setlist-result-table th:nth-child(4),
+.setlist-result-table td:nth-child(4),
+.setlist-result-table th:nth-child(5),
+.setlist-result-table td:nth-child(5) {
+  width: 54px;
+}
+
+.setlist-result-table th:nth-child(6),
+.setlist-result-table td:nth-child(6),
+.setlist-result-table th:nth-child(7),
+.setlist-result-table td:nth-child(7) {
+  width: auto;
+}
+
+.setlist-result-table td:nth-child(6),
+.setlist-result-table td:nth-child(7) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
 .live-history-wrap {
   margin-top: 24px;
 }

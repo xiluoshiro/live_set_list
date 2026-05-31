@@ -42,6 +42,7 @@ type LiveAdminSectionProps = {
   onSelectVenue: (venueId: number) => void;
   onQueryVid: () => void;
   onInsertVenue: () => void;
+  onClearInsertLive: () => void;
   onSubmitInsertLive: () => void;
   queryInsertDisabled: boolean;
   submitInsertDisabled: boolean;
@@ -77,6 +78,7 @@ export function LiveAdminSection({
   onSelectVenue,
   onQueryVid,
   onInsertVenue,
+  onClearInsertLive,
   onSubmitInsertLive,
   queryInsertDisabled,
   submitInsertDisabled,
@@ -178,6 +180,9 @@ export function LiveAdminSection({
       </div>
 
       <div className="console-submit-row live-admin-insert-row">
+        <button type="button" className="console-ghost-btn" onClick={onClearInsertLive}>
+          清空数据
+        </button>
         <button type="button" className="console-submit-btn" onClick={onSubmitInsertLive} disabled={submitInsertDisabled}>
           提交插入
         </button>

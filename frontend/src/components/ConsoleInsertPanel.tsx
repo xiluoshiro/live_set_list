@@ -187,6 +187,18 @@ function formatTimedLabel(value: string | null | undefined): string {
   return `${timePart}(${timezoneLabel})`;
 }
 
+const DEFAULT_LIVE_OPENING_TIME = "18:00";
+const DEFAULT_LIVE_START_TIME = "19:00";
+const DEFAULT_LIVE_TIMEZONE = "+09:00";
+
+function getTodayDateInputValue(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProps = {}) {
   const auth = useAuth();
   const [mode, setMode] = useState<ConsoleMode>("setlist");
@@ -213,13 +225,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const [songCover, setSongCover] = useState(false);
   const [insertedSongs, setInsertedSongs] = useState<SongInsertRow[]>([]);
 
-  const [liveDate, setLiveDate] = useState("2026-03-30");
+  const [liveDate, setLiveDate] = useState(() => getTodayDateInputValue());
   const [liveTitle, setLiveTitle] = useState("");
   const [liveType, setLiveType] = useState(LIVE_TYPE_OPTIONS[0] ?? "其他");
   const [liveUrl, setLiveUrl] = useState("");
-  const [openingTime, setOpeningTime] = useState("18:00");
-  const [startTime, setStartTime] = useState("19:00");
-  const [timezone, setTimezone] = useState("+09:00");
+  const [openingTime, setOpeningTime] = useState(DEFAULT_LIVE_OPENING_TIME);
+  const [startTime, setStartTime] = useState(DEFAULT_LIVE_START_TIME);
+  const [timezone, setTimezone] = useState(DEFAULT_LIVE_TIMEZONE);
   const [selectedVenueId, setSelectedVenueId] = useState<number>(0);
   const [venueQueryText, setVenueQueryText] = useState("");
   const [venueOpen, setVenueOpen] = useState(false);
@@ -262,6 +274,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     [songs],
   );
   const derivedSegments = useMemo(() => getDerivedSegments(setlistRows), [setlistRows]);
+  const hasBatchSongInsertCandidate = setlistRows.some(
+    (row) => row.song_name.trim() !== "" && row.song_id.trim() === "",
+  );
   // 校验规则 1：查询 venue 行若当前查询输入为空，禁用该行“插入”。
   const isVenueQuickInsertDisabled = venueQueryText.trim() === "";
   // 校验规则 2：新增 Live 的“提交插入”要求 venue 已选，且表格字段（含 url）全部非空。
@@ -283,6 +298,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     });
   // 校验规则 4：新增歌曲的“提交插入”要求 song_name 与 band_id 均非空。
   const isSongSubmitDisabled = songName.trim() === "" || songBandId === null;
+  // 校验规则 5：批量插入歌曲必须先查询过，且至少存在一行有歌名但 sid 为空。
+  const isBatchSongInsertDisabled = !didSongLookup || !hasBatchSongInsertCandidate;
 
   useEffect(() => {
     let canceled = false;
@@ -442,6 +459,34 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
 
   const showTransientNotice = (notice: string) => {
     setTransientNotice(notice);
+  };
+
+  const resetLiveForm = () => {
+    setLiveDate(getTodayDateInputValue());
+    setLiveTitle("");
+    setLiveType(LIVE_TYPE_OPTIONS[0] ?? "其他");
+    setLiveUrl("");
+    setOpeningTime(DEFAULT_LIVE_OPENING_TIME);
+    setStartTime(DEFAULT_LIVE_START_TIME);
+    setTimezone(DEFAULT_LIVE_TIMEZONE);
+  };
+
+  const clearLiveForm = () => {
+    resetLiveForm();
+    setMessage("已清空新增Live表格。");
+  };
+
+  const resetSongForm = () => {
+    setSongName("");
+    setSongBandId(null);
+    setSongCover(false);
+    setSongBandOpen(false);
+    setSongBandMenuPos(null);
+  };
+
+  const clearSongForm = () => {
+    resetSongForm();
+    setMessage("已清空新增歌曲表格。");
   };
 
   const addSetlistRow = () => {
@@ -980,6 +1025,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       });
       setSelectedLiveId(inserted.live_id);
       onLiveDataChanged?.();
+      resetLiveForm();
       setMessage(`已新增Live #${inserted.live_id}（${inserted.live_title}）`);
     } catch (error) {
       setMessage(`新增Live失败：${errorMessage(error)}`);
@@ -1027,9 +1073,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       const row = toSongInsertRow(response.item);
       setSongs((prev) => sortById([row, ...prev.filter((song) => song.song_id !== row.song_id)], (song) => song.song_id));
       setInsertedSongs((prev) => sortById([row, ...prev.filter((song) => song.song_id !== row.song_id)], (song) => song.song_id));
-      setSongName("");
-      setSongCover(false);
-      setSongBandOpen(false);
+      resetSongForm();
       setMessage(`已新增歌曲 #${row.song_id}`);
     } catch (error) {
       setMessage(`新增歌曲失败：${errorMessage(error)}`);
@@ -1327,6 +1371,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
         setSongBandId(bandId);
         setSongBandOpen(false);
       }}
+      onClearSong={clearSongForm}
       onSubmitSong={requestSongConfirmation}
       submitDisabled={isSongSubmitDisabled}
     />
@@ -1407,6 +1452,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           }}
           onQueryVid={queryVid}
           onInsertVenue={requestVenueConfirmation}
+          onClearInsertLive={clearLiveForm}
           onSubmitInsertLive={submitInsertLive}
           queryInsertDisabled={isVenueQuickInsertDisabled}
           submitInsertDisabled={isLiveSubmitDisabled}
@@ -1459,6 +1505,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           onRemoveLastSetlistRow={removeLastSetlistRow}
           onClearSetlistData={clearSetlistData}
           onBatchInsertSongs={requestBatchSongInsert}
+          batchInsertDisabled={isBatchSongInsertDisabled}
           onQuerySongsForSetlist={querySongsForSetlist}
           onSubmitLiveWithSetlist={requestSetlistConfirmation}
           submitDisabled={isSetlistSubmitDisabled}
