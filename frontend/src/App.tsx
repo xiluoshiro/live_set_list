@@ -895,7 +895,6 @@ function App() {
                 rows={detailData?.detail_rows}
                 loading={detailLoading}
                 error={detailError}
-                seed={activeRow.liveId}
               />
             </div>
           </div>

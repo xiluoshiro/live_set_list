@@ -2,12 +2,52 @@
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
+import type { LiveDetailRow } from "../../api";
 import { MemberStatusTable } from "../DetailMemberTable";
+
+const detailRows: LiveDetailRow[] = [
+  {
+    row_id: "M1",
+    song_name: "春日序曲",
+    band_members: [
+      {
+        band_id: 1,
+        band_name: "Poppin'Party",
+        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
+        present_count: 5,
+        total_count: 5,
+        is_full: true,
+      },
+    ],
+    other_members: [],
+    comments: [],
+  },
+  {
+    row_id: "M2",
+    song_name: "逆光海岸",
+    band_members: [
+      {
+        band_id: 2,
+        band_name: "Afterglow",
+        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
+        present_count: 5,
+        total_count: 5,
+        is_full: true,
+      },
+    ],
+    other_members: [
+      { key: "和声", value: ["双声部"] },
+      { key: "采样", value: ["预置触发"] },
+      { key: "打击乐", value: ["额外一轨"] },
+    ],
+    comments: ["翻唱"],
+  },
+];
 
 describe("MemberStatusTable", () => {
   test("详情表格表头为 5 列：编号/曲目名称/乐队成员/其他成员/备注", () => {
     // 测试点：看护详情表格表头结构，防止列名被误改。
-    render(<MemberStatusTable seed={1} />);
+    render(<MemberStatusTable />);
     expect(screen.getByRole("columnheader", { name: "编号" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "曲目名称" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "乐队成员" })).toBeInTheDocument();
@@ -15,17 +55,18 @@ describe("MemberStatusTable", () => {
     expect(screen.getByRole("columnheader", { name: "备注" })).toBeInTheDocument();
   });
 
-  test("mock 数据渲染行数正确（20 行数据 + 1 行表头）", () => {
-    // 测试点：表格行数基于组件内 mock 生成规则，确保为固定 20 行。
-    render(<MemberStatusTable seed={2} />);
+  test("未传详情行时展示空数据提示", () => {
+    // 测试点：详情表格不再生成本地静态数据，缺少后端明细时展示空状态。
+    render(<MemberStatusTable />);
     const table = screen.getByRole("table");
-    expect(within(table).getAllByRole("row")).toHaveLength(21);
+    expect(within(table).getAllByRole("row")).toHaveLength(2);
+    expect(screen.getByText("当前 Live 暂无详情数据")).toBeInTheDocument();
   });
 
   test("乐队成员单元格点击后可打开“参加队员”二级详情", async () => {
     // 测试点：点击乐队成员区域打开二级详情弹层。
     const user = userEvent.setup();
-    render(<MemberStatusTable seed={1} />);
+    render(<MemberStatusTable rows={detailRows} />);
 
     const bandButtons = screen.getAllByTitle("点击查看参加队员");
     await user.click(bandButtons[0]);
@@ -37,7 +78,7 @@ describe("MemberStatusTable", () => {
   test("其他成员 +N 按钮可打开浮层，点击外部可关闭", async () => {
     // 测试点：+N 按钮打开“其他成员明细”浮层，点外部关闭。
     const user = userEvent.setup();
-    render(<MemberStatusTable seed={4} />);
+    render(<MemberStatusTable rows={detailRows} />);
 
     const moreButton = screen.getAllByRole("button", { name: /\+\d+/ })[0];
     await user.click(moreButton);
@@ -52,7 +93,7 @@ describe("MemberStatusTable", () => {
   test("当 +N 按钮靠近底部时，浮层优先向上弹出", async () => {
     // 测试点：验证 +N 浮层定位规则（靠近底部时向上优先）。
     const user = userEvent.setup();
-    render(<MemberStatusTable seed={4} />);
+    render(<MemberStatusTable rows={detailRows} />);
 
     const originalInnerHeight = window.innerHeight;
     Object.defineProperty(window, "innerHeight", {

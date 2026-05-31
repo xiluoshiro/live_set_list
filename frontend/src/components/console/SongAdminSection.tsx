@@ -3,7 +3,7 @@ import type { RefObject } from "react";
 import type { BandOption, Position, SongInsertRow } from "./types";
 
 type SongAdminSectionProps = {
-  mockBands: BandOption[];
+  bandOptions: BandOption[];
   nextSongId: number;
   insertedSongs: SongInsertRow[];
   songName: string;
@@ -22,7 +22,7 @@ type SongAdminSectionProps = {
 };
 
 export function SongAdminSection({
-  mockBands,
+  bandOptions,
   nextSongId,
   insertedSongs,
   songName,
@@ -40,7 +40,7 @@ export function SongAdminSection({
   submitDisabled,
 }: SongAdminSectionProps) {
   const selectedBandText = (() => {
-    const selected = mockBands.find((band) => band.band_id === songBandId);
+    const selected = bandOptions.find((band) => band.band_id === songBandId);
     if (!selected) return "请选择 band_id";
     return `${selected.band_id} - ${selected.band_name}`;
   })();
@@ -98,7 +98,7 @@ export function SongAdminSection({
           onWheel={(event) => event.stopPropagation()}
           style={{ top: songBandMenuPos.top, left: songBandMenuPos.left, width: songBandMenuPos.width }}
         >
-          {mockBands.map((band) => (
+          {bandOptions.map((band) => (
             <label key={band.band_id}>
               <input
                 type="radio"

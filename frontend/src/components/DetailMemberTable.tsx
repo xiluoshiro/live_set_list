@@ -12,201 +12,10 @@ type MemberStatusTableProps = {
   rows?: LiveDetailRow[];
   loading?: boolean;
   error?: string | null;
-  seed?: number;
 };
 
 const BAND_FALLBACK_COLORS = ["#5b7cfa", "#00a4a6", "#f59f00", "#e8590c", "#6c5ce7", "#2b8a3e"];
 const bandIconExistsCache = new Map<string, boolean>();
-
-const BASE_ROWS: Omit<LiveDetailRow, "row_id">[] = [
-  {
-    song_name: "春日序曲",
-    band_members: [
-      {
-        band_id: 1,
-        band_name: "Poppin'Party",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-    ],
-    other_members: [],
-    comments: [],
-  },
-  {
-    song_name: "夜行线",
-    band_members: [
-      {
-        band_id: 2,
-        band_name: "Afterglow",
-        present_members: ["主唱", "吉他", "鼓手", "键盘"],
-        present_count: 4,
-        total_count: 5,
-        is_full: false,
-      },
-      {
-        band_id: 3,
-        band_name: "Pastel*Palettes",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 4,
-        band_name: "Roselia",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-    ],
-    other_members: [{ key: "键盘支援", value: ["远程连线"] }],
-    comments: ["短版"],
-  },
-  {
-    song_name: "逆光海岸",
-    band_members: [
-      {
-        band_id: 1,
-        band_name: "Poppin'Party",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 2,
-        band_name: "Afterglow",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 3,
-        band_name: "Pastel*Palettes",
-        present_members: ["主唱", "吉他", "鼓手", "键盘"],
-        present_count: 4,
-        total_count: 5,
-        is_full: false,
-      },
-      {
-        band_id: 5,
-        band_name: "Hello, Happy World!",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 6,
-        band_name: "RAISE A SUILEN",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "DJ"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-    ],
-    other_members: [
-      { key: "和声", value: ["双声部"] },
-      { key: "采样", value: ["预置触发"] },
-      { key: "打击乐", value: ["额外一轨"] },
-    ],
-    comments: ["翻唱"],
-  },
-  {
-    song_name: "零界点",
-    band_members: [
-      {
-        band_id: 1,
-        band_name: "Poppin'Party",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 2,
-        band_name: "Afterglow",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 3,
-        band_name: "Pastel*Palettes",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 4,
-        band_name: "Roselia",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手"],
-        present_count: 4,
-        total_count: 5,
-        is_full: false,
-      },
-      {
-        band_id: 5,
-        band_name: "Hello, Happy World!",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 6,
-        band_name: "RAISE A SUILEN",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "DJ"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 7,
-        band_name: "Morfonica",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 8,
-        band_name: "MyGO!!!!!",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-      {
-        band_id: 9,
-        band_name: "Ave Mujica",
-        present_members: ["主唱", "吉他", "键盘"],
-        present_count: 3,
-        total_count: 5,
-        is_full: false,
-      },
-      {
-        band_id: 10,
-        band_name: "梦限大MIX",
-        present_members: ["主唱", "吉他", "贝斯", "鼓手", "键盘"],
-        present_count: 5,
-        total_count: 5,
-        is_full: true,
-      },
-    ],
-    other_members: Array.from({ length: 24 }, (_, idx) => ({
-      key: `扩展键${idx + 1}`,
-      value: [`值${idx + 1}`],
-    })),
-    comments: ["短版", "翻唱"],
-  },
-];
 
 function getBandFallbackChar(bandName: string): string {
   const trimmed = bandName.trim();
@@ -286,20 +95,6 @@ function getOrderedBandMembers(members: LiveDetailBandMember[]): LiveDetailBandM
   });
 }
 
-// Build 20 mock rows by cycling base templates, so layout edge-cases stay visible.
-function buildMockRows(seed: number): LiveDetailRow[] {
-  return Array.from({ length: 20 }, (_, idx) => {
-    const base = BASE_ROWS[(idx + seed) % BASE_ROWS.length];
-    return {
-      row_id: `M${idx + 1}`,
-      song_name: `${base.song_name} ${idx + 1}`,
-      band_members: base.band_members,
-      other_members: base.other_members,
-      comments: base.comments,
-    };
-  });
-}
-
 function estimateOtherPopoverHeight(itemCount: number): number {
   const titleHeight = 26;
   const rowHeight = 26;
@@ -351,8 +146,8 @@ function normalizeRows(rows: LiveDetailRow[]): LiveDetailRow[] {
   }));
 }
 
-export function MemberStatusTable({ rows, loading = false, error = null, seed = 1 }: MemberStatusTableProps) {
-  const sourceRows = useMemo(() => normalizeRows(rows ?? buildMockRows(seed)), [rows, seed]);
+export function MemberStatusTable({ rows, loading = false, error = null }: MemberStatusTableProps) {
+  const sourceRows = useMemo(() => normalizeRows(rows ?? []), [rows]);
   const [bandDetailRow, setBandDetailRow] = useState<LiveDetailRow | null>(null);
   const [otherPopover, setOtherPopover] = useState<OtherPopoverState | null>(null);
 

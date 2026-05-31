@@ -17,7 +17,7 @@ type LiveInsertTabProps = {
   derivedSegments: DerivedSegment[];
   submittedBundles: LiveInsertBundle[];
   displayedBundle: LiveInsertBundle | null;
-  mockBands: BandOption[];
+  bandOptions: BandOption[];
   editingBandRow: SetlistDraftRow | null;
   editingOtherRow: SetlistDraftRow | null;
   bandMemberMenuPos: Position | null;
@@ -78,7 +78,7 @@ export function LiveInsertTab({
   derivedSegments,
   submittedBundles,
   displayedBundle,
-  mockBands,
+  bandOptions,
   editingBandRow,
   editingOtherRow,
   bandMemberMenuPos,
@@ -466,7 +466,7 @@ export function LiveInsertTab({
           onWheel={(event) => event.stopPropagation()}
           style={{ top: bandMemberMenuPos.top, left: bandMemberMenuPos.left, width: bandMemberMenuPos.width }}
         >
-          {mockBands.map((band) => {
+          {bandOptions.map((band) => {
             const selected = editingBandRow.band_member[band.band_name] ?? [];
             const bandChecked = selected.length > 0;
             const memberOptions =
