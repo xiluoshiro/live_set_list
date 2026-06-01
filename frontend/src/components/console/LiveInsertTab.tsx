@@ -58,6 +58,8 @@ type LiveInsertTabProps = {
   onQuerySongsForSetlist: () => void;
   onSubmitLiveWithSetlist: () => void;
   submitDisabled: boolean;
+  hasExistingSetlist: boolean;
+  setlistDetailLoading: boolean;
   onToggleBandForSetlistRow: (rowKey: number, bandName: string) => void;
   onToggleBandMemberForSetlistRow: (rowKey: number, bandName: string, memberName: string) => void;
   onUpdateOtherMemberEntry: (
@@ -124,6 +126,8 @@ export function LiveInsertTab({
   onQuerySongsForSetlist,
   onSubmitLiveWithSetlist,
   submitDisabled,
+  hasExistingSetlist,
+  setlistDetailLoading,
   onToggleBandForSetlistRow,
   onToggleBandMemberForSetlistRow,
   onUpdateOtherMemberEntry,
@@ -213,7 +217,15 @@ export function LiveInsertTab({
         </button>
       </div>
 
-      <section className="setlist-paste-panel" aria-label="批量粘贴 Setlist">
+      {setlistDetailLoading && selectedLiveId > 0 && (
+        <p className="console-admin-hint">正在检查 Live setlist 状态...</p>
+      )}
+      {hasExistingSetlist && (
+        <p className="console-admin-hint">此 Live 已有 setlist 数据，无法新增。</p>
+      )}
+      {!hasExistingSetlist && !setlistDetailLoading && (
+        <>
+          <section className="setlist-paste-panel" aria-label="批量粘贴 Setlist">
         <div className="setlist-paste-head">
           <div>
             <h4>批量粘贴 Setlist</h4>
@@ -464,6 +476,8 @@ export function LiveInsertTab({
           提交插入
         </button>
       </div>
+        </>
+      )}
 
       <div className="console-table-wrap live-history-wrap">
         <table className="console-admin-table live-history-table">

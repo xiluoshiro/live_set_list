@@ -98,24 +98,7 @@ describe("ConsoleInsertPanel", () => {
       band_names: ["Poppin'Party"],
       url: "https://example.com/live/101",
       is_favorite: false,
-      detail_rows: [
-        {
-          row_id: "main1",
-          song_name: "真实详情歌曲",
-          band_members: [
-            {
-              band_id: 1,
-              band_name: "Poppin'Party",
-              present_members: ["Kasumi"],
-              present_count: 1,
-              total_count: 5,
-              is_full: false,
-            },
-          ],
-          other_members: [],
-          comments: [],
-        },
-      ],
+      detail_rows: [],
     });
     apiMocks.getLives.mockResolvedValue({
       items: [
@@ -164,6 +147,7 @@ describe("ConsoleInsertPanel", () => {
       .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await waitFor(() => expect(screen.queryByText("正在检查 Live setlist 状态...")).not.toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "<Roselia>\nM1. BLACK SHOUT" },
@@ -491,6 +475,30 @@ describe("ConsoleInsertPanel", () => {
   test("显示详细信息会复用主页详情API与详情表格", async () => {
     // 测试点：新增Setlist的详情按钮应请求真实 live detail API，并渲染与主页一致的成员表格。
     const user = userEvent.setup();
+    apiMocks.getLiveDetail.mockResolvedValue({
+      live_id: 101,
+      live_date: "2026-03-30",
+      live_title: "春日联合公演",
+      live_type: "oneman",
+      venue: "Test Venue",
+      opening_time: "18:00:00+09",
+      start_time: "19:00:00+09",
+      bands: [1],
+      band_names: ["Poppin'Party"],
+      url: "https://example.com/live/101",
+      is_favorite: false,
+      detail_rows: [
+        {
+          row_id: "main1",
+          song_name: "真实详情歌曲",
+          band_members: [
+            { band_id: 1, band_name: "Poppin'Party", present_members: ["Kasumi"], present_count: 1, total_count: 5, is_full: false },
+          ],
+          other_members: [],
+          comments: [],
+        },
+      ],
+    });
     render(<ConsoleInsertPanel />);
 
     await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20));
@@ -580,7 +588,8 @@ describe("ConsoleInsertPanel", () => {
   test("未解析时应用到表格按钮为禁用态", async () => {
     // 测试点：必须先点"解析"才能点"应用到表格"，避免未确认结果就直接应用。
     render(<ConsoleInsertPanel />);
-    await waitFor(() => expect(screen.getByText("101 - 春日联合公演 (2026-03-30)")).toBeInTheDocument());
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await waitFor(() => expect(screen.getByLabelText("批量粘贴 Setlist 文本")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "<Roselia>\nM1. BLACK SHOUT" },
