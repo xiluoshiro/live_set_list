@@ -22,6 +22,7 @@ export type LiveInsertRow = {
   live_id: number;
   live_date: string;
   live_title: string;
+  live_type: string;
   bands: number[];
   url: string | null;
 };

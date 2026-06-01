@@ -1,9 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAuth } from "./auth/AuthProvider";
-import { BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
-import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
-import { MemberStatusTable } from "./components/DetailMemberTable";
-import { LoginDialog } from "./components/LoginDialog";
 import {
   ApiError,
   clearLivesCache,
@@ -15,6 +10,12 @@ import {
   type LiveDetailResponse,
   type LiveItem,
 } from "./api";
+import { useAuth } from "./auth/AuthProvider";
+import { BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
+import { formatLiveType } from "./components/console/constants";
+import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
+import { MemberStatusTable } from "./components/DetailMemberTable";
+import { LoginDialog } from "./components/LoginDialog";
 import { useFavorites } from "./favorites/FavoriteProvider";
 import { logError } from "./logger";
 import {
@@ -881,6 +882,10 @@ function App() {
               <p className="detail-inline-item detail-inline-item-venue">
                 <strong>场地：</strong>
                 <span>{venueText}</span>
+              </p>
+              <p className="detail-inline-item detail-inline-item-type">
+                <strong>类型：</strong>
+                <span>{formatLiveType(detailData?.live_type ?? "")}</span>
               </p>
             </div>
             <p className="detail-row">
