@@ -147,6 +147,7 @@ function toLiveInsertRow(item: LiveItem): LiveInsertRow {
     live_id: item.live_id,
     live_date: item.live_date,
     live_title: item.live_title,
+    live_type: item.live_type,
     bands: item.bands.flatMap((band) => (typeof band === "number" ? [band] : [])),
     url: item.url,
   };
@@ -1045,6 +1046,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
               live_id: inserted.live_id,
               live_date: inserted.live_date,
               live_title: inserted.live_title,
+              live_type: inserted.live_type,
               bands: [],
               url: inserted.url,
             },
@@ -1675,6 +1677,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
               <p className="detail-inline-item detail-inline-item-venue">
                 <strong>场地：</strong>
                 <span>{setlistVenueText}</span>
+              </p>
+              <p className="detail-inline-item detail-inline-item-type">
+                <strong>类型：</strong>
+                <span>{formatLiveType(setlistDetailData?.live_type ?? selectedLive?.live_type ?? "")}</span>
               </p>
             </div>
             <p className="detail-row">

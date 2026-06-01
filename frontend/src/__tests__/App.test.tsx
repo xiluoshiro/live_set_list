@@ -724,16 +724,19 @@ describe("App", () => {
     const metaLine = container.querySelector(".detail-meta-line");
     expect(metaLine).not.toBeNull();
     const metaItems = Array.from(metaLine?.querySelectorAll("p") ?? []);
-    expect(metaItems).toHaveLength(4);
+    expect(metaItems).toHaveLength(5);
     metaItems.forEach((item) => expect(item).toHaveClass("detail-inline-item"));
 
     const dateRow = screen.getByText("日期：").closest("p");
     const openingRow = screen.getByText("开场：").closest("p");
     const venueRow = screen.getByText("场地：").closest("p");
+    const typeRow = screen.getByText("类型：").closest("p");
 
     expect(dateRow).toHaveClass("detail-inline-item", "detail-inline-item-date");
     expect(openingRow).toHaveClass("detail-inline-item");
     expect(venueRow).toHaveClass("detail-inline-item", "detail-inline-item-venue");
+    expect(typeRow).toHaveClass("detail-inline-item", "detail-inline-item-type");
+    expect(screen.getByText("类型：").parentElement).toHaveTextContent("类型：专场");
     expect(screen.getByText("乐队：").closest("p")).toHaveClass("detail-row");
   });
 

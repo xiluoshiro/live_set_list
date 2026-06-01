@@ -25,8 +25,8 @@ export const MOCK_BANDS: BandOption[] = [
 ];
 
 export const MOCK_LIVES: LiveInsertRow[] = [
-  { live_id: 101, live_date: "2026-03-28", live_title: "Spring Live", bands: [1, 2], url: null },
-  { live_id: 102, live_date: "2026-03-29", live_title: "After School", bands: [3], url: "https://example.com/live/102" },
+  { live_id: 101, live_date: "2026-03-28", live_title: "Spring Live", live_type: "oneman", bands: [1, 2], url: null },
+  { live_id: 102, live_date: "2026-03-29", live_title: "After School", live_type: "festival", bands: [3], url: "https://example.com/live/102" },
 ];
 
 export const MOCK_SONGS: SongInsertRow[] = [
