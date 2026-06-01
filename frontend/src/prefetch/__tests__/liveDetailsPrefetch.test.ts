@@ -22,6 +22,7 @@ function makeLiveItem(id: number): LiveItem {
     live_id: id,
     live_date: "2026-03-28",
     live_title: `Live ${id}`,
+    live_type: "oneman",
     bands: [1],
     url: null,
     is_favorite: false,

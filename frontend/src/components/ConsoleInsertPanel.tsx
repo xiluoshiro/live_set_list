@@ -30,6 +30,7 @@ import {
   INITIAL_SETLIST_ROWS,
   LIVE_TYPE_OPTIONS,
   TIMEZONE_OPTIONS,
+  formatLiveType,
 } from "./console/constants";
 import {
   buildOtherMemberPayloadObject,
@@ -54,7 +55,7 @@ type LiveInsertDraft = {
   live_id: number;
   live_date: string;
   live_title: string;
-  type: string;
+  live_type: string;
   url: string | null;
   opening_time: string;
   start_time: string;
@@ -249,7 +250,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
 
   const [liveDate, setLiveDate] = useState(() => getTodayDateInputValue());
   const [liveTitle, setLiveTitle] = useState("");
-  const [liveType, setLiveType] = useState(LIVE_TYPE_OPTIONS[0] ?? "其他");
+  const [liveType, setLiveType] = useState(LIVE_TYPE_OPTIONS[0].value);
   const [liveUrl, setLiveUrl] = useState("");
   const [openingTime, setOpeningTime] = useState(DEFAULT_LIVE_OPENING_TIME);
   const [startTime, setStartTime] = useState(DEFAULT_LIVE_START_TIME);
@@ -500,7 +501,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const resetLiveForm = () => {
     setLiveDate(getTodayDateInputValue());
     setLiveTitle("");
-    setLiveType(LIVE_TYPE_OPTIONS[0] ?? "其他");
+    setLiveType(LIVE_TYPE_OPTIONS[0].value);
     setLiveUrl("");
     setOpeningTime(DEFAULT_LIVE_OPENING_TIME);
     setStartTime(DEFAULT_LIVE_START_TIME);
@@ -1007,7 +1008,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       payload: {
         live_date: liveDate,
         live_title: liveTitle.trim(),
-        type: liveType,
+        live_type: liveType,
         url: liveUrl.trim(),
         opening_time: openingTime,
         start_time: startTime,
@@ -1028,7 +1029,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
         live_id: response.item.live_id,
         live_date: response.item.live_date,
         live_title: response.item.live_title,
-        type: payload.type,
+        live_type: response.item.live_type,
         url: response.item.url,
         opening_time: response.item.opening_time,
         start_time: response.item.start_time,
@@ -1277,7 +1278,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       return renderCompactConfirmation([
         ["live_date", payload.live_date],
         ["live_title", payload.live_title],
-        ["type", payload.type],
+        ["live_type", formatLiveType(payload.live_type)],
         ["url", payload.url],
         ["opening_time", payload.opening_time],
         ["start_time", payload.start_time],

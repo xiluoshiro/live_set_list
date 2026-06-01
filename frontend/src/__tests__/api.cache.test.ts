@@ -202,7 +202,7 @@ describe("api cache behavior", () => {
       {
         live_date: "2026-05-30",
         live_title: "Console Draft Live",
-        type: "专场",
+        live_type: "oneman",
         url: "https://example.com/lives/console-draft",
         opening_time: "17:00",
         start_time: "18:00",

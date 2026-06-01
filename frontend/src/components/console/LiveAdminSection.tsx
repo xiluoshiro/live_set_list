@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 
+import { formatLiveType } from "./constants";
 import type { Position, VenueOption } from "./types";
 
 type LiveAdminSectionProps = {
@@ -14,7 +15,7 @@ type LiveAdminSectionProps = {
   venueQueryText: string;
   venues: VenueOption[];
   timezoneOptions: string[];
-  liveTypeOptions: string[];
+  liveTypeOptions: { value: string; label: string }[];
   venueOpen: boolean;
   venueMenuPos: Position | null;
   venueTriggerRef: RefObject<HTMLButtonElement>;
@@ -23,7 +24,7 @@ type LiveAdminSectionProps = {
     live_id: number;
     live_date: string;
     live_title: string;
-    type: string;
+    live_type: string;
     url: string | null;
     opening_time: string;
     start_time: string;
@@ -126,7 +127,7 @@ export function LiveAdminSection({
             <tr>
               <th>live_date</th>
               <th>live_title</th>
-              <th>type</th>
+              <th>live_type</th>
               <th>url</th>
               <th>opening_time</th>
               <th>start_time</th>
@@ -150,8 +151,8 @@ export function LiveAdminSection({
               <td>
                 <select value={liveType} onChange={(e) => onLiveTypeChange(e.target.value)}>
                   {liveTypeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -219,7 +220,7 @@ export function LiveAdminSection({
               <th>live_id</th>
               <th>live_date</th>
               <th>live_title</th>
-              <th>type</th>
+              <th>live_type</th>
               <th>url</th>
               <th>opening_time</th>
               <th>start_time</th>
@@ -238,7 +239,7 @@ export function LiveAdminSection({
                   <td>{row.live_id}</td>
                   <td>{row.live_date}</td>
                   <td>{row.live_title}</td>
-                  <td>{row.type}</td>
+                  <td>{formatLiveType(row.live_type)}</td>
                   <td>{row.url ?? "-"}</td>
                   <td>{row.opening_time}</td>
                   <td>{row.start_time}</td>

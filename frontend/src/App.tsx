@@ -307,6 +307,7 @@ function App() {
         live_id: row.liveId,
         live_date: row.liveDate,
         live_title: row.liveTitle,
+        live_type: "",
         bands: row.icons,
         url: row.url,
         is_favorite: isFavorite(row.liveId),
