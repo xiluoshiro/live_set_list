@@ -481,13 +481,13 @@ def create_live(
     status_code=201,
     response_model=ConsoleLiveSetlistAppendResponse,
     summary="向指定 Live 追加 setlist 行",
-    description="`editor+` 用户向指定 Live 追加 setlist 行。该接口只插入，不会删除或覆盖已有行。",
+    description="`editor+` 用户向指定 Live 追加 setlist 行。如果目标 Live 已有 setlist 数据则禁止追加。",
     responses={
         400: {"model": ErrorResponse, "description": "业务参数错误"},
         401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
         403: {"model": AuthErrorResponse, "description": "缺少权限或 CSRF 校验失败"},
         404: {"model": ErrorResponse, "description": "目标 live 或 song 不存在"},
-        409: {"model": ErrorResponse, "description": "absolute_order 与已有 setlist 行冲突"},
+         409: {"model": ErrorResponse, "description": "Live 已有 setlist 数据或 absolute_order 冲突"},
         422: {"model": ValidationErrorResponse, "description": "请求体验证失败"},
         500: {"model": ErrorResponse, "description": "数据库一般错误"},
         504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
@@ -533,6 +533,10 @@ def append_live_setlist(
                 cur.execute("SELECT 1 FROM live_attrs WHERE id = %s", (live_id,))
                 if cur.fetchone() is None:
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
+
+                cur.execute("SELECT 1 FROM live_setlist WHERE live_id = %s LIMIT 1", (live_id,))
+                if cur.fetchone() is not None:
+                    raise HTTPException(status_code=409, detail=f"Live id {live_id} already has setlist data")
 
                 deduped_song_ids = list(dict.fromkeys(song_ids_in_request))
                 cur.execute("SELECT id FROM song_list WHERE id = ANY(%s)", (deduped_song_ids,))

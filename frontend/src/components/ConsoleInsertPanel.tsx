@@ -332,9 +332,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     openingTime.trim() === "" ||
     startTime.trim() === "" ||
     timezone.trim() === "";
+  const hasExistingSetlist = (setlistDetailData?.detail_rows ?? []).length > 0;
   // 校验规则 3：新增 Setlist 的“提交插入”要求每一行 song_name/sid/band_member 均非空。
   const isSetlistSubmitDisabled =
     setlistRows.length === 0 ||
+    hasExistingSetlist ||
     setlistRows.some((row) => {
       const hasBandMember = Object.values(row.band_member).some((members) => members.length > 0);
       return row.song_name.trim() === "" || row.song_id.trim() === "" || !hasBandMember;
@@ -343,6 +345,30 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const isSongSubmitDisabled = songName.trim() === "" || songBandId === null;
   // 校验规则 5：批量插入歌曲必须先查询过，且至少存在一行有歌名但 sid 为空。
   const isBatchSongInsertDisabled = !didSongLookup || !hasBatchSongInsertCandidate;
+
+  useEffect(() => {
+    if (selectedLiveId <= 0) {
+      setSetlistDetailData(null);
+      setSetlistDetailLoading(false);
+      return;
+    }
+    let canceled = false;
+    setSetlistDetailData(null);
+    setSetlistDetailLoading(true);
+    getLiveDetail(selectedLiveId).then((detail) => {
+      if (!canceled) {
+        setSetlistDetailData(detail);
+        setSetlistDetailLoading(false);
+      }
+    }).catch((error) => {
+      if (!canceled) {
+        setSetlistDetailData(null);
+        setSetlistDetailLoading(false);
+        setMessage(`检查Live #${selectedLiveId} setlist 状态失败：${errorMessage(error)}`);
+      }
+    });
+    return () => { canceled = true; };
+  }, [selectedLiveId]);
 
   useEffect(() => {
     let canceled = false;
@@ -1652,6 +1678,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           onQuerySongsForSetlist={querySongsForSetlist}
           onSubmitLiveWithSetlist={requestSetlistConfirmation}
           submitDisabled={isSetlistSubmitDisabled}
+          hasExistingSetlist={hasExistingSetlist}
+          setlistDetailLoading={setlistDetailLoading}
           onToggleBandForSetlistRow={toggleBandForSetlistRow}
           onToggleBandMemberForSetlistRow={toggleBandMemberForSetlistRow}
           onUpdateOtherMemberEntry={updateOtherMemberEntry}

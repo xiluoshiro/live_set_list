@@ -426,7 +426,7 @@ def test_console_create_live_mock_business_errors(payload: dict, expected_status
 def test_console_append_setlist_mock_success_inserts_rows_and_audits():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
-        fetchone_side_effect=[(1,), (4,)],
+        fetchone_side_effect=[(1,), None, (4,)],
         fetchall_side_effect=[[(1,), (2,), (3,), (4,)], []],
     )
     payload = {
@@ -492,7 +492,7 @@ def test_console_append_setlist_mock_rejects_pre_db_business_errors(
 def test_console_append_setlist_mock_missing_song_rejects_batch_without_partial_insert():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
-        fetchone_side_effect=[(1,)],
+        fetchone_side_effect=[(1,), None],
         fetchall_side_effect=[[(1,)]],
     )
     payload = {
@@ -511,12 +511,12 @@ def test_console_append_setlist_mock_missing_song_rejects_batch_without_partial_
     assert all("INSERT INTO live_setlist" not in execute_call.args[0] for execute_call in cursor.execute.call_args_list)
 
 
-# 测试点：追加 setlist 若 absolute_order 与已有行冲突，应返回 409 且不插入新行。
-def test_console_append_setlist_mock_existing_order_conflict_rejects_without_insert():
+# 测试点：追加 setlist 若 Live 已有 setlist 数据，应返回 409 且不插入新行。
+def test_console_append_setlist_mock_existing_setlist_rejects_with_409():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
-        fetchone_side_effect=[(1,)],
-        fetchall_side_effect=[[(1,)], [(3,)]],
+        fetchone_side_effect=[(1,), (1,)],
+        fetchall_side_effect=[[(1,)]],
     )
 
     with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
@@ -528,5 +528,5 @@ def test_console_append_setlist_mock_existing_order_conflict_rejects_without_ins
         )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "absolute_order already exists for live 1: 3"
+    assert response.json()["detail"] == "Live id 1 already has setlist data"
     assert all("INSERT INTO live_setlist" not in execute_call.args[0] for execute_call in cursor.execute.call_args_list)

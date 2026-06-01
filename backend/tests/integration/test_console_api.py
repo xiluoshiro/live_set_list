@@ -385,7 +385,7 @@ def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
         },
     )
     setlist_response = integration_test_client.post(
-        "/api/console/lives/1/setlist",
+        "/api/console/lives/41/setlist",
         json={
             "setlist_rows": [
                 {
@@ -491,12 +491,12 @@ def test_console_create_live_persists_live_row(
     )
 
 
-# 测试点：追加 setlist 接口应只插入新行，不删除旧行，并把控制台里的 `EN / SP` 片段编码归一化到库内值。
-def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
+# 测试点：向无已有 setlist 的 Live 追加行应成功插入并返回正确的行计数。
+def test_console_append_live_setlist_inserts_rows_to_clean_live(
     integration_test_client,
     integration_admin_connection,
 ):
-    """Verify the console setlist endpoint appends rows only and leaves earlier setlist rows untouched."""
+    """Verify the console setlist endpoint inserts rows into a live without existing setlist data."""
     editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
     csrf_token = _login_and_get_csrf_for(
         integration_test_client,
@@ -505,13 +505,13 @@ def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
     )
 
     response = integration_test_client.post(
-        "/api/console/lives/1/setlist",
+        "/api/console/lives/41/setlist",
         headers={"X-CSRF-Token": csrf_token},
         json={
             "setlist_rows": [
                 {
                     "song_id": 4,
-                    "absolute_order": 3,
+                    "absolute_order": 1,
                     "segment_type": "EN",
                     "sub_order": 1,
                     "is_short": False,
@@ -521,7 +521,7 @@ def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
                 },
                 {
                     "song_id": 2,
-                    "absolute_order": 4,
+                    "absolute_order": 2,
                     "segment_type": "SP",
                     "sub_order": 1,
                     "is_short": True,
@@ -532,15 +532,15 @@ def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
             ]
         },
     )
-    detail_response = integration_test_client.get("/api/lives/1")
+    detail_response = integration_test_client.get("/api/lives/41")
 
     assert response.status_code == 201
     assert response.json() == {
         "ok": True,
         "item": {
-            "live_id": 1,
+            "live_id": 41,
             "inserted_row_count": 2,
-            "total_setlist_row_count": 4,
+            "total_setlist_row_count": 2,
         },
     }
 
@@ -553,31 +553,13 @@ def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
             WHERE live_id = %s
             ORDER BY absolute_order
             """,
-            (1,),
+            (41,),
         )
         rows = cursor.fetchall()
 
     assert rows == [
         (
             1,
-            "main",
-            1,
-            False,
-            {"Poppin'Party": ["Kasumi", "Tae", "Rimi", "Saaya", "Arisa"]},
-            {"嘉宾": ["CHU2"]},
-            "opening song",
-        ),
-        (
-            2,
-            "main",
-            2,
-            True,
-            {"Roselia": ["Yukina", "Sayo", "Lisa", "Ako"]},
-            None,
-            "short version",
-        ),
-        (
-            3,
             "EN",
             1,
             False,
@@ -586,7 +568,7 @@ def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
             "appended encore",
         ),
         (
-            4,
+            2,
             "SP",
             1,
             True,
@@ -595,16 +577,19 @@ def test_console_append_live_setlist_inserts_rows_and_keeps_existing_rows(
             None,
         ),
     ]
-    assert [row["row_id"] for row in detail_response.json()["detail_rows"]] == ["main1", "main2", "EN1", "SP1"]
-    assert detail_response.json()["detail_rows"][0]["song_name"] == "Yes! BanG_Dream!"
-    assert detail_response.json()["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["CHU2"]}]
-    assert detail_response.json()["detail_rows"][2]["song_name"] == "STAR BEAT!〜ホシノコドウ〜"
-    assert detail_response.json()["detail_rows"][2]["other_members"] == [{"key": "嘉宾", "value": ["MASKING", "LOCK"]}]
-    assert detail_response.json()["detail_rows"][3]["comments"] == ["短版"]
-    assert detail_response.json()["detail_rows"][3]["other_members"] == [{"key": "支援", "value": ["Keyboard"]}]
+    assert [row["row_id"] for row in detail_response.json()["detail_rows"]] == ["EN1", "SP1"]
+    assert detail_response.json()["detail_rows"][0]["song_name"] == "STAR BEAT!〜ホシノコドウ〜"
+    assert detail_response.json()["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["MASKING", "LOCK"]}]
+    assert detail_response.json()["detail_rows"][1]["comments"] == ["短版"]
+    assert detail_response.json()["detail_rows"][1]["other_members"] == [{"key": "支援", "value": ["Keyboard"]}]
+    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
+        "live_setlist_append",
+        "41",
+        {"inserted_row_count": 2, "total_setlist_row_count": 2},
+    )
 
 
-# 测试点：新增歌曲唯一键冲突、缺失 song_id 和已有 absolute_order 冲突都应返回明确错误，而不是吞掉数据库异常。
+# 测试点：新增歌曲唯一键冲突、缺失 song_id 和请求体内 absolute_order 重复都应返回明确错误。
 def test_console_endpoints_surface_conflict_and_missing_song_errors(
     integration_test_client,
 ):
@@ -621,7 +606,7 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
         json={"song_name": "Yes! BanG_Dream!", "band_id": 1, "cover": False},
     )
     missing_song_response = integration_test_client.post(
-        "/api/console/lives/1/setlist",
+        "/api/console/lives/41/setlist",
         headers={"X-CSRF-Token": csrf_token},
         json={
             "setlist_rows": [
@@ -639,7 +624,7 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
         },
     )
     conflicting_order_response = integration_test_client.post(
-        "/api/console/lives/1/setlist",
+        "/api/console/lives/41/setlist",
         headers={"X-CSRF-Token": csrf_token},
         json={
             "setlist_rows": [
@@ -647,12 +632,22 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
                     "song_id": 3,
                     "absolute_order": 1,
                     "segment_type": "M",
-                    "sub_order": 3,
+                    "sub_order": 1,
                     "is_short": False,
                     "band_member": {"MyGO!!!!!": ["Tomori"]},
                     "other_member": {},
                     "comment": None,
-                }
+                },
+                {
+                    "song_id": 4,
+                    "absolute_order": 1,
+                    "segment_type": "M",
+                    "sub_order": 2,
+                    "is_short": False,
+                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "other_member": {},
+                    "comment": None,
+                },
             ]
         },
     )
@@ -661,8 +656,8 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
     assert duplicate_song_response.json()["detail"] == "Song name already exists: Yes! BanG_Dream!"
     assert missing_song_response.status_code == 404
     assert missing_song_response.json()["detail"] == "Song ids not found: 999"
-    assert conflicting_order_response.status_code == 409
-    assert conflicting_order_response.json()["detail"] == "absolute_order already exists for live 1: 1"
+    assert conflicting_order_response.status_code == 400
+    assert conflicting_order_response.json()["detail"] == "Duplicate absolute_order in setlist_rows: 1"
 
 
 # 测试点：追加 setlist 连到测试库时若批次内存在缺失 song_id，应整批回滚且不插入有效行。
@@ -680,11 +675,11 @@ def test_console_append_live_setlist_rolls_back_when_one_row_is_invalid(
     setlist_count_before = _count_rows(
         integration_admin_connection,
         "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s",
-        (1,),
+        (41,),
     )
 
     response = integration_test_client.post(
-        "/api/console/lives/1/setlist",
+        "/api/console/lives/41/setlist",
         headers={"X-CSRF-Token": csrf_token},
         json={
             "setlist_rows": [
@@ -714,11 +709,11 @@ def test_console_append_live_setlist_rolls_back_when_one_row_is_invalid(
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Song ids not found: 999"
-    assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s", (1,)) == setlist_count_before
+    assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s", (41,)) == setlist_count_before
     assert _count_rows(
         integration_admin_connection,
         "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s AND absolute_order IN (%s, %s)",
-        (1, 3, 4),
+        (41, 3, 4),
     ) == 0
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
 
@@ -736,7 +731,7 @@ def test_console_append_live_setlist_stores_segment_type_raw(
     )
 
     response = integration_test_client.post(
-        "/api/console/lives/1/setlist",
+        "/api/console/lives/41/setlist",
         headers={"X-CSRF-Token": csrf_token},
         json={
             "setlist_rows": [
@@ -771,7 +766,7 @@ def test_console_append_live_setlist_stores_segment_type_raw(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             "SELECT absolute_order, segment_type, sub_order, comment FROM live_setlist WHERE live_id = %s AND absolute_order >= 5 ORDER BY absolute_order",
-            (1,),
+            (41,),
         )
         rows = cursor.fetchall()
 
@@ -779,6 +774,40 @@ def test_console_append_live_setlist_stores_segment_type_raw(
         (5, "OP", 1, "opening track"),
         (6, "WEN", 1, "w encore"),
     ]
+
+
+# 测试点：向已有 setlist 的 Live 追加应返回 409，禁止覆盖已有数据。
+def test_console_append_live_setlist_rejects_when_live_has_existing_rows(
+    integration_test_client,
+):
+    """Verify the console setlist endpoint rejects appends to a live that already has setlist rows."""
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    response = integration_test_client.post(
+        "/api/console/lives/1/setlist",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "setlist_rows": [
+                {
+                    "song_id": 4,
+                    "absolute_order": 1,
+                    "segment_type": "M",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "other_member": {},
+                    "comment": None,
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Live id 1 already has setlist data"
 
 
 # 测试点：批量新增歌曲接口应一次写入多条歌曲，部分冲突时跳过冲突项继续写入其余项。
