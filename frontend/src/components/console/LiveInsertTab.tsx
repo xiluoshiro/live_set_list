@@ -15,6 +15,8 @@ type LiveInsertTabProps = {
   didSongLookup: boolean;
   setlistRows: SetlistDraftRow[];
   derivedSegments: DerivedSegment[];
+  effectiveAbs: number[];
+  effectiveSub: number[];
   submittedBundles: LiveInsertBundle[];
   displayedBundle: LiveInsertBundle | null;
   bandOptions: BandOption[];
@@ -42,6 +44,8 @@ type LiveInsertTabProps = {
   onUpdateSetlistSongName: (rowKey: number, value: string) => void;
   onSetSongModalRowKey: (rowKey: number | null) => void;
   onUpdateSetlistSegment: (rowKey: number, value: string) => void;
+  onUpdateSetlistAbs: (rowKey: number, value: number) => void;
+  onUpdateSetlistSub: (rowKey: number, value: number) => void;
   onToggleSetlistShort: (rowKey: number, checked: boolean) => void;
   onOpenBandMemberMenu: (rowKey: number) => void;
   onOpenOtherMemberMenu: (rowKey: number) => void;
@@ -77,6 +81,8 @@ export function LiveInsertTab({
   didSongLookup,
   setlistRows,
   derivedSegments,
+  effectiveAbs,
+  effectiveSub,
   submittedBundles,
   displayedBundle,
   bandOptions,
@@ -104,6 +110,8 @@ export function LiveInsertTab({
   onUpdateSetlistSongName,
   onSetSongModalRowKey,
   onUpdateSetlistSegment,
+  onUpdateSetlistAbs,
+  onUpdateSetlistSub,
   onToggleSetlistShort,
   onOpenBandMemberMenu,
   onOpenOtherMemberMenu,
@@ -124,6 +132,7 @@ export function LiveInsertTab({
   renderSongAdminSection,
  }: LiveInsertTabProps) {
   const [pasteConfirmOpen, setPasteConfirmOpen] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ rowKey: number; field: "abs" | "sub" } | null>(null);
   const normalizedLiveTotalPages = Math.max(liveTotalPages, 1);
 
   const hasParsed = setlistParsePreviewRows.length > 0 || setlistParseWarnings.length > 0;
@@ -315,7 +324,37 @@ export function LiveInsertTab({
                   )}
                 </td>
                 <td>
-                  <span className="readonly-cell">{index + 1}</span>
+                  {editingCell?.rowKey === row.row_key && editingCell?.field === "abs" ? (
+                    <input
+                      type="number"
+                      aria-label={`abs-${row.row_key}`}
+                      defaultValue={effectiveAbs[index]}
+                      min={1}
+                      step={1}
+                      autoFocus
+                      onBlur={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (Number.isFinite(val) && val >= 1) onUpdateSetlistAbs(row.row_key, val);
+                        setEditingCell(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const val = parseInt((e.target as HTMLInputElement).value, 10);
+                          if (Number.isFinite(val) && val >= 1) onUpdateSetlistAbs(row.row_key, val);
+                          setEditingCell(null);
+                        } else if (e.key === "Escape") {
+                          setEditingCell(null);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span
+                      className={row.absolute_order != null ? "editable-cell manual-override" : "editable-cell"}
+                      onDoubleClick={() => setEditingCell({ rowKey: row.row_key, field: "abs" })}
+                    >
+                      {effectiveAbs[index]}
+                    </span>
+                  )}
                 </td>
                 <td>
                   <select
@@ -332,7 +371,37 @@ export function LiveInsertTab({
                   </select>
                 </td>
                 <td>
-                  <span className="readonly-cell">{derivedSegments[index]?.subOrder ?? 1}</span>
+                  {editingCell?.rowKey === row.row_key && editingCell?.field === "sub" ? (
+                    <input
+                      type="number"
+                      aria-label={`sub-${row.row_key}`}
+                      defaultValue={effectiveSub[index]}
+                      min={1}
+                      step={1}
+                      autoFocus
+                      onBlur={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (Number.isFinite(val) && val >= 1) onUpdateSetlistSub(row.row_key, val);
+                        setEditingCell(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const val = parseInt((e.target as HTMLInputElement).value, 10);
+                          if (Number.isFinite(val) && val >= 1) onUpdateSetlistSub(row.row_key, val);
+                          setEditingCell(null);
+                        } else if (e.key === "Escape") {
+                          setEditingCell(null);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span
+                      className={row.sub_order != null ? "editable-cell manual-override" : "editable-cell"}
+                      onDoubleClick={() => setEditingCell({ rowKey: row.row_key, field: "sub" })}
+                    >
+                      {effectiveSub[index]}
+                    </span>
+                  )}
                 </td>
                 <td>
                   <input
