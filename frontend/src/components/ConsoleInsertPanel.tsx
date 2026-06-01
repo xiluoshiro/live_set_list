@@ -312,6 +312,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     [songs],
   );
   const derivedSegments = useMemo(() => getDerivedSegments(setlistRows), [setlistRows]);
+  const effectiveAbs = useMemo(() => setlistRows.map((row, i) => row.absolute_order ?? (i + 1)), [setlistRows]);
+  const effectiveSub = useMemo(
+    () => setlistRows.map((row, i) => row.sub_order ?? derivedSegments[i]?.subOrder ?? 1),
+    [setlistRows, derivedSegments],
+  );
   const hasBatchSongInsertCandidate = setlistRows.some(
     (row) => row.song_name.trim() !== "" && row.song_id.trim() === "",
   );
@@ -576,6 +581,68 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     setSetlistRows((prev) =>
       prev.map((row) => (row.row_key === rowKey ? { ...row, song_name: value, song_id: "" } : row)),
     );
+  };
+
+  const updateSetlistAbs = (rowKey: number, value: number) => {
+    setSetlistRows((prev) => {
+      const targetIndex = prev.findIndex((row) => row.row_key === rowKey);
+      if (targetIndex === -1) return prev;
+      for (let i = 0; i < targetIndex; i += 1) {
+        const eff = prev[i].absolute_order ?? (i + 1);
+        if (eff >= value) {
+          setMessage(`abs 必须单调递增：第 ${i + 1} 行为 ${eff}，不能填 ${value}`);
+          return prev;
+        }
+      }
+      let cascaded = value;
+      return prev.map((row, i) => {
+        if (i < targetIndex) return row;
+        if (i === targetIndex) return { ...row, absolute_order: value };
+        const manual = row.absolute_order;
+        if (manual != null && manual > cascaded) {
+          cascaded = manual;
+          return row;
+        }
+        cascaded = cascaded + 1;
+        return { ...row, absolute_order: cascaded };
+      });
+    });
+  };
+
+  const updateSetlistSub = (rowKey: number, value: number) => {
+    setSetlistRows((prev) => {
+      const targetIndex = prev.findIndex((row) => row.row_key === rowKey);
+      if (targetIndex === -1) return prev;
+      const currentDerived = getDerivedSegments(prev);
+      const groupSegment = currentDerived[targetIndex]?.segmentType;
+      if (!groupSegment) return prev;
+      const groupIndices = currentDerived.reduce<number[]>((acc, seg, i) => {
+        if (seg.segmentType === groupSegment) acc.push(i);
+        return acc;
+      }, []);
+      const targetGroupIndex = groupIndices.indexOf(targetIndex);
+      for (let gi = 0; gi < targetGroupIndex; gi += 1) {
+        const i = groupIndices[gi];
+        const eff = prev[i].sub_order ?? currentDerived[i]?.subOrder ?? 1;
+        if (eff >= value) {
+          setMessage(`sub（组 ${groupSegment}）必须单调递增：第 ${i + 1} 行为 ${eff}，不能填 ${value}`);
+          return prev;
+        }
+      }
+      let cascaded = value;
+      return prev.map((row, i) => {
+        const groupIdx = groupIndices.indexOf(i);
+        if (groupIdx === -1 || groupIdx < targetGroupIndex) return row;
+        if (i === targetIndex) return { ...row, sub_order: value };
+        const manual = row.sub_order;
+        if (manual != null && manual > cascaded) {
+          cascaded = manual;
+          return row;
+        }
+        cascaded = cascaded + 1;
+        return { ...row, sub_order: cascaded };
+      });
+    });
   };
 
   const querySongsForSetlist = async () => {
@@ -882,19 +949,20 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     const validDerivedSegments = getDerivedSegments(validRows);
     const setlistPayload = validRows.map((row, payloadIndex) => {
       const derived = validDerivedSegments[payloadIndex];
+      const originalIndex = setlistRows.findIndex((r) => r.row_key === row.row_key);
       return {
         song_id: Number(row.song_id),
-        absolute_order: payloadIndex + 1,
+        absolute_order: effectiveAbs[originalIndex],
         segment_type: derived.segmentType,
-        sub_order: derived.subOrder,
+        sub_order: effectiveSub[originalIndex],
         is_short: row.is_short,
         band_member: row.band_member,
         other_member: buildOtherMemberPayloadObject(row.other_member),
       };
     });
-    const previewRows = setlistPayload.map((row) => ({
+    const previewRows = setlistPayload.map((row, idx) => ({
       ...row,
-      song_name: validRows[row.absolute_order - 1]?.song_name.trim() ?? "",
+      song_name: validRows[idx]?.song_name.trim() ?? "",
     }));
 
     setPendingConfirmation({
@@ -1541,6 +1609,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           didSongLookup={didSongLookup}
           setlistRows={setlistRows}
           derivedSegments={derivedSegments}
+          effectiveAbs={effectiveAbs}
+          effectiveSub={effectiveSub}
           submittedBundles={submittedBundles}
           displayedBundle={displayedBundle}
           bandOptions={bands}
@@ -1568,6 +1638,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           onUpdateSetlistSongName={updateSetlistSongName}
           onSetSongModalRowKey={setSongModalRowKey}
           onUpdateSetlistSegment={(rowKey, value) => updateSetlistRow(rowKey, "segment_start_type", value)}
+          onUpdateSetlistAbs={updateSetlistAbs}
+          onUpdateSetlistSub={updateSetlistSub}
           onToggleSetlistShort={(rowKey, checked) => updateSetlistRow(rowKey, "is_short", checked)}
           onOpenBandMemberMenu={openBandMemberMenu}
           onOpenOtherMemberMenu={openOtherMemberMenu}

@@ -60,6 +60,8 @@ export type SetlistDraftRow = {
   song_name: string;
   song_id: string;
   segment_start_type: string;
+  absolute_order?: number;
+  sub_order?: number;
   is_short: boolean;
   band_member: Record<string, string[]>;
   other_member: OtherMemberDraft[];

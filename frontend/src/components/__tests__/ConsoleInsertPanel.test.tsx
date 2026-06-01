@@ -814,4 +814,132 @@ describe("ConsoleInsertPanel", () => {
     expect(within(dialog).getByText("BLACK SHOUT")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认提交" })).not.toBeDisabled();
   });
+
+  test("双击abs列可进入编辑态，修改有效值后下行级联递增", async () => {
+    // 测试点：双击 abs 单元格弹出数字输入框，填入前向合法的值后下游行自动重算。
+    const user = userEvent.setup();
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await user.click(screen.getByRole("button", { name: "新增一行" }));
+    await user.click(screen.getByRole("button", { name: "新增一行" }));
+    const absCells = document.querySelectorAll(".setlist-table td .editable-cell");
+    await user.dblClick(absCells[0]);
+    const absInput = screen.getByLabelText(/abs-/);
+    expect(absInput).toBeInTheDocument();
+    expect(absInput.tagName).toBe("INPUT");
+    fireEvent.change(absInput, { target: { value: "5" } });
+    fireEvent.blur(absInput);
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/abs-/)).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("5")).toBeInTheDocument();
+    expect(screen.getByText("6")).toBeInTheDocument();
+  });
+
+  test("abs填入小于前行有效值的数时报错并拒绝修改", async () => {
+    // 测试点：abs 违反上游单调递增时，应显示错误消息并保持原值不变。
+    const user = userEvent.setup();
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await user.click(screen.getByRole("button", { name: "新增一行" }));
+    const absCells = document.querySelectorAll(".setlist-table td .editable-cell");
+    await user.dblClick(absCells[2]);
+    const absInput = screen.getByLabelText(/abs-/);
+    fireEvent.change(absInput, { target: { value: "1" } });
+    fireEvent.blur(absInput);
+    expect(screen.getByText(/abs 必须单调递增/)).toBeInTheDocument();
+  });
+
+  test("双击abs编辑框后按Escape取消编辑，不修改任何值", async () => {
+    // 测试点：编辑态下按 Escape 应退出编辑并回退到原值，不触发任何数据变更。
+    const user = userEvent.setup();
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    const absCells = document.querySelectorAll(".setlist-table td .editable-cell");
+    const beforeCount = absCells.length;
+    await user.dblClick(absCells[0]);
+    const absInput = screen.getByLabelText(/abs-/);
+    fireEvent.change(absInput, { target: { value: "99" } });
+    fireEvent.keyDown(absInput, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/abs-/)).not.toBeInTheDocument();
+    });
+    const afterCells = document.querySelectorAll(".setlist-table td .editable-cell");
+    expect(afterCells.length).toBe(beforeCount);
+  });
+
+  test("手动修改abs后单元格添加下划线样式", async () => {
+    // 测试点：手动编辑过 abs 的行应带有 manual-override class，区分于自动计算行。
+    const user = userEvent.setup();
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    const absCells = document.querySelectorAll(".setlist-table td .editable-cell");
+    await user.dblClick(absCells[0]);
+    const absInput = screen.getByLabelText(/abs-/);
+    fireEvent.change(absInput, { target: { value: "3" } });
+    fireEvent.blur(absInput);
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/abs-/)).not.toBeInTheDocument();
+    });
+    const manualCells = document.querySelectorAll(".setlist-table td .manual-override");
+    expect(manualCells.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("sub填入小于段组内前行有效值的数时报错并拒绝修改", async () => {
+    // 测试点：sub 违反段组内上游单调递增时，应显示错误消息并保持原值。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "roselia", band_members: ["湊友希那"] }],
+    });
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [] });
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. Song A\nM2. Song B\nM3. Song C" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await waitFor(() => expect(screen.getAllByLabelText(/seg-/).length).toBeGreaterThanOrEqual(3));
+    const subCells = document.querySelectorAll(".setlist-table td .editable-cell");
+    await user.dblClick(subCells[3]);
+    const subInput = screen.getByLabelText(/sub-/);
+    fireEvent.change(subInput, { target: { value: "1" } });
+    fireEvent.blur(subInput);
+    expect(screen.getByText(/sub（组 M）必须单调递增/)).toBeInTheDocument();
+  });
+
+  test("sub有效修改后段组内下游行级联递增", async () => {
+    // 测试点：段组内 sub 编辑后，后续同一段组的 sub 应自动级联递增。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "roselia", band_members: ["湊友希那"] }],
+    });
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [] });
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. Song A\nM2. Song B\nM3. Song C" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await waitFor(() => expect(screen.getAllByLabelText(/seg-/).length).toBeGreaterThanOrEqual(3));
+    const subCells = document.querySelectorAll(".setlist-table td .editable-cell");
+    await user.dblClick(subCells[1]);
+    const subInput = screen.getByLabelText(/sub-/);
+    fireEvent.change(subInput, { target: { value: "5" } });
+    fireEvent.blur(subInput);
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/sub-/)).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("5")).toBeInTheDocument();
+    expect(screen.getByText("6")).toBeInTheDocument();
+  });
 });
