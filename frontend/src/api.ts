@@ -37,6 +37,7 @@ export type LiveItem = {
   live_id: number;
   live_date: string;
   live_title: string;
+  live_type: string;
   bands: Array<number | string>;
   url: string | null;
   is_favorite: boolean;
@@ -78,6 +79,7 @@ export type LiveDetailResponse = {
   live_id: number;
   live_date: string;
   live_title: string;
+  live_type: string;
   venue: string | null;
   opening_time: string | null;
   start_time: string | null;
@@ -158,7 +160,7 @@ export type ConsoleVenueMutationResponse = {
 export type ConsoleLiveCreatePayload = {
   live_date: string;
   live_title: string;
-  type: string;
+  live_type: string;
   url: string;
   opening_time: string;
   start_time: string;
@@ -170,6 +172,7 @@ export type ConsoleLiveMutationItem = {
   live_id: number;
   live_date: string;
   live_title: string;
+  live_type: string;
   url: string;
   opening_time: string;
   start_time: string;

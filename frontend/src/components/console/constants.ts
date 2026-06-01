@@ -2,7 +2,18 @@ import type { BandOption, LiveInsertRow, SetlistDraftRow, SongInsertRow, VenueOp
 
 export const SEGMENT_OPTIONS = ["M", "OP", "ED", "EN", "WEN", "SP"];
 export const DEFAULT_BAND_MEMBERS = ["主唱", "吉他", "贝斯", "鼓手", "键盘"];
-export const LIVE_TYPE_OPTIONS = ["专场", "拼盘", "对邦", "活动", "其他"];
+export const LIVE_TYPE_OPTIONS = [
+  { value: "oneman", label: "专场" },
+  { value: "multi_act", label: "拼盘" },
+  { value: "taiban", label: "对邦" },
+  { value: "festival", label: "音乐节" },
+  { value: "event", label: "活动" },
+  { value: "other", label: "其他" },
+];
+
+export function formatLiveType(value: string): string {
+  return LIVE_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value;
+}
 export const TIMEZONE_OPTIONS = ["+08:00", "+09:00", "+00:00", "-05:00"];
 
 export const MOCK_BANDS: BandOption[] = [

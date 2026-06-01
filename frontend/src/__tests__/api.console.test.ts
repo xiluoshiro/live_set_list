@@ -132,6 +132,7 @@ describe("console lookup api", () => {
           live_id: 39,
           live_date: "2026-03-30",
           live_title: "Inserted Live",
+          live_type: "oneman",
           url: "https://example.com/inserted",
           opening_time: "18:00:00+09:00",
           start_time: "19:00:00+09:00",
@@ -143,7 +144,7 @@ describe("console lookup api", () => {
     const requestPayload = {
       live_date: "2026-03-30",
       live_title: "Inserted Live",
-      type: "专场",
+      live_type: "oneman",
       url: "https://example.com/inserted",
       opening_time: "18:00",
       start_time: "19:00",
