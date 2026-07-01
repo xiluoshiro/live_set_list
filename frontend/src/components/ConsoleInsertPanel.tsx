@@ -451,11 +451,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       setSongBandOpen(false);
     };
     const close = () => setSongBandOpen(false);
++
+    const onScroll = () => openSongBandMenu();
     window.addEventListener("mousedown", onDown);
     window.addEventListener("resize", close);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", onScroll);
     };
   }, [songBandOpen]);
 
@@ -468,11 +472,14 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       setVenueOpen(false);
     };
     const close = () => setVenueOpen(false);
+    const onScroll = () => openVenueMenu();
     window.addEventListener("mousedown", onDown);
     window.addEventListener("resize", close);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", onScroll);
     };
   }, [venueOpen]);
 
@@ -490,11 +497,16 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       setEditingBandRowKey(null);
       setBandMemberMenuPos(null);
     };
+    const onScroll = () => {
+      if (editingBandRowKey !== null) openBandMemberMenu(editingBandRowKey);
+    };
     window.addEventListener("mousedown", onDown);
     window.addEventListener("resize", close);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", onScroll);
     };
   }, [editingBandRowKey]);
 
@@ -512,11 +524,16 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       setEditingOtherRowKey(null);
       setOtherMemberMenuPos(null);
     };
+    const onScroll = () => {
+      if (editingOtherRowKey !== null) openOtherMemberMenu(editingOtherRowKey);
+    };
     window.addEventListener("mousedown", onDown);
     window.addEventListener("resize", close);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", onScroll);
     };
   }, [editingOtherRowKey]);
 
@@ -784,12 +801,19 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     setMessage("已清空批量粘贴内容。");
   };
 
+  const computeMenuTop = (rect: DOMRect, estimatedHeight: number): number => {
+    const below = rect.bottom + 6;
+    if (below + estimatedHeight <= window.innerHeight) return below;
+    const above = rect.top - estimatedHeight - 6;
+    return Math.max(above, 4);
+  };
+
   const openSongBandMenu = () => {
     const rect = songBandTriggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const menuWidth = Math.max(rect.width, 280);
     setSongBandMenuPos({
-      top: rect.bottom + 6,
+      top: computeMenuTop(rect, Math.min(320, window.innerHeight * 0.6)),
       left: Math.min(rect.left, window.innerWidth - menuWidth - 12),
       width: menuWidth,
     });
@@ -801,7 +825,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     if (!rect) return;
     const menuWidth = Math.max(rect.width, 320);
     setVenueMenuPos({
-      top: rect.bottom + 6,
+      top: computeMenuTop(rect, Math.min(320, window.innerHeight * 0.6)),
       left: Math.min(rect.left, window.innerWidth - menuWidth - 12),
       width: menuWidth,
     });
@@ -814,7 +838,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     const rect = trigger.getBoundingClientRect();
     const menuWidth = 440;
     setBandMemberMenuPos({
-      top: rect.bottom + 6,
+      top: computeMenuTop(rect, Math.min(420, window.innerHeight * 0.7)),
       left: Math.min(rect.left, window.innerWidth - menuWidth - 12),
       width: menuWidth,
     });
@@ -829,7 +853,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     const rect = trigger.getBoundingClientRect();
     const menuWidth = 520;
     setOtherMemberMenuPos({
-      top: rect.bottom + 6,
+      top: computeMenuTop(rect, Math.min(360, window.innerHeight * 0.65)),
       left: Math.min(rect.left, window.innerWidth - menuWidth - 12),
       width: menuWidth,
     });
