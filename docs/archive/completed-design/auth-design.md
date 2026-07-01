@@ -4,9 +4,9 @@
 
 注意：
 
-- 本文档是设计与实施约定，不代表当前仓库已经全部实现
+- 本文档是历史设计与实施约定，不代表当前仓库最新实现的完整说明
 - 当前已经实现的接口行为仍以 [api.md](/D:/Code/PythonCode/5%20LiveSetList/docs/api.md) 为准
-- 当前数据库迁移与角色约定仍以 [flyway.md](/D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md) 为准
+- 当前数据库迁移与角色约定仍以 [docs/design/flyway.md](/D:/Code/PythonCode/5%20LiveSetList/docs/design/flyway.md) 和 [docs/db-roles.md](/D:/Code/PythonCode/5%20LiveSetList/docs/db-roles.md) 为准
 
 ## 1. 设计目标
 
@@ -14,7 +14,7 @@
 
 1. 为项目提供统一登录能力
 2. 将首页“收藏”改为仅登录用户可见，并与账号绑定
-3. 为后续控制台写接口提供权限控制
+3. 为控制台写接口提供权限控制
 4. 为后续审计、会话失效、跨设备收藏同步预留结构
 
 基于当前代码状态，推荐采用：
@@ -33,7 +33,7 @@
 - 前端未登录时已隐藏“收藏”页签与星标入口
 - 前端控制台入口已按角色可见性控制：仅 `editor+` 显示；未登录和 `viewer` 不显示
 - 前端已增加控制台页签的状态层兜底拦截，避免通过开发者工具强行切 tab 绕过页面权限
-- 控制台录入界面当前仍是前端 mock，尚未接入真实写接口
+- 控制台录入界面已接入真实写接口；当前接口清单与行为以 [api.md](/D:/Code/PythonCode/5%20LiveSetList/docs/api.md) 为准
 - 后端认证骨架已落地：已新增用户表、会话表、认证路由和默认 admin 加载机制
 - 后端当前数据库连接已拆分为只读连接、普通用户写连接和高权限业务写连接
 
@@ -152,9 +152,14 @@
   - `PUT /api/me/favorites/lives/{live_id}`
   - `DELETE /api/me/favorites/lives/{live_id}`
 - `editor+`：
-  - `POST /api/admin/songs`
-  - `POST /api/admin/lives`
-  - `PUT /api/admin/lives/{live_id}`
+  - `GET /api/console/songs`
+  - `GET /api/console/bands`
+  - `GET /api/console/venues`
+  - `POST /api/console/songs`
+  - `POST /api/console/songs:batch`
+  - `POST /api/console/venues`
+  - `POST /api/console/lives`
+  - `POST /api/console/lives/{live_id}/setlist`
 - `admin+`：
   - 后续用户管理、会话管理、审计查询接口
 
@@ -172,7 +177,7 @@
 
 - `live_project_ro`：公开读接口
 - `live_project_user_rw`：前端登录用户的低权限写接口，当前主要用于收藏写入
-- `live_project_super_ro`：认证、session、审计，以及后续控制台写接口
+- `live_project_super_ro`：认证、session、审计，以及控制台写接口
 
 ## 4. 数据库设计
 
@@ -436,13 +441,18 @@ create table audit_logs (
 }
 ```
 
-## 5.4 管理接口
+## 5.4 控制台接口
 
-后续控制台真实写接口统一挂在：
+当前控制台真实接口统一挂在：
 
-- `POST /api/admin/songs`
-- `POST /api/admin/lives`
-- `PUT /api/admin/lives/{live_id}`
+- `GET /api/console/songs`
+- `GET /api/console/bands`
+- `GET /api/console/venues`
+- `POST /api/console/songs`
+- `POST /api/console/songs:batch`
+- `POST /api/console/venues`
+- `POST /api/console/lives`
+- `POST /api/console/lives/{live_id}/setlist`
 
 权限要求：
 
@@ -630,7 +640,7 @@ flowchart TD
 当前补充：
 
 - 收藏写接口已从高权限业务连接拆分到 `live_project_user_rw`
-- `live_project_super_ro` 继续保留给认证链路与后续控制台写接口
+- `live_project_super_ro` 继续保留给认证链路与控制台写接口
 
 ### 阶段 C：前端登录态与收藏切换
 
@@ -659,15 +669,16 @@ flowchart TD
 ### 阶段 D：控制台权限与写接口
 
 - [x] D1. 控制台页签可见性与前端拦截：未登录/`viewer` 隐藏，`editor+` 可见
-- [ ] D2. 新增 `/api/admin/songs`
-- [ ] D3. 新增 `/api/admin/lives`
-- [ ] D4. 新增 `/api/admin/lives/{live_id}`
-- [ ] D5. 写接口接入审计日志
+- [x] D2. 新增 `/api/console/songs` 与 `/api/console/songs:batch`
+- [x] D3. 新增 `/api/console/venues`
+- [x] D4. 新增 `/api/console/lives`
+- [x] D5. 新增 `/api/console/lives/{live_id}/setlist`
+- [x] D6. 写接口接入审计日志
 
 确认点：
 
 - 只有 `editor+` 能进入控制台
-- 真实写接口可替换当前 mock
+- 真实写接口已替换控制台 mock 写入
 - 审计日志可记录谁做了什么操作
 
 ### 阶段 E：测试与回归
@@ -684,16 +695,14 @@ flowchart TD
 
 ## 11. 当前推荐的第一步
 
-当前推荐进入阶段 D：
+阶段 D 的主线写接口已经落地。当前推荐继续看护控制台真实链路：
 
-- D2. 新增 `/api/admin/songs`
-- D3. 新增 `/api/admin/lives`
-- D4. 新增 `/api/admin/lives/{live_id}`
-- D5. 写接口接入审计日志
-- D6. 把控制台页签从“仅登录拦截”继续细化到 `editor+` 角色控制
+- 补充 E2E，覆盖新增 Live 后跨页签仍可见
+- 补充 E2E，覆盖新增 Live 后追加 setlist、详情可见
+- 继续补管理员创建用户与用户管理能力
 
 原因：
 
 - Phase A、B、C 已把认证、服务端收藏和前端登录态切换完整打通
-- 当前最大的空白已经转到控制台真实写接口与角色控制
-- 后续应围绕 `editor / admin` 能力继续推进后台写链路
+- 控制台 `editor+` 权限和主线真实写接口已经落地
+- 当前更大的空白在 E2E 回归与管理员用户管理能力

@@ -4,7 +4,7 @@
 
 建议使用方式：
 
-1. 先阅读 [docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md)
+1. 先阅读 [docs/design/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/flyway.md)
 2. 本地可直接使用 `flyway.toml` 连接 Docker 迁移目标库
 3. 如需提交模板或切换环境，再参考 `flyway.toml.example`
 4. `infra/postgres` 提供 Docker PostgreSQL 的 compose 和 env 配置
@@ -33,5 +33,7 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
   - Flyway 项目配置模板
 - `sql/B1__baseline_schema.sql`
   - 当前 baseline migration
+- `sql/V2__...` 到 `sql/V9__...`
+  - 当前已经落地的认证、收藏、权限、控制台与 `live_type` 版本化迁移
 - `../postgres/init/010-create-flyway-role.sh`
   - PostgreSQL 容器初始化时创建 Flyway / app / test admin 角色并授予相应权限

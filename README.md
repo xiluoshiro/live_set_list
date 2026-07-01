@@ -11,10 +11,10 @@
 - 已提供服务端收藏接口：`GET /api/me/favorites/lives`、`PUT /api/me/favorites/lives/{live_id}`、`DELETE /api/me/favorites/lives/{live_id}`
 - 接口会执行真实业务查询；健康检查接口会执行 `select 1;`
 - 前端使用 `React + TypeScript + Vite`
-- 前端已接入登录态恢复、登录弹窗、服务端收藏切换、Live 列表、详情弹窗、分页、主题切换和控制台 mock 录入界面
+- 前端已接入登录态恢复、登录弹窗、服务端收藏切换、Live 列表、详情弹窗、分页、主题切换和控制台录入界面
 - 收藏页已支持空闲预读与缓存命中，`全量 -> 收藏` 切换默认无加载闪烁；进入收藏页仅在存在脏状态时才触发一次会话对账
 - 提供一键启动脚本，可同时启动前后端并统一关闭
-- 已引入 Flyway baseline 和 `V2~V6` 认证/收藏/权限相关迁移
+- 已引入 Flyway baseline 和 `V2~V9` 认证、收藏、权限、控制台与 live_type 相关迁移
 - 已支持应用启动时自动补齐默认 admin 账号（优先读取环境变量，否则使用内建默认值）
 - 已包含后端单元测试和前端接口测试框架
 
@@ -126,41 +126,15 @@ npm run typecheck
 
 ## 数据库版本控制
 
-- Flyway 落地说明见 [docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/flyway.md)
-- 控制台现状与后续设计见 [docs/archive/completed-design/console.md](D:/Code/PythonCode/5%20LiveSetList/docs/archive/completed-design/console.md)
-- 批量收藏实施方案见 [docs/archive/completed-design/favorite-batch-design.md](D:/Code/PythonCode/5%20LiveSetList/docs/archive/completed-design/favorite-batch-design.md)
-- 登录与权限方案见 [docs/archive/completed-design/auth-design.md](D:/Code/PythonCode/5%20LiveSetList/docs/archive/completed-design/auth-design.md)
-- 前端角色权限说明见 [docs/archive/completed-design/frontend-role-permissions.md](D:/Code/PythonCode/5%20LiveSetList/docs/archive/completed-design/frontend-role-permissions.md)
-- 数据库角色与后端用户梳理见 [docs/db-roles.md](D:/Code/PythonCode/5%20LiveSetList/docs/db-roles.md)
-- 数据库操作说明见 [backend/db/README.md](D:/Code/PythonCode/5%20LiveSetList/backend/db/README.md)
+- Flyway 落地说明：[docs/design/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/flyway.md)
+- 数据库角色与后端用户：[docs/db-roles.md](D:/Code/PythonCode/5%20LiveSetList/docs/db-roles.md)
+- 数据库操作说明：[backend/db/README.md](D:/Code/PythonCode/5%20LiveSetList/backend/db/README.md)
+- 归档设计文档：[docs/archive/completed-design](D:/Code/PythonCode/5%20LiveSetList/docs/archive/completed-design)
 - 仓库内 Flyway 骨架位于 `backend/db/flyway`
 - Docker PostgreSQL 配置位于 `infra/postgres`
-- 当前容器内默认使用的账号分工：
-  - `postgres`：容器 bootstrap / 管理账号
-  - `live_project_owner`：业务库 owner，由 `APP_OWNER` / `APP_OWNER_PASSWORD` 指定
-  - `live_project_flyway`：Flyway 迁移账号
-  - `live_project_ro`：普通查询账号
-  - `live_project_user_rw`：前端普通用户写账号，当前用于收藏写入
-  - `live_project_super_ro`：高权限业务账号，可查询/插入/更新，当前用于认证与后续控制台写接口
-  - `live_project_test_admin`：测试库专用管理账号，用于 integration 的重置与 seed
 
-## 开发路线图（TODO）
+## 当前待办
 
-- [x] 初始化前后端工程骨架
-- [x] 后端连通本机 PostgreSQL 并提供 `select 1` 健康检查接口
-- [x] 前端按钮触发接口并展示结果
-- [x] 增加一键启动脚本（同时启动/统一关闭）
-- [x] 搭建后端单元测试和前端接口测试框架
-- [x] 新增后端查询接口（返回真实表数据）
-- [x] 前端改为表格展示查询结果
-- [x] 增加基础日志与配置说明
-- [x] 增加登录框架第一阶段骨架（数据库迁移、认证接口、默认 admin 加载）
-- [x] 前端接入登录态恢复、登录弹窗与服务端收藏切换
-- [x] 收藏改为仅登录用户可见并切换到服务端存储
-- [x] 收藏页切换体验优化（预读收藏第一页，减少不必要的 `/api/auth/me` 请求）
-- [x] 运行时数据库连接拆分为 `ro / user_rw / super_ro`
-- [ ] 控制台接入真实写接口
-- [ ] 控制台按 `viewer / editor / admin` 做真正的角色控制
-- [ ] 增加后端更新接口权限与参数校验
-- [ ] 补充错误提示、空数据态、加载态
-- [ ] 增加管理员创建用户与用户管理能力
+- 补充错误提示、空数据态、加载态
+- 增加管理员创建用户与用户管理能力
+- 补充 E2E，覆盖控制台新增 Live / 追加 setlist 的跨页签链路
