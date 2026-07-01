@@ -951,4 +951,123 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("6")).toBeInTheDocument();
   });
+
+  test("band_member浮层靠近页面底部时翻转到触发按钮上方", async () => {
+    // 测试点：当触发按钮在视口底部时，弹窗应翻转显示在按钮上方，避免被裁切。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [
+        { band_id: 1, band_name: "Poppin'Party", band_abbr: "ポピパ", band_members: ["愛美", "大塚紗英"] },
+        { band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那", "氷川紗夜"] },
+      ],
+    });
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await user.click(screen.getByRole("button", { name: "新增一行" }));
+
+    const trigger = document.querySelector(".band-member-trigger") as HTMLElement;
+    const rectSpy = vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+      top: 750, bottom: 780, left: 600, right: 720, width: 120, height: 30,
+      x: 600, y: 750, toJSON: () => ({}),
+    });
+
+    await user.click(trigger);
+    const menu = document.querySelector(".band-member-floating-menu") as HTMLElement;
+    const menuTop = Number(menu.style.top.replace("px", ""));
+    const estimatedHeight = Math.min(420, window.innerHeight * 0.7);
+    expect(menuTop).toBeLessThan(750 - estimatedHeight + 10);
+
+    rectSpy.mockRestore();
+  });
+
+  test("页面滚动时band_member浮层跟随触发按钮重新定位", async () => {
+    // 测试点：打开弹窗后滚动页面，弹窗应根据新的触发按钮位置重新计算 top/left。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [
+        { band_id: 1, band_name: "Poppin'Party", band_abbr: "ポピパ", band_members: ["愛美"] },
+      ],
+    });
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await user.click(screen.getByRole("button", { name: "新增一行" }));
+
+    const trigger = document.querySelector(".band-member-trigger") as HTMLElement;
+    let rectCallCount = 0;
+    const rectSpy = vi.spyOn(trigger, "getBoundingClientRect").mockImplementation(() => {
+      rectCallCount += 1;
+      if (rectCallCount <= 1) {
+        return { top: 100, bottom: 130, left: 600, right: 720, width: 120, height: 30, x: 600, y: 100, toJSON: () => ({}) } as DOMRect;
+      }
+      return { top: 200, bottom: 230, left: 500, right: 620, width: 120, height: 30, x: 500, y: 200, toJSON: () => ({}) } as DOMRect;
+    });
+
+    await user.click(trigger);
+    const menu = document.querySelector(".band-member-floating-menu") as HTMLElement;
+    expect(menu.style.top).toBe("136px");
+
+    fireEvent.scroll(window);
+    await waitFor(() => {
+      const updatedMenu = document.querySelector(".band-member-floating-menu") as HTMLElement;
+      expect(updatedMenu.style.top).toBe("236px");
+    });
+
+    rectSpy.mockRestore();
+  });
+
+  test("歌曲bands下拉框靠近底部时翻转到上方", async () => {
+    // 测试点：歌曲新增面板的 band_id 下拉选择框在视口底部时应翻转到触发按钮上方。
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [
+        { band_id: 1, band_name: "Poppin'Party", band_abbr: "ポピパ", band_members: [] },
+        { band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: [] },
+      ],
+    });
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
+    await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
+    const trigger = screen.getByRole("button", { name: "请选择 band_id" });
+
+    const rectSpy = vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+      top: 750, bottom: 780, left: 400, right: 520, width: 120, height: 30,
+      x: 400, y: 750, toJSON: () => ({}),
+    });
+
+    await user.click(trigger);
+    const menu = document.querySelector(".bands-floating-menu") as HTMLElement;
+    const menuTop = Number(menu.style.top.replace("px", ""));
+    const estimatedHeight = Math.min(320, window.innerHeight * 0.6);
+    expect(menuTop).toBeLessThan(750 - estimatedHeight + 10);
+
+    rectSpy.mockRestore();
+  });
+
+  test("venue下拉框靠近底部时翻转到上方", async () => {
+    // 测试点：新增 Live 面板的 venue 下拉选择框在视口底部时应翻转到触发按钮上方。
+    const user = userEvent.setup();
+    apiMocks.getConsoleVenues.mockResolvedValue({
+      items: [
+        { venue_id: 1, venue_name: "TOKYO DOME CITY HALL", venue_alias: "TDC" },
+        { venue_id: 2, venue_name: "日本武道館", venue_alias: "武道館" },
+      ],
+    });
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalledWith(undefined, 100));
+    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    const trigger: HTMLElement = document.querySelector(".venue-picker-trigger")!;
+
+    const rectSpy = vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+      top: 750, bottom: 780, left: 400, right: 520, width: 120, height: 30,
+      x: 400, y: 750, toJSON: () => ({}),
+    });
+
+    await user.click(trigger);
+    const menu = document.querySelector(".bands-floating-menu") as HTMLElement;
+    const menuTop = Number(menu.style.top.replace("px", ""));
+    const estimatedHeight = Math.min(320, window.innerHeight * 0.6);
+    expect(menuTop).toBeLessThan(750 - estimatedHeight + 10);
+
+    rectSpy.mockRestore();
+  });
 });
