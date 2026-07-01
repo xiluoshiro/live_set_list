@@ -39,12 +39,26 @@
   - 单条 Live 详情查询
 - `POST /api/lives/details:batch`
   - 批量详情预读接口
+- `GET /api/console/songs`
+  - `editor+` 查询控制台歌曲候选
+- `GET /api/console/bands`
+  - `editor+` 查询控制台乐队与成员候选
+- `GET /api/console/venues`
+  - `editor+` 查询控制台场地候选
+- `POST /api/console/songs`
+  - `editor+` 新增单首歌曲
 - `POST /api/console/songs:batch`
   - 批量新增歌曲，一次写入多条，单项冲突不影响其他项继续写入
+- `POST /api/console/venues`
+  - `editor+` 新增场地
+- `POST /api/console/lives`
+  - `editor+` 新增 Live；`live_type` 必填，值为稳定 code
+- `POST /api/console/lives/{live_id}/setlist`
+  - `editor+` 向指定 Live 追加 setlist 行；当前是 append-only，不修改既有 setlist
 
 说明：
-- 当前后端还挂载了其他路由，例如认证相关接口
 - 全量路径、请求参数、响应 schema 请直接查看自动文档
+- 控制台写接口都要求有效登录态、`editor+` 角色和 `X-CSRF-Token`
 
 ## 自动文档中已覆盖的内容
 
@@ -105,6 +119,44 @@
 - 返回结构与 `GET /api/lives` 保持一致
 - `items[].is_favorite` 恒为 `true`
 - 取消收藏后，该接口会立即反映最新结果
+
+### 5. 控制台 lookup 接口
+
+`GET /api/console/songs`、`GET /api/console/bands`、`GET /api/console/venues` 用于控制台录入候选查询。
+
+- 三个接口都要求 `editor+`
+- `q` 会 trim；空字符串等同于默认候选列表
+- `limit` 范围是 `1..100`，默认 `20`
+- 文本查询使用 `ILIKE`，并转义 `%`、`_`、`\`
+- 歌曲查询会把名称精确匹配结果排在前面，再按 `song_name, id` 排序
+- 乐队查询匹配 `band_name` 或 `band_abbr`
+- 场地查询匹配 `venue`
+
+### 6. 控制台写接口
+
+当前控制台已接入真实写接口，统一使用 `get_write_db_connection()`，并写入 `audit_logs`。
+
+- 所有写接口都要求 `editor+` 和有效 CSRF header
+- `POST /api/console/songs`
+  - 要求 `band_id` 已存在
+  - 歌曲唯一键冲突返回 `409`
+- `POST /api/console/songs:batch`
+  - 最多一次提交 100 首
+  - 单项 band 不存在或歌曲冲突会跳过该项，不回滚其他成功项
+  - `ok` 只有在全部请求项都成功创建时才为 `true`
+- `POST /api/console/venues`
+  - 写入 `venue_list(venue)`，`id` 由 sequence 生成
+- `POST /api/console/lives`
+  - 要求 `venue_id` 已存在
+  - `opening_time` / `start_time` 接受 `HH:mm` 或 `HH:mm:ss`，并与 `timezone` 组合成带时区时间
+  - `live_type` 必填，只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
+- `POST /api/console/lives/{live_id}/setlist`
+  - 要求目标 Live 存在
+  - 如果目标 Live 已有任何 setlist 行，返回 `409`
+  - 请求体内 `absolute_order` 不能重复
+  - 所有 `song_id` 都必须存在
+  - `band_member` 至少需要包含一个非空乐队和成员列表
+  - 后端按 `absolute_order` 升序写入
 
 ## 错误处理说明
 

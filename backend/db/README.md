@@ -9,7 +9,7 @@
 - `live_project_flyway`：Flyway 迁移账号
 - `live_project_ro`：普通查询账号
 - `live_project_user_rw`：前端普通用户写账号，只授予指定表写权限，当前用于收藏
-- `live_project_super_ro`：高权限业务账号，可查询/插入/更新，当前用于认证与后续控制台写接口
+- `live_project_super_ro`：高权限业务账号，可查询/插入/更新，当前用于认证与控制台写接口
 - `live_project_test_admin`：测试库专用管理账号，用于 integration 的重置与 seed
 
 ## 修改表结构时怎么做
@@ -114,7 +114,7 @@ python scripts/run_checks.py recovery
 
 ## 相关位置
 
-- Flyway 说明：[docs/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/flyway.md)
+- Flyway 说明：[docs/design/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/flyway.md)
 - Flyway 踩坑指南：[docs/fails/flyway-pitfalls.md](D:/Code/PythonCode/5%20LiveSetList/docs/fails/flyway-pitfalls.md)
 - 数据库角色与后端用户梳理：[docs/db-roles.md](D:/Code/PythonCode/5%20LiveSetList/docs/db-roles.md)
 - Flyway 配置目录：[backend/db/flyway/README.md](D:/Code/PythonCode/5%20LiveSetList/backend/db/flyway/README.md)

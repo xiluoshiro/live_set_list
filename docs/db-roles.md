@@ -8,6 +8,7 @@
 - [backend/db/postgres/init/010-create-flyway-role.sh](/D:/Code/PythonCode/5%20LiveSetList/backend/db/postgres/init/010-create-flyway-role.sh)
 - [backend/app/db.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/db.py)
 - [backend/app/auth.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/auth.py)
+- [backend/app/routers/console_write.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/console_write.py)
 - [backend/tests/integration/conftest.py](/D:/Code/PythonCode/5%20LiveSetList/backend/tests/integration/conftest.py)
 - [recovery/restore.py](/D:/Code/PythonCode/5%20LiveSetList/recovery/restore.py)
 - [recovery/backup.py](/D:/Code/PythonCode/5%20LiveSetList/recovery/backup.py)
@@ -188,7 +189,7 @@ schema 级权限：
 当前限制：
 
 - 不能写 `app_users`、`auth_sessions` 等认证表
-- 不能写控制台后续会用到的业务表
+- 不能写控制台接口使用的业务表；控制台写入统一走 `live_project_super_ro`
 - 不依赖默认权限扩散，只对明确授权的表生效
 
 当前职责：
@@ -318,11 +319,18 @@ schema 级权限：
   - session 创建/校验/失效
   - 审计日志写入
   - 收藏 ID 查询
+- [console_write.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/console_write.py)
+  - `POST /api/console/songs`
+  - `POST /api/console/songs:batch`
+  - `POST /api/console/venues`
+  - `POST /api/console/lives`
+  - `POST /api/console/lives/{live_id}/setlist`
 
 说明：
 
 - 认证链路虽然包含部分读取，但因为会同时更新 session、登录时间、审计，所以统一走写连接
 - 当前默认 admin 自动插入 `app_users` 时，使用的也是 `live_project_super_ro`
+- 控制台写接口要求 `editor+`，并统一做 CSRF 校验；当前 setlist 写入是 append-only，不依赖 `DELETE`
 
 ### 4.3 运行时普通用户写连接
 
@@ -504,7 +512,8 @@ schema 级权限：
 2. [backend/db/postgres/init/010-create-flyway-role.sh](/D:/Code/PythonCode/5%20LiveSetList/backend/db/postgres/init/010-create-flyway-role.sh)
 3. [backend/app/db.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/db.py)
 4. [backend/app/auth.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/auth.py)
-5. [backend/tests/integration/conftest.py](/D:/Code/PythonCode/5%20LiveSetList/backend/tests/integration/conftest.py)
-6. [recovery/restore.py](/D:/Code/PythonCode/5%20LiveSetList/recovery/restore.py)
+5. [backend/app/routers/console_write.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/console_write.py)
+6. [backend/tests/integration/conftest.py](/D:/Code/PythonCode/5%20LiveSetList/backend/tests/integration/conftest.py)
+7. [recovery/restore.py](/D:/Code/PythonCode/5%20LiveSetList/recovery/restore.py)
 
 这样可以先看“配置了谁”，再看“授了什么权”，最后看“代码到底用谁”。
