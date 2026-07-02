@@ -42,7 +42,7 @@ type LiveInsertTabProps = {
   onOpenFullSetlistPreview: () => void;
   onCloseFullSetlistPreview: () => void;
   onUpdateSetlistSongName: (rowKey: number, value: string) => void;
-  onUpdateSetlistSongId: (rowKey: number, value: string) => void;
+  onUpdateSetlistSongId: (rowKey: number, value: string, resolvedName?: string) => void;
   onSetSongModalRowKey: (rowKey: number | null) => void;
   onUpdateSetlistSegment: (rowKey: number, value: string) => void;
   onUpdateSetlistAbs: (rowKey: number, value: number) => void;
@@ -686,7 +686,7 @@ export function LiveInsertTab({
                             type="button"
                             className="console-submit-btn"
                             onClick={() => {
-                              onUpdateSetlistSongId(songModalRow.row_key, String(song.song_id));
+                              onUpdateSetlistSongId(songModalRow.row_key, String(song.song_id), song.song_name);
                               onSetSongModalRowKey(null);
                             }}
                           >

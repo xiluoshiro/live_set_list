@@ -622,13 +622,21 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const updateSetlistSongName = (rowKey: number, value: string) => {
     setDidSongLookup(false);
     setSetlistRows((prev) =>
-      prev.map((row) => (row.row_key === rowKey ? { ...row, song_name: value, song_id: "", song_candidates: [] } : row)),
+      prev.map((row) =>
+        row.row_key === rowKey
+          ? { ...row, song_name: value, song_id: "", song_resolved_name: undefined, song_candidates: [] }
+          : row,
+      ),
     );
   };
 
-  const updateSetlistSongId = (rowKey: number, value: string) => {
+  const updateSetlistSongId = (rowKey: number, value: string, resolvedName?: string) => {
     setSetlistRows((prev) =>
-      prev.map((row) => (row.row_key === rowKey ? { ...row, song_id: value, song_candidates: [] } : row)),
+      prev.map((row) =>
+        row.row_key === rowKey
+          ? { ...row, song_id: value, song_resolved_name: resolvedName, song_candidates: [] }
+          : row,
+      ),
     );
   };
 
@@ -694,6 +702,18 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     });
   };
 
+  const resolveSetlistPreviewSongName = (row: SetlistDraftRow | undefined): string => {
+    if (!row) return "";
+    const resolvedName = row.song_resolved_name?.trim();
+    if (resolvedName) return resolvedName;
+    const songId = Number(row.song_id);
+    if (Number.isFinite(songId)) {
+      const cachedSong = songs.find((song) => song.song_id === songId);
+      if (cachedSong) return cachedSong.song_name;
+    }
+    return row.song_name.trim();
+  };
+
   const querySongsForSetlist = async () => {
     const queryNames = [...new Set(setlistRows.map((row) => row.song_name.trim()).filter((name) => name !== ""))];
     const songCandidatesByQuery = new Map<string, SongInsertRow[]>();
@@ -727,19 +747,24 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     const nextRows = setlistRows.map((row) => {
       const normalizedName = normalizeSongLookupText(row.song_name);
       if (normalizedName === "") {
-        return { ...row, song_id: "", song_candidates: [] };
+        return { ...row, song_id: "", song_resolved_name: undefined, song_candidates: [] };
       }
       const candidates = resolveCandidates(normalizedName);
       if (candidates.length === 1) {
         matched += 1;
-        return { ...row, song_id: String(candidates[0].song_id), song_candidates: [] };
+        return {
+          ...row,
+          song_id: String(candidates[0].song_id),
+          song_resolved_name: candidates[0].song_name,
+          song_candidates: [],
+        };
       }
       if (candidates.length > 1) {
         pending += 1;
-        return { ...row, song_id: "", song_candidates: candidates };
+        return { ...row, song_id: "", song_resolved_name: undefined, song_candidates: candidates };
       }
       missing += 1;
-      return { ...row, song_id: "", song_candidates: [] };
+      return { ...row, song_id: "", song_resolved_name: undefined, song_candidates: [] };
     });
 
     setSetlistRows(nextRows);
@@ -1035,7 +1060,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     });
     const previewRows = setlistPayload.map((row, idx) => ({
       ...row,
-      song_name: validRows[idx]?.song_name.trim() ?? "",
+      song_name: resolveSetlistPreviewSongName(validRows[idx]),
     }));
 
     setPendingConfirmation({
