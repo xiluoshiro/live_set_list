@@ -622,7 +622,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const updateSetlistSongName = (rowKey: number, value: string) => {
     setDidSongLookup(false);
     setSetlistRows((prev) =>
-      prev.map((row) => (row.row_key === rowKey ? { ...row, song_name: value, song_id: "" } : row)),
+      prev.map((row) => (row.row_key === rowKey ? { ...row, song_name: value, song_id: "", song_candidates: [] } : row)),
+    );
+  };
+
+  const updateSetlistSongId = (rowKey: number, value: string) => {
+    setSetlistRows((prev) =>
+      prev.map((row) => (row.row_key === rowKey ? { ...row, song_id: value, song_candidates: [] } : row)),
     );
   };
 
@@ -690,42 +696,59 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
 
   const querySongsForSetlist = async () => {
     const queryNames = [...new Set(setlistRows.map((row) => row.song_name.trim()).filter((name) => name !== ""))];
-    const songMap = new Map<string, number>();
+    const songCandidatesByQuery = new Map<string, SongInsertRow[]>();
 
     try {
       const responses = await Promise.all(queryNames.map((name) => getConsoleSongs(name, 10)));
       const remoteSongs = responses.flatMap((response) => response.items.map(toSongInsertRow));
       setSongs((prev) => mergeSongs(prev, remoteSongs));
-      remoteSongs.forEach((song) => {
-        const normalized = normalizeSongLookupText(song.song_name);
-        if (normalized !== "" && !songMap.has(normalized)) {
-          songMap.set(normalized, song.song_id);
-        }
+      responses.forEach((response, index) => {
+        const normalizedQuery = normalizeSongLookupText(queryNames[index]);
+        if (normalizedQuery === "") return;
+        const candidates = response.items.map(toSongInsertRow);
+        const existingCandidates = songCandidatesByQuery.get(normalizedQuery) ?? [];
+        const mergedCandidates = mergeSongs(existingCandidates, candidates);
+        songCandidatesByQuery.set(normalizedQuery, mergedCandidates);
       });
     } catch (error) {
       setMessage(`查询歌曲失败：${errorMessage(error)}`);
       return;
     }
 
+    const resolveCandidates = (normalizedName: string): SongInsertRow[] => {
+      const candidates = songCandidatesByQuery.get(normalizedName) ?? [];
+      const exactCandidates = candidates.filter((song) => normalizeSongLookupText(song.song_name) === normalizedName);
+      return exactCandidates.length > 0 ? exactCandidates : candidates;
+    };
+
     let matched = 0;
+    let pending = 0;
     let missing = 0;
     const nextRows = setlistRows.map((row) => {
       const normalizedName = normalizeSongLookupText(row.song_name);
       if (normalizedName === "") {
-        return { ...row, song_id: "" };
+        return { ...row, song_id: "", song_candidates: [] };
       }
-      const songId = songMap.get(normalizedName);
-      if (songId) {
+      const candidates = resolveCandidates(normalizedName);
+      if (candidates.length === 1) {
         matched += 1;
-        return { ...row, song_id: String(songId) };
+        return { ...row, song_id: String(candidates[0].song_id), song_candidates: [] };
+      }
+      if (candidates.length > 1) {
+        pending += 1;
+        return { ...row, song_id: "", song_candidates: candidates };
       }
       missing += 1;
-      return { ...row, song_id: "" };
+      return { ...row, song_id: "", song_candidates: [] };
     });
 
     setSetlistRows(nextRows);
     setDidSongLookup(true);
-    setMessage(`查询歌曲完成：匹配 ${matched} 行，未匹配 ${missing} 行。`);
+    if (pending > 0) {
+      setMessage(`查询歌曲完成：匹配 ${matched} 行，待选择 ${pending} 行，未匹配 ${missing} 行。`);
+    } else {
+      setMessage(`查询歌曲完成：匹配 ${matched} 行，未匹配 ${missing} 行。`);
+    }
   };
 
   const updateSetlistPasteText = (value: string) => {
@@ -1686,6 +1709,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           onOpenFullSetlistPreview={() => setSetlistParsePreviewOpen(true)}
           onCloseFullSetlistPreview={() => setSetlistParsePreviewOpen(false)}
           onUpdateSetlistSongName={updateSetlistSongName}
+          onUpdateSetlistSongId={updateSetlistSongId}
           onSetSongModalRowKey={setSongModalRowKey}
           onUpdateSetlistSegment={(rowKey, value) => updateSetlistRow(rowKey, "segment_start_type", value)}
           onUpdateSetlistAbs={updateSetlistAbs}
