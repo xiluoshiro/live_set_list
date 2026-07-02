@@ -129,6 +129,7 @@ npm run typecheck
 - Flyway 落地说明：[docs/design/flyway.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/flyway.md)
 - 数据库角色与后端用户：[docs/db-roles.md](D:/Code/PythonCode/5%20LiveSetList/docs/db-roles.md)
 - 数据库操作说明：[backend/db/README.md](D:/Code/PythonCode/5%20LiveSetList/backend/db/README.md)
+- 产品需求：社区 Live 数据库首页与个人工作台：[docs/product/homepage-community-database.md](D:/Code/PythonCode/5%20LiveSetList/docs/product/homepage-community-database.md)
 - 归档设计文档：[docs/archive/completed-design](D:/Code/PythonCode/5%20LiveSetList/docs/archive/completed-design)
 - 仓库内 Flyway 骨架位于 `backend/db/flyway`
 - Docker PostgreSQL 配置位于 `infra/postgres`
