@@ -451,7 +451,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       setSongBandOpen(false);
     };
     const close = () => setSongBandOpen(false);
-+
     const onScroll = () => openSongBandMenu();
     window.addEventListener("mousedown", onDown);
     window.addEventListener("resize", close);
