@@ -123,7 +123,8 @@ SELECT
     s.song_name,
     stl.band_member,
     stl.other_member,
-    stl.is_short
+    stl.is_short,
+    s.is_cover
 FROM live_setlist stl
 JOIN song_list s
     ON s.id = stl.song_id
@@ -188,6 +189,7 @@ WITH row_base AS (
         stl.band_member,
         stl.other_member,
         stl.is_short,
+        s.is_cover,
         stl.absolute_order
     FROM live_setlist stl
     JOIN song_list s
@@ -216,7 +218,8 @@ SELECT
         '[]'::jsonb
     ) AS band_members,
     rb.other_member,
-    rb.is_short
+    rb.is_short,
+    rb.is_cover
 FROM row_base rb
 LEFT JOIN LATERAL jsonb_each(
     CASE
@@ -232,6 +235,7 @@ GROUP BY
     rb.song_name,
     rb.other_member,
     rb.is_short,
+    rb.is_cover,
     rb.absolute_order
 ORDER BY rb.live_id, rb.absolute_order
 """
@@ -248,7 +252,7 @@ WHERE ba.band_name = ANY(%s)
 DEFAULT_BAND_TOTAL_COUNT = 5
 
 
-ParsedDetailRow = tuple[str, str, dict[str, Any], dict[str, Any], bool]
+ParsedDetailRow = tuple[str, str, dict[str, Any], dict[str, Any], bool, bool]
 
 
 def _ensure_json_object(raw: Any) -> dict[str, Any]:
@@ -335,6 +339,15 @@ def _other_member_sort_key(item: dict[str, Any]) -> str:
     return str(key) if key is not None else ""
 
 
+def _build_detail_comments(is_short: bool, is_cover: bool) -> list[str]:
+    comments: list[str] = []
+    if is_short:
+        comments.append("短版")
+    if is_cover:
+        comments.append("翻唱")
+    return comments
+
+
 def _order_band_names_by_bands(
     bands: list[int],
     raw_band_names: Any,
@@ -390,7 +403,7 @@ def _build_live_detail_payload(
         if isinstance(band_meta.get("band_id"), int)
     }
     detail_rows = []
-    for row_id, song_name, band_member_obj, other_member_obj, is_short in parsed_rows:
+    for row_id, song_name, band_member_obj, other_member_obj, is_short, is_cover in parsed_rows:
         band_members = []
         for band_name, present_members_raw in band_member_obj.items():
             band_meta = band_meta_by_name.get(str(band_name), {})
@@ -419,7 +432,7 @@ def _build_live_detail_payload(
         other_members = [{"key": str(key), "value": _to_string_array(value)} for key, value in other_member_obj.items()]
         other_members.sort(key=_other_member_sort_key)
 
-        comments: list[str] = ["短版"] if is_short else []
+        comments = _build_detail_comments(is_short, is_cover)
 
         detail_rows.append(
             {
@@ -458,7 +471,7 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
     parsed_rows: list[ParsedDetailRow] = []
     all_band_names: set[str] = set()
     for row in raw_rows:
-        row_id, song_name, band_member_raw, other_member_raw, is_short = row
+        row_id, song_name, band_member_raw, other_member_raw, is_short, is_cover = row
         band_member_obj = _ensure_json_object(band_member_raw)
         other_member_obj = _ensure_json_object(other_member_raw)
         all_band_names.update(str(k) for k in band_member_obj.keys())
@@ -469,6 +482,7 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
                 band_member_obj,
                 other_member_obj,
                 bool(is_short),
+                bool(is_cover),
             )
         )
 
@@ -647,7 +661,7 @@ def get_live_details_batch(
                 parsed_rows_by_live_id: dict[int, list[dict[str, Any]]] = {}
                 band_name_to_id_by_live_id: dict[int, dict[str, int]] = {}
                 for row in raw_rows:
-                    live_id, row_id, song_name, band_members_raw, other_member_raw, is_short = row
+                    live_id, row_id, song_name, band_members_raw, other_member_raw, is_short, is_cover = row
                     band_members_arr = _ensure_json_array(band_members_raw)
                     band_members = []
                     for band_item in band_members_arr:
@@ -691,6 +705,7 @@ def get_live_details_batch(
                             "band_members": band_members,
                             "other_member_obj": other_member_obj,
                             "is_short": bool(is_short),
+                            "is_cover": bool(is_cover),
                         }
                     )
 
@@ -706,7 +721,7 @@ def get_live_details_batch(
                             for key, value in parsed_row["other_member_obj"].items()
                         ]
                         other_members.sort(key=_other_member_sort_key)
-                        comments: list[str] = ["短版"] if parsed_row["is_short"] else []
+                        comments = _build_detail_comments(parsed_row["is_short"], parsed_row["is_cover"])
                         detail_rows.append(
                             {
                                 "row_id": parsed_row["row_id"],

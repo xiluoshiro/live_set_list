@@ -49,7 +49,7 @@ class LiveDetailRow(BaseModel):
     song_name: str = Field(..., description='Song title')
     band_members: list[LiveDetailBandMember] = Field(..., description='Band member info for this row')
     other_members: list[LiveDetailOtherMember] = Field(..., description='Other member info for this row')
-    comments: list[str] = Field(..., description='Comment tags such as short version markers')
+    comments: list[str] = Field(..., description='Comment tags such as short version and cover markers')
 
 
 class LiveDetailResponse(BaseModel):

@@ -97,7 +97,7 @@
 - `other_members` 会统一归一化为 `{key, value: string[]}`
 - `other_members` 的 `value` 允许源数据是数组、单个字符串、JSON 字符串数组、JSON 字符串字面量
 - `other_members` 最终按 `key` 升序排列
-- `comments` 当前仅在 `is_short = true` 时返回 `["短版"]`
+- `comments` 由详情行规则生成：`live_setlist.is_short = true` 时包含 `"短版"`，`song_list.is_cover = true` 时包含 `"翻唱"`
 - `is_favorite` 会按当前登录用户的 `user_live_favorites` 计算；匿名请求统一返回 `false`
 
 ### 3. `POST /api/lives/details:batch`
