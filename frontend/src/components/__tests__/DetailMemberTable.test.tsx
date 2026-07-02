@@ -63,6 +63,15 @@ describe("MemberStatusTable", () => {
     expect(screen.getByText("当前 Live 暂无详情数据")).toBeInTheDocument();
   });
 
+  // 测试点：详情表格应把 comments 中的“翻唱”渲染为备注 tag。
+  test("备注列展示后端返回的翻唱 tag", () => {
+    render(<MemberStatusTable rows={detailRows} />);
+
+    const coverTag = screen.getByText("翻唱");
+    expect(coverTag).toBeInTheDocument();
+    expect(coverTag).toHaveClass("comment-tag");
+  });
+
   test("乐队成员单元格点击后可打开“参加队员”二级详情", async () => {
     // 测试点：点击乐队成员区域打开二级详情弹层。
     const user = userEvent.setup();

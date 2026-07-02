@@ -216,8 +216,9 @@ def test_get_live_detail_success_maps_rows_and_rules():
             {"Poppin'Party": ["A", "B", "C", "D", "E"], "Afterglow": ["A", "B", "C", "D"]},
             {"键盘支援": "远程连线", "嘉宾": "[\"Ommy\", \"荒幡亮平\"]"},
             True,
+            True,
         ),
-        ("EN1", "Song 2", {"Unknown Band": ["Solo"]}, None, False),
+        ("EN1", "Song 2", {"Unknown Band": ["Solo"]}, None, False, True),
     ]
     band_lookup_rows = [(1, "Poppin'Party", 5), (2, "Afterglow", 6)]
     conn, cursor = _build_detail_connection_mock(header_row, detail_rows, band_lookup_rows)
@@ -242,7 +243,7 @@ def test_get_live_detail_success_maps_rows_and_rules():
     first_row = payload["detail_rows"][0]
     assert first_row["row_id"] == "M1"
     assert first_row["song_name"] == "Song 1"
-    assert first_row["comments"] == ["短版"]
+    assert first_row["comments"] == ["短版", "翻唱"]
     assert first_row["other_members"] == [
         {"key": "嘉宾", "value": ["Ommy", "荒幡亮平"]},
         {"key": "键盘支援", "value": ["远程连线"]},
@@ -259,7 +260,7 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert first_row_bands[1]["is_full"] is False
 
     second_row = payload["detail_rows"][1]
-    assert second_row["comments"] == []
+    assert second_row["comments"] == ["翻唱"]
     assert second_row["other_members"] == []
     assert second_row["band_members"][0]["band_id"] is None
     assert second_row["band_members"][0]["total_count"] == 5
@@ -333,7 +334,7 @@ def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
         "oneman",
     )
     detail_rows = [
-        ("M1", "Song 1", {"Band30": ["A"], "Band10": ["B"], "Band20": ["C"]}, None, False),
+        ("M1", "Song 1", {"Band30": ["A"], "Band10": ["B"], "Band20": ["C"]}, None, False, False),
     ]
     band_lookup_rows = [(10, "Band10", 5), (20, "Band20", 5), (30, "Band30", 5)]
     conn, _ = _build_detail_connection_mock(header_row, detail_rows, band_lookup_rows)
@@ -368,6 +369,7 @@ def test_get_live_detail_new_fields_and_total_count_fallback_rules():
             "Song 1",
             {"Band3": ["A", "B"], "Band1": ["C"], "Band2": ["H", "I", "J", "K"]},
             None,
+            False,
             False,
         )
     ]
@@ -411,6 +413,7 @@ def test_get_live_details_batch_success_and_partial_missing():
             [{"band_id": 2, "band_name": "Afterglow", "total_count": 6, "present_members": ["A", "B", "C", "D", "E"]}],
             {"嘉宾": "Guest A"},
             True,
+            True,
         ),
         (
             1,
@@ -418,6 +421,7 @@ def test_get_live_details_batch_success_and_partial_missing():
             "Song B",
             [{"band_id": 1, "band_name": "Poppin'Party", "total_count": 5, "present_members": ["A", "B", "C", "D"]}],
             None,
+            False,
             False,
         ),
     ]
@@ -437,7 +441,7 @@ def test_get_live_details_batch_success_and_partial_missing():
     assert first_item["opening_time"] == "17:00"
     assert first_item["start_time"] == "18:00"
     assert first_item["url"] == "https://example.com/live/2"
-    assert first_item["detail_rows"][0]["comments"] == ["短版"]
+    assert first_item["detail_rows"][0]["comments"] == ["短版", "翻唱"]
     assert first_item["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["Guest A"]}]
     assert first_item["detail_rows"][0]["band_members"][0]["total_count"] == 6
     assert first_item["detail_rows"][0]["band_members"][0]["is_full"] is False
@@ -475,6 +479,7 @@ def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
                 {"band_id": 10, "band_name": "Band10", "total_count": 5, "present_members": ["C"]},
             ],
             None,
+            False,
             False,
         )
     ]
@@ -517,6 +522,7 @@ def test_get_live_details_batch_new_fields_and_total_count_fallback_rules():
                 {"band_id": 2, "band_name": "Band2", "total_count": 6, "present_members": ["H", "I", "J", "K", "L", "M"]},
             ],
             None,
+            False,
             False,
         )
     ]
@@ -631,6 +637,7 @@ def test_get_live_details_batch_normalizes_band_and_other_members():
                 {"band_id": 1, "band_name": None, "total_count": 5, "present_members": ["A", "B"]},
             ],
             {"嘉宾": "[\"Alice\", \"Bob\"]", "支援": "\"Solo\""},
+            False,
             False,
         ),
     ]

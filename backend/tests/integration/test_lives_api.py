@@ -126,6 +126,54 @@ def test_get_live_detail_returns_seeded_detail_payload(integration_test_client):
     assert second_row["band_members"][0]["is_full"] is False
 
 
+# 测试点：详情接口应把 song_list.is_cover=true 映射为“翻唱”备注 tag。
+def test_get_live_detail_marks_cover_song_as_comment_tag(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO song_list (id, song_name, band_id, is_cover)
+            VALUES (9000, 'Cover Detail Song', 1, true)
+            """
+        )
+        cursor.execute(
+            """
+            INSERT INTO live_setlist (
+                live_id,
+                song_id,
+                absolute_order,
+                segment_type,
+                sub_order,
+                is_short,
+                band_member,
+                other_member,
+                comment
+            )
+            VALUES (
+                1,
+                9000,
+                99,
+                'SP',
+                99,
+                true,
+                '{"Poppin''Party": ["Kasumi"]}'::jsonb,
+                NULL,
+                NULL
+            )
+            """
+        )
+
+    response = integration_test_client.get("/api/lives/1")
+
+    assert response.status_code == 200
+    cover_row = response.json()["detail_rows"][-1]
+    assert cover_row["song_name"] == "Cover Detail Song"
+    assert cover_row["comments"] == ["短版", "翻唱"]
+
+
 def test_get_live_detail_not_found_returns_404(integration_test_client):
     # 测试点：请求不存在的 live_id 时，详情接口应返回 404。
     response = integration_test_client.get("/api/lives/999999")
