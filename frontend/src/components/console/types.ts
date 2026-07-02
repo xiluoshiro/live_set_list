@@ -59,6 +59,7 @@ export type SetlistDraftRow = {
   row_key: number;
   song_name: string;
   song_id: string;
+  song_resolved_name?: string;
   song_candidates?: SongInsertRow[];
   segment_start_type: string;
   absolute_order?: number;

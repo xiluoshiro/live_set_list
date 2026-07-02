@@ -254,6 +254,9 @@ describe("ConsoleInsertPanel", () => {
   test("查询歌曲唯一模糊候选时自动回填sid", async () => {
     // 测试点：后端只返回一个包含匹配候选时，setlist 查询应自动采用该候选 sid。
     const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 9, band_name: "Roselia", band_abbr: "rsl", band_members: ["湊友希那"] }],
+    });
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
@@ -263,16 +266,30 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel />);
 
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-    await user.type(screen.getByPlaceholderText("请输入歌曲名"), "CORUSCATE -DNA");
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. CORUSCATE -DNA" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
 
     expect(await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。")).toBeInTheDocument();
     expect(screen.getByText("905")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+
+    const dialog = screen.getByRole("dialog", { name: /确认提交 Setlist/ });
+    expect(within(dialog).getByText("CORUSCATE -DNA-")).toBeInTheDocument();
+    expect(within(dialog).queryByText("CORUSCATE -DNA")).not.toBeInTheDocument();
   });
 
   test("查询歌曲多候选时弹窗选择sid", async () => {
     // 测试点：模糊查询返回多个候选时不自动误配，用户可从弹窗中选择 sid。
     const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 9, band_name: "Roselia", band_abbr: "rsl", band_members: ["湊友希那"] }],
+    });
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
@@ -285,7 +302,12 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel />);
 
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-    await user.type(screen.getByPlaceholderText("请输入歌曲名"), "CORUSCATE -DNA");
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. CORUSCATE -DNA" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
 
     expect(await screen.findByText("查询歌曲完成：匹配 0 行，待选择 1 行，未匹配 0 行。")).toBeInTheDocument();
@@ -297,6 +319,12 @@ describe("ConsoleInsertPanel", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "歌曲查询结果" })).not.toBeInTheDocument());
     expect(screen.getByText("907")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+
+    const confirmDialog = screen.getByRole("dialog", { name: /确认提交 Setlist/ });
+    expect(within(confirmDialog).getByText("CORUSCATE -DNA-A")).toBeInTheDocument();
+    expect(within(confirmDialog).queryByText("CORUSCATE -DNA")).not.toBeInTheDocument();
   });
 
   test("只读候选请求失败时展示错误且不回退到本地候选", async () => {
