@@ -42,6 +42,7 @@ type LiveInsertTabProps = {
   onOpenFullSetlistPreview: () => void;
   onCloseFullSetlistPreview: () => void;
   onUpdateSetlistSongName: (rowKey: number, value: string) => void;
+  onUpdateSetlistSongId: (rowKey: number, value: string) => void;
   onSetSongModalRowKey: (rowKey: number | null) => void;
   onUpdateSetlistSegment: (rowKey: number, value: string) => void;
   onUpdateSetlistAbs: (rowKey: number, value: number) => void;
@@ -110,6 +111,7 @@ export function LiveInsertTab({
   onOpenFullSetlistPreview,
   onCloseFullSetlistPreview,
   onUpdateSetlistSongName,
+  onUpdateSetlistSongId,
   onSetSongModalRowKey,
   onUpdateSetlistSegment,
   onUpdateSetlistAbs,
@@ -138,6 +140,9 @@ export function LiveInsertTab({
   const [pasteConfirmOpen, setPasteConfirmOpen] = useState(false);
   const [editingCell, setEditingCell] = useState<{ rowKey: number; field: "abs" | "sub" } | null>(null);
   const normalizedLiveTotalPages = Math.max(liveTotalPages, 1);
+  const songModalRow = songModalRowKey === null
+    ? null
+    : setlistRows.find((row) => row.row_key === songModalRowKey) ?? null;
 
   const hasParsed = setlistParsePreviewRows.length > 0 || setlistParseWarnings.length > 0;
 
@@ -323,6 +328,14 @@ export function LiveInsertTab({
                 <td>
                   {row.song_id !== "" ? (
                     <span className="readonly-cell">{row.song_id}</span>
+                  ) : row.song_candidates && row.song_candidates.length > 1 ? (
+                    <button
+                      type="button"
+                      className="song-missing-btn"
+                      onClick={() => onSetSongModalRowKey(row.row_key)}
+                    >
+                      候选 {row.song_candidates.length}
+                    </button>
                   ) : didSongLookup && row.song_name.trim() !== "" ? (
                     <button
                       type="button"
@@ -639,7 +652,11 @@ export function LiveInsertTab({
         <div className="song-modal-backdrop" role="presentation" onClick={() => onSetSongModalRowKey(null)}>
           <div className="song-modal" role="dialog" aria-label="歌曲查询结果" onClick={(e) => e.stopPropagation()}>
             <div className="song-modal-header">
-              <strong>未匹配歌曲，请先新增或确认歌名</strong>
+              <strong>
+                {songModalRow?.song_candidates && songModalRow.song_candidates.length > 1
+                  ? "请选择匹配歌曲"
+                  : "未匹配歌曲，请先新增或确认歌名"}
+              </strong>
               <button
                 type="button"
                 className="modal-action-btn close"
@@ -649,7 +666,41 @@ export function LiveInsertTab({
                 <span className="modal-action-glyph close">✕</span>
               </button>
             </div>
-            {renderSongAdminSection()}
+            {songModalRow?.song_candidates && songModalRow.song_candidates.length > 1 ? (
+              <div className="console-table-wrap">
+                <table className="console-admin-table song-candidate-table">
+                  <thead>
+                    <tr>
+                      <th>song_id</th>
+                      <th>song_name</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {songModalRow.song_candidates.map((song) => (
+                      <tr key={song.song_id}>
+                        <td>{song.song_id}</td>
+                        <td>{song.song_name}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="console-submit-btn"
+                            onClick={() => {
+                              onUpdateSetlistSongId(songModalRow.row_key, String(song.song_id));
+                              onSetSongModalRowKey(null);
+                            }}
+                          >
+                            选择
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              renderSongAdminSection()
+            )}
           </div>
         </div>
       )}
