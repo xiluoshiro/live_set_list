@@ -232,6 +232,25 @@ describe("ConsoleInsertPanel", () => {
     expect(await screen.findByText("查询歌曲完成：匹配 2 行，未匹配 0 行。")).toBeInTheDocument();
   });
 
+  test("查询歌曲用等价标点回填sid", async () => {
+    // 测试点：setlist 歌名与候选歌名只差常见等价标点时，查询歌曲仍应回填 sid。
+    const user = userEvent.setup();
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({
+        items: [{ song_id: 904, song_name: "Song ‘A’，B；C〜D", band_id: 9, cover: false }],
+      });
+
+    render(<ConsoleInsertPanel />);
+
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await user.type(screen.getByPlaceholderText("请输入歌曲名"), "Song 'A',B;C~D");
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("Song 'A',B;C~D", 10));
+    expect(await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。")).toBeInTheDocument();
+  });
+
   test("只读候选请求失败时展示错误且不回退到本地候选", async () => {
     // 测试点：只读接口失败时，控制台直接展示错误，不展示本地静态候选。
     apiMocks.getConsoleBands.mockRejectedValue(new Error("bands offline"));

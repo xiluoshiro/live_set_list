@@ -153,6 +153,34 @@ def test_console_song_lookup_prioritizes_exact_title_match(
     assert response.json()["items"] == [{"song_id": song_id, "song_name": "R", "band_id": 1, "cover": False}]
 
 
+# 测试点：歌曲查询应把常见等价标点归一化，允许半角输入命中含弯引号和全角符号的歌名。
+def test_console_song_lookup_matches_punctuation_equivalent_title(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify song lookup handles common punctuation variants without mutating stored titles."""
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s) RETURNING id",
+            ("Song ‘A’，B；C〜D", 1, False),
+        )
+        song_id = cursor.fetchone()[0]
+
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    response = integration_test_client.get("/api/console/songs?q=Song 'A',B;C~D&limit=10")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [
+        {"song_id": song_id, "song_name": "Song ‘A’，B；C〜D", "band_id": 1, "cover": False}
+    ]
+
+
 # 测试点：只读查询接口也必须执行后端 `editor+` 权限校验，不能只依赖前端隐藏入口。
 def test_console_lookup_endpoints_require_editor_role(
     integration_test_client,

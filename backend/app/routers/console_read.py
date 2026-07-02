@@ -10,6 +10,7 @@ from app.logging_config import get_logger
 from app.schemas import ErrorResponse, ValidationErrorResponse
 from app.schemas.auth import AuthErrorResponse
 from app.schemas.console import ConsoleBandListResponse, ConsoleSongListResponse, ConsoleVenueListResponse
+from app.song_lookup import SONG_LOOKUP_SQL_FROM_CHARS, SONG_LOOKUP_SQL_TO_CHARS, normalize_song_lookup_text
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -53,6 +54,7 @@ def list_songs(
 ):
     """Return song_list rows for the console song selector without mutating any data."""
     query_text = _normalize_lookup_query(q)
+    normalized_query_text = normalize_song_lookup_text(query_text)
 
     try:
         with get_db_connection() as conn:
@@ -60,16 +62,38 @@ def list_songs(
                 if query_text:
                     cur.execute(
                         """
+                        WITH normalized_song_list AS (
+                            SELECT
+                                id,
+                                song_name,
+                                band_id,
+                                is_cover,
+                                translate(song_name, %s, %s) AS normalized_song_name
+                            FROM song_list
+                        )
                         SELECT id, song_name, band_id, is_cover
-                        FROM song_list
+                        FROM normalized_song_list
                         WHERE song_name ILIKE %s ESCAPE '\\'
+                           OR normalized_song_name ILIKE %s ESCAPE '\\'
                         ORDER BY
-                            CASE WHEN song_name ILIKE %s ESCAPE '\\' THEN 0 ELSE 1 END,
+                            CASE
+                                WHEN song_name ILIKE %s ESCAPE '\\' THEN 0
+                                WHEN normalized_song_name ILIKE %s ESCAPE '\\' THEN 1
+                                ELSE 2
+                            END,
                             song_name,
                             id
                         LIMIT %s
                         """,
-                        (_build_lookup_pattern(query_text), _build_exact_lookup_pattern(query_text), limit),
+                        (
+                            SONG_LOOKUP_SQL_FROM_CHARS,
+                            SONG_LOOKUP_SQL_TO_CHARS,
+                            _build_lookup_pattern(query_text),
+                            _build_lookup_pattern(normalized_query_text),
+                            _build_exact_lookup_pattern(query_text),
+                            _build_exact_lookup_pattern(normalized_query_text),
+                            limit,
+                        ),
                     )
                 else:
                     cur.execute(

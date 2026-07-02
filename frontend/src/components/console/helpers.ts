@@ -1,5 +1,20 @@
 import { DEFAULT_BAND_MEMBERS } from "./constants";
+import songLookupPunctuationConfig from "../../../../config/song_lookup_punctuation_groups.json";
 import type { DerivedSegment, OtherMemberDraft, SetlistDraftRow } from "./types";
+
+const songLookupPunctuationTranslation = new Map<string, string>(
+  songLookupPunctuationConfig.groups.flatMap((group) => group.map((value) => [value, group[0]] as [string, string])),
+);
+
+export function normalizeSongLookupText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .split("")
+    .map((char) => songLookupPunctuationTranslation.get(char) ?? char)
+    .join("")
+    .trim()
+    .toLowerCase();
+}
 
 export function getBandMembersTemplate(_bandName: string): string[] {
   return [...DEFAULT_BAND_MEMBERS];

@@ -36,6 +36,7 @@ import {
   buildOtherMemberPayloadObject,
   getBandMembersTemplate,
   getDerivedSegments,
+  normalizeSongLookupText,
 } from "./console/helpers";
 import { parseSetlistText } from "./console/setlistParser/parseSetlistText";
 import type { ParsedSetlistWarning } from "./console/setlistParser/types";
@@ -696,7 +697,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
       const remoteSongs = responses.flatMap((response) => response.items.map(toSongInsertRow));
       setSongs((prev) => mergeSongs(prev, remoteSongs));
       remoteSongs.forEach((song) => {
-        const normalized = song.song_name.trim().toLowerCase();
+        const normalized = normalizeSongLookupText(song.song_name);
         if (normalized !== "" && !songMap.has(normalized)) {
           songMap.set(normalized, song.song_id);
         }
@@ -709,7 +710,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
     let matched = 0;
     let missing = 0;
     const nextRows = setlistRows.map((row) => {
-      const normalizedName = row.song_name.trim().toLowerCase();
+      const normalizedName = normalizeSongLookupText(row.song_name);
       if (normalizedName === "") {
         return { ...row, song_id: "" };
       }
