@@ -378,6 +378,8 @@ python scripts/run_checks.py functional
 git diff --check
 ```
 
+阶段 1 开发设计单独维护在 [docs/design/homepage-community-database-phase1.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/homepage-community-database-phase1.md)。
+
 ### 阶段 2：公共搜索与浏览
 
 目标：让数据库真正可查。
@@ -478,7 +480,7 @@ git diff --check
 
 | 阶段 | 状态 | 说明 |
 |------|------|------|
-| 阶段 1：首页壳与信息架构 | TODO | 当前只有需求文档，尚未修改业务代码 |
+| 阶段 1：首页壳与信息架构 | TODO | 需求文档与阶段 1 设计文档已拆分，尚未修改业务代码 |
 | 阶段 2：公共搜索与浏览 | TODO | 等阶段 1 稳定后再设计 API 与实体浏览入口 |
 | 阶段 3：登录后个人首页 | TODO | 依赖首页结构和收藏摘要入口 |
 | 阶段 4：贡献工作台 | TODO | 依赖首页入口稳定，先复用现有控制台 |
@@ -487,6 +489,7 @@ git diff --check
 
 ### 阶段 1 TODO
 
+- [x] 完成阶段 1 开发方案和开发边界设计，详见 [docs/design/homepage-community-database-phase1.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/homepage-community-database-phase1.md)。
 - [ ] 新增“首页”视图，并将默认视图从“全部内容”调整为“首页”。
 - [ ] 首页首屏展示站点名称、数据库定位说明和搜索入口 UI 壳。
 - [ ] 首页展示可从现有接口可靠获得的 Live 总数。
