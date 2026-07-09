@@ -166,7 +166,6 @@ function App() {
   const canUseFavoriteFeatures = auth.isAuthenticated;
   const canUseConsoleFeatures = auth.isAuthenticated && canAccessConsole(auth.user?.role);
   const navigationItems: Array<{ key: TabKey; label: string; visible: boolean }> = [
-    { key: "home", label: "首页", visible: true },
     { key: "favorites", label: "我的收藏", visible: auth.isAuthenticated },
     { key: "all", label: "全部内容", visible: true },
     { key: "browse", label: "乐队", visible: true },
@@ -704,7 +703,9 @@ function App() {
     <main className="page">
       <section className="panel">
         <header className="site-topbar">
-          <div className="site-title">BanG Dream! Live 资料库</div>
+          <button type="button" className="site-title" onClick={() => handleTabChange("home")}>
+            BanG Dream! Live 资料库
+          </button>
 
           <nav className="tabs" aria-label="主导航">
             {navigationItems.filter((item) => item.visible).map((item) => (
@@ -805,6 +806,13 @@ function App() {
                 </button>
               </div>
               <div className="nav-drawer-list">
+                <button
+                  type="button"
+                  className={`nav-drawer-item ${tab === "home" ? "active" : ""}`}
+                  onClick={() => handleTabChange("home")}
+                >
+                  首页
+                </button>
                 {navigationItems.filter((item) => item.visible).map((item) => (
                   <button
                     key={item.key}
