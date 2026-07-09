@@ -6,12 +6,26 @@
 
 本文只描述阶段 1“首页壳与信息架构”的开发设计和实现边界。产品定位、用户视角、阶段路线和 TODO 仍由需求文档维护。
 
+## 实现后状态
+
+阶段 1 已落地，且后续已经继续推进到公共搜索、乐队浏览和全宽应用框架：
+
+- `TabKey` 当前为 `"home" | "favorites" | "all" | "console" | "search" | "browse" | "about"`。
+- 默认视图为 `"home"`。
+- 首页搜索已不再是阶段 1 设计里的“搜索壳”，而是接入 `GET /api/catalog/search` 的真实公共搜索入口。
+- 乐队浏览已接入 `GET /api/catalog/bands` 和 `GET /api/catalog/bands/{band_id}/lives`。
+- 顶部导航已从居中卡片内导航调整为全宽置顶条，并提供右侧侧边栏菜单。
+- 页面外层已取消居中框，首页、资料库、控制台等主内容直接占满视口宽度。
+- 样式入口已统一到 `frontend/src/styles/index.css`，旧的 `frontend/src/styles.css` 已移除。
+
+因此，本文后续章节保留为阶段 1 的设计背景和回归参考；当前实现状态与剩余 TODO 以 [docs/product/homepage-community-database.md](D:/Code/PythonCode/5%20LiveSetList/docs/product/homepage-community-database.md) 为准。
+
 ## 当前实现背景
 
 当前前端入口集中在 `frontend/src/App.tsx`：
 
-- `TabKey` 为 `"favorites" | "all" | "console"`。
-- 默认 tab 是 `"all"`。
+- 阶段 1 实施前，`TabKey` 为 `"favorites" | "all" | "console"`。
+- 阶段 1 实施前，默认 tab 是 `"all"`。
 - 列表加载、收藏页会话对账、详情预读、批量收藏和控制台权限都依赖 `tab` 状态。
 - Live 详情弹窗通过 `activeRow` 和 `getLiveDetail()` 维护。
 - `editor+` 控制台通过 `canUseConsoleFeatures` 做 UI 入口和状态兜底。
