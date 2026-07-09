@@ -2,6 +2,8 @@
 @import "./base.css";
 @import "./auth.css";
 @import "./layout.css";
+@import "./home-dashboard.css";
+@import "./catalog.css";
 @import "./live-table.css";
 @import "./detail-modal.css";
 @import "./console-admin.css";

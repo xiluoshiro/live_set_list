@@ -3,18 +3,31 @@ import {
   ApiError,
   clearLivesCache,
   clearMyFavoriteLivesCache,
+  getCatalogBandLives,
+  getCatalogBands,
   getLiveDetail,
   getLives,
   getMyFavoriteLives,
   peekMyFavoriteLives,
+  searchCatalog,
+  type CatalogBandItem,
+  type CatalogBandLivesResponse,
+  type CatalogSearchResponse,
   type LiveDetailResponse,
   type LiveItem,
 } from "./api";
 import { useAuth } from "./auth/AuthProvider";
 import { BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
+import {
+  AboutPanel,
+  BandBrowsePanel,
+  type CatalogLiveRow,
+  SearchResultsPanel,
+} from "./components/CatalogPanels";
 import { formatLiveType } from "./components/console/constants";
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { MemberStatusTable } from "./components/DetailMemberTable";
+import { HomeDashboard, type HomeLiveRow } from "./components/HomeDashboard";
 import { LoginDialog } from "./components/LoginDialog";
 import { useFavorites } from "./favorites/FavoriteProvider";
 import { logError } from "./logger";
@@ -34,7 +47,8 @@ type LiveRow = {
   url: string | null;
 };
 
-type TabKey = "favorites" | "all" | "console";
+type TabKey = "home" | "favorites" | "all" | "console" | "search" | "browse" | "about";
+type ListTabKey = "favorites" | "all";
 type ListSnapshot = {
   items: LiveRow[];
   total: number;
@@ -85,7 +99,7 @@ function getThemeToggleMeta(mode: ThemeMode, resolvedTheme: "light" | "dark") {
   };
 }
 
-function buildListSnapshotKey(tab: Exclude<TabKey, "console">, page: number, pageSize: 15 | 20): string {
+function buildListSnapshotKey(tab: ListTabKey, page: number, pageSize: 15 | 20): string {
   return `${tab}:${page}:${pageSize}`;
 }
 
@@ -131,7 +145,7 @@ function App() {
   const [pageSize, setPageSize] = useState<15 | 20>(20);
   const [page, setPage] = useState(1);
   const [jumpPageInput, setJumpPageInput] = useState("1");
-  const [tab, setTab] = useState<TabKey>("all");
+  const [tab, setTab] = useState<TabKey>("home");
   const [activeRow, setActiveRow] = useState<LiveRow | null>(null);
   const [detailFullscreen, setDetailFullscreen] = useState(false);
   const [items, setItems] = useState<LiveRow[]>([]);
@@ -139,6 +153,22 @@ function App() {
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [homeRecentRows, setHomeRecentRows] = useState<LiveRow[]>([]);
+  const [homeLiveTotal, setHomeLiveTotal] = useState(0);
+  const [homeLoading, setHomeLoading] = useState(false);
+  const [homeError, setHomeError] = useState<string | null>(null);
+  const [homeRefreshKey, setHomeRefreshKey] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResult, setSearchResult] = useState<CatalogSearchResponse | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [catalogBands, setCatalogBands] = useState<CatalogBandItem[]>([]);
+  const [catalogBandsLoading, setCatalogBandsLoading] = useState(false);
+  const [catalogBandLives, setCatalogBandLives] = useState<CatalogBandLivesResponse | null>(null);
+  const [catalogBandLivesLoading, setCatalogBandLivesLoading] = useState(false);
+  const [catalogBrowseError, setCatalogBrowseError] = useState<string | null>(null);
+  const [selectedCatalogBandId, setSelectedCatalogBandId] = useState<number | null>(null);
+  const [catalogBandPage, setCatalogBandPage] = useState(1);
   const [detailData, setDetailData] = useState<LiveDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -146,10 +176,11 @@ function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const listSnapshotsRef = useRef<Record<string, ListSnapshot>>({});
   const favoritesReconcileGateRef = useRef(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
-  const listEnabled = tab !== "console" && !auth.isLoading;
+  const listEnabled = (tab === "all" || tab === "favorites") && !auth.isLoading;
   const canUseFavoriteFeatures = auth.isAuthenticated;
   const canUseConsoleFeatures = auth.isAuthenticated && canAccessConsole(auth.user?.role);
 
@@ -184,7 +215,7 @@ function App() {
     void favorites.reconcileFavorites().catch((error) => {
       if (error instanceof ApiError && error.status === 401) {
         auth.setAnonymous();
-        setTab("all");
+        setTab("home");
         favoritesReconcileGateRef.current = false;
       }
     });
@@ -205,6 +236,139 @@ function App() {
     });
     clearMyFavoriteLivesCache();
   }, [favorites.favoriteLiveIds]);
+
+  useEffect(() => {
+    if (auth.isLoading) return;
+    let canceled = false;
+
+    const fetchHomeRecentLives = async () => {
+      setHomeLoading(true);
+      setHomeError(null);
+      try {
+        const data = await getLives(1, 15);
+        if (canceled) return;
+        setHomeRecentRows(data.items.map(toLiveRow));
+        setHomeLiveTotal(data.pagination.total);
+      } catch (error) {
+        if (canceled) return;
+        const rawMessage = error instanceof Error ? error.message : "未知错误";
+        const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
+        logError("load_home_recent_lives_failed", {
+          page: 1,
+          pageSize: 15,
+          message,
+        });
+        setHomeRecentRows([]);
+        setHomeLiveTotal(0);
+        setHomeError(message);
+      } finally {
+        if (!canceled) setHomeLoading(false);
+      }
+    };
+
+    void fetchHomeRecentLives();
+    return () => {
+      canceled = true;
+    };
+  }, [auth.isLoading, auth.isAuthenticated, auth.user?.id, homeRefreshKey]);
+
+  useEffect(() => {
+    if (tab !== "search" || searchQuery.trim() === "") return;
+    let canceled = false;
+
+    const fetchSearchResult = async () => {
+      setSearchLoading(true);
+      setSearchError(null);
+      try {
+        const data = await searchCatalog(searchQuery, 8);
+        if (!canceled) setSearchResult(data);
+      } catch (error) {
+        if (canceled) return;
+        const rawMessage = error instanceof Error ? error.message : "未知错误";
+        const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
+        logError("catalog_search_failed", {
+          query: searchQuery,
+          message,
+        });
+        setSearchResult(null);
+        setSearchError(message);
+      } finally {
+        if (!canceled) setSearchLoading(false);
+      }
+    };
+
+    void fetchSearchResult();
+    return () => {
+      canceled = true;
+    };
+  }, [searchQuery, tab]);
+
+  useEffect(() => {
+    if (tab !== "browse") return;
+    let canceled = false;
+
+    const fetchCatalogBands = async () => {
+      setCatalogBandsLoading(true);
+      setCatalogBrowseError(null);
+      try {
+        const data = await getCatalogBands(30);
+        if (canceled) return;
+        setCatalogBands(data.items);
+        if (selectedCatalogBandId === null && data.items.length > 0) {
+          setSelectedCatalogBandId(data.items[0].band_id);
+        }
+      } catch (error) {
+        if (canceled) return;
+        const rawMessage = error instanceof Error ? error.message : "未知错误";
+        const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
+        logError("catalog_bands_failed", { message });
+        setCatalogBands([]);
+        setCatalogBrowseError(message);
+      } finally {
+        if (!canceled) setCatalogBandsLoading(false);
+      }
+    };
+
+    void fetchCatalogBands();
+    return () => {
+      canceled = true;
+    };
+  }, [selectedCatalogBandId, tab]);
+
+  useEffect(() => {
+    if (tab !== "browse" || selectedCatalogBandId === null) {
+      setCatalogBandLives(null);
+      return;
+    }
+    let canceled = false;
+
+    const fetchBandLives = async () => {
+      setCatalogBandLivesLoading(true);
+      setCatalogBrowseError(null);
+      try {
+        const data = await getCatalogBandLives(selectedCatalogBandId, catalogBandPage, pageSize);
+        if (!canceled) setCatalogBandLives(data);
+      } catch (error) {
+        if (canceled) return;
+        const rawMessage = error instanceof Error ? error.message : "未知错误";
+        const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
+        logError("catalog_band_lives_failed", {
+          bandId: selectedCatalogBandId,
+          page: catalogBandPage,
+          message,
+        });
+        setCatalogBandLives(null);
+        setCatalogBrowseError(message);
+      } finally {
+        if (!canceled) setCatalogBandLivesLoading(false);
+      }
+    };
+
+    void fetchBandLives();
+    return () => {
+      canceled = true;
+    };
+  }, [catalogBandPage, pageSize, selectedCatalogBandId, tab]);
 
   useEffect(() => {
     if (!listEnabled) return;
@@ -273,7 +437,7 @@ function App() {
         if (canceled) return;
         if (error instanceof ApiError && error.status === 401) {
           auth.setAnonymous();
-          setTab("all");
+          setTab("home");
         }
         const rawMessage = error instanceof Error ? error.message : "未知错误";
         const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
@@ -299,7 +463,7 @@ function App() {
   }, [canUseFavoriteFeatures, listEnabled, page, pageSize, tab]);
 
   useEffect(() => {
-    if (tab === "console") return;
+    if (tab !== "all" && tab !== "favorites") return;
     if (items.length === 0) return;
     const currentPage = Math.min(page, serverTotalPages);
     // 标签切换或分页后，先预读当前页详情，再空闲预读下一页。
@@ -373,7 +537,12 @@ function App() {
 
   const isFavorite = (id: number) => favorites.favoriteLiveIdSet.has(id);
   const showConsolePanel = tab === "console" && canUseConsoleFeatures;
-  const rows = showConsolePanel ? [] : items;
+  const showHomePanel = tab === "home";
+  const showListPanel = tab === "all" || tab === "favorites";
+  const showSearchPanel = tab === "search";
+  const showBrowsePanel = tab === "browse";
+  const showAboutPanel = tab === "about";
+  const rows = showListPanel ? items : [];
 
   const total = serverTotal;
   const totalPages = serverTotalPages;
@@ -416,6 +585,36 @@ function App() {
     listSnapshotsRef.current = {};
     clearLivesCache();
     clearMyFavoriteLivesCache();
+    setHomeRecentRows([]);
+    setHomeLiveTotal(0);
+    setHomeError(null);
+    setHomeRefreshKey((key) => key + 1);
+  };
+
+  const handleCatalogSearch = (query: string) => {
+    setSearchQuery(query);
+    setSearchResult(null);
+    setSearchError(null);
+    setTab("search");
+    setPage(1);
+    setUserMenuOpen(false);
+  };
+
+  const handleCatalogBandSelect = (bandId: number) => {
+    setSelectedCatalogBandId(bandId);
+    setCatalogBandPage(1);
+    setTab("browse");
+    setUserMenuOpen(false);
+  };
+
+  const openCatalogLive = (row: CatalogLiveRow) => {
+    setActiveRow({
+      liveId: row.liveId,
+      liveDate: row.liveDate,
+      liveTitle: row.liveTitle,
+      icons: row.icons,
+      url: row.url,
+    });
   };
 
   // 页签切换统一做权限闸门，防止未登录或低权限用户进入受限页。
@@ -432,7 +631,7 @@ function App() {
         return;
       }
       if (!canUseConsoleFeatures) {
-        setTab("all");
+        setTab("home");
         setPage(1);
         return;
       }
@@ -464,7 +663,7 @@ function App() {
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         auth.setAnonymous();
-        setTab("all");
+        setTab("home");
         setLoginDialogOpen(true);
       }
       logError("toggle_favorite_failed", {
@@ -489,7 +688,7 @@ function App() {
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         auth.setAnonymous();
-        setTab("all");
+        setTab("home");
         setLoginDialogOpen(true);
       }
       logError("toggle_batch_favorite_failed", {
@@ -527,7 +726,7 @@ function App() {
     try {
       await auth.login(params.username, params.password);
       setLoginDialogOpen(false);
-      setTab("all");
+      setTab("home");
       setPage(1);
       setUserMenuOpen(false);
     } catch (error) {
@@ -544,7 +743,7 @@ function App() {
       setLoginError(error instanceof Error ? error.message : "退出失败，请稍后重试");
       return;
     }
-    setTab("all");
+    setTab("home");
     setPage(1);
     setUserMenuOpen(false);
   };
@@ -616,6 +815,12 @@ function App() {
         </header>
 
         <nav className="tabs">
+          <button
+            className={`tab-btn ${tab === "home" ? "active" : ""}`}
+            onClick={() => handleTabChange("home")}
+          >
+            首页
+          </button>
           {auth.isAuthenticated && (
             <button
               className={`tab-btn ${tab === "favorites" ? "active" : ""}`}
@@ -629,6 +834,18 @@ function App() {
             onClick={() => handleTabChange("all")}
           >
             全部内容
+          </button>
+          <button
+            className={`tab-btn ${tab === "browse" ? "active" : ""}`}
+            onClick={() => handleTabChange("browse")}
+          >
+            按乐队浏览
+          </button>
+          <button
+            className={`tab-btn ${tab === "about" ? "active" : ""}`}
+            onClick={() => handleTabChange("about")}
+          >
+            关于 / 联系
           </button>
           {canUseConsoleFeatures && (
             <button
@@ -653,7 +870,54 @@ function App() {
         )}
         {favorites.favoriteSyncWarning && <p className="favorite-sync-warning">{favorites.favoriteSyncWarning}</p>}
 
-        {!showConsolePanel ? (
+        {showHomePanel ? (
+          <HomeDashboard
+            isAuthenticated={auth.isAuthenticated}
+            canUseConsoleFeatures={canUseConsoleFeatures}
+            favoriteCount={favorites.favoriteLiveIds.length}
+            liveTotal={homeLiveTotal}
+            recentRows={homeRecentRows}
+            loading={homeLoading}
+            error={homeError}
+            onOpenLive={(row: HomeLiveRow) => setActiveRow({ ...row, url: null })}
+            onShowAll={() => handleTabChange("all")}
+            onShowFavorites={() => handleTabChange("favorites")}
+            onShowConsole={() => handleTabChange("console")}
+            onLogin={() => {
+              setLoginError(null);
+              setLoginDialogOpen(true);
+            }}
+            onSearch={handleCatalogSearch}
+            onShowBrowse={() => handleTabChange("browse")}
+            onShowAbout={() => handleTabChange("about")}
+          />
+        ) : showSearchPanel ? (
+          <SearchResultsPanel
+            query={searchQuery}
+            result={searchResult}
+            loading={searchLoading}
+            error={searchError}
+            onSearch={handleCatalogSearch}
+            onOpenLive={openCatalogLive}
+            onSelectBand={handleCatalogBandSelect}
+            onShowAbout={() => handleTabChange("about")}
+          />
+        ) : showBrowsePanel ? (
+          <BandBrowsePanel
+            bands={catalogBands}
+            selectedBandId={selectedCatalogBandId}
+            bandLives={catalogBandLives}
+            loadingBands={catalogBandsLoading}
+            loadingLives={catalogBandLivesLoading}
+            error={catalogBrowseError}
+            page={catalogBandPage}
+            onSelectBand={handleCatalogBandSelect}
+            onOpenLive={openCatalogLive}
+            onPageChange={setCatalogBandPage}
+          />
+        ) : showAboutPanel ? (
+          <AboutPanel onShowBrowse={() => handleTabChange("browse")} />
+        ) : showListPanel ? (
           <>
             <div className="table-wrap">
               <table className={showFavoriteColumn ? "table-with-fav" : "table-no-fav"}>
@@ -794,8 +1058,10 @@ function App() {
               </div>
             </footer>
           </>
-        ) : (
+        ) : showConsolePanel ? (
           <ConsoleInsertPanel onLiveDataChanged={handleConsoleLiveDataChanged} />
+        ) : (
+          <AboutPanel onShowBrowse={() => handleTabChange("browse")} />
         )}
       </section>
 
@@ -892,6 +1158,9 @@ function App() {
               <strong>乐队：</strong>
               <span>{bandNamesText}</span>
             </p>
+            <button type="button" className="detail-feedback-btn" onClick={() => setFeedbackDialogOpen(true)}>
+              发现问题 / 补充信息
+            </button>
 
             <div className="detail-table-wrap">
               <MemberStatusTable
@@ -900,6 +1169,41 @@ function App() {
                 error={detailError}
               />
             </div>
+          </div>
+        </div>
+      )}
+      {feedbackDialogOpen && (
+        <div className="modal-mask" onClick={() => setFeedbackDialogOpen(false)}>
+          <div className="modal compact feedback-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <h2>反馈与补充信息</h2>
+              <button
+                type="button"
+                className="modal-action-btn close"
+                title="关闭"
+                aria-label="关闭反馈说明"
+                onClick={() => setFeedbackDialogOpen(false)}
+              >
+                <span className="modal-action-glyph close">✕</span>
+              </button>
+            </div>
+            <p>
+              当前不开放直接编辑，也不建立反馈工单。请通过站方维护者提供的 GitHub Issue、邮箱或社交账号反馈。
+            </p>
+            <p>
+              建议包含：Live 名称、日期、需要修正或补充的内容，以及可核对的说明。
+            </p>
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => {
+                setFeedbackDialogOpen(false);
+                closeDetailModal();
+                handleTabChange("about");
+              }}
+            >
+              查看关于 / 联系方式
+            </button>
           </div>
         </div>
       )}

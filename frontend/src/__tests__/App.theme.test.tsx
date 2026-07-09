@@ -17,6 +17,9 @@ import { ThemeProvider } from "../theme/ThemeProvider";
 
 vi.mock("../api", () => ({
   getLives: vi.fn(),
+  searchCatalog: vi.fn(),
+  getCatalogBands: vi.fn().mockResolvedValue({ items: [] }),
+  getCatalogBandLives: vi.fn(),
   getLiveDetail: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
   peekMyFavoriteLives: vi.fn(),

@@ -18,6 +18,14 @@ from app.schemas.console import (
     ConsoleVenueMutationResponse,
 )
 from app.schemas.common import ErrorResponse, RootResponse, ValidationErrorItem, ValidationErrorResponse
+from app.schemas.catalog import (
+    CatalogBandItem,
+    CatalogBandListResponse,
+    CatalogBandLivesResponse,
+    CatalogSearchResponse,
+    CatalogSongItem,
+    CatalogVenueItem,
+)
 from app.schemas.favorites import FavoriteBatchRequest, FavoriteBatchResponse
 from app.schemas.health import HealthResponse
 from app.schemas.lives import (
@@ -40,6 +48,12 @@ __all__ = [
     'HealthResponse',
     'FavoriteBatchRequest',
     'FavoriteBatchResponse',
+    'CatalogBandItem',
+    'CatalogBandListResponse',
+    'CatalogBandLivesResponse',
+    'CatalogSearchResponse',
+    'CatalogSongItem',
+    'CatalogVenueItem',
     'ConsoleBandItem',
     'ConsoleBandListResponse',
     'ConsoleSongCreateRequest',
