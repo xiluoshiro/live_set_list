@@ -68,6 +68,28 @@ python scripts/export_openapi.py
 - 当前脚本会从 FastAPI 应用运行时生成 OpenAPI
 - 导出结果写入 [docs/openapi.json](D:/Code/PythonCode/5%20LiveSetList/docs/openapi.json)
 
+## 生产发布包
+
+生产服务器不要直接上传整个工作区。先构建前端：
+
+```powershell
+cd frontend
+npm run build
+cd ..
+```
+
+再从项目根目录生成白名单发布包：
+
+```powershell
+python scripts/build_release.py --version 2026-07-10-001
+```
+
+发布包只包含运行所需的后端、前端构建产物、Flyway、生产 infra 模板和备份恢复入口，不包含 `.git`、`.codex`、`.agents`、`old`、`node_modules`、`.venv`、真实 env、日志或缓存。
+
+生产部署模板见：
+
+- [infra/production/README.md](D:/Code/PythonCode/5%20LiveSetList/infra/production/README.md)
+
 ## 数据库恢复
 
 在项目根目录执行：
@@ -99,3 +121,5 @@ python scripts/recovery_db.py <arguments> [--force]
 - 脚本会调用 `python scripts/recovery_db.py backup-app-auto`
 - 结束后会提取最后一条摘要，发送一条 Windows 系统通知
 - 若希望看到通知，任务需要运行在当前已登录用户会话中；如果任务配置成“无论用户是否登录都运行”，通常拿不到桌面通知
+
+Linux 生产环境使用 `infra/production/livesetlist-backup.service` 和 `infra/production/livesetlist-backup.timer`，并通过 `LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist` 指定备份根目录。

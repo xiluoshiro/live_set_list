@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from app.main import app, log_api_requests
+from app.main import app, create_app, log_api_requests
 
 
 def test_request_logging_middleware_logs_completed_request():
@@ -56,3 +56,50 @@ def test_request_logging_middleware_logs_failed_request_and_reraises():
     assert logger_exception.call_args.args[3] == "source=test"
     assert isinstance(logger_exception.call_args.args[4], float)
     assert logger_exception.call_args.args[5] == "127.0.0.1"
+
+
+def test_create_app_uses_cors_allow_origins_from_env():
+    # 测试点：生产域名 allowlist 应由环境变量驱动，避免继续写死本地开发端口。
+    with patch.dict(
+        "os.environ",
+        {
+            "CORS_ALLOW_ORIGINS": "https://example.com, https://admin.example.com",
+            "APP_ENV": "development",
+        },
+        clear=False,
+    ):
+        client = TestClient(create_app())
+        response = client.options(
+            "/api/health/db",
+            headers={
+                "Origin": "https://example.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+    assert response.headers["access-control-allow-origin"] == "https://example.com"
+
+
+def test_create_app_disables_openapi_docs_in_production():
+    # 测试点：生产环境不应默认暴露 Swagger、ReDoc 或 OpenAPI JSON。
+    with patch.dict(
+        "os.environ",
+        {"APP_ENV": "production", "AUTH_COOKIE_SECURE": "true"},
+        clear=False,
+    ):
+        client = TestClient(create_app())
+
+    assert client.get("/docs").status_code == 404
+    assert client.get("/redoc").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+def test_create_app_requires_secure_cookie_in_production():
+    # 测试点：生产环境必须启用 Secure cookie，避免公网 session 走明文连接。
+    with patch.dict(
+        "os.environ",
+        {"APP_ENV": "production", "AUTH_COOKIE_SECURE": "false"},
+        clear=False,
+    ):
+        with pytest.raises(RuntimeError, match="AUTH_COOKIE_SECURE=true"):
+            create_app()

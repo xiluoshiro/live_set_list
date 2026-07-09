@@ -42,7 +42,7 @@ describe("console lookup api", () => {
 
     expect(payload.items[0]).toEqual({ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, cover: false });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/console/songs?limit=10&q=BanG");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs?limit=10&q=BanG");
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ credentials: "include" }));
   });
 
@@ -60,7 +60,7 @@ describe("console lookup api", () => {
     expect(payload.items).toEqual([
       { band_id: 2, band_name: "Roselia", band_abbr: "rsl", band_members: ["Yukina", "Sayo"] },
     ]);
-    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/console/bands?limit=5&q=rsl");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/bands?limit=5&q=rsl");
   });
 
   test("getConsoleVenues 空 q 时只发送 limit 参数", async () => {
@@ -75,7 +75,7 @@ describe("console lookup api", () => {
     const payload = await getConsoleVenues("   ");
 
     expect(payload.items).toEqual([{ venue_id: 3, venue_name: "Zepp Shinjuku" }]);
-    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/console/venues?limit=20");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/venues?limit=20");
   });
 
   test("createConsoleVenue 会携带 CSRF 写入 venue", async () => {
@@ -91,7 +91,7 @@ describe("console lookup api", () => {
     const payload = await createConsoleVenue("New Venue", "csrf-token");
 
     expect(payload.item).toEqual({ venue_id: 9, venue_name: "New Venue" });
-    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/console/venues");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/venues");
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
       credentials: "include",
       method: "POST",
@@ -114,7 +114,7 @@ describe("console lookup api", () => {
     const payload = await createConsoleSong(requestPayload, "csrf-token");
 
     expect(payload.item).toEqual({ song_id: 903, song_name: "新曲", band_id: 2, cover: false });
-    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/console/songs");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs");
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
       credentials: "include",
       method: "POST",
@@ -155,7 +155,7 @@ describe("console lookup api", () => {
     const payload = await createConsoleLive(requestPayload, "csrf-token");
 
     expect(payload.item.live_id).toBe(39);
-    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/console/lives");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/lives");
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
       credentials: "include",
       method: "POST",
@@ -190,7 +190,7 @@ describe("console lookup api", () => {
     const payload = await appendConsoleLiveSetlist(101, requestPayload, "csrf-token");
 
     expect(payload.item).toEqual({ live_id: 101, inserted_row_count: 1, total_setlist_row_count: 12 });
-    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/console/lives/101/setlist");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/lives/101/setlist");
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
       credentials: "include",
       method: "POST",

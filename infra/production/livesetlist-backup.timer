@@ -1,0 +1,10 @@
+[Unit]
+Description=Run LiveSetList automatic database backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+Unit=livesetlist-backup.service
+
+[Install]
+WantedBy=timers.target

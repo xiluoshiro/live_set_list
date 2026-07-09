@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import importlib
 from argparse import Namespace
 from datetime import datetime
 from pathlib import Path
@@ -8,11 +9,25 @@ from pathlib import Path
 import pytest
 
 from recovery import backup, core
+from recovery import common
 
 
 def _touch_dump(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"dump")
+
+
+def test_backup_root_can_be_overridden_by_environment(tmp_path, monkeypatch) -> None:
+    # 测试点：生产 Linux 环境应能通过环境变量把备份目录切到 /var/backups 等路径。
+    monkeypatch.setenv("LIVESETLIST_BACKUP_ROOT", str(tmp_path / "prod-backups"))
+
+    reloaded_common = importlib.reload(common)
+
+    assert reloaded_common.BACKUP_ROOT == tmp_path / "prod-backups"
+    assert reloaded_common.AUTO_BACKUP_DIR == tmp_path / "prod-backups" / "app" / "auto"
+
+    monkeypatch.delenv("LIVESETLIST_BACKUP_ROOT")
+    importlib.reload(common)
 
 
 def test_build_backup_path_routes_snapshot_to_dedicated_directory(tmp_path, monkeypatch) -> None:

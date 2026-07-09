@@ -182,7 +182,7 @@ npx playwright test
 - 后端：`http://localhost:8000`
 - 前端：`http://localhost:5173`
 
-如果担心和开发服务冲突，可以改为 E2E 专用端口，例如后端 `18000`、前端 `15173`，但这要求前端 API base URL 支持配置。目前前端 API base URL 硬编码为 `http://localhost:8000`，所以第一阶段沿用 8000 更省事。
+如果担心和开发服务冲突，可以改为 E2E 专用端口，例如后端 `18000`、前端 `15173`。当前前端 API base URL 已支持 `VITE_API_BASE_URL` 覆盖，也可以通过 Vite dev proxy 继续沿用同源 `/api`。
 
 ## 6. 用例选择原则
 

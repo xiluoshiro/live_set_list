@@ -38,6 +38,7 @@ describe("api cache behavior", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
   });
 
@@ -101,7 +102,24 @@ describe("api cache behavior", () => {
 
     const [r1, r2] = await Promise.all([p1, p2]);
     expect(r1).toEqual(r2);
-    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/auth/me");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/auth/me");
+  });
+
+  test("VITE_API_BASE_URL 配置后会请求指定后端域名", async () => {
+    // 测试点：生产分域部署时 API base URL 应可由 Vite 环境变量覆盖。
+    vi.stubEnv("VITE_API_BASE_URL", "https://api.example.com/");
+    fetchMock.mockResolvedValue(
+      makeJsonResponse({
+        ok: true,
+        result: 1,
+      }),
+    );
+    const { checkDbHealth } = await import("../api");
+
+    await checkDbHealth();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.example.com/api/health/db");
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ credentials: "include" }));
   });
 
   test("getLives TTL 过期后会重新请求", async () => {
@@ -215,7 +233,7 @@ describe("api cache behavior", () => {
 
     expect(refreshed.pagination.total).toBe(4);
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[2][0]).toBe("http://localhost:8000/api/lives?page=1&page_size=20");
+    expect(fetchMock.mock.calls[2][0]).toBe("/api/lives?page=1&page_size=20");
   });
 
   test("getLiveDetail 命中缓存，不重复请求同一 live_id", async () => {

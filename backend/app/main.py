@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import ensure_default_admin_user
+from app.config import assert_production_security_config, cors_allow_origins, docs_urls
 from app.logging_config import get_logger, setup_logging
 from app.routers.auth import router as auth_router
 from app.routers.catalog import router as catalog_router
@@ -26,25 +27,6 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="LiveSetList API", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(health_router)
-app.include_router(lives_router)
-app.include_router(catalog_router)
-app.include_router(auth_router)
-app.include_router(me_router)
-app.include_router(console_router)
-
-
-@app.middleware("http")
 async def log_api_requests(request: Request, call_next):
     """Emit one access log per request and keep uncaught exception logging in one place."""
     start = perf_counter()
@@ -79,14 +61,46 @@ async def log_api_requests(request: Request, call_next):
     return response
 
 
-@app.get(
-    "/",
-    response_model=RootResponse,
-    summary="服务根路由",
-    description="用于确认后端服务已启动，不访问数据库。",
-)
 def root():
     """Return a lightweight startup confirmation message without touching the database."""
     return {"message": "LiveSetList backend is running"}
+
+
+def create_app() -> FastAPI:
+    assert_production_security_config()
+    doc_config = docs_urls()
+    app = FastAPI(
+        title="LiveSetList API",
+        lifespan=lifespan,
+        docs_url=doc_config["docs_url"],
+        redoc_url=doc_config["redoc_url"],
+        openapi_url=doc_config["openapi_url"],
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_allow_origins(),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.middleware("http")(log_api_requests)
+    app.get(
+        "/",
+        response_model=RootResponse,
+        summary="服务根路由",
+        description="用于确认后端服务已启动，不访问数据库。",
+    )(root)
+    app.include_router(health_router)
+    app.include_router(lives_router)
+    app.include_router(catalog_router)
+    app.include_router(auth_router)
+    app.include_router(me_router)
+    app.include_router(console_router)
+    return app
+
+
+app = create_app()
 
 
