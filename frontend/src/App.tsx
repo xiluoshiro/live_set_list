@@ -923,9 +923,6 @@ function App() {
             </aside>
           </div>
         )}
-        {!auth.isLoading && !auth.isAuthenticated && (
-          <p className="tab-tip">登录后可使用收藏同步；控制台仅对 editor 及以上角色可见。</p>
-        )}
         {favorites.favoriteSyncWarning && <p className="favorite-sync-warning">{favorites.favoriteSyncWarning}</p>}
 
         {tab === "detail" && detailLiveId !== null && detailFallback !== null ? (
