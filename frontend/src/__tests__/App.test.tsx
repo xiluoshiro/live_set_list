@@ -326,7 +326,7 @@ describe("App", () => {
   });
 
   test("首页最近 Live 可打开详情，并能进入全部内容", async () => {
-    // 测试点：首页最近收录复用详情弹窗，并提供进入全量列表的入口。
+    // 测试点：首页最近收录复用详情页，并提供进入全量列表的入口。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -335,7 +335,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(1));
-    await user.click(screen.getByRole("button", { name: "关闭" }));
+    await user.click(screen.getByRole("button", { name: "返回" }));
     await user.click(screen.getByRole("button", { name: "查看全部 Live" }));
 
     await waitFor(() => expect(screen.getByText("总计 47 条")).toBeInTheDocument());
@@ -821,8 +821,8 @@ describe("App", () => {
     expect(getComputedStyle(secondTable).tableLayout).toBe("fixed");
   });
 
-  test("点击 live 名称打开详情弹窗并可关闭", async () => {
-    // 测试点：详情查看路径（打开/关闭）可用。
+  test("点击 live 名称打开详情页并可返回", async () => {
+    // 测试点：详情查看路径（打开/返回）可用。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -835,12 +835,12 @@ describe("App", () => {
     await user.click(firstLiveButton);
     expect(screen.getByRole("heading", { name: firstLiveName })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "关闭" }));
+    await user.click(screen.getByRole("button", { name: "返回" }));
     expect(screen.queryByRole("heading", { name: firstLiveName })).not.toBeInTheDocument();
   });
 
-  test("详情弹窗格式正确：头部动作、基础信息、详情表格", async () => {
-    // 测试点：验证弹窗的新布局结构是否完整。
+  test("详情页格式正确：返回按钮、基础信息、详情表格", async () => {
+    // 测试点：验证详情页的布局结构是否完整（返回按钮、meta 信息、标题链接、表格结构）。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -850,9 +850,8 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
 
-    // 头部动作按钮
-    expect(screen.getByRole("button", { name: "全屏" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "关闭" })).toBeInTheDocument();
+    // 返回按钮
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
 
     // 基础信息行
     expect(screen.getByText("日期：")).toBeInTheDocument();
@@ -911,27 +910,24 @@ describe("App", () => {
     expect(screen.getByText("乐队：").closest("p")).toHaveClass("detail-row");
   });
 
-  test("详情弹窗支持全屏切换并可点遮罩关闭", async () => {
-    // 测试点：验证全屏状态切换样式和遮罩关闭交互。
+  test("详情页返回按钮可回到列表页", async () => {
+    // 测试点：点击返回按钮后详情页应消失，列表页应重新展示。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     const user = userEvent.setup();
-    const { container } = render(<App />);
+    render(<App />);
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
-    await user.click(screen.getByRole("button", { name: "全屏" }));
-    expect(screen.getByRole("button", { name: "退出全屏" })).toBeInTheDocument();
-    expect(container.querySelector(".modal.fullscreen")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
 
-    const mask = container.querySelector(".modal-mask") as HTMLElement;
-    await user.click(mask);
-    expect(screen.queryByRole("button", { name: "退出全屏" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
   });
 
-  test("详情弹窗右上角按钮样式类名正确", async () => {
-    // 测试点：看护右上角“全屏/关闭”按钮的样式类，避免回归改坏。
+  test("详情页返回按钮样式类名正确", async () => {
+    // 测试点：看护返回按钮的样式类，避免回归改坏。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -941,16 +937,11 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
 
-    const fullscreenBtn = screen.getByRole("button", { name: "全屏" });
-    const closeBtn = screen.getByRole("button", { name: "关闭" });
+    const backBtn = screen.getByRole("button", { name: "返回" });
+    expect(backBtn).toHaveClass("detail-back-btn");
 
-    expect(fullscreenBtn).toHaveClass("modal-action-btn", "fullscreen");
-    expect(closeBtn).toHaveClass("modal-action-btn", "close");
-
-    const fullscreenGlyph = within(fullscreenBtn).getByText("⛶");
-    const closeGlyph = within(closeBtn).getByText("✕");
-    expect(fullscreenGlyph).toHaveClass("modal-action-glyph", "fullscreen");
-    expect(closeGlyph).toHaveClass("modal-action-glyph", "close");
+    const backGlyph = within(backBtn).getByText("←");
+    expect(backGlyph).toHaveClass("detail-back-glyph");
   });
 
   test("详情弹窗在 url 为空时标题不渲染超链接", async () => {
