@@ -32,9 +32,15 @@ python scripts/recovery_db.py <arguments> [--force]
 
 ## 备份目录
 
-主库备份目录当前固定为：
+主库备份目录默认是当前 Windows 开发机路径：
 
 - `C:\Users\xiluo\OneDrive - stu.jiangnan.edu.cn\Backup\live-set-list-docker`
+
+Linux 生产环境应通过环境变量覆盖：
+
+```bash
+LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist
+```
 
 其中：
 

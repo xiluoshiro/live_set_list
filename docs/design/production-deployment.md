@@ -9,36 +9,41 @@
 - 推荐采用同源部署：公网只暴露 `https://<domain>`，静态前端由反向代理托管，`/api/*` 反代到后端，PostgreSQL 只允许后端内网访问。
 - 上线前的最后验收应包含功能检查、浏览器实测、生产环境健康检查、备份恢复演练和回滚演练。
 
+当前推荐服务器：
+
+- Google Cloud Compute Engine `e2-medium`
+- Debian 13 可用；Debian 12 / Ubuntu 24.04 LTS 也可作为更稳妥选择
+- Balanced Persistent Disk：30 GB 最低，40 GB 推荐，50 GB 是更宽松余量
+- 初版不使用 Vercel、Cloud Run、Cloud SQL 或 Kubernetes
+
 ## 1. 当前公网部署阻塞点
 
-### 1.1 前端 API 地址仍是本地开发地址
+### 1.1 前端 API 地址已改为生产可配置
 
-当前 `frontend/src/api.ts` 中 API 基址写死为：
+当前 `frontend/src/api.ts` 默认使用同源相对路径，并允许通过 `VITE_API_BASE_URL` 覆盖：
 
 ```ts
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 ```
 
-如果直接构建前端并部署到公网，用户浏览器会请求用户自己机器上的 `localhost:8000`，公网访问必然失败。
-
-必须改为以下之一：
+当前采用以下策略：
 
 - 推荐：前端请求同源相对路径，例如 `/api/...`，由反向代理转发到后端。
 - 可接受：通过 Vite 环境变量注入公网 API 地址，例如 `VITE_API_BASE_URL=https://api.example.com`。
 
-### 1.2 后端 CORS 仍是本地开发配置
+### 1.2 后端 CORS 已改为环境变量配置
 
-当前 `backend/app/main.py` 中 CORS 只允许：
+当前开发环境默认允许：
 
 ```py
-allow_origins=["http://localhost:5173"]
+DEV_CORS_ALLOW_ORIGINS = ["http://localhost:5173"]
 ```
 
-公网部署必须按真实域名配置。推荐同源反代后尽量不依赖跨域；如果必须前后端不同域名，则 CORS origin 必须由生产环境变量配置，不能写死开发地址，也不能使用泛化 `*` 搭配 credentials。
+生产环境默认不开放跨域；如果必须前后端不同域名，则通过 `CORS_ALLOW_ORIGINS` 配置明确 origin allowlist，不能使用泛化 `*` 搭配 credentials。
 
-### 1.3 Cookie 安全配置默认不适合公网
+### 1.3 Cookie 安全配置已在生产环境强制
 
-当前 `backend/app/auth.py` 中 `AUTH_COOKIE_SECURE` 默认是 `false`。公网必须满足：
+当前生产环境启动时会要求 `AUTH_COOKIE_SECURE=true`。公网必须满足：
 
 - 全站 HTTPS。
 - `AUTH_COOKIE_SECURE=true`。
@@ -154,20 +159,30 @@ PostgreSQL: private network only
 
 ### P0 必须完成
 
-- [ ] 前端 API 基址改为同源 `/api` 或 `VITE_API_BASE_URL`。
-- [ ] 后端 CORS 改为环境变量配置，并为生产域名提供明确 allowlist。
-- [ ] 生产环境强制 `AUTH_COOKIE_SECURE=true`。
-- [ ] 新增生产启动方案，不使用 `uvicorn --reload`。
-- [ ] 新增反向代理配置，完成 HTTPS、静态前端托管和 `/api/*` 转发。
-- [ ] 生产数据库取消公网端口暴露，仅允许后端私网访问。
-- [ ] 生产 admin 使用强随机密码初始化，初始化后关闭或收紧默认 admin bootstrap。
-- [ ] 为 `/api/auth/login` 增加登录限流或反代限流。
-- [ ] 明确 `/docs`、`/redoc`、`/openapi.json` 的生产访问策略。
-- [ ] `.gitignore` 明确忽略真实 env 文件，保留 `.example`。
-- [ ] 准备生产环境变量清单，覆盖 DB、auth、cookie、日志、域名、CORS。
+- [x] 前端 API 基址改为同源 `/api`，并支持 `VITE_API_BASE_URL`。
+- [x] 后端 CORS 改为环境变量配置，并为生产域名提供明确 allowlist。
+- [x] 生产环境强制 `AUTH_COOKIE_SECURE=true`。
+- [x] 新增生产启动方案，不使用 `uvicorn --reload`。
+- [x] 新增反向代理配置，完成 HTTPS、静态前端托管和 `/api/*` 转发模板。
+- [x] 生产数据库 compose 模板只绑定 `127.0.0.1`，不公网暴露。
+- [x] 生产 admin bootstrap 默认关闭，显式启用时拒绝占位/弱密码。
+- [x] 为 `/api/auth/login` 增加 Nginx `limit_req` 模板。
+- [x] 生产环境默认关闭 `/docs`、`/redoc`、`/openapi.json`。
+- [x] `.gitignore` 明确忽略真实 env 文件，保留 `.example`。
+- [x] 准备生产环境变量清单，覆盖 DB、auth、cookie、日志、域名、CORS。
 - [ ] 跑通一次生产数据库迁移流程：Flyway validate -> migrate -> app startup。
-- [ ] 建立生产备份任务，并完成至少一次恢复演练。
-- [ ] 建立部署验收清单和回滚步骤。
+- [x] 建立生产备份任务模板；真实 VM 上仍需完成首次备份和恢复演练。
+- [x] 建立部署验收清单和回滚步骤。
+
+### P0 已新增仓库入口
+
+- 生产模板目录：`infra/production`
+- 生产 env 样例：`infra/production/env.production.example`
+- 私有 PostgreSQL compose：`infra/production/docker-compose.postgres.yml`
+- Nginx 模板：`infra/production/nginx.livesetlist.conf.template`
+- 后端 systemd：`infra/production/livesetlist-backend.service`
+- 自动备份 systemd：`infra/production/livesetlist-backup.service`、`infra/production/livesetlist-backup.timer`
+- 发布包脚本：`python scripts/build_release.py --version <version>`
 
 ### P1 强烈建议完成
 
@@ -218,6 +233,7 @@ AUTH_SESSION_HOURS=8
 AUTH_DEFAULT_ADMIN_ENABLED=false
 
 CORS_ALLOW_ORIGINS=https://<domain>
+LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist
 ```
 
 如果首次部署需要 bootstrap admin，可以短暂设置：
@@ -261,16 +277,19 @@ VITE_API_BASE_URL=https://api.<domain>
 
 ### 5.1 首次上线流程
 
-1. 准备服务器、域名、DNS 和 HTTPS 证书。
-2. 准备生产数据库和私网访问规则。
-3. 配置生产 env，不提交到 Git。
-4. 执行 Flyway migration。
-5. 临时启用默认 admin bootstrap，启动后端，确认 admin 创建成功。
-6. 关闭默认 admin bootstrap，重启后端。
-7. 构建前端静态文件。
-8. 启动反向代理，启用 HTTPS。
-9. 执行上线验收。
-10. 开启备份、监控和告警。
+1. 准备 Google Cloud VM、防火墙和静态公网 IP。
+2. 准备域名、DNS 和 HTTPS 证书；暂无域名时只做临时 HTTP/本机验收。
+3. 本地执行 `npm run build` 生成 `frontend/dist`。
+4. 执行 `python scripts/build_release.py --version <version>` 生成白名单发布包。
+5. 上传发布包到 VM，解压到 `/opt/livesetlist/releases/<version>`，并更新 `/opt/livesetlist/current`。
+6. 配置 `/etc/livesetlist/backend.env` 和 `/etc/livesetlist/postgres.env`，不提交到 Git。
+7. 启动本机私有 PostgreSQL compose。
+8. 执行 Flyway validate/migrate。
+9. 临时启用默认 admin bootstrap，启动后端，确认 admin 创建成功。
+10. 关闭默认 admin bootstrap，重启后端。
+11. 启动 Nginx 反向代理，域名到位后启用 HTTPS。
+12. 启用备份 timer，执行首次手动备份和恢复演练。
+13. 执行上线验收。
 
 ### 5.2 常规发布流程
 

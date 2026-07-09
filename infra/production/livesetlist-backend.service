@@ -1,0 +1,19 @@
+[Unit]
+Description=LiveSetList FastAPI backend
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=livesetlist
+Group=livesetlist
+WorkingDirectory=/opt/livesetlist/current/backend
+EnvironmentFile=/etc/livesetlist/backend.env
+ExecStart=/opt/livesetlist/current/backend/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

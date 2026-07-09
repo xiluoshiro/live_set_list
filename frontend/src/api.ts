@@ -288,7 +288,7 @@ type RequestLogMeta = {
   method?: string;
 };
 
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 const REQUEST_TIMEOUT_MS = 10000;
 const LIVES_CACHE_TTL_MS = 15 * 60 * 1000;
 const DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;

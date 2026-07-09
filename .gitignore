@@ -2,3 +2,15 @@ old/
 __pycache__/
 AGENTS.md
 .opencode/
+.agents/
+.codex/
+.mypy_cache*/
+.pytest_cache/
+*.log
+backend/.venv/
+backend/logs/
+dist-release/
+frontend/dist/
+frontend/node_modules/
+infra/**/.env*
+!infra/**/*.example

@@ -222,6 +222,7 @@ def test_ensure_default_admin_user_upserts_admin_from_env():
             "AUTH_DEFAULT_ADMIN_PASSWORD": "secret-pass",
             "AUTH_DEFAULT_ADMIN_DISPLAY_NAME": "Root User",
             "AUTH_DEFAULT_ADMIN_ENABLED": "true",
+            "APP_ENV": "development",
         },
         clear=False,
     ):
@@ -231,3 +232,39 @@ def test_ensure_default_admin_user_upserts_admin_from_env():
     assert sql_params[0] == "root"
     assert isinstance(sql_params[1], str)
     assert sql_params[2] == "Root User"
+
+
+# 测试点：生产环境默认不自动补齐 admin，避免启动时意外覆盖管理员状态。
+def test_ensure_default_admin_user_disabled_by_default_in_production():
+    with patch("app.auth.get_write_db_connection") as connect, patch.dict(
+        "os.environ",
+        {
+            "APP_ENV": "production",
+            "AUTH_DEFAULT_ADMIN_USERNAME": "Root",
+            "AUTH_DEFAULT_ADMIN_PASSWORD": "very-strong-admin-password",
+            "AUTH_DEFAULT_ADMIN_DISPLAY_NAME": "Root User",
+        },
+        clear=True,
+    ):
+        ensure_default_admin_user()
+
+    connect.assert_not_called()
+
+
+# 测试点：生产环境显式启用默认 admin 时，应拒绝占位或过短密码。
+def test_ensure_default_admin_user_rejects_weak_password_in_production():
+    with patch("app.auth.get_write_db_connection") as connect, patch.dict(
+        "os.environ",
+        {
+            "APP_ENV": "production",
+            "AUTH_DEFAULT_ADMIN_ENABLED": "true",
+            "AUTH_DEFAULT_ADMIN_USERNAME": "Root",
+            "AUTH_DEFAULT_ADMIN_PASSWORD": "replace-me",
+            "AUTH_DEFAULT_ADMIN_DISPLAY_NAME": "Root User",
+        },
+        clear=False,
+    ):
+        with pytest.raises(RuntimeError, match="password is too weak"):
+            ensure_default_admin_user()
+
+    connect.assert_not_called()

@@ -12,6 +12,7 @@ from fastapi import Depends, HTTPException, Request, status
 from psycopg2 import Error
 from psycopg2.extras import Json
 
+from app.config import cookie_secure_enabled, is_production, is_truthy_env
 from app.db import get_write_db_connection
 from app.favorites import get_favorite_live_ids
 from app.logging_config import get_logger
@@ -85,7 +86,8 @@ def _session_cookie_max_age_seconds() -> int:
 
 
 def _default_admin_enabled() -> bool:
-    return os.getenv("AUTH_DEFAULT_ADMIN_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+    default = "false" if is_production() else "true"
+    return is_truthy_env("AUTH_DEFAULT_ADMIN_ENABLED", default)
 
 
 def _read_required_auth_setting(name: str) -> str | None:
@@ -109,6 +111,21 @@ def _default_admin_password() -> str | None:
 
 def _default_admin_display_name() -> str | None:
     return _read_required_auth_setting("AUTH_DEFAULT_ADMIN_DISPLAY_NAME")
+
+
+def _is_weak_default_admin_password(password: str) -> bool:
+    normalized = password.strip().lower()
+    weak_values = {
+        "admin",
+        "administrator",
+        "password",
+        "test-admin-pass",
+        "replace-me",
+        "replace_me",
+        "changeme",
+        "your_password",
+    }
+    return len(password) < 16 or normalized in weak_values
 
 
 def _user_payload(user: AuthUser) -> dict[str, Any]:
@@ -190,6 +207,8 @@ def ensure_default_admin_user() -> None:
     if username is None or password is None or display_name is None:
         logger.warning("default admin bootstrap skipped because AUTH_DEFAULT_ADMIN_* is incomplete")
         return
+    if is_production() and _is_weak_default_admin_password(password):
+        raise RuntimeError("production default admin password is too weak or uses a placeholder value")
 
     password_hash = hash_password(password)
     now = _now_utc()
@@ -502,12 +521,11 @@ def logout_current_session(request: Request, context: AuthSessionContext) -> Non
 
 
 def session_cookie_settings(expires_at: datetime) -> dict[str, Any]:
-    secure = os.getenv("AUTH_COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes", "on"}
     return {
         "key": SESSION_COOKIE_NAME,
         "value": "",
         "httponly": True,
-        "secure": secure,
+        "secure": cookie_secure_enabled(),
         "samesite": "lax",
         "path": "/",
         "expires": expires_at,
