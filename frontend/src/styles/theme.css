@@ -16,6 +16,7 @@
   --surface-muted: #eef3ff;
   --surface-hover: #f3fbf7;
   --surface-head: #f9fbff;
+  --surface-topbar: rgba(255, 255, 255, 0.92);
   --surface-table-head: rgba(243, 24, 100, 0.06);
   --surface-table-hover: #f9fbff;
   --surface-input: #ffffff;
@@ -80,6 +81,7 @@
   --surface-muted: #22314d;
   --surface-hover: #263754;
   --surface-head: #1d2a43;
+  --surface-topbar: rgba(29, 42, 67, 0.94);
   --surface-table-head: #22324d;
   --surface-table-hover: #243553;
   --surface-input: #1f2b43;
