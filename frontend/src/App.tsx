@@ -5,6 +5,7 @@ import {
   clearMyFavoriteLivesCache,
   getCatalogBandLives,
   getCatalogBands,
+  getCatalogStats,
   getLives,
   getMyFavoriteLives,
   peekMyFavoriteLives,
@@ -12,6 +13,7 @@ import {
   type CatalogBandItem,
   type CatalogBandLivesResponse,
   type CatalogSearchResponse,
+  type CatalogStatsResponse,
   type LiveItem,
 } from "./api";
 import { useAuth } from "./auth/AuthProvider";
@@ -154,6 +156,7 @@ function App() {
   const [catalogBrowseError, setCatalogBrowseError] = useState<string | null>(null);
   const [selectedCatalogBandId, setSelectedCatalogBandId] = useState<number | null>(null);
   const [catalogBandPage, setCatalogBandPage] = useState(1);
+  const [catalogStats, setCatalogStats] = useState<CatalogStatsResponse | null>(null);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -358,6 +361,23 @@ function App() {
       canceled = true;
     };
   }, [catalogBandPage, pageSize, selectedCatalogBandId, tab]);
+
+  useEffect(() => {
+    if (tab !== "home") return;
+    let canceled = false;
+    const fetchStats = async () => {
+      try {
+        const stats = await getCatalogStats();
+        if (!canceled) setCatalogStats(stats);
+      } catch {
+        if (!canceled) setCatalogStats(null);
+      }
+    };
+    void fetchStats();
+    return () => {
+      canceled = true;
+    };
+  }, [tab]);
 
   useEffect(() => {
     if (!listEnabled) return;
@@ -843,6 +863,7 @@ function App() {
             recentRows={homeRecentRows}
             loading={homeLoading}
             error={homeError}
+            stats={catalogStats}
             onOpenLive={(row: HomeLiveRow) => {
               setDetailLiveId(row.liveId);
               setDetailFallback({ liveTitle: row.liveTitle, liveDate: row.liveDate, url: null });

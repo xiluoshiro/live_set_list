@@ -183,6 +183,8 @@ npm run typecheck
 - `DONE` 首页按钮视觉统一：线性箭头风格 action-link，与下方列表列对齐，补充 primary-btn hover 态，联系入口内联为文字链接
 - `DONE` 隐私说明：在"联系我们"页面明确说明收集/不收集的数据范围、Cookie 策略和数据删除方式
 - `DONE` 外部反馈入口：配置 mailto 邮箱链接（xiluoshiro@gmail.com），替换原来的占位文案
+- `DONE` 顶部导航精简：移除"首页"tab，标题 `BanG Dream! Live 资料库` 改为可点击按钮（hover 粉色），侧边栏保留首页入口
+- `DONE` 首页指标卡片数据化：新增 `GET /api/catalog/stats` 端点，三张卡片展示"已收录 Live 总数"、"歌曲 / 场地统计"、"最近更新日期"
 
 ## 当前待办
 

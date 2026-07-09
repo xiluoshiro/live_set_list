@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import type { CatalogStatsResponse } from "../api";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
 
 export type HomeLiveRow = {
@@ -17,6 +18,7 @@ type HomeDashboardProps = {
   recentRows: HomeLiveRow[];
   loading: boolean;
   error: string | null;
+  stats: CatalogStatsResponse | null;
   onOpenLive: (row: HomeLiveRow) => void;
   onShowAll: () => void;
   onShowFavorites: () => void;
@@ -35,6 +37,7 @@ export function HomeDashboard({
   recentRows,
   loading,
   error,
+  stats,
   onOpenLive,
   onShowAll,
   onShowFavorites,
@@ -90,13 +93,15 @@ export function HomeDashboard({
           <span className="home-metric-value">{loading ? "..." : liveTotal}</span>
           <span className="home-metric-label">已收录 Live</span>
         </div>
-        <div className="home-metric home-metric-muted">
-          <span className="home-metric-value">待补充</span>
-          <span className="home-metric-label">乐队 / 歌曲 / 场地统计</span>
+        <div className="home-metric">
+          <span className="home-metric-value">
+            {stats ? `${stats.song_count} / ${stats.venue_count}` : "..."}
+          </span>
+          <span className="home-metric-label">歌曲 / 场地统计</span>
         </div>
-        <div className="home-metric home-metric-muted">
-          <span className="home-metric-value">阶段 2</span>
-          <span className="home-metric-label">公共搜索与浏览</span>
+        <div className="home-metric">
+          <span className="home-metric-value">{stats?.latest_live_date ?? "..."}</span>
+          <span className="home-metric-label">最近更新</span>
         </div>
       </section>
 

@@ -43,3 +43,10 @@ class CatalogBandLivesResponse(BaseModel):
 class CatalogBandListResponse(BaseModel):
     items: list[CatalogBandItem] = Field(..., description="Public band browse candidates")
 
+
+class CatalogStatsResponse(BaseModel):
+    band_count: int = Field(..., description="Total number of bands")
+    song_count: int = Field(..., description="Total number of songs")
+    venue_count: int = Field(..., description="Total number of venues")
+    latest_live_date: str | None = Field(default=None, description="Most recent live date in ISO format")
+
