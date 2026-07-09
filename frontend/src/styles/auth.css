@@ -42,6 +42,10 @@
   color: var(--text-on-primary);
 }
 
+.primary-btn:hover {
+  background: #d41558;
+}
+
 .secondary-btn {
   border: 1px solid var(--border-normal);
   background: var(--surface-chip-soft);
