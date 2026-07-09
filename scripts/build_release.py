@@ -10,6 +10,7 @@ RELEASE_DIRS = [
     "backend/app",
     "backend/db/flyway",
     "backend/db/postgres/init",
+    "config",
     "frontend/dist",
     "infra/production",
     "recovery",
