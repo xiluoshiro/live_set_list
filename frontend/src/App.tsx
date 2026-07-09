@@ -5,7 +5,6 @@ import {
   clearMyFavoriteLivesCache,
   getCatalogBandLives,
   getCatalogBands,
-  getLiveDetail,
   getLives,
   getMyFavoriteLives,
   peekMyFavoriteLives,
@@ -13,7 +12,6 @@ import {
   type CatalogBandItem,
   type CatalogBandLivesResponse,
   type CatalogSearchResponse,
-  type LiveDetailResponse,
   type LiveItem,
 } from "./api";
 import { useAuth } from "./auth/AuthProvider";
@@ -24,10 +22,9 @@ import {
   type CatalogLiveRow,
   SearchResultsPanel,
 } from "./components/CatalogPanels";
-import { formatLiveType } from "./components/console/constants";
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
-import { MemberStatusTable } from "./components/DetailMemberTable";
 import { HomeDashboard, type HomeLiveRow } from "./components/HomeDashboard";
+import { LiveDetailPage } from "./components/LiveDetailPage";
 import { LoginDialog } from "./components/LoginDialog";
 import { useFavorites } from "./favorites/FavoriteProvider";
 import { logError } from "./logger";
@@ -47,32 +44,19 @@ type LiveRow = {
   url: string | null;
 };
 
-type TabKey = "home" | "favorites" | "all" | "console" | "search" | "browse" | "about";
+type LiveDetailFallback = {
+  liveTitle: string;
+  liveDate: string;
+  url: string | null;
+};
+
+type TabKey = "home" | "favorites" | "all" | "console" | "search" | "browse" | "about" | "detail";
 type ListTabKey = "favorites" | "all";
 type ListSnapshot = {
   items: LiveRow[];
   total: number;
   totalPages: number;
 };
-
-function formatTimedLabel(value: string | null | undefined): string {
-  const raw = value?.trim();
-  if (!raw) return "-";
-
-  const match = raw.match(/^(\d{2}:\d{2})(?::\d{2})?(?:([+-]\d{2})(?::?(\d{2}))?)?$/);
-  if (!match) return raw;
-
-  const [, timePart, offsetHour, offsetMinute] = match;
-  if (!offsetHour) return timePart;
-
-  const normalizedOffset = `${offsetHour}:${offsetMinute ?? "00"}`;
-  const timezoneLabelMap: Record<string, string> = {
-    "+08:00": "CN",
-    "+09:00": "JP",
-  };
-  const timezoneLabel = timezoneLabelMap[normalizedOffset] ?? `UTC${normalizedOffset}`;
-  return `${timePart}(${timezoneLabel})`;
-}
 
 function getNextThemeMode(mode: ThemeMode): ThemeMode {
   if (mode === "system") return "dark";
@@ -146,8 +130,9 @@ function App() {
   const [page, setPage] = useState(1);
   const [jumpPageInput, setJumpPageInput] = useState("1");
   const [tab, setTab] = useState<TabKey>("home");
-  const [activeRow, setActiveRow] = useState<LiveRow | null>(null);
-  const [detailFullscreen, setDetailFullscreen] = useState(false);
+  const [detailLiveId, setDetailLiveId] = useState<number | null>(null);
+  const [detailFallback, setDetailFallback] = useState<LiveDetailFallback | null>(null);
+  const [previousTab, setPreviousTab] = useState<TabKey>("home");
   const [items, setItems] = useState<LiveRow[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(1);
@@ -169,9 +154,6 @@ function App() {
   const [catalogBrowseError, setCatalogBrowseError] = useState<string | null>(null);
   const [selectedCatalogBandId, setSelectedCatalogBandId] = useState<number | null>(null);
   const [catalogBandPage, setCatalogBandPage] = useState(1);
-  const [detailData, setDetailData] = useState<LiveDetailResponse | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -503,46 +485,6 @@ function App() {
     };
   }, [canUseFavoriteFeatures, items, page, pageSize, serverTotalPages, tab]);
 
-  useEffect(() => {
-    if (!activeRow) {
-      setDetailData(null);
-      setDetailLoading(false);
-      setDetailError(null);
-      return;
-    }
-
-    let canceled = false;
-    const fetchDetail = async () => {
-      setDetailLoading(true);
-      setDetailError(null);
-      setDetailData(null);
-      try {
-        const data = await getLiveDetail(activeRow.liveId);
-        if (!canceled) {
-          setDetailData(data);
-        }
-      } catch (error) {
-        if (canceled) return;
-        const rawMessage = error instanceof Error ? error.message : "未知错误";
-        const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
-        logError("load_live_detail_failed", {
-          liveId: activeRow.liveId,
-          message,
-        });
-        setDetailError(message);
-      } finally {
-        if (!canceled) {
-          setDetailLoading(false);
-        }
-      }
-    };
-
-    fetchDetail();
-    return () => {
-      canceled = true;
-    };
-  }, [activeRow?.liveId]);
-
   const isFavorite = (id: number) => favorites.favoriteLiveIdSet.has(id);
   const showConsolePanel = tab === "console" && canUseConsoleFeatures;
   const showHomePanel = tab === "home";
@@ -616,18 +558,20 @@ function App() {
   };
 
   const openCatalogLive = (row: CatalogLiveRow) => {
-    setActiveRow({
-      liveId: row.liveId,
-      liveDate: row.liveDate,
+    setDetailLiveId(row.liveId);
+    setDetailFallback({
       liveTitle: row.liveTitle,
-      icons: row.icons,
+      liveDate: row.liveDate,
       url: row.url,
     });
+    setPreviousTab(tab);
+    setTab("detail");
   };
 
   // 页签切换统一做权限闸门，防止未登录或低权限用户进入受限页。
   const handleTabChange = (nextTab: TabKey) => {
     setNavDrawerOpen(false);
+    if (nextTab === "detail") return;
     if (nextTab === "favorites" && !canUseFavoriteFeatures) {
       setLoginError(null);
       setLoginDialogOpen(true);
@@ -645,6 +589,8 @@ function App() {
         return;
       }
     }
+    setDetailLiveId(null);
+    setDetailFallback(null);
     setTab(nextTab);
     setPage(1);
     setUserMenuOpen(false);
@@ -708,22 +654,11 @@ function App() {
     }
   };
 
-  const closeDetailModal = () => {
-    setActiveRow(null);
-    setDetailFullscreen(false);
-    setDetailData(null);
-    setDetailLoading(false);
-    setDetailError(null);
+  const handleBackFromDetail = () => {
+    setDetailLiveId(null);
+    setDetailFallback(null);
+    setTab(previousTab);
   };
-  const bandNamesText = detailData
-    ? detailData.band_names.filter((name) => name.trim() !== "").join(" / ") || "-"
-    : detailLoading
-      ? "加载中..."
-      : "-";
-  const venueText = detailData?.venue?.trim() ? detailData.venue : "-";
-  const openingTimeText = formatTimedLabel(detailData?.opening_time);
-  const startTimeText = formatTimedLabel(detailData?.start_time);
-  const detailUrl = detailData?.url ?? activeRow?.url ?? null;
   const toggleTheme = () => {
     setThemeMode(getNextThemeMode(themeMode));
   };
@@ -889,7 +824,9 @@ function App() {
         )}
         {favorites.favoriteSyncWarning && <p className="favorite-sync-warning">{favorites.favoriteSyncWarning}</p>}
 
-        {showHomePanel ? (
+        {tab === "detail" && detailLiveId !== null && detailFallback !== null ? (
+          <LiveDetailPage liveId={detailLiveId} fallback={detailFallback} onBack={handleBackFromDetail} />
+        ) : showHomePanel ? (
           <HomeDashboard
             isAuthenticated={auth.isAuthenticated}
             canUseConsoleFeatures={canUseConsoleFeatures}
@@ -898,7 +835,12 @@ function App() {
             recentRows={homeRecentRows}
             loading={homeLoading}
             error={homeError}
-            onOpenLive={(row: HomeLiveRow) => setActiveRow({ ...row, url: null })}
+            onOpenLive={(row: HomeLiveRow) => {
+              setDetailLiveId(row.liveId);
+              setDetailFallback({ liveTitle: row.liveTitle, liveDate: row.liveDate, url: null });
+              setPreviousTab("home");
+              setTab("detail");
+            }}
             onShowAll={() => handleTabChange("all")}
             onShowFavorites={() => handleTabChange("favorites")}
             onShowConsole={() => handleTabChange("console")}
@@ -986,7 +928,12 @@ function App() {
                       <td>
                         <button
                           className="name-btn"
-                          onClick={() => setActiveRow(row)}
+                          onClick={() => {
+                            setDetailLiveId(row.liveId);
+                            setDetailFallback({ liveTitle: row.liveTitle, liveDate: row.liveDate, url: row.url });
+                            setPreviousTab(tab);
+                            setTab("detail");
+                          }}
                           title={row.liveTitle}
                         >
                           {row.liveTitle}
@@ -1084,110 +1031,6 @@ function App() {
         )}
       </section>
 
-      {activeRow && (
-        <div className="modal-mask" onClick={closeDetailModal}>
-          <div
-            className={`modal ${detailFullscreen ? "fullscreen" : ""}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-head">
-              <h2>
-                {detailUrl ? (
-                  <a href={detailUrl} target="_blank" rel="noreferrer" className="detail-title-link">
-                    <span>{detailData?.live_title ?? activeRow.liveTitle}</span>
-                    <span className="detail-title-link-icon" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" focusable="false">
-                        <path
-                          d="M6 3.5H3.5v9h9V10"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <path
-                          d="M8 3.5h4.5V8"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <path
-                          d="M7.5 8.5 12.5 3.5"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </span>
-                  </a>
-                ) : (
-                  detailData?.live_title ?? activeRow.liveTitle
-                )}
-              </h2>
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="modal-action-btn fullscreen"
-                  title={detailFullscreen ? "退出全屏" : "全屏"}
-                  aria-label={detailFullscreen ? "退出全屏" : "全屏"}
-                  onClick={() => setDetailFullscreen((v) => !v)}
-                >
-                  <span className="modal-action-glyph fullscreen">
-                    {detailFullscreen ? "❐" : "⛶"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="modal-action-btn close"
-                  title="关闭"
-                  aria-label="关闭"
-                  onClick={closeDetailModal}
-                >
-                  <span className="modal-action-glyph close">✕</span>
-                </button>
-              </div>
-            </div>
-            <div className="detail-meta-line">
-              <p className="detail-inline-item detail-inline-item-date">
-                <strong>日期：</strong>
-                <span>{detailData?.live_date ?? activeRow.liveDate}</span>
-              </p>
-              <p className="detail-inline-item">
-                <strong>开场：</strong>
-                <span>{openingTimeText}</span>
-              </p>
-              <p className="detail-inline-item">
-                <strong>开演：</strong>
-                <span>{startTimeText}</span>
-              </p>
-              <p className="detail-inline-item detail-inline-item-venue">
-                <strong>场地：</strong>
-                <span>{venueText}</span>
-              </p>
-              <p className="detail-inline-item detail-inline-item-type">
-                <strong>类型：</strong>
-                <span>{formatLiveType(detailData?.live_type ?? "")}</span>
-              </p>
-            </div>
-            <p className="detail-row">
-              <strong>乐队：</strong>
-              <span>{bandNamesText}</span>
-            </p>
-
-            <div className="detail-table-wrap">
-              <MemberStatusTable
-                rows={detailData?.detail_rows}
-                loading={detailLoading}
-                error={detailError}
-              />
-            </div>
-          </div>
-        </div>
-      )}
       <LoginDialog
         open={loginDialogOpen}
         loading={loginLoading}
