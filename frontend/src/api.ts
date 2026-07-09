@@ -53,6 +53,45 @@ export type LivesResponse = {
   };
 };
 
+export type CatalogBandItem = {
+  band_id: number;
+  band_name: string;
+  band_abbr: string;
+  live_count: number;
+};
+
+export type CatalogSongItem = {
+  song_id: number;
+  song_name: string;
+  band_id: number;
+  band_name: string | null;
+  live_count: number;
+};
+
+export type CatalogVenueItem = {
+  venue_id: number;
+  venue_name: string;
+  live_count: number;
+};
+
+export type CatalogSearchResponse = {
+  query: string;
+  lives: LiveItem[];
+  bands: CatalogBandItem[];
+  songs: CatalogSongItem[];
+  venues: CatalogVenueItem[];
+};
+
+export type CatalogBandListResponse = {
+  items: CatalogBandItem[];
+};
+
+export type CatalogBandLivesResponse = {
+  band: CatalogBandItem;
+  items: LiveItem[];
+  pagination: LivesResponse["pagination"];
+};
+
 export type LiveDetailBandMember = {
   band_id: number | null;
   band_name: string;
@@ -231,7 +270,10 @@ type RequestKind =
   | "console_live_create"
   | "console_song_create"
   | "console_song_batch_create"
-  | "console_live_setlist_append";
+  | "console_live_setlist_append"
+  | "catalog_search"
+  | "catalog_bands"
+  | "catalog_band_lives";
 
 type RequestLogMeta = {
   requestKind: RequestKind;
@@ -604,6 +646,42 @@ export async function getConsoleVenues(q?: string, limit = 20): Promise<ConsoleV
     requestKind: "console_venues",
   });
   return expectJsonResponse<ConsoleVenueListResponse>(response);
+}
+
+export async function searchCatalog(q: string, limit = 8): Promise<CatalogSearchResponse> {
+  const query = new URLSearchParams({
+    q,
+    limit: String(limit),
+  });
+  const response = await fetchWithTimeout(`${BASE_URL}/api/catalog/search?${query.toString()}`, undefined, {
+    requestKind: "catalog_search",
+  });
+  return expectJsonResponse<CatalogSearchResponse>(response);
+}
+
+export async function getCatalogBands(limit = 20): Promise<CatalogBandListResponse> {
+  const query = new URLSearchParams({
+    limit: String(limit),
+  });
+  const response = await fetchWithTimeout(`${BASE_URL}/api/catalog/bands?${query.toString()}`, undefined, {
+    requestKind: "catalog_bands",
+  });
+  return expectJsonResponse<CatalogBandListResponse>(response);
+}
+
+export async function getCatalogBandLives(
+  bandId: number,
+  page: number,
+  pageSize: 15 | 20,
+): Promise<CatalogBandLivesResponse> {
+  const query = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  const response = await fetchWithTimeout(`${BASE_URL}/api/catalog/bands/${bandId}/lives?${query.toString()}`, undefined, {
+    requestKind: "catalog_band_lives",
+  });
+  return expectJsonResponse<CatalogBandLivesResponse>(response);
 }
 
 export async function createConsoleSong(

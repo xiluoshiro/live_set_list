@@ -10,6 +10,8 @@ import {
   clearMyFavoriteLivesCache,
   favoriteLive,
   favoriteLivesBatch,
+  getCatalogBandLives,
+  getCatalogBands,
   getLiveDetail,
   getLiveDetailsBatch,
   getAuthMe,
@@ -18,7 +20,10 @@ import {
   login,
   logout,
   peekMyFavoriteLives,
+  searchCatalog,
   unfavoriteLive,
+  type CatalogBandLivesResponse,
+  type CatalogSearchResponse,
   type LiveDetailResponse,
   type LivesResponse,
 } from "../api";
@@ -27,6 +32,9 @@ import { ThemeProvider } from "../theme/ThemeProvider";
 
 vi.mock("../api", () => ({
   getLives: vi.fn(),
+  searchCatalog: vi.fn(),
+  getCatalogBands: vi.fn(),
+  getCatalogBandLives: vi.fn(),
   getLiveDetail: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
   getAuthMe: vi.fn(),
@@ -62,6 +70,9 @@ vi.mock("../logger", () => ({
 }));
 
 const getLivesMock = vi.mocked(getLives);
+const searchCatalogMock = vi.mocked(searchCatalog);
+const getCatalogBandsMock = vi.mocked(getCatalogBands);
+const getCatalogBandLivesMock = vi.mocked(getCatalogBandLives);
 const getLiveDetailMock = vi.mocked(getLiveDetail);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
 const getAuthMeMock = vi.mocked(getAuthMe);
@@ -148,6 +159,49 @@ function makeDetailResponse(params: {
   };
 }
 
+function makeSearchResponse(query: string): CatalogSearchResponse {
+  return {
+    query,
+    lives: [
+      {
+        live_id: 101,
+        live_date: "2026-06-01",
+        live_title: "検索対象 Live",
+        live_type: "oneman",
+        bands: [1],
+        url: "https://example.com/live/101",
+        is_favorite: false,
+      },
+    ],
+    bands: [{ band_id: 1, band_name: "Poppin'Party", band_abbr: "PoPiPa", live_count: 12 }],
+    songs: [{ song_id: 7, song_name: "STAR BEAT!", band_id: 1, band_name: "Poppin'Party", live_count: 5 }],
+    venues: [{ venue_id: 3, venue_name: "有明アリーナ", live_count: 4 }],
+  };
+}
+
+function makeBandLivesResponse(): CatalogBandLivesResponse {
+  return {
+    band: { band_id: 1, band_name: "Poppin'Party", band_abbr: "PoPiPa", live_count: 2 },
+    items: [
+      {
+        live_id: 201,
+        live_date: "2026-07-01",
+        live_title: "Poppin'Party Browse Live",
+        live_type: "multi_act",
+        bands: [1, 2],
+        url: "https://example.com/live/201",
+        is_favorite: false,
+      },
+    ],
+    pagination: {
+      page: 1,
+      page_size: 20,
+      total: 1,
+      total_pages: 1,
+    },
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -198,11 +252,18 @@ function renderApp(options?: { withAuthProvider?: boolean }) {
   return render(<App />);
 }
 
+async function openAllContent(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "全部内容" }));
+}
+
 describe("App", () => {
   beforeEach(() => {
     Reflect.deleteProperty(window, "requestIdleCallback");
     Reflect.deleteProperty(window, "cancelIdleCallback");
     getLivesMock.mockReset();
+    searchCatalogMock.mockReset();
+    getCatalogBandsMock.mockReset();
+    getCatalogBandLivesMock.mockReset();
     getLiveDetailMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
     getAuthMeMock.mockReset();
@@ -240,18 +301,109 @@ describe("App", () => {
       makeDetailResponse({ liveId, rowCount: 20 }),
     );
     getLiveDetailsBatchMock.mockResolvedValue({ items: [], missing_live_ids: [] });
+    searchCatalogMock.mockResolvedValue(makeSearchResponse("Party"));
+    getCatalogBandsMock.mockResolvedValue({
+      items: [
+        { band_id: 1, band_name: "Poppin'Party", band_abbr: "PoPiPa", live_count: 2 },
+        { band_id: 2, band_name: "Roselia", band_abbr: "Roselia", live_count: 1 },
+      ],
+    });
+    getCatalogBandLivesMock.mockResolvedValue(makeBandLivesResponse());
   });
 
-  test("匿名模式默认进入全量页，且不显示收藏入口", () => {
-    // 测试点：未登录时默认只展示全量页，不暴露收藏页签。
+  test("匿名模式默认进入首页，且不显示收藏入口", async () => {
+    // 测试点：未登录时默认展示社区数据库首页，不暴露收藏页签。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     renderApp();
-    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "首页" })).toHaveClass("active");
+    expect(screen.getByRole("heading", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "我的收藏" })).not.toBeInTheDocument();
-    return waitFor(() => expect(getTotalCount()).toBe(47));
+    await waitFor(() => expect(screen.getByText("47")).toBeInTheDocument());
+    expect(getLivesMock).toHaveBeenCalledWith(1, 15);
+  });
+
+  test("首页最近 Live 可打开详情，并能进入全部内容", async () => {
+    // 测试点：首页最近收录复用详情弹窗，并提供进入全量列表的入口。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
+    await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(1));
+    await user.click(screen.getByRole("button", { name: "关闭" }));
+    await user.click(screen.getByRole("button", { name: "查看全部 Live" }));
+
+    await waitFor(() => expect(screen.getByText("总计 47 条")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
+  });
+
+  test("首页搜索会进入搜索结果，并可从结果打开详情", async () => {
+    // 测试点：首页搜索框接入公共搜索，Live 结果继续复用现有详情弹窗。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.type(screen.getByRole("searchbox", { name: "搜索入口" }), "Party");
+    await user.click(screen.getByRole("button", { name: "搜索" }));
+
+    await waitFor(() => expect(searchCatalogMock).toHaveBeenCalledWith("Party", 8));
+    expect(await screen.findByRole("heading", { name: "搜索结果" })).toBeInTheDocument();
+    expect(screen.getByText("STAR BEAT!")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "検索対象 Live" }));
+    await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(101));
+  });
+
+  test("搜索空结果展示明确空状态", async () => {
+    // 测试点：公共搜索无任何分组结果时，应展示可理解的空结果提示。
+    searchCatalogMock.mockResolvedValueOnce({ query: "不存在", lives: [], bands: [], songs: [], venues: [] });
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.type(screen.getByRole("searchbox", { name: "搜索入口" }), "不存在");
+    await user.click(screen.getByRole("button", { name: "搜索" }));
+
+    expect(await screen.findByText("没有找到与“不存在”匹配的资料。")).toBeInTheDocument();
+  });
+
+  test("按乐队浏览可加载乐队 Live 并打开详情", async () => {
+    // 测试点：公开浏览页按乐队加载关联 Live，不依赖后台控制台权限。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getAllByRole("button", { name: "按乐队浏览" })[0]);
+
+    await waitFor(() => expect(getCatalogBandsMock).toHaveBeenCalledWith(30));
+    await waitFor(() => expect(getCatalogBandLivesMock).toHaveBeenCalledWith(1, 1, 20));
+    await user.click(await screen.findByRole("button", { name: "Poppin'Party Browse Live" }));
+    await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(201));
+  });
+
+  test("详情页反馈入口只展示联系说明，不提交工单", async () => {
+    // 测试点：详情页反馈入口是静态联系说明，不触发反馈保存 API。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
+    await user.click(await screen.findByRole("button", { name: "发现问题 / 补充信息" }));
+
+    expect(screen.getByRole("heading", { name: "反馈与补充信息" })).toBeInTheDocument();
+    expect(screen.getByText(/当前不开放直接编辑/)).toBeInTheDocument();
   });
 
   test("未登录时不显示控制台入口", async () => {
@@ -317,6 +469,7 @@ describe("App", () => {
     });
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
+    await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "收藏本页" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "收藏本页" }));
@@ -351,6 +504,7 @@ describe("App", () => {
     });
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
+    await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "取消收藏本页" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "取消收藏本页" }));
@@ -416,6 +570,7 @@ describe("App", () => {
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     renderApp();
+    await userEvent.setup().click(await screen.findByRole("button", { name: "全部内容" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "取消收藏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入收藏" })).not.toBeInTheDocument();
@@ -432,10 +587,12 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "登录" }));
     await user.type(screen.getByLabelText("用户名"), "admin");
     await user.type(screen.getByLabelText("密码"), "test-admin-pass");
-    await user.click(screen.getAllByRole("button", { name: /^登录$/ })[1]);
+    const loginButtons = screen.getAllByRole("button", { name: /^登录$/ });
+    await user.click(loginButtons[loginButtons.length - 1]);
 
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith("admin", "test-admin-pass"));
     expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "首页" })).toHaveClass("active");
     await user.click(screen.getByRole("button", { name: "用户菜单：Administrator" }));
     expect(screen.getByText("Administrator")).toBeInTheDocument();
     expect(screen.getByText("账户：admin")).toBeInTheDocument();
@@ -451,7 +608,7 @@ describe("App", () => {
     const user = userEvent.setup();
     const { container } = renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "登录" }));
+    await user.click((await screen.findAllByRole("button", { name: "登录" }))[0]);
     const loginModal = container.querySelector(".modal.login-modal");
     expect(loginModal).not.toBeNull();
     const style = getComputedStyle(loginModal as HTMLElement);
@@ -474,6 +631,7 @@ describe("App", () => {
     getMyFavoriteLivesMock.mockImplementationOnce(() => deferredFavorites.promise);
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
+    await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "我的收藏" }));
@@ -504,6 +662,7 @@ describe("App", () => {
     );
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
+    await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "我的收藏" }));
@@ -512,7 +671,7 @@ describe("App", () => {
 
     expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument();
     expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
-    expect(getLivesMock).toHaveBeenCalledTimes(1);
+    expect(getLivesMock).toHaveBeenCalledTimes(2);
   });
 
   test("收藏页预读命中后，切换到收藏不会再额外刷新 auth/me 且无加载闪烁", async () => {
@@ -550,6 +709,7 @@ describe("App", () => {
     );
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
+    await openAllContent(user);
 
     await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
     expect(getAuthMeMock).toHaveBeenCalledTimes(1);
@@ -565,6 +725,9 @@ describe("App", () => {
     // 测试点：分页跳转与 15/20 行切换后页码计算正确。
     getLivesMock
       .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
+      )
+      .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
       )
       .mockResolvedValueOnce(
@@ -575,6 +738,7 @@ describe("App", () => {
       );
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
 
     const total = getTotalCount();
@@ -596,6 +760,9 @@ describe("App", () => {
     // 测试点：在“跳转至第（）页”输入页码后按回车，应请求对应页并更新分页显示。
     getLivesMock
       .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
+      )
+      .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
       )
       .mockResolvedValueOnce(
@@ -603,6 +770,7 @@ describe("App", () => {
       );
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
 
     const jumpInput = screen.getByRole("textbox");
@@ -631,10 +799,14 @@ describe("App", () => {
       },
     };
 
-    getLivesMock.mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+    getLivesMock
+      .mockResolvedValueOnce(makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }))
+      .mockResolvedValueOnce(page1)
+      .mockResolvedValueOnce(page2);
 
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
 
     const firstTable = screen.getByRole("table");
@@ -797,25 +969,29 @@ describe("App", () => {
     expect(screen.queryByRole("link", { name: /示例 Live 名称 1/i })).not.toBeInTheDocument();
   });
 
-  test("URL 列使用链接图标并携带正确链接", () => {
+  test("URL 列使用链接图标并携带正确链接", async () => {
     // 测试点：URL 列展示为 🔗，并指向对应详情地址。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20, withUrl: true }),
     );
+    const user = userEvent.setup();
     renderApp();
-    return waitFor(() => {
+    await openAllContent(user);
+    await waitFor(() => {
       const firstLink = screen.getAllByRole("link", { name: "🔗" })[0];
       expect(firstLink.getAttribute("href")).toMatch(/^https:\/\/example\.com\/live\/\d+$/);
     });
   });
 
-  test("乐队列渲染图标单元格", () => {
+  test("乐队列渲染图标单元格", async () => {
     // 测试点：乐队列应渲染图标容器与 SVG 图标。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
+    const user = userEvent.setup();
     renderApp();
-    return waitFor(() => {
+    await openAllContent(user);
+    await waitFor(() => {
       const firstBandCell = screen.getAllByTitle(/支乐队/)[0];
       const bandIcons = within(firstBandCell).getAllByRole("img", { name: /Band \d+/ });
       expect(bandIcons.length).toBeGreaterThan(0);
@@ -825,7 +1001,7 @@ describe("App", () => {
     });
   });
 
-  test("空 bands 的 live 不渲染默认乐队图标", () => {
+  test("空 bands 的 live 不渲染默认乐队图标", async () => {
     // 测试点：没有 setlist 乐队信息的 live 应展示空乐队格，不回退成 Band_1 图标。
     getLivesMock.mockResolvedValue({
       items: [
@@ -841,16 +1017,21 @@ describe("App", () => {
       ],
       pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
     });
+    const user = userEvent.setup();
     renderApp();
-    return waitFor(() => {
+    await openAllContent(user);
+    await waitFor(() => {
       const bandCell = screen.getByTitle("0 支乐队");
       expect(within(bandCell).queryByRole("img")).not.toBeInTheDocument();
     });
   });
 
   test("首次加载请求参数正确，切换每页数量后重新请求", async () => {
-    // 测试点：首次请求应为 page=1&page_size=20，切到 15 后重新请求 page_size=15。
+    // 测试点：进入全量页后请求 page=1&page_size=20，切到 15 后重新请求 page_size=15。
     getLivesMock
+      .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
+      )
       .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
       )
@@ -859,6 +1040,7 @@ describe("App", () => {
       );
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(1, 20));
     await user.selectOptions(screen.getByRole("combobox"), "15");
@@ -870,7 +1052,9 @@ describe("App", () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 3, totalPages: 1, itemCount: 3 }),
     );
+    const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledTimes(1));
     expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2, 3]);
@@ -882,7 +1066,9 @@ describe("App", () => {
       makeResponse({ page: 1, pageSize: 20, total: 3, totalPages: 1, itemCount: 3 }),
     );
     getLiveDetailsBatchMock.mockRejectedValueOnce(new Error("Request timeout"));
+    const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2, 3]));
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
@@ -905,6 +1091,7 @@ describe("App", () => {
     );
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
+    await openAllContent(user);
 
     await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2, 3]));
     await user.click(screen.getByRole("button", { name: "我的收藏" }));
@@ -916,6 +1103,9 @@ describe("App", () => {
     // 测试点：点击下一页/上一页会触发 page 参数变化。
     getLivesMock
       .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
+      )
+      .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
       )
       .mockResolvedValueOnce(
@@ -926,6 +1116,7 @@ describe("App", () => {
       );
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
     await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(1, 20));
 
     await user.click(screen.getByRole("button", { name: "下一页" }));
@@ -939,6 +1130,9 @@ describe("App", () => {
     // 测试点：翻页成功后，batch 预读应切换到新页的 live_id 列表。
     getLivesMock
       .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
+      )
+      .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 2, startId: 1 }),
       )
       .mockResolvedValueOnce(
@@ -946,6 +1140,7 @@ describe("App", () => {
       );
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2]));
     await user.click(screen.getByRole("button", { name: "下一页" }));
@@ -966,12 +1161,17 @@ describe("App", () => {
 
     getLivesMock
       .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 15, total: 40, totalPages: 3, itemCount: 15 }),
+      )
+      .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 40, totalPages: 2, itemCount: 2, startId: 1 }),
       )
       .mockResolvedValueOnce(
         makeResponse({ page: 2, pageSize: 20, total: 40, totalPages: 2, itemCount: 2, startId: 21 }),
       );
+    const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(2, 20));
     await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([21, 22]));
@@ -982,7 +1182,9 @@ describe("App", () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 120, totalPages: 6, itemCount: 3 }),
     );
+    const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => {
       expect(screen.getByText("总计 120 条")).toBeInTheDocument();
@@ -994,6 +1196,9 @@ describe("App", () => {
     // 测试点：后端返回 canonical page 时，前端应同步显示该页并复用这次响应，不再冗余补请求。
     getLivesMock
       .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 15, total: 40, totalPages: 3, itemCount: 15 }),
+      )
+      .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 40, totalPages: 2, itemCount: 20 }),
       )
       .mockResolvedValueOnce(
@@ -1001,6 +1206,7 @@ describe("App", () => {
       );
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "下一页" }));
@@ -1008,8 +1214,8 @@ describe("App", () => {
       expect(screen.getByText("第 1 / 1 页")).toBeInTheDocument();
       expect(screen.getByText("总计 20 条")).toBeInTheDocument();
     });
-    expect(getLivesMock).toHaveBeenCalledTimes(2);
-    expect(getLivesMock).toHaveBeenNthCalledWith(2, 2, 20);
+    expect(getLivesMock).toHaveBeenCalledTimes(3);
+    expect(getLivesMock).toHaveBeenNthCalledWith(3, 2, 20);
   });
 
   test("url 为空时显示 '-' 且不渲染链接", async () => {
@@ -1017,7 +1223,9 @@ describe("App", () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 3, totalPages: 1, itemCount: 3, withUrl: false }),
     );
+    const user = userEvent.setup();
     render(<App />);
+    await openAllContent(user);
 
     await waitFor(() => {
       expect(screen.getAllByText("-").length).toBeGreaterThan(0);
@@ -1028,9 +1236,13 @@ describe("App", () => {
   test("请求中显示加载态，成功后消失并展示数据", async () => {
     // 测试点：接口未返回前显示“加载中...”，返回后渲染列表数据。
     const d = deferred<LivesResponse>();
-    getLivesMock.mockImplementationOnce(() => d.promise);
+    getLivesMock
+      .mockResolvedValueOnce(makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }))
+      .mockImplementationOnce(() => d.promise);
+    const user = userEvent.setup();
     render(<App />);
 
+    await openAllContent(user);
     expect(screen.getByText("加载中...")).toBeInTheDocument();
     d.resolve(makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }));
     await waitFor(() => {
@@ -1041,8 +1253,12 @@ describe("App", () => {
 
   test("请求失败时显示错误提示且分页区域可见", async () => {
     // 测试点：接口异常时页面不崩溃，显示错误文案并保留分页区域。
-    getLivesMock.mockRejectedValueOnce(new Error("Request failed: 500"));
+    getLivesMock
+      .mockResolvedValueOnce(makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }))
+      .mockRejectedValueOnce(new Error("Request failed: 500"));
+    const user = userEvent.setup();
     render(<App />);
+    await openAllContent(user);
 
     await waitFor(() => {
       expect(screen.getByText("数据加载失败: Request failed: 500")).toBeInTheDocument();
@@ -1052,8 +1268,12 @@ describe("App", () => {
 
   test("列表加载失败时会记录页面级错误日志", async () => {
     // 测试点：列表请求失败后，页面 catch 会记录带分页上下文的业务日志。
-    getLivesMock.mockRejectedValueOnce(new Error("Request failed: 500"));
+    getLivesMock
+      .mockResolvedValueOnce(makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }))
+      .mockRejectedValueOnce(new Error("Request failed: 500"));
+    const user = userEvent.setup();
     render(<App />);
+    await openAllContent(user);
 
     await waitFor(() => {
       expect(logErrorMock).toHaveBeenCalledWith(

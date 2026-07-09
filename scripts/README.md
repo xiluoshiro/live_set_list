@@ -16,7 +16,7 @@ python scripts/run_dev.py
 python scripts/run_dev.py --test-db
 ```
 
-`--test-db` 只会给后端进程注入 `DB_NAME=<TEST_DB_NAME>`，默认值为 `live_statistic_test`；不会修改 `.env` 文件，也不会改变前端请求地址。
+`--test-db` 只会给后端进程注入 `DB_NAME=<TEST_DB_NAME>` 与 `APP_DB=<TEST_DB_NAME>`，默认值为 `live_statistic_test`；不会修改 `.env` 文件，也不会改变前端请求地址。默认启动会给后端进程注入 `DB_NAME=<APP_DB>` 与 `APP_DB=<APP_DB>`。
 
 或：
 
@@ -24,9 +24,9 @@ python scripts/run_dev.py --test-db
 .\start-dev.bat
 ```
 
-启动前会检查 PostgreSQL Docker 容器；若容器存在但未运行则自动拉起，若容器不存在则直接报错退出。
+启动前会检查 PostgreSQL Docker 容器；若容器存在但未运行则自动拉起，若容器不存在则直接报错退出。启动后端前会清理 8000 端口上残留的旧后端进程，避免 uvicorn reload 子进程继续连接旧数据库。
 
-按 `Ctrl+C` 可同时关闭前后端。
+按 `Ctrl+C` 可同时关闭前后端，并清理本次启动的进程树。
 
 ## 一键检查
 

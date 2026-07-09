@@ -26,6 +26,9 @@ import {
 
 vi.mock("../api", () => ({
   getLives: vi.fn(),
+  searchCatalog: vi.fn(),
+  getCatalogBands: vi.fn().mockResolvedValue({ items: [] }),
+  getCatalogBandLives: vi.fn(),
   getLiveDetail: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
   getAuthMe: vi.fn(),
@@ -172,6 +175,10 @@ function renderApp() {
   );
 }
 
+async function openAllContent(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "全部内容" }));
+}
+
 describe("App optimistic favorite sync", () => {
   beforeEach(() => {
     Reflect.deleteProperty(window, "requestIdleCallback");
@@ -231,6 +238,7 @@ describe("App optimistic favorite sync", () => {
     unfavoriteLiveMock.mockImplementationOnce(() => deferredUnfavorite.promise);
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
@@ -255,6 +263,7 @@ describe("App optimistic favorite sync", () => {
     unfavoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
@@ -290,6 +299,7 @@ describe("App optimistic favorite sync", () => {
     favoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 3" })).toBeInTheDocument());
     await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
@@ -312,6 +322,7 @@ describe("App optimistic favorite sync", () => {
     unfavoriteLiveMock.mockImplementationOnce(() => firstUnfavorite.promise);
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     const row = getTableRowByLiveTitle("示例 Live 名称 1");
@@ -337,6 +348,7 @@ describe("App optimistic favorite sync", () => {
     unfavoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
     const user = userEvent.setup();
     renderApp();
+    await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
@@ -370,12 +382,13 @@ describe("App optimistic favorite sync", () => {
     renderApp();
 
     await waitFor(() => expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument());
+    await openAllContent(user);
     await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
     await user.click(screen.getByRole("button", { name: "我的收藏" }));
 
     await waitFor(() => expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
-    expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "首页" })).toHaveClass("active");
+    expect(screen.getAllByRole("button", { name: "登录" }).length).toBeGreaterThan(0);
   });
 });
 
