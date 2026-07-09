@@ -261,6 +261,7 @@ async function openAllContent(user: ReturnType<typeof userEvent.setup>) {
 
 describe("App", () => {
   beforeEach(() => {
+    localStorage.setItem("live-view-mode", "table");
     Reflect.deleteProperty(window, "requestIdleCallback");
     Reflect.deleteProperty(window, "cancelIdleCallback");
     getLivesMock.mockReset();
@@ -1399,6 +1400,47 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(window.localStorage.getItem("live-theme-mode")).toBe("system");
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+  });
+
+  test("卡片模式下渲染 live-card-grid 而非表格", async () => {
+    // 测试点：切换到卡片模式后应展示卡片 grid，不渲染表格元素。
+    localStorage.setItem("live-view-mode", "cards");
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+    await openAllContent(user);
+
+    expect(document.querySelector(".live-card-grid")).not.toBeNull();
+    expect(document.querySelector(".live-card")).not.toBeNull();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument();
+    expect(screen.getByText("2026-03-02")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "🔗" }).length).toBeGreaterThan(0);
+  });
+
+  test("视图切换按钮可在卡片与表格模式间切换", async () => {
+    // 测试点：点击单按钮可在卡片/表格间切换，localStorage 跟随更新。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+    await openAllContent(user);
+
+    expect(document.querySelector(".table-wrap")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "切换为卡片模式" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "切换为卡片模式" }));
+    expect(document.querySelector(".live-card-grid")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "切换为表格模式" })).toBeInTheDocument();
+    expect(localStorage.getItem("live-view-mode")).toBe("cards");
+
+    await user.click(screen.getByRole("button", { name: "切换为表格模式" }));
+    await waitFor(() => expect(document.querySelector(".table-wrap")).not.toBeNull());
+    expect(screen.getByRole("button", { name: "切换为卡片模式" })).toBeInTheDocument();
+    expect(localStorage.getItem("live-view-mode")).toBe("table");
   });
 
 });

@@ -187,6 +187,7 @@ async function openAllContent(user: ReturnType<typeof userEvent.setup>) {
 
 describe("App optimistic favorite sync", () => {
   beforeEach(() => {
+    localStorage.setItem("live-view-mode", "table");
     Reflect.deleteProperty(window, "requestIdleCallback");
     Reflect.deleteProperty(window, "cancelIdleCallback");
 

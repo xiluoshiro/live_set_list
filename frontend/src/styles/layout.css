@@ -251,7 +251,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 14px;
-  padding: 14px 24px 24px;
+  padding: 14px 24px 8px;
 }
 
 .pager-controls {
