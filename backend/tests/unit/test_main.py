@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from app.main import app, create_app, log_api_requests
+from app.main import app, create_app, get_request_client_ip, log_api_requests
 
 
 def test_request_logging_middleware_logs_completed_request():
@@ -56,6 +56,46 @@ def test_request_logging_middleware_logs_failed_request_and_reraises():
     assert logger_exception.call_args.args[3] == "source=test"
     assert isinstance(logger_exception.call_args.args[4], float)
     assert logger_exception.call_args.args[5] == "127.0.0.1"
+
+
+def test_get_request_client_ip_uses_forwarded_for_from_trusted_proxy():
+    # 测试点：可信 Nginx 反代转发时，后端日志应记录真实客户端 IP。
+    request = Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "path": "/",
+            "raw_path": b"/",
+            "query_string": b"",
+            "headers": [(b"x-forwarded-for", b"203.0.113.10, 127.0.0.1")],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+
+    assert get_request_client_ip(request) == "203.0.113.10"
+
+
+def test_get_request_client_ip_ignores_forwarded_for_from_untrusted_client():
+    # 测试点：非可信来源伪造 X-Forwarded-For 时，应继续记录直连 IP。
+    request = Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "path": "/",
+            "raw_path": b"/",
+            "query_string": b"",
+            "headers": [(b"x-forwarded-for", b"203.0.113.10")],
+            "client": ("198.51.100.20", 12345),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+
+    assert get_request_client_ip(request) == "198.51.100.20"
 
 
 def test_create_app_uses_cors_allow_origins_from_env():

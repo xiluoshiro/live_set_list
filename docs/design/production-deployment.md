@@ -12,7 +12,7 @@
 当前推荐服务器：
 
 - Google Cloud Compute Engine `e2-medium`
-- Debian 13 可用；Debian 12 / Ubuntu 24.04 LTS 也可作为更稳妥选择
+- 实际环境：Debian 12 Bookworm image `debian-12-bookworm-v20260609`
 - Balanced Persistent Disk：30 GB 最低，40 GB 推荐，50 GB 是更宽松余量
 - 初版不使用 Vercel、Cloud Run、Cloud SQL 或 Kubernetes
 
@@ -215,6 +215,8 @@ PostgreSQL: private network only
 ```powershell
 APP_ENV=production
 APP_LOG_LEVEL=INFO
+APP_LOG_FILE=/var/log/livesetlist/app.log
+TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128
 
 DB_HOST=<private-db-host>
 DB_PORT=5432

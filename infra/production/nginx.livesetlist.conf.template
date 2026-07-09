@@ -1,4 +1,14 @@
 limit_req_zone $binary_remote_addr zone=livesetlist_login:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=livesetlist_api:10m rate=60r/m;
+
+server {
+    listen 80 default_server;
+    listen 443 ssl default_server;
+    server_name _;
+    ssl_certificate /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
+    return 444;
+}
 
 server {
     listen 80;
@@ -24,6 +34,8 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header X-Frame-Options "DENY" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    client_max_body_size 1m;
 
     root /opt/livesetlist/current/frontend/dist;
     index index.html;
@@ -51,6 +63,7 @@ server {
     }
 
     location /api/ {
+        limit_req zone=livesetlist_api burst=120 nodelay;
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;

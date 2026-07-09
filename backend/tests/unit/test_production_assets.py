@@ -26,8 +26,13 @@ def test_production_nginx_template_guards_login_and_openapi():
     nginx_text = (ROOT / "infra" / "production" / "nginx.livesetlist.conf.template").read_text(encoding="utf-8")
 
     assert "limit_req_zone" in nginx_text
+    assert "zone=livesetlist_api" in nginx_text
     assert "location = /api/auth/login" in nginx_text
     assert "limit_req zone=livesetlist_login" in nginx_text
+    assert "limit_req zone=livesetlist_api" in nginx_text
+    assert "listen 80 default_server" in nginx_text
+    assert "return 444" in nginx_text
+    assert "client_max_body_size 1m" in nginx_text
     assert "location = /openapi.json" in nginx_text
     assert "location = /docs" in nginx_text
     assert "location = /redoc" in nginx_text

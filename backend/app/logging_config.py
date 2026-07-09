@@ -4,10 +4,16 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
-LOG_FILE = LOG_DIR / "app.log"
+DEFAULT_LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 DEFAULT_LOG_LEVEL = "INFO"
 _LOGGING_CONFIGURED = False
+
+
+def log_file_path() -> Path:
+    configured_file = os.getenv("APP_LOG_FILE")
+    if configured_file:
+        return Path(configured_file)
+    return DEFAULT_LOG_DIR / "app.log"
 
 
 def setup_logging() -> None:
@@ -23,8 +29,9 @@ def setup_logging() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    log_file = log_file_path()
     # 启动时确保日志目录存在，避免首次写文件时失败。
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
 
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
@@ -36,13 +43,13 @@ def setup_logging() -> None:
     # 只读或受限环境下允许退回控制台日志，避免测试因文件句柄权限失败。
     try:
         file_handler = RotatingFileHandler(
-            LOG_FILE,
+            log_file,
             maxBytes=1_048_576,
             backupCount=3,
             encoding="utf-8",
         )
     except OSError:
-        root_logger.warning("file logging disabled because %s is not writable", LOG_FILE)
+        root_logger.warning("file logging disabled because %s is not writable", log_file)
     else:
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)

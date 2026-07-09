@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import ensure_default_admin_user
-from app.config import assert_production_security_config, cors_allow_origins, docs_urls
+from app.config import assert_production_security_config, cors_allow_origins, docs_urls, is_trusted_proxy_ip
 from app.logging_config import get_logger, setup_logging
 from app.routers.auth import router as auth_router
 from app.routers.catalog import router as catalog_router
@@ -20,6 +20,25 @@ setup_logging()
 logger = get_logger(__name__)
 
 
+def _first_forwarded_for_ip(header_value: str | None) -> str | None:
+    if not header_value:
+        return None
+    first_value = header_value.split(",", 1)[0].strip()
+    return first_value or None
+
+
+def get_request_client_ip(request: Request) -> str:
+    direct_ip = request.client.host if request.client else None
+    if is_trusted_proxy_ip(direct_ip):
+        forwarded_ip = _first_forwarded_for_ip(request.headers.get("x-forwarded-for"))
+        if forwarded_ip:
+            return forwarded_ip
+        real_ip = request.headers.get("x-real-ip")
+        if real_ip:
+            return real_ip.strip()
+    return direct_ip or "-"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Prepare startup-only state before the API begins serving requests."""
@@ -31,7 +50,7 @@ async def log_api_requests(request: Request, call_next):
     """Emit one access log per request and keep uncaught exception logging in one place."""
     start = perf_counter()
     query_string = request.url.query or "-"
-    client_ip = request.client.host if request.client else "-"
+    client_ip = get_request_client_ip(request)
     try:
         response = await call_next(request)
     except Exception:
