@@ -176,7 +176,6 @@ function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const listSnapshotsRef = useRef<Record<string, ListSnapshot>>({});
   const favoritesReconcileGateRef = useRef(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
@@ -839,13 +838,13 @@ function App() {
             className={`tab-btn ${tab === "browse" ? "active" : ""}`}
             onClick={() => handleTabChange("browse")}
           >
-            按乐队浏览
+            乐队
           </button>
           <button
             className={`tab-btn ${tab === "about" ? "active" : ""}`}
             onClick={() => handleTabChange("about")}
           >
-            关于 / 联系
+            联系我们
           </button>
           {canUseConsoleFeatures && (
             <button
@@ -916,7 +915,7 @@ function App() {
             onPageChange={setCatalogBandPage}
           />
         ) : showAboutPanel ? (
-          <AboutPanel onShowBrowse={() => handleTabChange("browse")} />
+          <AboutPanel />
         ) : showListPanel ? (
           <>
             <div className="table-wrap">
@@ -1061,7 +1060,7 @@ function App() {
         ) : showConsolePanel ? (
           <ConsoleInsertPanel onLiveDataChanged={handleConsoleLiveDataChanged} />
         ) : (
-          <AboutPanel onShowBrowse={() => handleTabChange("browse")} />
+          <AboutPanel />
         )}
       </section>
 
@@ -1158,9 +1157,6 @@ function App() {
               <strong>乐队：</strong>
               <span>{bandNamesText}</span>
             </p>
-            <button type="button" className="detail-feedback-btn" onClick={() => setFeedbackDialogOpen(true)}>
-              发现问题 / 补充信息
-            </button>
 
             <div className="detail-table-wrap">
               <MemberStatusTable
@@ -1169,41 +1165,6 @@ function App() {
                 error={detailError}
               />
             </div>
-          </div>
-        </div>
-      )}
-      {feedbackDialogOpen && (
-        <div className="modal-mask" onClick={() => setFeedbackDialogOpen(false)}>
-          <div className="modal compact feedback-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head">
-              <h2>反馈与补充信息</h2>
-              <button
-                type="button"
-                className="modal-action-btn close"
-                title="关闭"
-                aria-label="关闭反馈说明"
-                onClick={() => setFeedbackDialogOpen(false)}
-              >
-                <span className="modal-action-glyph close">✕</span>
-              </button>
-            </div>
-            <p>
-              当前不开放直接编辑，也不建立反馈工单。请通过站方维护者提供的 GitHub Issue、邮箱或社交账号反馈。
-            </p>
-            <p>
-              建议包含：Live 名称、日期、需要修正或补充的内容，以及可核对的说明。
-            </p>
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => {
-                setFeedbackDialogOpen(false);
-                closeDetailModal();
-                handleTabChange("about");
-              }}
-            >
-              查看关于 / 联系方式
-            </button>
           </div>
         </div>
       )}

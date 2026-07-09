@@ -40,10 +40,6 @@ type BandBrowsePanelProps = {
   onPageChange: (page: number) => void;
 };
 
-type AboutPanelProps = {
-  onShowBrowse: () => void;
-};
-
 export function catalogLiveToRow(item: LiveItem): CatalogLiveRow {
   return {
     liveId: item.live_id,
@@ -136,7 +132,7 @@ export function SearchResultsPanel({
           <p>按 Live、乐队、歌曲和场地分组展示。</p>
         </div>
         <button type="button" className="secondary-btn" onClick={onShowAbout}>
-          反馈与联系
+          联系我们
         </button>
       </div>
       <SearchForm query={query} onSearch={onSearch} />
@@ -227,7 +223,7 @@ export function BandBrowsePanel({
       <div className="catalog-panel-head">
         <div>
           <p className="catalog-kicker">Browse</p>
-          <h2>按乐队浏览</h2>
+          <h2>乐队</h2>
           <p>选择乐队后查看已收录的相关 Live。</p>
         </div>
       </div>
@@ -280,18 +276,15 @@ export function BandBrowsePanel({
   );
 }
 
-export function AboutPanel({ onShowBrowse }: AboutPanelProps) {
+export function AboutPanel() {
   return (
     <div className="catalog-panel about-panel">
       <div className="catalog-panel-head">
         <div>
           <p className="catalog-kicker">About</p>
-          <h2>关于本站 / 联系方式</h2>
+          <h2>联系我们</h2>
           <p>LiveSetList 是站方整理维护的演唱会歌单数据库。</p>
         </div>
-        <button type="button" className="secondary-btn" onClick={onShowBrowse}>
-          按乐队浏览
-        </button>
       </div>
 
       <div className="about-grid">
@@ -312,4 +305,3 @@ export function AboutPanel({ onShowBrowse }: AboutPanelProps) {
     </div>
   );
 }
-

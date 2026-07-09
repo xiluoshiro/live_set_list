@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.routers.catalog import (
+    BAND_LIST_QUERY,
     BAND_LIVES_COUNT_QUERY,
     BAND_LIVES_PAGE_QUERY,
     BAND_META_QUERY,
@@ -70,8 +71,30 @@ def test_search_catalog_blank_query_returns_400():
     assert response.json()["detail"] == "q must not be blank"
 
 
+def test_list_catalog_bands_uses_public_band_query():
+    # 测试点：乐队浏览列表应使用过滤 id=0 且按 band id 排序的公开查询。
+    conn, cursor = _build_connection_mock()
+    cursor.fetchall.return_value = [
+        (1, "Poppin'Party", "PoPiPa", 12),
+        (2, "Roselia", "Roselia", 8),
+    ]
+
+    with patch("app.routers.catalog.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.get("/api/catalog/bands?limit=30")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [
+        {"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "live_count": 12},
+        {"band_id": 2, "band_name": "Roselia", "band_abbr": "Roselia", "live_count": 8},
+    ]
+    assert "WHERE b.id > 0" in BAND_LIST_QUERY
+    assert "ORDER BY b.id" in BAND_LIST_QUERY
+    assert cursor.execute.call_args_list == [call(BAND_LIST_QUERY, (30,))]
+
+
 def test_get_catalog_band_lives_returns_band_and_paginated_lives():
-    # 测试点：按乐队浏览应返回乐队摘要、分页信息和可打开详情的 Live 行。
+    # 测试点：乐队页应返回乐队摘要、分页信息和可打开详情的 Live 行。
     conn, cursor = _build_connection_mock()
     cursor.fetchone.side_effect = [(1, "Poppin'Party", "PoPiPa", 22), (22,)]
     cursor.fetchall.return_value = [
@@ -93,4 +116,3 @@ def test_get_catalog_band_lives_returns_band_and_paginated_lives():
         call(BAND_LIVES_COUNT_QUERY, (1,)),
         call(BAND_LIVES_PAGE_QUERY, (1, 20, 20)),
     ]
-

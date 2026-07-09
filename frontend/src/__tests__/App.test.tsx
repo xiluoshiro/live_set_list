@@ -375,15 +375,15 @@ describe("App", () => {
     expect(await screen.findByText("没有找到与“不存在”匹配的资料。")).toBeInTheDocument();
   });
 
-  test("按乐队浏览可加载乐队 Live 并打开详情", async () => {
-    // 测试点：公开浏览页按乐队加载关联 Live，不依赖后台控制台权限。
+  test("乐队页可加载乐队 Live 并打开详情", async () => {
+    // 测试点：公开乐队页加载关联 Live，不依赖后台控制台权限。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(screen.getAllByRole("button", { name: "按乐队浏览" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "乐队" })[0]);
 
     await waitFor(() => expect(getCatalogBandsMock).toHaveBeenCalledWith(30));
     await waitFor(() => expect(getCatalogBandLivesMock).toHaveBeenCalledWith(1, 1, 20));
@@ -391,8 +391,8 @@ describe("App", () => {
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(201));
   });
 
-  test("详情页反馈入口只展示联系说明，不提交工单", async () => {
-    // 测试点：详情页反馈入口是静态联系说明，不触发反馈保存 API。
+  test("详情页不显示反馈入口", async () => {
+    // 测试点：Live 详情页不再展示反馈入口，反馈路径集中到联系我们页。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -400,10 +400,9 @@ describe("App", () => {
     renderApp();
 
     await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
-    await user.click(await screen.findByRole("button", { name: "发现问题 / 补充信息" }));
 
-    expect(screen.getByRole("heading", { name: "反馈与补充信息" })).toBeInTheDocument();
-    expect(screen.getByText(/当前不开放直接编辑/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "发现问题 / 补充信息" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "反馈与补充信息" })).not.toBeInTheDocument();
   });
 
   test("未登录时不显示控制台入口", async () => {

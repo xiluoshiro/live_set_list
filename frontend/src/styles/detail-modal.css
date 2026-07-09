@@ -219,27 +219,6 @@
   min-width: 48px;
 }
 
-.detail-feedback-btn {
-  align-self: flex-start;
-  border: 1px solid var(--border-normal);
-  border-radius: 8px;
-  padding: 8px 12px;
-  background: var(--surface-chip);
-  color: var(--text-tab);
-  font: inherit;
-  cursor: pointer;
-}
-
-.feedback-modal {
-  width: min(520px, 96vw);
-  height: auto;
-  max-height: 90vh;
-}
-
-.feedback-modal p {
-  color: var(--text-secondary);
-}
-
 .detail-table-wrap {
   margin: 14px 0 0;
   overflow: auto;

@@ -111,7 +111,7 @@ export function HomeDashboard({
               查看全部 Live
             </button>
             <button type="button" className="secondary-btn" onClick={onShowBrowse}>
-              按乐队浏览
+              乐队
             </button>
           </div>
 
@@ -169,7 +169,7 @@ export function HomeDashboard({
           <p>本站资料由站方整理维护。发现错误或希望补充信息时，请通过联系入口反馈。</p>
         </div>
         <button type="button" className="secondary-btn" onClick={onShowAbout}>
-          查看关于 / 联系方式
+          联系我们
         </button>
       </section>
     </div>
