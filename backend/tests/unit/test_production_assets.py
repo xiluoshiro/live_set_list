@@ -41,6 +41,7 @@ def test_production_nginx_template_guards_login_and_openapi():
 # 测试点：生产发布包白名单不能包含本地状态、依赖缓存或敏感工作区目录。
 def test_release_path_whitelist_excludes_local_state_and_sensitive_directories():
     assert "backend/app" in RELEASE_DIRS
+    assert "config" in RELEASE_DIRS
     assert "frontend/dist" in RELEASE_DIRS
     assert "infra/production" in RELEASE_DIRS
     assert "backend/requirements.txt" in RELEASE_FILES
