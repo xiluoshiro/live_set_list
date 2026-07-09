@@ -16,7 +16,11 @@ python scripts/run_dev.py
 python scripts/run_dev.py --test-db
 ```
 
-`--test-db` 只会给后端进程注入 `DB_NAME=<TEST_DB_NAME>` 与 `APP_DB=<TEST_DB_NAME>`，默认值为 `live_statistic_test`；不会修改 `.env` 文件，也不会改变前端请求地址。默认启动会给后端进程注入 `DB_NAME=<APP_DB>` 与 `APP_DB=<APP_DB>`。
+`--test-db` 只会影响本次后端进程，不会修改 `.env` 文件，也不会改变前端请求地址。
+
+- 默认启动：后端连接 `APP_DB`，当前通常是 `live_statistic`
+- `--test-db`：后端连接 `TEST_DB_NAME`，默认值为 `live_statistic_test`
+- 脚本会给后端进程显式注入 `DB_HOST`、`DB_PORT`、`POSTGRES_HOST`、`POSTGRES_PORT`、`DB_NAME`、`APP_DB` 和运行时 DB 用户别名，避免当前 shell 中残留的测试库环境变量污染本次启动
 
 或：
 
@@ -25,6 +29,8 @@ python scripts/run_dev.py --test-db
 ```
 
 启动前会检查 PostgreSQL Docker 容器；若容器存在但未运行则自动拉起，若容器不存在则直接报错退出。启动后端前会清理 8000 端口上残留的旧后端进程，避免 uvicorn reload 子进程继续连接旧数据库。
+
+如果 8000 端口上的旧后端无法清理，且端口仍不可绑定，脚本会停止启动，而不是继续拉起一个新后端。这可以避免“启动日志显示生产库，但浏览器实际命中旧测试库后端”的问题。
 
 按 `Ctrl+C` 可同时关闭前后端，并清理本次启动的进程树。
 

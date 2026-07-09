@@ -1,22 +1,47 @@
 # LiveSetList
 
-一个前后端分离的 Live 信息管理工程，用于在本机访问 PostgreSQL，并逐步演进到带登录、收藏和后台录入能力的完整应用。
+一个前后端分离的 Live 资料库工程。当前定位是站方维护的演唱会 / Live setlist 数据库：匿名用户可公开查询和浏览，登录用户可收藏，`editor+` 用户可通过控制台维护数据；普通用户暂不直接编辑资料，只通过轻量联系 / 反馈入口报告问题。
 
 ## 主要功能
+
+### 公共资料库
+
+- 默认首页已改为公开资料库入口，而不是单一后台表格
+- 首页展示 Live 总数、最近 Live、全部内容入口、收藏入口和控制台入口
+- 匿名用户可浏览首页、全部 Live 列表、Live 详情和公共搜索结果
+- Live 详情保留日期、类型、乐队、setlist、成员信息、来源 URL 和收藏能力
+- Live 详情已提供“发现问题 / 补充信息”入口，当前为静态联系说明，不保存站内工单
+- 已提供“关于 / 联系 / 数据说明”入口，明确站方维护、用户反馈纠错、不开放直接编辑
+
+### 搜索与浏览
+
+- 首页搜索框已接入真实搜索
+- 公共搜索 API 支持按 Live 标题、乐队 / 艺人名、歌曲名、场地名查询
+- 搜索结果按 Live、乐队 / 艺人、歌曲、场地分组展示
+- 搜索结果中的 Live 可直接打开现有详情
+- 已新增按乐队浏览入口，可查看乐队摘要、收录 Live 数和相关 Live 列表
+
+### 登录、收藏与控制台
+
+- 已提供登录接口：`POST /api/auth/login`、`GET /api/auth/me`、`POST /api/auth/logout`
+- 已支持应用启动时自动补齐默认 admin 账号（优先读取环境变量，否则使用内建默认值）
+- 已提供服务端收藏接口：`GET /api/me/favorites/lives`、`PUT /api/me/favorites/lives/{live_id}`、`DELETE /api/me/favorites/lives/{live_id}`
+- 前端已接入登录态恢复、登录弹窗、服务端收藏切换、Live 列表、详情弹窗、分页、主题切换和控制台录入界面
+- 收藏页已支持空闲预读与缓存命中，`全量 -> 收藏` 切换默认无加载闪烁；进入收藏页仅在存在脏状态时才触发一次会话对账
+- `editor+` 用户可进入现有控制台新增 Live、歌曲、场地和追加 setlist
+
+### 后端、数据库与工程脚本
 
 - 后端使用 `FastAPI + psycopg2` 连接 Docker PostgreSQL（默认 `localhost:15432`）
 - 提供数据库健康检查接口：`GET /api/health/db`
 - 已提供 Live 列表、单条详情和详情批量预读接口
-- 已提供登录骨架接口：`POST /api/auth/login`、`GET /api/auth/me`、`POST /api/auth/logout`
-- 已提供服务端收藏接口：`GET /api/me/favorites/lives`、`PUT /api/me/favorites/lives/{live_id}`、`DELETE /api/me/favorites/lives/{live_id}`
 - 接口会执行真实业务查询；健康检查接口会执行 `select 1;`
 - 前端使用 `React + TypeScript + Vite`
-- 前端已接入登录态恢复、登录弹窗、服务端收藏切换、Live 列表、详情弹窗、分页、主题切换和控制台录入界面
-- 收藏页已支持空闲预读与缓存命中，`全量 -> 收藏` 切换默认无加载闪烁；进入收藏页仅在存在脏状态时才触发一次会话对账
-- 提供一键启动脚本，可同时启动前后端并统一关闭
 - 已引入 Flyway baseline 和 `V2~V9` 认证、收藏、权限、控制台与 live_type 相关迁移
-- 已支持应用启动时自动补齐默认 admin 账号（优先读取环境变量，否则使用内建默认值）
-- 已包含后端单元测试和前端接口测试框架
+- 提供一键启动脚本，可同时启动前后端并统一关闭
+- `scripts/run_dev.py` 默认连接生产库，`--test-db` 连接测试库；脚本会显式注入后端 DB host / port / name，降低父 shell 环境污染风险
+- `scripts/run_dev.py` 启动前会清理 8000 端口残留后端；若旧后端无法清理且端口仍不可用，会停止启动，避免新旧后端同时服务导致误连测试库
+- 已包含后端单元测试、集成测试和前端接口 / 行为测试框架
 
 ## 快速开始
 
@@ -47,6 +72,15 @@ npm install
 ### 3) 一键启动
 
 脚本入口说明见 [scripts/README.md](D:/Code/PythonCode/5%20LiveSetList/scripts/README.md)。
+
+常用命令：
+
+```powershell
+python scripts/run_dev.py
+python scripts/run_dev.py --test-db
+```
+
+默认启动会连接 `infra/postgres/.env.pg-migrate` 中的 `APP_DB`，当前为 `live_statistic`；`--test-db` 会连接 `TEST_DB_NAME`，默认 `live_statistic_test`。
 
 ### 4) 默认 admin 账号
 
@@ -134,8 +168,19 @@ npm run typecheck
 - 仓库内 Flyway 骨架位于 `backend/db/flyway`
 - Docker PostgreSQL 配置位于 `infra/postgres`
 
+## 当前完成状态
+
+- `DONE` 首页与入口：默认首页、最近 Live、Live 总数、全部内容入口、登录 / 收藏 / 控制台入口、首页最近 Live 打开详情
+- `DONE` 站点说明与轻反馈入口：关于 / 联系 / 数据说明、Live 详情反馈说明；当前不做反馈数据库表、反馈 API 或后台工单
+- `DONE` 公共搜索：Live、乐队 / 艺人、歌曲、场地分组搜索，搜索结果可打开 Live 详情
+- `DONE` 公开乐队浏览：乐队列表、收录 Live 数、乐队相关 Live 列表
+- `DONE` dev 启动脚本加固：显式注入 DB 配置，清理旧 8000 后端，避免残留测试库后端被误连
+
 ## 当前待办
 
-- 补充错误提示、空数据态、加载态
-- 增加管理员创建用户与用户管理能力
+- 补齐隐私说明、GitHub Issues / Discussions 等外部反馈入口配置
+- 全部内容列表继续增强年份、Live 类型、乐队 / 艺人筛选
+- 后续补齐歌曲页、场地页、城市页、巡演页等资料库实体页
+- 登录用户首页增强收藏摘要、最近查看、收藏更新提醒
+- 增加管理员创建用户与用户管理能力（近期暂缓）
 - 补充 E2E，覆盖控制台新增 Live / 追加 setlist 的跨页签链路
