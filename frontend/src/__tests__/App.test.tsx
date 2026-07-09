@@ -317,7 +317,7 @@ describe("App", () => {
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     renderApp();
-    expect(screen.getByRole("button", { name: "首页" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "我的收藏" })).not.toBeInTheDocument();
@@ -591,7 +591,7 @@ describe("App", () => {
 
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith("admin", "test-admin-pass"));
     expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "首页" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "用户菜单：Administrator" }));
     expect(screen.getByText("Administrator")).toBeInTheDocument();
     expect(screen.getByText("账户：admin")).toBeInTheDocument();

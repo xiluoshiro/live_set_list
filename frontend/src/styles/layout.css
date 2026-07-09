@@ -28,11 +28,20 @@
 .site-title {
   flex: 0 0 auto;
   margin: 0;
+  border: none;
+  background: transparent;
   color: var(--text-heading);
   font-size: 18px;
   font-weight: 700;
-  line-height: 1.2;
   white-space: nowrap;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.site-title:hover {
+  color: var(--accent-primary);
 }
 
 .toolbar {

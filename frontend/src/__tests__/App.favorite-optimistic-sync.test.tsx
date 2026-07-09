@@ -387,7 +387,7 @@ describe("App optimistic favorite sync", () => {
     await user.click(screen.getByRole("button", { name: "我的收藏" }));
 
     await waitFor(() => expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "首页" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "登录" }).length).toBeGreaterThan(0);
   });
 });
