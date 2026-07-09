@@ -965,8 +965,8 @@ describe("App", () => {
     const backBtn = screen.getByRole("button", { name: "返回" });
     expect(backBtn).toHaveClass("detail-back-btn");
 
-    const backGlyph = within(backBtn).getByText("←");
-    expect(backGlyph).toHaveClass("detail-back-glyph");
+    const backGlyph = within(backBtn).getByText("✕");
+    expect(backGlyph).toHaveClass("modal-action-glyph", "close");
   });
 
   test("详情弹窗在 url 为空时标题不渲染超链接", async () => {

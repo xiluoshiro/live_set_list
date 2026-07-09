@@ -86,10 +86,6 @@ export function LiveDetailPage({ liveId, fallback, onBack }: LiveDetailPageProps
   return (
     <div className="detail-page">
       <div className="detail-page-head">
-        <button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回">
-          <span className="detail-back-glyph">←</span>
-          <span>返回</span>
-        </button>
         <h2>
           {detailUrl ? (
             <a href={detailUrl} target="_blank" rel="noreferrer" className="detail-title-link">
@@ -127,6 +123,9 @@ export function LiveDetailPage({ liveId, fallback, onBack }: LiveDetailPageProps
             detailData?.live_title ?? fallback.liveTitle
           )}
         </h2>
+        <button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回">
+          <span className="modal-action-glyph close">✕</span>
+        </button>
       </div>
       <div className="detail-meta-line">
         <p className="detail-inline-item detail-inline-item-date">
