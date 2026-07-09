@@ -13,6 +13,7 @@ from app.schemas import (
     CatalogBandListResponse,
     CatalogBandLivesResponse,
     CatalogSearchResponse,
+    CatalogStatsResponse,
     ErrorResponse,
     ValidationErrorResponse,
 )
@@ -440,3 +441,38 @@ def get_catalog_band_lives(
             "total_pages": total_pages,
         },
     }
+
+
+@router.get(
+    "/stats",
+    response_model=CatalogStatsResponse,
+    summary="Get catalog aggregate stats",
+    description="Return total band / song / venue counts and the most recent live date.",
+)
+def get_catalog_stats():
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    (SELECT COUNT(*) FROM band_attrs) AS band_count,
+                    (SELECT COUNT(*) FROM song_list)   AS song_count,
+                    (SELECT COUNT(*) FROM venue_list)  AS venue_count,
+                    (SELECT MAX(live_date) FROM live_attrs) AS latest_live_date
+            """)
+            row = cur.fetchone()
+            return CatalogStatsResponse(
+                band_count=row[0],
+                song_count=row[1],
+                venue_count=row[2],
+                latest_live_date=row[3].isoformat() if row[3] else None,
+            )
+    except OperationalError as exc:
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        logger.exception("get_catalog_stats failed")
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    finally:
+        conn.close()

@@ -24,6 +24,7 @@ from app.schemas.catalog import (
     CatalogBandLivesResponse,
     CatalogSearchResponse,
     CatalogSongItem,
+    CatalogStatsResponse,
     CatalogVenueItem,
 )
 from app.schemas.favorites import FavoriteBatchRequest, FavoriteBatchResponse
@@ -53,6 +54,7 @@ __all__ = [
     'CatalogBandLivesResponse',
     'CatalogSearchResponse',
     'CatalogSongItem',
+    'CatalogStatsResponse',
     'CatalogVenueItem',
     'ConsoleBandItem',
     'ConsoleBandListResponse',

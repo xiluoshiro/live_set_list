@@ -92,6 +92,13 @@ export type CatalogBandLivesResponse = {
   pagination: LivesResponse["pagination"];
 };
 
+export type CatalogStatsResponse = {
+  band_count: number;
+  song_count: number;
+  venue_count: number;
+  latest_live_date: string | null;
+};
+
 export type LiveDetailBandMember = {
   band_id: number | null;
   band_name: string;
@@ -273,7 +280,8 @@ type RequestKind =
   | "console_live_setlist_append"
   | "catalog_search"
   | "catalog_bands"
-  | "catalog_band_lives";
+  | "catalog_band_lives"
+  | "catalog_stats";
 
 type RequestLogMeta = {
   requestKind: RequestKind;
@@ -682,6 +690,13 @@ export async function getCatalogBandLives(
     requestKind: "catalog_band_lives",
   });
   return expectJsonResponse<CatalogBandLivesResponse>(response);
+}
+
+export async function getCatalogStats(): Promise<CatalogStatsResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/catalog/stats`, undefined, {
+    requestKind: "catalog_stats",
+  });
+  return expectJsonResponse<CatalogStatsResponse>(response);
 }
 
 export async function createConsoleSong(

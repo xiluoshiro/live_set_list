@@ -20,6 +20,12 @@ vi.mock("../api", () => ({
   searchCatalog: vi.fn(),
   getCatalogBands: vi.fn().mockResolvedValue({ items: [] }),
   getCatalogBandLives: vi.fn(),
+  getCatalogStats: vi.fn().mockResolvedValue({
+    band_count: 3,
+    song_count: 17,
+    venue_count: 3,
+    latest_live_date: "2026-05-30",
+  }),
   getLiveDetail: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
   peekMyFavoriteLives: vi.fn(),

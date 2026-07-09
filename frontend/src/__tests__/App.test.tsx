@@ -12,6 +12,7 @@ import {
   favoriteLivesBatch,
   getCatalogBandLives,
   getCatalogBands,
+  getCatalogStats,
   getLiveDetail,
   getLiveDetailsBatch,
   getAuthMe,
@@ -33,6 +34,7 @@ import { ThemeProvider } from "../theme/ThemeProvider";
 vi.mock("../api", () => ({
   getLives: vi.fn(),
   searchCatalog: vi.fn(),
+  getCatalogStats: vi.fn(),
   getCatalogBands: vi.fn(),
   getCatalogBandLives: vi.fn(),
   getLiveDetail: vi.fn(),
@@ -73,6 +75,7 @@ const getLivesMock = vi.mocked(getLives);
 const searchCatalogMock = vi.mocked(searchCatalog);
 const getCatalogBandsMock = vi.mocked(getCatalogBands);
 const getCatalogBandLivesMock = vi.mocked(getCatalogBandLives);
+const getCatalogStatsMock = vi.mocked(getCatalogStats);
 const getLiveDetailMock = vi.mocked(getLiveDetail);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
 const getAuthMeMock = vi.mocked(getAuthMe);
@@ -264,6 +267,7 @@ describe("App", () => {
     searchCatalogMock.mockReset();
     getCatalogBandsMock.mockReset();
     getCatalogBandLivesMock.mockReset();
+    getCatalogStatsMock.mockReset();
     getLiveDetailMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
     getAuthMeMock.mockReset();
@@ -309,6 +313,12 @@ describe("App", () => {
       ],
     });
     getCatalogBandLivesMock.mockResolvedValue(makeBandLivesResponse());
+    getCatalogStatsMock.mockResolvedValue({
+      band_count: 3,
+      song_count: 17,
+      venue_count: 3,
+      latest_live_date: "2026-05-30",
+    });
   });
 
   test("匿名模式默认进入首页，且不显示收藏入口", async () => {
@@ -323,6 +333,21 @@ describe("App", () => {
     expect(screen.queryByRole("columnheader", { name: "我的收藏" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("47")).toBeInTheDocument());
     expect(getLivesMock).toHaveBeenCalledWith(1, 15);
+  });
+
+  test("首页数据概览展示真实指标数据", async () => {
+    // 测试点：首页指标卡片应在加载完成后展示歌曲/场地统计和最近更新日期。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    renderApp();
+    await waitFor(() => expect(screen.getByText("47")).toBeInTheDocument());
+    expect(screen.getByText("已收录 Live")).toBeInTheDocument();
+    expect(screen.getByText("17 / 3")).toBeInTheDocument();
+    expect(screen.getByText("歌曲 / 场地统计")).toBeInTheDocument();
+    expect(screen.getByText("2026-05-30")).toBeInTheDocument();
+    expect(screen.getByText("最近更新")).toBeInTheDocument();
+    expect(getCatalogStatsMock).toHaveBeenCalled();
   });
 
   test("首页最近 Live 可打开详情，并能进入全部内容", async () => {
