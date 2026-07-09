@@ -97,6 +97,10 @@
   gap: 14px;
 }
 
+.about-grid .catalog-section:last-child {
+  grid-column: 1 / -1;
+}
+
 .catalog-section {
   border: 1px solid var(--border-subtle);
   border-radius: 8px;

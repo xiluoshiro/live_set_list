@@ -283,23 +283,51 @@ export function AboutPanel() {
         <div>
           <p className="catalog-kicker">About</p>
           <h2>联系我们</h2>
-          <p>LiveSetList 是站方整理维护的演唱会歌单数据库。</p>
+          <p>本站是站方整理维护的演唱会歌单数据库。</p>
         </div>
       </div>
 
       <div className="about-grid">
         <section className="catalog-section">
-          <h3>资料定位</h3>
-          <p>本站优先保证 Live、setlist、出演成员等资料清楚、可查、可维护。当前不开放用户直接编辑。</p>
+          <h3>资料与数据</h3>
+          <p>本站优先保证 Live、setlist、出演成员等资料清楚、可查、可维护，当前不开放用户直接编辑。资料仍在持续整理中，搜索和浏览结果基于现有数据库字段，不代表完整巡演、城市或来源体系已经完成。</p>
         </section>
         <section className="catalog-section">
           <h3>反馈方式</h3>
           <p>发现错误或希望补充信息时，请联系站方，并尽量附上 Live 名称、日期、问题描述和可核对的说明。</p>
-          <p className="contact-line">联系：请通过项目维护者提供的 GitHub Issue、邮箱或社交账号反馈。</p>
+          <p className="contact-line">
+            联系：
+            <a href="mailto:xiluoshiro@gmail.com">xiluoshiro@gmail.com</a>
+          </p>
         </section>
         <section className="catalog-section">
-          <h3>数据说明</h3>
-          <p>当前资料仍在持续整理中。搜索和浏览结果基于现有数据库字段，不代表完整巡演、城市或来源体系已经完成。</p>
+          <h3>隐私说明</h3>
+          <p>我们仅在必要范围内收集和使用数据，不使用任何第三方分析工具或追踪脚本。</p>
+          <p>
+            <strong>收集的数据：</strong>
+            登录名（username）和显示名（display_name）用于账户标识；
+            密码经 Argon2 不可逆哈希后存储，明文密码不留存；
+            客户端 IP 地址和浏览器 User-Agent 用于会话管理与安全审计；
+            登录时间用于账户安全；
+            收藏的 Live ID 列表用于实现收藏同步；
+            登录、收藏、内容变更等操作写入审计日志，用于安全追溯。
+          </p>
+          <p>
+            <strong>不收集的数据：</strong>
+            邮箱、手机号、真实姓名等个人身份信息均不收集；
+            前端错误日志仅存储在浏览器 localStorage 中，不上传至服务器；
+            不使用 Google Analytics 或任何第三方 SDK；
+            不嵌入外部追踪脚本。
+          </p>
+          <p>
+            <strong>Cookie 说明：</strong>
+            登录后设置 HttpOnly Session Cookie，仅用于维持登录状态；
+            不设置第三方 Cookie，不用于广告或追踪。
+          </p>
+          <p>
+            <strong>数据删除：</strong>
+            如需删除账户及相关数据，请通过上方反馈邮箱联系站方。
+          </p>
         </section>
       </div>
     </div>
