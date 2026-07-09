@@ -117,8 +117,11 @@ FROM band_attrs b
 LEFT JOIN live_setlist ls
     ON jsonb_typeof(ls.band_member) = 'object'
    AND ls.band_member ? b.band_name
-WHERE b.band_name ILIKE %s ESCAPE '\\'
-   OR b.band_abbr ILIKE %s ESCAPE '\\'
+WHERE b.id > 0
+  AND (
+      b.band_name ILIKE %s ESCAPE '\\'
+      OR b.band_abbr ILIKE %s ESCAPE '\\'
+  )
 GROUP BY b.id, b.band_name, b.band_abbr
 ORDER BY live_count DESC, b.band_name, b.id
 LIMIT %s
@@ -166,8 +169,9 @@ FROM band_attrs b
 LEFT JOIN live_setlist ls
     ON jsonb_typeof(ls.band_member) = 'object'
    AND ls.band_member ? b.band_name
+WHERE b.id > 0
 GROUP BY b.id, b.band_name, b.band_abbr
-ORDER BY live_count DESC, b.band_name, b.id
+ORDER BY b.id
 LIMIT %s
 """
 
