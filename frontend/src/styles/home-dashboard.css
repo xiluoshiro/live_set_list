@@ -67,8 +67,7 @@
   font: inherit;
 }
 
-.home-search-row button,
-.secondary-btn {
+.home-search-row button {
   border: 1px solid var(--border-normal);
   border-radius: 8px;
   padding: 9px 14px;
@@ -76,6 +75,37 @@
   color: var(--text-tab);
   font: inherit;
   cursor: pointer;
+}
+
+.action-link {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1.5px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+
+.action-link:hover {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+.action-link-arrow {
+  display: inline-block;
+  transition: transform 0.15s;
+  font-size: 12px;
+}
+
+.action-link:hover .action-link-arrow {
+  transform: translateX(2px);
 }
 
 .home-search-row button:disabled {
@@ -138,15 +168,24 @@
 }
 
 .home-section-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 140px;
   gap: 12px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
+  align-items: end;
+  margin-bottom: 4px;
 }
 
-.home-section-head p,
+.home-section-head h3 {
+  margin: 0;
+}
+
+.home-section-head > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
 .home-action-copy {
   margin: 6px 0 0;
   color: var(--text-secondary);
@@ -218,17 +257,23 @@
   gap: 12px;
 }
 
-.home-actions .primary-btn,
-.home-actions .secondary-btn {
-  width: 100%;
-  justify-content: center;
+.home-actions .action-link {
+  font-size: 14px;
+}
+
+.home-actions .primary-btn {
+  font-size: 14px;
+}
+
+.home-actions .primary-btn .action-link-arrow {
+  font-size: 14px;
 }
 
 .home-support {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
   padding: 16px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
@@ -245,16 +290,24 @@
   color: var(--text-secondary);
 }
 
+.home-support-link {
+  border: none;
+  background: transparent;
+  color: var(--accent-primary);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.home-support-link:hover {
+  color: var(--text-link);
+}
+
 @media (max-width: 900px) {
   .home-intro,
-  .home-grid,
-  .home-support {
+  .home-grid {
     grid-template-columns: 1fr;
-  }
-
-  .home-support {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .home-metrics {

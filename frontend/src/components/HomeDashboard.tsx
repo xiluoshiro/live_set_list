@@ -103,16 +103,14 @@ export function HomeDashboard({
       <div className="home-grid">
         <section className="home-section home-recent" aria-labelledby="home-recent-title">
           <div className="home-section-head">
-            <div>
-              <h3 id="home-recent-title">最近收录</h3>
-              <p>来自当前 Live 列表第一页。</p>
-            </div>
-            <button type="button" className="secondary-btn" onClick={onShowAll}>
-              查看全部 Live
+            <h3 id="home-recent-title">最近收录</h3>
+            <button type="button" className="action-link" onClick={onShowAll}>
+              查看全部 Live <span className="action-link-arrow">→</span>
             </button>
-            <button type="button" className="secondary-btn" onClick={onShowBrowse}>
-              乐队
+            <button type="button" className="action-link" onClick={onShowBrowse}>
+              乐队 <span className="action-link-arrow">→</span>
             </button>
+            <p>来自当前 Live 列表第一页。</p>
           </div>
 
           {error ? (
@@ -143,8 +141,8 @@ export function HomeDashboard({
           {isAuthenticated ? (
             <>
               <p className="home-action-copy">已同步 {favoriteCount} 个收藏 Live。</p>
-              <button type="button" className="primary-btn" onClick={onShowFavorites}>
-                查看我的收藏
+              <button type="button" className="action-link" onClick={onShowFavorites}>
+                查看我的收藏 <span className="action-link-arrow">→</span>
               </button>
             </>
           ) : (
@@ -156,8 +154,8 @@ export function HomeDashboard({
             </>
           )}
           {canUseConsoleFeatures && (
-            <button type="button" className="secondary-btn" onClick={onShowConsole}>
-              进入控制台
+            <button type="button" className="action-link" onClick={onShowConsole}>
+              进入控制台 <span className="action-link-arrow">→</span>
             </button>
           )}
         </section>
@@ -166,11 +164,14 @@ export function HomeDashboard({
       <section className="home-support" aria-labelledby="home-support-title">
         <div>
           <h3 id="home-support-title">关于与反馈</h3>
-          <p>本站资料由站方整理维护。发现错误或希望补充信息时，请通过联系入口反馈。</p>
+          <p>
+            本站资料由站方整理维护。发现错误或希望补充信息时，请通过
+            <button type="button" className="home-support-link" onClick={onShowAbout}>
+              联系入口
+            </button>
+            反馈。
+          </p>
         </div>
-        <button type="button" className="secondary-btn" onClick={onShowAbout}>
-          联系我们
-        </button>
       </section>
     </div>
   );

@@ -336,7 +336,7 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(1));
     await user.click(screen.getByRole("button", { name: "返回" }));
-    await user.click(screen.getByRole("button", { name: "查看全部 Live" }));
+    await user.click(screen.getByRole("button", { name: "查看全部 Live →" }));
 
     await waitFor(() => expect(screen.getByText("总计 47 条")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
