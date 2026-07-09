@@ -1,5 +1,5 @@
 .home-dashboard {
-  padding: 20px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -264,7 +264,7 @@
 
 @media (max-width: 620px) {
   .home-dashboard {
-    padding: 14px;
+    padding: 12px;
   }
 
   .home-intro {

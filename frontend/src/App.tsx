@@ -176,12 +176,21 @@ function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false);
   const listSnapshotsRef = useRef<Record<string, ListSnapshot>>({});
   const favoritesReconcileGateRef = useRef(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const listEnabled = (tab === "all" || tab === "favorites") && !auth.isLoading;
   const canUseFavoriteFeatures = auth.isAuthenticated;
   const canUseConsoleFeatures = auth.isAuthenticated && canAccessConsole(auth.user?.role);
+  const navigationItems: Array<{ key: TabKey; label: string; visible: boolean }> = [
+    { key: "home", label: "首页", visible: true },
+    { key: "favorites", label: "我的收藏", visible: auth.isAuthenticated },
+    { key: "all", label: "全部内容", visible: true },
+    { key: "browse", label: "乐队", visible: true },
+    { key: "about", label: "联系我们", visible: true },
+    { key: "console", label: "控制台", visible: canUseConsoleFeatures },
+  ];
 
   const toLiveRow = (item: LiveItem): LiveRow => ({
     liveId: item.live_id,
@@ -618,6 +627,7 @@ function App() {
 
   // 页签切换统一做权限闸门，防止未登录或低权限用户进入受限页。
   const handleTabChange = (nextTab: TabKey) => {
+    setNavDrawerOpen(false);
     if (nextTab === "favorites" && !canUseFavoriteFeatures) {
       setLoginError(null);
       setLoginDialogOpen(true);
@@ -758,112 +768,122 @@ function App() {
   return (
     <main className="page">
       <section className="panel">
-        <header className="panel-head">
-          <h1>BanG Dream! 活动信息统计</h1>
-          <div className="auth-toolbar">
-            {auth.isLoading ? (
-              <span className="auth-status">登录态检查中...</span>
-            ) : auth.isAuthenticated ? (
-              <div className="user-menu-wrap" ref={userMenuRef}>
+        <header className="site-topbar">
+          <div className="site-title">BanG Dream! Live 资料库</div>
+
+          <nav className="tabs" aria-label="主导航">
+            {navigationItems.filter((item) => item.visible).map((item) => (
+              <button
+                key={item.key}
+                className={`tab-btn ${tab === item.key ? "active" : ""}`}
+                onClick={() => handleTabChange(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="topbar-actions">
+            <div className="auth-toolbar">
+              {auth.isLoading ? (
+                <span className="auth-status">登录态检查中...</span>
+              ) : auth.isAuthenticated ? (
+                <div className="user-menu-wrap" ref={userMenuRef}>
+                  <button
+                    type="button"
+                    className="user-menu-trigger"
+                    aria-label={`用户菜单：${userDisplayName}`}
+                    aria-expanded={userMenuOpen}
+                    onClick={() => setUserMenuOpen((open) => !open)}
+                  >
+                    <img className="user-avatar-img" src={userAvatarSrc} alt={`${userDisplayName} 图标`} />
+                  </button>
+                  {userMenuOpen && (
+                    <div className="user-menu-dropdown" role="menu" aria-label="用户菜单">
+                      <div className="user-menu-row user-name-row">
+                        <img className="user-avatar-img user-menu-avatar" src={userAvatarSrc} alt="" aria-hidden="true" />
+                        <span>{userDisplayName}</span>
+                      </div>
+                      <hr className="user-menu-divider" />
+                      <div className="user-menu-row user-account-row">账户：{userNameText}</div>
+                      <div className="user-menu-row user-role-row">角色：{userRoleLabel}</div>
+                      <hr className="user-menu-divider" />
+                      <a
+                        href="#"
+                        className="user-menu-logout-btn"
+                        role="menuitem"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void handleLogout();
+                        }}
+                      >
+                        退出登录
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ) : (
                 <button
                   type="button"
-                  className="user-menu-trigger"
-                  aria-label={`用户菜单：${userDisplayName}`}
-                  aria-expanded={userMenuOpen}
-                  onClick={() => setUserMenuOpen((open) => !open)}
+                  className="primary-btn"
+                  onClick={() => {
+                    setLoginError(null);
+                    setLoginDialogOpen(true);
+                  }}
                 >
-                  <img className="user-avatar-img" src={userAvatarSrc} alt={`${userDisplayName} 图标`} />
+                  登录
                 </button>
-                {userMenuOpen && (
-                  <div className="user-menu-dropdown" role="menu" aria-label="用户菜单">
-                    <div className="user-menu-row user-name-row">
-                      <img className="user-avatar-img user-menu-avatar" src={userAvatarSrc} alt="" aria-hidden="true" />
-                      <span>{userDisplayName}</span>
-                    </div>
-                    <hr className="user-menu-divider" />
-                    <div className="user-menu-row user-account-row">账户：{userNameText}</div>
-                    <div className="user-menu-row user-role-row">角色：{userRoleLabel}</div>
-                    <hr className="user-menu-divider" />
-                    <a
-                      href="#"
-                      className="user-menu-logout-btn"
-                      role="menuitem"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        void handleLogout();
-                      }}
-                    >
-                      退出登录
-                    </a>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => {
-                  setLoginError(null);
-                  setLoginDialogOpen(true);
-                }}
-              >
-                登录
-              </button>
-            )}
+              )}
+            </div>
+            <button
+              type="button"
+              className="theme-icon-btn"
+              onClick={toggleTheme}
+              aria-label={themeToggleMeta.label}
+              title={themeToggleMeta.label}
+            >
+              {themeToggleMeta.icon}
+            </button>
+            <button
+              type="button"
+              className="topbar-menu-btn"
+              aria-label="打开页面菜单"
+              aria-expanded={navDrawerOpen}
+              onClick={() => setNavDrawerOpen(true)}
+            >
+              ☰
+            </button>
           </div>
         </header>
-
-        <nav className="tabs">
-          <button
-            className={`tab-btn ${tab === "home" ? "active" : ""}`}
-            onClick={() => handleTabChange("home")}
-          >
-            首页
-          </button>
-          {auth.isAuthenticated && (
-            <button
-              className={`tab-btn ${tab === "favorites" ? "active" : ""}`}
-              onClick={() => handleTabChange("favorites")}
-            >
-              我的收藏
-            </button>
-          )}
-          <button
-            className={`tab-btn ${tab === "all" ? "active" : ""}`}
-            onClick={() => handleTabChange("all")}
-          >
-            全部内容
-          </button>
-          <button
-            className={`tab-btn ${tab === "browse" ? "active" : ""}`}
-            onClick={() => handleTabChange("browse")}
-          >
-            乐队
-          </button>
-          <button
-            className={`tab-btn ${tab === "about" ? "active" : ""}`}
-            onClick={() => handleTabChange("about")}
-          >
-            联系我们
-          </button>
-          {canUseConsoleFeatures && (
-            <button
-              className={`tab-btn ${tab === "console" ? "active" : ""}`}
-              onClick={() => handleTabChange("console")}
-            >
-              控制台
-            </button>
-          )}
-          <button
-            type="button"
-            className="theme-icon-btn"
-            onClick={toggleTheme}
-            aria-label={themeToggleMeta.label}
-            title={themeToggleMeta.label}
-          >
-            {themeToggleMeta.icon}
-          </button>
-        </nav>
+        {navDrawerOpen && (
+          <div className="nav-drawer-mask" onClick={() => setNavDrawerOpen(false)}>
+            <aside className="nav-drawer" aria-label="页面菜单" onClick={(event) => event.stopPropagation()}>
+              <div className="nav-drawer-head">
+                <strong>页面导航</strong>
+                <button
+                  type="button"
+                  className="nav-drawer-close"
+                  aria-label="关闭页面菜单"
+                  onClick={() => setNavDrawerOpen(false)}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="nav-drawer-list">
+                {navigationItems.filter((item) => item.visible).map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`nav-drawer-item ${tab === item.key ? "active" : ""}`}
+                    onClick={() => handleTabChange(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </aside>
+          </div>
+        )}
         {!auth.isLoading && !auth.isAuthenticated && (
           <p className="tab-tip">登录后可使用收藏同步；控制台仅对 editor 及以上角色可见。</p>
         )}
