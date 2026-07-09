@@ -5,10 +5,32 @@ This directory contains production deployment templates for a single Google Clou
 Target baseline:
 
 - VM: Google Compute Engine `e2-medium`
-- OS: Debian 13 is acceptable; Debian 12 or Ubuntu 24.04 LTS are also safe choices
+- OS: Debian 12 Bookworm image `debian-12-bookworm-v20260609`
 - Disk: 30 GB minimum, 40 GB recommended, Balanced Persistent Disk
 - Public ports: 80 and 443 only
 - Private services: backend on `127.0.0.1:8000`, PostgreSQL on `127.0.0.1:${POSTGRES_PORT}`
+
+## Google Cloud Firewall
+
+Allow only:
+
+- TCP 22 from your admin IP
+- TCP 80 from `0.0.0.0/0` and `::/0`
+- TCP 443 from `0.0.0.0/0` and `::/0`
+
+Do not expose PostgreSQL, backend port 8000, or Docker daemon ports.
+
+## Debian 12 Packages
+
+Install the runtime packages on Debian 12:
+
+```bash
+sudo apt update
+sudo apt install -y nginx python3 python3-venv python3-pip docker.io docker-compose-plugin certbot python3-certbot-nginx
+sudo systemctl enable --now docker nginx
+```
+
+The project is developed with Python 3.12. Debian 12's default Python may be older, so run `python3 --version` before creating the backend venv. If it is not acceptable for the current dependency set, install Python 3.12 from a trusted package source before deploying.
 
 ## Server Layout
 
@@ -35,7 +57,7 @@ sudo chmod 750 /etc/livesetlist
 2. Build release archive: `python scripts/build_release.py --version <version>`.
 3. Upload `dist-release/livesetlist-<version>.tar.gz` to the VM.
 4. Unpack to `/opt/livesetlist/releases/<version>` and update `/opt/livesetlist/current`.
-5. Copy `env.production.example` to `/etc/livesetlist/backend.env` and `/etc/livesetlist/postgres.env`, then fill real secrets.
+5. Copy `env.production.example` to `/etc/livesetlist/backend.env` and `/etc/livesetlist/postgres.env`, then fill real secrets. Keep `APP_LOG_FILE=/var/log/livesetlist/app.log`.
 6. Start PostgreSQL with `docker compose --env-file /etc/livesetlist/postgres.env -f /opt/livesetlist/current/infra/production/docker-compose.postgres.yml up -d`.
 7. Run Flyway validate/migrate against the private PostgreSQL port.
 8. Install and start `livesetlist-backend.service`.
@@ -74,3 +96,10 @@ sudo ss -ltnp
 ```
 
 The `ss` output must not show PostgreSQL listening on `0.0.0.0:5432` or `0.0.0.0:${POSTGRES_PORT}`.
+
+Check production logs:
+
+```bash
+sudo journalctl -u livesetlist-backend -n 100 --no-pager
+sudo tail -n 100 /var/log/livesetlist/app.log
+```

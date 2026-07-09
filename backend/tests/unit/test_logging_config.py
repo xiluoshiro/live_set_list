@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import app.logging_config as logging_config
@@ -11,12 +12,11 @@ def test_setup_logging_is_idempotent():
     root_logger.handlers = []
     console_handler = MagicMock()
     file_handler = MagicMock()
-    fake_log_dir = MagicMock()
     fake_log_file = MagicMock()
 
     with patch("app.logging_config._LOGGING_CONFIGURED", False), patch(
-        "app.logging_config.LOG_DIR", fake_log_dir
-    ), patch("app.logging_config.LOG_FILE", fake_log_file), patch(
+        "app.logging_config.log_file_path", return_value=fake_log_file
+    ), patch(
         "app.logging_config.logging.getLogger", return_value=root_logger
     ), patch(
         "app.logging_config.logging.StreamHandler", return_value=console_handler
@@ -29,7 +29,7 @@ def test_setup_logging_is_idempotent():
     assert stream_handler_ctor.call_count == 1
     assert file_handler_ctor.call_count == 1
     assert root_logger.addHandler.call_count == 2
-    fake_log_dir.mkdir.assert_called_once_with(parents=True, exist_ok=True)
+    fake_log_file.parent.mkdir.assert_called_once_with(parents=True, exist_ok=True)
 
 
 def test_setup_logging_app_log_level_valid_and_invalid():
@@ -44,11 +44,11 @@ def test_setup_logging_app_log_level_valid_and_invalid():
         root_logger.handlers = []
         console_handler = MagicMock()
         file_handler = MagicMock()
-        fake_log_dir = MagicMock()
+        fake_log_file = MagicMock()
 
         with patch.dict(os.environ, {"APP_LOG_LEVEL": level_name}, clear=False), patch(
             "app.logging_config._LOGGING_CONFIGURED", False
-        ), patch("app.logging_config.LOG_DIR", fake_log_dir), patch(
+        ), patch("app.logging_config.log_file_path", return_value=fake_log_file), patch(
             "app.logging_config.logging.getLogger", return_value=root_logger
         ), patch(
             "app.logging_config.logging.StreamHandler", return_value=console_handler
@@ -66,12 +66,11 @@ def test_setup_logging_file_handler_rotation_config():
     root_logger.handlers = []
     console_handler = MagicMock()
     file_handler = MagicMock()
-    fake_log_dir = MagicMock()
     fake_log_file = MagicMock()
 
     with patch("app.logging_config._LOGGING_CONFIGURED", False), patch(
-        "app.logging_config.LOG_DIR", fake_log_dir
-    ), patch("app.logging_config.LOG_FILE", fake_log_file), patch(
+        "app.logging_config.log_file_path", return_value=fake_log_file
+    ), patch(
         "app.logging_config.logging.getLogger", return_value=root_logger
     ), patch(
         "app.logging_config.logging.StreamHandler", return_value=console_handler
@@ -86,3 +85,11 @@ def test_setup_logging_file_handler_rotation_config():
         backupCount=3,
         encoding="utf-8",
     )
+
+
+def test_log_file_path_uses_app_log_file_env(tmp_path, monkeypatch):
+    # 测试点：生产环境应能把后端日志写到发布目录外的固定日志路径。
+    log_file = tmp_path / "production" / "app.log"
+    monkeypatch.setenv("APP_LOG_FILE", str(log_file))
+
+    assert logging_config.log_file_path() == Path(log_file)
