@@ -560,6 +560,8 @@ python scripts/run_checks.py functional
 
 ## 需求实现状态 / TODO
 
+截至当前版本，阶段 1、阶段 1.5 的轻量站点支持入口、阶段 2 的公共搜索，以及阶段 3A 的公开乐队浏览已经落地。下一轮优先事项应聚焦在：隐私与外部反馈入口、列表筛选、资料实体页、登录后的个人化首页，以及可看护全局样式的 E2E / 视觉验证。
+
 状态说明：
 
 - `TODO`：尚未开始实现。
@@ -570,9 +572,10 @@ python scripts/run_checks.py functional
 | 阶段 | 状态 | 说明 |
 |------|------|------|
 | 阶段 1：首页壳与信息架构 | DONE | 已新增首页视图、首页最近 Live、全量/收藏/控制台入口，并通过 functional |
-| 阶段 1.5：站点基础支持与可信度说明 | DONE | 已新增关于 / 联系说明、首页支持入口和 Live 详情反馈说明；暂不做反馈工单和数据库表 |
+| 阶段 1B：全宽应用框架与置顶导航 | DONE | 已取消外层居中框，改为全宽页面、全宽置顶条、文本式页签和右侧侧边栏菜单 |
+| 阶段 1.5：站点基础支持与可信度说明 | DOING | 已新增关于 / 联系说明、首页支持入口和 Live 详情反馈说明；隐私说明和外部反馈渠道仍待确认 |
 | 阶段 2：公共搜索与浏览 | DONE | 已新增只读公共搜索 API，首页搜索可按 Live、乐队、歌曲、场地返回分组结果 |
-| 阶段 3：登录后个人首页 | TODO | 依赖首页结构和收藏摘要入口 |
+| 阶段 3：登录后个人首页 | TODO | 当前只有收藏数量和收藏入口；最近查看、收藏更新提醒、关注更新仍未做 |
 | 阶段 3A：公开乐队浏览 | DONE | 已新增按乐队浏览入口和乐队相关 Live 只读列表 |
 | 阶段 4：贡献工作台 | DEFERRED | 近期不升级后台维护体系，先复用现有控制台 |
 | 阶段 5：数据可信度与社区治理 | DEFERRED | 来源系统、反馈工单、审核流和数据质量字段暂缓 |
@@ -583,6 +586,7 @@ python scripts/run_checks.py functional
 - [x] 完成阶段 1 开发方案和开发边界设计，详见 [docs/design/homepage-community-database-phase1.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/homepage-community-database-phase1.md)。
 - [x] 新增“首页”视图，并将默认视图从“全部内容”调整为“首页”。
 - [x] 首页首屏展示站点名称、数据库定位说明和搜索入口 UI 壳。
+- [x] 首页搜索入口已从 UI 壳升级为真实公共搜索入口。
 - [x] 首页展示可从现有接口可靠获得的 Live 总数。
 - [x] 首页展示最近 Live / 最新收录区域。
 - [x] 首页最近 Live 条目可打开现有 Live 详情交互。
@@ -596,6 +600,16 @@ python scripts/run_checks.py functional
 - [x] 首页补齐最近 Live 的加载、空数据和失败状态。
 - [x] 首页文案不宣传未实现的全局搜索、关注、推荐、审核能力。
 - [x] 完成后运行 `python scripts/run_checks.py functional`。
+
+### 阶段 1B TODO
+
+- [x] 页面从居中框布局调整为全屏宽度布局。
+- [x] 顶部标题和页签统一为全宽置顶条。
+- [x] 站点名称统一为 `BanG Dream! Live 资料库`。
+- [x] 页签按钮改为与顶部背景同色的文本式导航，通过文字色和下划线区分选中态。
+- [x] 右侧增加菜单按钮，打开侧边栏后展示同一组页面切换入口。
+- [x] 移除未使用的旧样式入口 `frontend/src/styles.css`，保留 `frontend/src/styles/index.css` 作为样式聚合入口。
+- [x] 完成后运行 `python scripts/run_checks.py functional`，并做浏览器级视觉检查。
 
 ### 阶段 1.5 TODO
 
@@ -622,7 +636,17 @@ python scripts/run_checks.py functional
 - [x] 新增按乐队浏览入口。
 - [x] 乐队浏览展示乐队摘要、收录 Live 数和相关 Live 列表。
 - [x] 当前版本不做完整歌曲页、场馆页、城市页、巡演页。
-- [ ] 完成后运行 `python scripts/run_checks.py functional`。
+- [x] 完成后运行 `python scripts/run_checks.py functional`。
+
+### 下一轮优先 TODO
+
+- [ ] `P0` 补齐隐私说明静态内容。
+- [ ] `P0` 确认并配置至少一种外部反馈入口，例如 GitHub Issues、GitHub Discussions、邮箱或项目主页。
+- [ ] `P1` 全部内容列表增加年份、Live 类型、乐队 / 艺人筛选。
+- [ ] `P1` 为歌曲、场地、城市、巡演等资料实体页制定下一阶段设计。
+- [ ] `P1` 登录用户首页增加最近查看、收藏更新提醒或关注更新。
+- [ ] `P2` 补充跨页面 E2E，覆盖首页、搜索、乐队浏览、详情弹窗、收藏和控制台主链路。
+- [ ] `P2` 评估截图型视觉回归，专门看护全局样式和顶部导航回归。
 
 ## 非目标
 

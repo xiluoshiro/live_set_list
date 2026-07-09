@@ -39,6 +39,12 @@
   - 单条 Live 详情查询
 - `POST /api/lives/details:batch`
   - 批量详情预读接口
+- `GET /api/catalog/search`
+  - 公共资料库搜索，匿名可用，按 Live、乐队 / 艺人、歌曲、场地分组返回结果
+- `GET /api/catalog/bands`
+  - 公共乐队浏览列表，匿名可用
+- `GET /api/catalog/bands/{band_id}/lives`
+  - 按乐队浏览相关 Live，匿名可用，登录时会附带收藏状态
 - `GET /api/console/songs`
   - `editor+` 查询控制台歌曲候选
 - `GET /api/console/bands`
@@ -120,7 +126,36 @@
 - `items[].is_favorite` 恒为 `true`
 - 取消收藏后，该接口会立即反映最新结果
 
-### 5. 控制台 lookup 接口
+### 5. 公共 catalog 接口
+
+`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives` 用于匿名可访问的公共资料库搜索与浏览。
+
+- 三个接口都不要求登录。
+- 登录用户访问搜索结果或乐队 Live 列表时，Live 项的 `is_favorite` 会按当前用户收藏计算；匿名请求统一返回 `false`。
+- `GET /api/catalog/search`
+  - `q` 会 trim，空字符串返回 `400`
+  - `q` 最大长度为 `255`
+  - `limit` 范围是 `1..20`，默认 `8`
+  - 文本查询使用 `ILIKE`，并转义 `%`、`_`、`\`
+  - Live 分组会匹配 Live 标题、场地名、歌曲名、乐队名和乐队缩写
+  - 乐队分组匹配 `band_name` 或 `band_abbr`
+  - 歌曲分组匹配 `song_name`
+  - 场地分组匹配 `venue`
+  - Live 结果按 `live_date DESC, id DESC` 排序
+  - 乐队、歌曲、场地分组优先按关联 Live 数降序排序
+- `GET /api/catalog/bands`
+  - `limit` 范围是 `1..100`，默认 `20`
+  - 当前只返回 `band_attrs.id > 0` 的乐队
+  - `live_count` 按 `live_setlist.band_member` 中的乐队名匹配统计
+  - 当前列表按 `band_attrs.id` 排序
+- `GET /api/catalog/bands/{band_id}/lives`
+  - `band_id` 必须大于等于 `1`
+  - `page_size` 当前只允许 `15` 或 `20`
+  - 页码超过最后一页时会自动钳制到最后一页
+  - 未找到乐队时返回 `404`
+  - Live 结果按 `live_date DESC, id DESC` 排序
+
+### 6. 控制台 lookup 接口
 
 `GET /api/console/songs`、`GET /api/console/bands`、`GET /api/console/venues` 用于控制台录入候选查询。
 
@@ -132,7 +167,7 @@
 - 乐队查询匹配 `band_name` 或 `band_abbr`
 - 场地查询匹配 `venue`
 
-### 6. 控制台写接口
+### 7. 控制台写接口
 
 当前控制台已接入真实写接口，统一使用 `get_write_db_connection()`，并写入 `audit_logs`。
 
