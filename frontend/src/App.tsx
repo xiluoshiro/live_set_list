@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   clearLivesCache,
@@ -26,6 +26,7 @@ import {
 } from "./components/CatalogPanels";
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { HomeDashboard, type HomeLiveRow } from "./components/HomeDashboard";
+import { LiveCardGrid } from "./components/LiveCardGrid";
 import { LiveDetailPage } from "./components/LiveDetailPage";
 import { LoginDialog } from "./components/LoginDialog";
 import { useFavorites } from "./favorites/FavoriteProvider";
@@ -129,6 +130,13 @@ function App() {
   const favorites = useFavorites();
   const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
   const [pageSize, setPageSize] = useState<15 | 20>(20);
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
+    const stored = localStorage.getItem("live-view-mode");
+    return stored === "table" ? "table" : "cards";
+  });
+  const [cardPage, setCardPage] = useState(1);
+  const [cardLoadingMore, setCardLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
   const [page, setPage] = useState(1);
   const [jumpPageInput, setJumpPageInput] = useState("1");
   const [tab, setTab] = useState<TabKey>("home");
@@ -623,6 +631,74 @@ function App() {
     setJumpPageInput(String(nextPage));
   };
 
+  const handleViewModeChange = async (mode: "table" | "cards") => {
+    setViewMode(mode);
+    localStorage.setItem("live-view-mode", mode);
+    if (mode === "table") {
+      setCardPage(1);
+      setPage(1);
+      setItems([]);
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const data = tab === "favorites"
+          ? await getMyFavoriteLives(1, pageSize)
+          : await getLives(1, pageSize);
+        setItems(data.items.map(toLiveRow));
+        setServerTotal(data.pagination.total);
+        setServerTotalPages(data.pagination.total_pages);
+        setPage(data.pagination.page);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          auth.setAnonymous();
+          setTab("home");
+          return;
+        }
+        setLoadError(error instanceof Error ? error.message : "未知错误");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const loadMoreCards = useCallback(async () => {
+    if (cardLoadingMore || cardPage >= serverTotalPages) return;
+    const nextPage = cardPage + 1;
+    setCardLoadingMore(true);
+    try {
+      const data = tab === "favorites"
+        ? await getMyFavoriteLives(nextPage, pageSize)
+        : await getLives(nextPage, pageSize);
+      const mappedItems = data.items.map(toLiveRow);
+      setItems((prev) => [...prev, ...mappedItems]);
+      setCardPage(nextPage);
+    } catch {
+      // load more 失败不覆盖已有数据
+    } finally {
+      setCardLoadingMore(false);
+    }
+  }, [cardLoadingMore, cardPage, serverTotalPages, pageSize, tab]);
+
+  useEffect(() => {
+    if (viewMode !== "cards") return;
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void loadMoreCards();
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [viewMode, loadMoreCards]);
+
+  useEffect(() => {
+    setCardPage(1);
+  }, [tab]);
+
   const showFavoriteColumn = tab === "all" && auth.isAuthenticated;
 
   const toggleFavorite = async (id: number) => {
@@ -909,7 +985,92 @@ function App() {
           <AboutPanel />
         ) : showListPanel ? (
           <>
-            <div className="table-wrap">
+            <footer className="pager">
+              <div className="toolbar">
+                <span className="view-toggle">
+                  <button
+                    type="button"
+                    className="view-toggle-btn"
+                    data-active="true"
+                    onClick={() => handleViewModeChange(viewMode === "cards" ? "table" : "cards")}
+                    aria-label={viewMode === "cards" ? "切换为表格模式" : "切换为卡片模式"}
+                    title={viewMode === "cards" ? "切换为表格模式" : "切换为卡片模式"}
+                  >
+                    {viewMode === "cards" ? "▦" : "☷"}
+                  </button>
+                </span>
+                {viewMode === "table" && (
+                  <label>
+                    每页行数
+                    <select
+                      value={pageSize}
+                      onChange={(e) => handlePageSizeChange(Number(e.target.value) as 15 | 20)}
+                    >
+                      <option value={15}>15</option>
+                      <option value={20}>20</option>
+                    </select>
+                  </label>
+                )}
+                <span>总计 {total} 条</span>
+              </div>
+              {viewMode === "table" && (
+                <div className="pager-controls">
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>
+                    上一页
+                  </button>
+                  <span className="pager-status">
+                    第 {safePage} / {totalPages} 页
+                  </span>
+                  <label className="pager-jump">
+                    跳转至第
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={jumpPageInput}
+                      onChange={(e) => setJumpPageInput(e.target.value)}
+                      onBlur={commitJumpPage}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitJumpPage();
+                        }
+                      }}
+                    />
+                    页
+                  </label>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safePage >= totalPages}
+                  >
+                    下一页
+                  </button>
+                </div>
+              )}
+            </footer>
+            {viewMode === "cards" && (
+              <LiveCardGrid
+                rows={items}
+                showStar={showFavoriteColumn}
+                isFavorite={isFavorite}
+                isSyncing={(id) => favorites.isFavoriteSyncing(id)}
+                onToggleStar={(id) => void toggleFavorite(id)}
+                onOpenLive={(row) => {
+                  setDetailLiveId(row.liveId);
+                  setDetailFallback({ liveTitle: row.liveTitle, liveDate: row.liveDate, url: row.url });
+                  setPreviousTab(tab);
+                  setTab("detail");
+                }}
+                loading={loading}
+                loadError={loadError}
+                sentinelRef={sentinelRef}
+                loadingMore={cardLoadingMore}
+                hasMore={cardPage < serverTotalPages}
+                total={serverTotal}
+              />
+            )}
+            {viewMode === "table" && (
+              <div className="table-wrap">
               <table className={showFavoriteColumn ? "table-with-fav" : "table-no-fav"}>
                 <thead>
                   <tr>
@@ -1004,54 +1165,7 @@ function App() {
                 </tbody>
               </table>
             </div>
-
-            <footer className="pager">
-              <div className="toolbar">
-                <label>
-                  每页行数
-                  <select
-                    value={pageSize}
-                    onChange={(e) => handlePageSizeChange(Number(e.target.value) as 15 | 20)}
-                  >
-                    <option value={15}>15</option>
-                    <option value={20}>20</option>
-                  </select>
-                </label>
-                <span>总计 {total} 条</span>
-              </div>
-              <div className="pager-controls">
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>
-                  上一页
-                </button>
-                <span className="pager-status">
-                  第 {safePage} / {totalPages} 页
-                </span>
-                <label className="pager-jump">
-                  跳转至第
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={jumpPageInput}
-                    onChange={(e) => setJumpPageInput(e.target.value)}
-                    onBlur={commitJumpPage}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        commitJumpPage();
-                      }
-                    }}
-                  />
-                  页
-                </label>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage >= totalPages}
-                >
-                  下一页
-                </button>
-              </div>
-            </footer>
+            )}
           </>
         ) : showConsolePanel ? (
           <ConsoleInsertPanel onLiveDataChanged={handleConsoleLiveDataChanged} />
