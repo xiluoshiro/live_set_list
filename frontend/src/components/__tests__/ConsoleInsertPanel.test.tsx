@@ -116,9 +116,9 @@ describe("ConsoleInsertPanel", () => {
     });
   });
 
-  test("默认渲染新增入口与Setlist字段表格", async () => {
-    // 测试点：控制台基础结构存在，且默认是新增Setlist录入视图。
-    render(<ConsoleInsertPanel />);
+  test("默认渲染新增 Live 并聚焦场地查询", async () => {
+    // 测试点：控制台首次进入应优先新增 Live，并把录入起点放在场地查询。
+    render(<ConsoleInsertPanel initialMode="live_create" />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
     await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20));
 
@@ -126,14 +126,12 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("tab", { name: "新增Setlist" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "新增歌曲" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "新增乐队" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "显示详细信息" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "新增Live" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("查询 venue")).toHaveFocus();
     expect(screen.getAllByRole("columnheader", { name: "live_date" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("columnheader", { name: "live_title" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("columnheader", { name: "abs" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("columnheader", { name: "seg" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("combobox", { name: /seg-/ }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("checkbox", { name: /is_short-/ }).length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("选择 live_id")).toBeInTheDocument();
+    expect(screen.getByLabelText("opening_time_hour")).toHaveValue("18");
+    expect(screen.getByLabelText("timezone")).toHaveValue("+09:00");
   });
 
   test("提交新增Setlist会调用真实追加接口并出现插入记录", async () => {
@@ -460,7 +458,7 @@ describe("ConsoleInsertPanel", () => {
       "csrf-token",
     ));
     expect(screen.getByText("已新增Live #39（Inserted Live）")).toBeInTheDocument();
-    expect(screen.getByText("39")).toBeInTheDocument();
+    expect(document.querySelector(".live-history-table tbody tr")?.textContent).toContain("39");
     expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("");
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
@@ -834,8 +832,8 @@ describe("ConsoleInsertPanel", () => {
       "bid",
       "band_name",
       "cover",
-      "band_member",
     ]);
+    expect(within(dialog).queryByText(JSON.stringify({ Roselia: ["湊友希那"] }))).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("columnheader", { name: "other_member" })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("columnheader", { name: "short" })).not.toBeInTheDocument();
     expect(dialog).toHaveClass("batch_song");

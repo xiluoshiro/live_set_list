@@ -14,7 +14,19 @@ export const LIVE_TYPE_OPTIONS = [
 export function formatLiveType(value: string): string {
   return LIVE_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
-export const TIMEZONE_OPTIONS = ["+08:00", "+09:00", "+00:00", "-05:00"];
+function formatUtcOffset(totalMinutes: number): string {
+  const sign = totalMinutes < 0 ? "-" : "+";
+  const absoluteMinutes = Math.abs(totalMinutes);
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = absoluteMinutes % 60;
+  return `${sign}${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+// 覆盖现行民用时区使用的固定 UTC 偏移，包含半小时和四十五分钟时区。
+export const TIMEZONE_OPTIONS = Array.from(
+  { length: ((14 * 60 - -12 * 60) / 15) + 1 },
+  (_, index) => formatUtcOffset(-12 * 60 + index * 15),
+);
 
 export const MOCK_BANDS: BandOption[] = [
   { band_id: 1, band_name: "Poppin'Party" },

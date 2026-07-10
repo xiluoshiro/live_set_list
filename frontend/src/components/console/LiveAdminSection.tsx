@@ -20,6 +20,7 @@ type LiveAdminSectionProps = {
   venueMenuPos: Position | null;
   venueTriggerRef: RefObject<HTMLButtonElement>;
   venueMenuRef: RefObject<HTMLDivElement>;
+  venueQueryInputRef: RefObject<HTMLInputElement>;
   insertedLives: Array<{
     live_id: number;
     live_date: string;
@@ -66,6 +67,7 @@ export function LiveAdminSection({
   venueMenuPos,
   venueTriggerRef,
   venueMenuRef,
+  venueQueryInputRef,
   insertedLives,
   onLiveDateChange,
   onLiveTitleChange,
@@ -84,6 +86,16 @@ export function LiveAdminSection({
   queryInsertDisabled,
   submitInsertDisabled,
 }: LiveAdminSectionProps) {
+  const splitTime = (value: string) => {
+    const [hour = "00", minute = "00"] = value.split(":");
+    return { hour, minute };
+  };
+  const updateTime = (current: string, nextHour: string, nextMinute: string, onChange: (value: string) => void) => {
+    const normalizedMinute = nextHour === "24" ? "00" : nextMinute;
+    if (current !== `${nextHour}:${normalizedMinute}`) onChange(`${nextHour}:${normalizedMinute}`);
+  };
+  const opening = splitTime(openingTime);
+  const start = splitTime(startTime);
   const selectedVenueText = (() => {
     const selected = venues.find((venue) => venue.venue_id === selectedVenueId);
     if (!selected) return "请选择 venue";
@@ -96,6 +108,7 @@ export function LiveAdminSection({
         <label htmlFor="venue-query-input">查询 venue</label>
         <input
           id="venue-query-input"
+          ref={venueQueryInputRef}
           className="venue-query-input"
           value={venueQueryText}
           onChange={(e) => onVenueQueryTextChange(e.target.value)}
@@ -161,13 +174,55 @@ export function LiveAdminSection({
                 <input value={liveUrl} onChange={(e) => onLiveUrlChange(e.target.value)} placeholder="https://..." />
               </td>
               <td>
-                <input type="time" value={openingTime} onChange={(e) => onOpeningTimeChange(e.target.value)} />
+                <span className="console-time-picker">
+                  <select
+                    aria-label="opening_time_hour"
+                    value={opening.hour}
+                    onChange={(e) => updateTime(openingTime, e.target.value, opening.minute, onOpeningTimeChange)}
+                  >
+                    {Array.from({ length: 25 }, (_, hour) => String(hour).padStart(2, "0")).map((hour) => (
+                      <option key={hour} value={hour}>{hour}</option>
+                    ))}
+                  </select>
+                  <span>:</span>
+                  <select
+                    aria-label="opening_time_minute"
+                    value={opening.minute}
+                    disabled={opening.hour === "24"}
+                    onChange={(e) => updateTime(openingTime, opening.hour, e.target.value, onOpeningTimeChange)}
+                  >
+                    {Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, "0")).map((minute) => (
+                      <option key={minute} value={minute}>{minute}</option>
+                    ))}
+                  </select>
+                </span>
               </td>
               <td>
-                <input type="time" value={startTime} onChange={(e) => onStartTimeChange(e.target.value)} />
+                <span className="console-time-picker">
+                  <select
+                    aria-label="start_time_hour"
+                    value={start.hour}
+                    onChange={(e) => updateTime(startTime, e.target.value, start.minute, onStartTimeChange)}
+                  >
+                    {Array.from({ length: 25 }, (_, hour) => String(hour).padStart(2, "0")).map((hour) => (
+                      <option key={hour} value={hour}>{hour}</option>
+                    ))}
+                  </select>
+                  <span>:</span>
+                  <select
+                    aria-label="start_time_minute"
+                    value={start.minute}
+                    disabled={start.hour === "24"}
+                    onChange={(e) => updateTime(startTime, start.hour, e.target.value, onStartTimeChange)}
+                  >
+                    {Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, "0")).map((minute) => (
+                      <option key={minute} value={minute}>{minute}</option>
+                    ))}
+                  </select>
+                </span>
               </td>
               <td>
-                <select value={timezone} onChange={(e) => onTimezoneChange(e.target.value)}>
+                <select aria-label="timezone" value={timezone} onChange={(e) => onTimezoneChange(e.target.value)}>
                   {timezoneOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}

@@ -170,6 +170,8 @@ export function mapParsedSetlist(
       song_name: line.songName,
       song_id: "",
       segment_start_type: segmentStartType,
+      // 保留原文段内编号；即使从 M2 开始，也不能在应用草稿时静默回退为 1。
+      sub_order: line.segmentOrder,
       is_short: false,
       band_member: mapping.bandMember,
       other_member: mapping.otherMember,

@@ -61,8 +61,17 @@ def _normalize_time_with_timezone(value: str, timezone: str) -> str:
     """Combine a local clock time and UTC offset into the DB-ready time-with-timezone format."""
     if not TIME_PATTERN.fullmatch(value):
         _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid time format: {value}")
+    hour, minute, *second_parts = (int(part) for part in value.split(":"))
+    second = second_parts[0] if second_parts else 0
+    if hour > 24 or minute > 59 or second > 59 or (hour == 24 and (minute != 0 or second != 0)):
+        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid time value: {value}")
     if not TIMEZONE_PATTERN.fullmatch(timezone):
         _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid timezone format: {timezone}")
+    offset_sign = -1 if timezone.startswith("-") else 1
+    offset_hour, offset_minute = (int(part) for part in timezone[1:].split(":"))
+    offset_minutes = offset_sign * (offset_hour * 60 + offset_minute)
+    if offset_minute % 15 != 0 or offset_minutes < -12 * 60 or offset_minutes > 14 * 60:
+        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid timezone value: {timezone}")
     normalized_time = value if len(value) == 8 else f"{value}:00"
     return f"{normalized_time}{timezone}"
 
