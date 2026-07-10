@@ -130,7 +130,10 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("查询 venue")).toHaveFocus();
     expect(screen.getAllByRole("columnheader", { name: "live_date" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("columnheader", { name: "live_title" }).length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("opening_time_hour")).toHaveValue("18");
+    expect(screen.getByLabelText("opening_time")).toHaveValue("18:00");
+    expect(screen.getByLabelText("opening_time")).toHaveAttribute("type", "time");
+    expect(screen.getByLabelText("start_time")).toHaveValue("19:00");
+    expect(screen.getByLabelText("start_time")).toHaveAttribute("type", "time");
     expect(screen.getByLabelText("timezone")).toHaveValue("+09:00");
   });
 

@@ -252,16 +252,6 @@
   font-size: 12px;
 }
 
-.console-time-picker {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.console-time-picker select {
-  width: 3.8rem;
-}
-
 .console-confirm-actions {
   display: flex;
   justify-content: flex-end;
