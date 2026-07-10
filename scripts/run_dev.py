@@ -16,6 +16,8 @@ BACKEND_DIR = ROOT / "backend"
 FRONTEND_DIR = ROOT / "frontend"
 PG_ENV_PATH = ROOT / "infra" / "postgres" / ".env.pg-migrate"
 BACKEND_PORT = 8000
+BACKEND_HOST = "127.0.0.1"
+DEV_API_PROXY_TARGET = f"http://{BACKEND_HOST}:{BACKEND_PORT}"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -35,8 +37,8 @@ def build_backend_command() -> list[str]:
         python_exe = BACKEND_DIR / ".venv" / "bin" / "python"
 
     if python_exe.exists():
-        return [str(python_exe), "-m", "uvicorn", "app.main:app", "--reload", "--port", str(BACKEND_PORT)]
-    return [sys.executable, "-m", "uvicorn", "app.main:app", "--reload", "--port", str(BACKEND_PORT)]
+        return [str(python_exe), "-m", "uvicorn", "app.main:app", "--reload", "--host", BACKEND_HOST, "--port", str(BACKEND_PORT)]
+    return [sys.executable, "-m", "uvicorn", "app.main:app", "--reload", "--host", BACKEND_HOST, "--port", str(BACKEND_PORT)]
 
 
 def build_frontend_command() -> list[str]:
@@ -89,6 +91,13 @@ def build_backend_env(*, use_test_db: bool) -> dict[str, str]:
     set_backend_env_value(backend_env, env_values, "DB_USER_RW_USER", "APP_USER_RW_USER")
     set_backend_env_value(backend_env, env_values, "DB_USER_RW_PASSWORD", "APP_USER_RW_PASSWORD")
     return backend_env
+
+
+def build_frontend_env() -> dict[str, str]:
+    """Pin Vite's local API proxy to the same IPv4 loopback address as Uvicorn."""
+    frontend_env = os.environ.copy()
+    frontend_env["VITE_DEV_API_PROXY_TARGET"] = DEV_API_PROXY_TARGET
+    return frontend_env
 
 
 def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
@@ -319,6 +328,7 @@ def main(argv: list[str] | None = None) -> int:
     backend_cmd = build_backend_command()
     frontend_cmd = build_frontend_command()
     backend_env = build_backend_env(use_test_db=args.test_db)
+    frontend_env = build_frontend_env()
 
     print(f"[backend] {' '.join(backend_cmd)}")
     if args.test_db:
@@ -331,7 +341,7 @@ def main(argv: list[str] | None = None) -> int:
             f"[backend] DB_HOST={backend_env['DB_HOST']} DB_PORT={backend_env['DB_PORT']} "
             f"DB_NAME={backend_env['DB_NAME']} APP_DB={backend_env['APP_DB']}（生产库，仅注入后端进程）"
         )
-    print(f"[frontend] {' '.join(frontend_cmd)}")
+    print(f"[frontend] {' '.join(frontend_cmd)} VITE_DEV_API_PROXY_TARGET={DEV_API_PROXY_TARGET}")
     print("启动中... 按 Ctrl+C 可一起关闭前后端。")
 
     backend_proc = subprocess.Popen(
@@ -343,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
     frontend_proc = subprocess.Popen(
         frontend_cmd,
         cwd=FRONTEND_DIR,
+        env=frontend_env,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
     )
 

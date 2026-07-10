@@ -21,6 +21,7 @@ python scripts/run_dev.py --test-db
 - 默认启动：后端连接 `APP_DB`，当前通常是 `live_statistic`
 - `--test-db`：后端连接 `TEST_DB_NAME`，默认值为 `live_statistic_test`
 - 脚本会给后端进程显式注入 `DB_HOST`、`DB_PORT`、`POSTGRES_HOST`、`POSTGRES_PORT`、`DB_NAME`、`APP_DB` 和运行时 DB 用户别名，避免当前 shell 中残留的测试库环境变量污染本次启动
+- 脚本会将后端和 Vite `/api` 代理同时固定到 `127.0.0.1:8000`，避免 Windows 上 `localhost` 被解析为 IPv6 `::1` 后导致代理连接被拒绝
 
 或：
 
