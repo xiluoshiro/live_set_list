@@ -2,6 +2,8 @@
 
 本文档只讨论 LiveSetList 部署到公网前必须补齐的工程、安全、运维事项，不讨论资料库功能开发进度。
 
+首次 Google Cloud VM 上线的实际操作、常规手工发布和 GitHub Actions 自动化待办见 [公网部署实录与自动化发布 TODO](../production-deployment-runbook.md)。
+
 当前结论：
 
 - 当前仓库适合本地开发和内网试用，不能直接按现状暴露到公网。
