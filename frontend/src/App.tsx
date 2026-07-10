@@ -55,6 +55,15 @@ type LiveDetailFallback = {
 
 type TabKey = "home" | "favorites" | "all" | "console" | "search" | "browse" | "about" | "detail";
 type ListTabKey = "favorites" | "all";
+type AppHistoryState = {
+  app: "live-set-list";
+  tab: TabKey;
+  previousTab?: Exclude<TabKey, "detail">;
+  detailLiveId?: number;
+  detailFallback?: LiveDetailFallback;
+  searchQuery?: string;
+  catalogBandId?: number | null;
+};
 type ListSnapshot = {
   items: LiveRow[];
   total: number;
@@ -88,6 +97,12 @@ function getThemeToggleMeta(mode: ThemeMode, resolvedTheme: "light" | "dark") {
 
 function buildListSnapshotKey(tab: ListTabKey, page: number, pageSize: 15 | 20): string {
   return `${tab}:${page}:${pageSize}`;
+}
+
+function isAppHistoryState(value: unknown): value is AppHistoryState {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<AppHistoryState>;
+  return candidate.app === "live-set-list" && typeof candidate.tab === "string";
 }
 
 const ROLE_PRIORITY: Record<string, number> = { viewer: 10, editor: 20, admin: 30 };
@@ -142,7 +157,7 @@ function App() {
   const [tab, setTab] = useState<TabKey>("home");
   const [detailLiveId, setDetailLiveId] = useState<number | null>(null);
   const [detailFallback, setDetailFallback] = useState<LiveDetailFallback | null>(null);
-  const [previousTab, setPreviousTab] = useState<TabKey>("home");
+  const [previousTab, setPreviousTab] = useState<Exclude<TabKey, "detail">>("home");
   const [items, setItems] = useState<LiveRow[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(1);
@@ -183,6 +198,62 @@ function App() {
     { key: "about", label: "联系我们", visible: true },
     { key: "console", label: "控制台", visible: canUseConsoleFeatures },
   ];
+
+  const applyHistoryState = (state: AppHistoryState) => {
+    const requestedTab = state.tab;
+    const allowedTab = requestedTab === "favorites" && !canUseFavoriteFeatures
+      ? "home"
+      : requestedTab === "console" && !canUseConsoleFeatures
+        ? "home"
+        : requestedTab;
+    setPage(1);
+    setUserMenuOpen(false);
+    if (allowedTab === "detail" && state.detailLiveId && state.detailFallback && state.previousTab) {
+      setDetailLiveId(state.detailLiveId);
+      setDetailFallback(state.detailFallback);
+      setPreviousTab(state.previousTab);
+      setTab("detail");
+      return;
+    }
+    setDetailLiveId(null);
+    setDetailFallback(null);
+    setTab(allowedTab === "detail" ? "home" : allowedTab);
+    if (state.searchQuery !== undefined) setSearchQuery(state.searchQuery);
+    if (state.catalogBandId !== undefined) setSelectedCatalogBandId(state.catalogBandId);
+  };
+
+  const pushHistoryState = (state: AppHistoryState) => {
+    window.history.pushState(state, "", window.location.href);
+    applyHistoryState(state);
+  };
+
+  const navigateToTab = (nextTab: Exclude<TabKey, "detail">, extras: Pick<AppHistoryState, "searchQuery" | "catalogBandId"> = {}) => {
+    pushHistoryState({ app: "live-set-list", tab: nextTab, ...extras });
+  };
+
+  const openLiveDetail = (row: LiveRow | CatalogLiveRow | HomeLiveRow, sourceTab: Exclude<TabKey, "detail"> = tab as Exclude<TabKey, "detail">) => {
+    const fallback = { liveTitle: row.liveTitle, liveDate: row.liveDate, url: "url" in row ? row.url : null };
+    pushHistoryState({
+      app: "live-set-list",
+      tab: "detail",
+      previousTab: sourceTab,
+      detailLiveId: row.liveId,
+      detailFallback: fallback,
+    });
+  };
+
+  useEffect(() => {
+    if (!isAppHistoryState(window.history.state)) {
+      window.history.replaceState({ app: "live-set-list", tab: "home" } satisfies AppHistoryState, "", window.location.href);
+    }
+    const onPopState = (event: PopStateEvent) => {
+      if (isAppHistoryState(event.state)) {
+        applyHistoryState(event.state);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [canUseConsoleFeatures, canUseFavoriteFeatures]);
 
   const toLiveRow = (item: LiveItem): LiveRow => ({
     liveId: item.live_id,
@@ -569,30 +640,18 @@ function App() {
   };
 
   const handleCatalogSearch = (query: string) => {
-    setSearchQuery(query);
+    navigateToTab("search", { searchQuery: query });
     setSearchResult(null);
     setSearchError(null);
-    setTab("search");
-    setPage(1);
-    setUserMenuOpen(false);
   };
 
   const handleCatalogBandSelect = (bandId: number) => {
-    setSelectedCatalogBandId(bandId);
     setCatalogBandPage(1);
-    setTab("browse");
-    setUserMenuOpen(false);
+    navigateToTab("browse", { catalogBandId: bandId });
   };
 
   const openCatalogLive = (row: CatalogLiveRow) => {
-    setDetailLiveId(row.liveId);
-    setDetailFallback({
-      liveTitle: row.liveTitle,
-      liveDate: row.liveDate,
-      url: row.url,
-    });
-    setPreviousTab(tab);
-    setTab("detail");
+    openLiveDetail(row);
   };
 
   // 页签切换统一做权限闸门，防止未登录或低权限用户进入受限页。
@@ -616,11 +675,7 @@ function App() {
         return;
       }
     }
-    setDetailLiveId(null);
-    setDetailFallback(null);
-    setTab(nextTab);
-    setPage(1);
-    setUserMenuOpen(false);
+    navigateToTab(nextTab);
   };
 
   const commitJumpPage = () => {
@@ -750,9 +805,11 @@ function App() {
   };
 
   const handleBackFromDetail = () => {
-    setDetailLiveId(null);
-    setDetailFallback(null);
-    setTab(previousTab);
+    if (isAppHistoryState(window.history.state) && window.history.state.tab === "detail") {
+      window.history.back();
+      return;
+    }
+    navigateToTab(previousTab);
   };
   const toggleTheme = () => {
     setThemeMode(getNextThemeMode(themeMode));
@@ -937,12 +994,7 @@ function App() {
             loading={homeLoading}
             error={homeError}
             stats={catalogStats}
-            onOpenLive={(row: HomeLiveRow) => {
-              setDetailLiveId(row.liveId);
-              setDetailFallback({ liveTitle: row.liveTitle, liveDate: row.liveDate, url: null });
-              setPreviousTab("home");
-              setTab("detail");
-            }}
+            onOpenLive={(row: HomeLiveRow) => openLiveDetail(row, "home")}
             onShowAll={() => handleTabChange("all")}
             onShowFavorites={() => handleTabChange("favorites")}
             onShowConsole={() => handleTabChange("console")}
@@ -1052,12 +1104,7 @@ function App() {
                 isFavorite={isFavorite}
                 isSyncing={(id) => favorites.isFavoriteSyncing(id)}
                 onToggleStar={(id) => void toggleFavorite(id)}
-                onOpenLive={(row) => {
-                  setDetailLiveId(row.liveId);
-                  setDetailFallback({ liveTitle: row.liveTitle, liveDate: row.liveDate, url: row.url });
-                  setPreviousTab(tab);
-                  setTab("detail");
-                }}
+                onOpenLive={openLiveDetail}
                 loading={loading}
                 loadError={loadError}
                 sentinelRef={sentinelRef}
@@ -1115,12 +1162,7 @@ function App() {
                       <td>
                         <button
                           className="name-btn"
-                          onClick={() => {
-                            setDetailLiveId(row.liveId);
-                            setDetailFallback({ liveTitle: row.liveTitle, liveDate: row.liveDate, url: row.url });
-                            setPreviousTab(tab);
-                            setTab("detail");
-                          }}
+                          onClick={() => openLiveDetail(row)}
                           title={row.liveTitle}
                         >
                           {row.liveTitle}
@@ -1165,7 +1207,7 @@ function App() {
             )}
           </>
         ) : showConsolePanel ? (
-          <ConsoleInsertPanel onLiveDataChanged={handleConsoleLiveDataChanged} />
+          <ConsoleInsertPanel initialMode="live_create" onLiveDataChanged={handleConsoleLiveDataChanged} />
         ) : (
           <AboutPanel />
         )}

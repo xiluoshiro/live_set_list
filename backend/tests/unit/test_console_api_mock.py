@@ -400,11 +400,30 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
 
 
+# 测试点：新增 Live 允许当天结束时刻 24:00，并接受四十五分钟 UTC 偏移。
+def test_console_create_live_mock_accepts_24_00_and_quarter_hour_timezone():
+    _set_authenticated_role("editor")
+    conn, _ = _build_connection_mock(fetchone_side_effect=[(1,), (78,)])
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/lives",
+            json=_valid_live_payload(opening_time="24:00", start_time="24:00", timezone="+05:45"),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["item"]["opening_time"] == "24:00:00+05:45"
+
+
 # 测试点：新增 Live 应拒绝非法时间、非法时区和不存在的 venue。
 @pytest.mark.parametrize(
     ("payload", "expected_status", "expected_detail"),
     [
         (_valid_live_payload(opening_time="18:0x"), 400, "Invalid time format: 18:0x"),
+        (_valid_live_payload(opening_time="24:01"), 400, "Invalid time value: 24:01"),
+        (_valid_live_payload(timezone="+14:15"), 400, "Invalid timezone value: +14:15"),
         (_valid_live_payload(timezone="+9"), 422, None),
         (_valid_live_payload(venue_id=999), 404, "Venue id 999 not found"),
     ],

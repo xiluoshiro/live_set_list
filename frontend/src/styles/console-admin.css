@@ -242,11 +242,6 @@
   width: 56px;
 }
 
-.console-confirm-batch-song-table th:nth-child(5),
-.console-confirm-batch-song-table td:nth-child(5) {
-  width: 280px;
-}
-
 .console-confirm-setlist-table code {
   display: block;
   max-width: 280px;
@@ -255,6 +250,16 @@
   color: var(--text-secondary);
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
+}
+
+.console-time-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.console-time-picker select {
+  width: 3.8rem;
 }
 
 .console-confirm-actions {

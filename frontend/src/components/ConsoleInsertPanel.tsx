@@ -66,6 +66,7 @@ type LiveInsertDraft = {
 
 type ConsoleInsertPanelProps = {
   onLiveDataChanged?: () => void;
+  initialMode?: ConsoleMode;
 };
 
 type ConsoleLogEntry = {
@@ -223,9 +224,9 @@ function getTodayDateInputValue(): string {
   return `${year}-${month}-${day}`;
 }
 
-export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProps = {}) {
+export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" }: ConsoleInsertPanelProps = {}) {
   const auth = useAuth();
-  const [mode, setMode] = useState<ConsoleMode>("setlist");
+  const [mode, setMode] = useState<ConsoleMode>(initialMode);
   const [lives, setLives] = useState<LiveInsertRow[]>([]);
   const [songs, setSongs] = useState<SongInsertRow[]>([]);
   const [bands, setBands] = useState<BandOption[]>([]);
@@ -289,11 +290,19 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
   const songBandMenuRef = useRef<HTMLDivElement | null>(null);
   const venueTriggerRef = useRef<HTMLButtonElement | null>(null);
   const venueMenuRef = useRef<HTMLDivElement | null>(null);
+  const venueQueryInputRef = useRef<HTMLInputElement | null>(null);
   const bandMemberTriggerRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const bandMemberMenuRef = useRef<HTMLDivElement | null>(null);
   const otherMemberTriggerRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const otherMemberMenuRef = useRef<HTMLDivElement | null>(null);
   const consoleLogIdRef = useRef(0);
+  const didInitialVenueFocusRef = useRef(false);
+
+  useEffect(() => {
+    if (mode !== "live_create" || didInitialVenueFocusRef.current) return;
+    didInitialVenueFocusRef.current = true;
+    venueQueryInputRef.current?.focus();
+  }, [mode]);
 
   const appendConsoleLog = (level: ConsoleLogEntry["level"], messageText: string) => {
     const id = consoleLogIdRef.current + 1;
@@ -1484,7 +1493,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
                   <th>bid</th>
                   <th>band_name</th>
                   <th>cover</th>
-                  <th>band_member</th>
                 </tr>
               </thead>
               <tbody>
@@ -1503,7 +1511,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
                         onChange={(event) => updateBatchSongCover(index, event.target.checked)}
                       />
                     </td>
-                    <td><code>{JSON.stringify(row.band_member)}</code></td>
                   </tr>
                 ))}
               </tbody>
@@ -1673,6 +1680,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged }: ConsoleInsertPanelProp
           venueMenuPos={venueMenuPos}
           venueTriggerRef={venueTriggerRef}
           venueMenuRef={venueMenuRef}
+          venueQueryInputRef={venueQueryInputRef}
           insertedLives={insertedLives}
           onLiveDateChange={setLiveDate}
           onLiveTitleChange={setLiveTitle}

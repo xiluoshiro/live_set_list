@@ -1,5 +1,6 @@
 ﻿import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { fireEvent } from "@testing-library/react";
 import { vi } from "vitest";
 
 import App from "../App";
@@ -261,6 +262,7 @@ async function openAllContent(user: ReturnType<typeof userEvent.setup>) {
 
 describe("App", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", window.location.href);
     localStorage.setItem("live-view-mode", "table");
     Reflect.deleteProperty(window, "requestIdleCallback");
     Reflect.deleteProperty(window, "cancelIdleCallback");
@@ -365,6 +367,24 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "查看全部 Live →" }));
 
     await waitFor(() => expect(screen.getByText("总计 47 条")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
+  });
+
+  test("浏览器返回会还原前一个主页面和详情来源", async () => {
+    // 测试点：History popstate 必须把 SPA 从详情还原到实际来源页面，支持鼠标侧键。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "查看全部 Live →" }));
+    await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
+    expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "detail", detailLiveId: 1 });
+
+    fireEvent.popState(window, { state: { app: "live-set-list", tab: "all" } });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
   });
 
