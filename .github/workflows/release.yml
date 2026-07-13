@@ -1,0 +1,174 @@
+name: Release and deploy
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Verify and package
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      sha256: ${{ steps.release.outputs.sha256 }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: |
+          python -m venv backend/.venv
+          backend/.venv/bin/python -m pip install --upgrade pip
+          backend/.venv/bin/pip install -r backend/requirements-dev.txt
+
+      - name: Create isolated PostgreSQL configuration
+        shell: bash
+        run: |
+          cat > infra/postgres/.env.pg-migrate <<'EOF'
+          POSTGRES_CONTAINER_NAME=live-set-list-ci
+          POSTGRES_VOLUME_NAME=live_set_list_ci_data
+          POSTGRES_HOST=localhost
+          POSTGRES_PORT=15432
+          POSTGRES_DB=postgres
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=ci_postgres_password
+          APP_DB=live_statistic
+          APP_OWNER=live_project_owner
+          APP_OWNER_PASSWORD=ci_owner_password
+          FLYWAY_USER=live_project_flyway
+          FLYWAY_PASSWORD=ci_flyway_password
+          APP_RO_USER=live_project_ro
+          APP_RO_PASSWORD=ci_ro_password
+          APP_SUPER_USER=live_project_super_ro
+          APP_SUPER_PASSWORD=ci_super_password
+          APP_USER_RW_USER=live_project_user_rw
+          APP_USER_RW_PASSWORD=ci_user_rw_password
+          TEST_ADMIN_USER=live_project_test_admin
+          TEST_ADMIN_PASSWORD=ci_test_admin_password
+          TEST_DB_NAME=live_statistic_test
+          EOF
+          sed -i 's/password = ".*"/password = "ci_flyway_password"/' backend/db/flyway/flyway.toml
+          docker volume create live_set_list_ci_data
+          docker compose --env-file infra/postgres/.env.pg-migrate -f infra/postgres/docker-compose.pg-migrate.yml up -d
+
+      - name: Wait for PostgreSQL
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            status="$(docker inspect --format '{{.State.Health.Status}}' live-set-list-ci 2>/dev/null || true)"
+            if [ "$status" = "healthy" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs live-set-list-ci
+          exit 1
+
+      - name: Migrate CI test database
+        run: |
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            redgate/flyway:latest \
+            -configFiles=backend/db/flyway/flyway.toml migrate
+
+      - name: Run functional checks
+        run: python scripts/run_checks.py functional
+
+      - name: Build release archive
+        id: release
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{3}$ ]]; then
+            echo "Release tag must be vYYYY-MM-DD-NNN, got: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          python scripts/build_release.py --version "$version"
+          archive="dist-release/livesetlist-${version}.tar.gz"
+          sha256sum "$archive" > "${archive}.sha256"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(cut -d ' ' -f1 "${archive}.sha256")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: livesetlist-${{ steps.release.outputs.version }}
+          path: |
+            dist-release/livesetlist-${{ steps.release.outputs.version }}.tar.gz
+            dist-release/livesetlist-${{ steps.release.outputs.version }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy-production:
+    name: Deploy production
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_BASE_URL }}
+    concurrency:
+      group: livesetlist-production
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: livesetlist-${{ needs.build.outputs.version }}
+          path: release
+
+      - name: Verify release checksum
+        working-directory: release
+        run: sha256sum --check livesetlist-${{ needs.build.outputs.version }}.tar.gz.sha256
+
+      - name: Configure deployment SSH key
+        shell: bash
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Upload and deploy release
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA256: ${{ needs.build.outputs.sha256 }}
+        run: |
+          archive="livesetlist-${VERSION}.tar.gz"
+          scp -P "$DEPLOY_PORT" "release/$archive" "$DEPLOY_USER@$DEPLOY_HOST:/tmp/$archive"
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "sudo /usr/local/sbin/livesetlist-deploy '$VERSION' '$SHA256'"
+
+      - name: Verify public deployment
+        shell: bash
+        env:
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+        run: |
+          curl --fail --location --max-time 15 "$PUBLIC_BASE_URL/"
+          curl --fail --location --max-time 15 "$PUBLIC_BASE_URL/api/health/db"
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' "$PUBLIC_BASE_URL/openapi.json")"
+          test "$status" = "404"

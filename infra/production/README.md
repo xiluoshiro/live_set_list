@@ -67,6 +67,28 @@ Every release under `/opt/livesetlist/releases` must stay root-owned and non-wri
 9. Install Nginx config from `nginx.livesetlist.conf.template`, replace placeholders, and reload Nginx.
 10. Enable `livesetlist-backup.timer`.
 
+## GitHub Actions Deployment Bootstrap
+
+The release workflow is triggered only by a `vYYYY-MM-DD-NNN` tag. It builds a release archive after `functional` checks, waits for the `production` Environment approval, then uploads that exact archive to the VM.
+
+Install the root-owned deployment script once:
+
+```bash
+sudo install -o root -g root -m 755 \
+  /opt/livesetlist/current/infra/production/livesetlist-deploy \
+  /usr/local/sbin/livesetlist-deploy
+```
+
+Create a separate SSH-only user for GitHub Actions. Its sudoers entry must allow only this script, not a general root shell:
+
+```text
+livesetlist-deploy ALL=(root) NOPASSWD: /usr/local/sbin/livesetlist-deploy *
+```
+
+Configure the GitHub `production` Environment with `DEPLOY_SSH_PRIVATE_KEY` and `DEPLOY_KNOWN_HOSTS` secrets, plus `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, and `PUBLIC_BASE_URL` variables. Keep database and application env files only under `/etc/livesetlist` on the VM.
+
+The script rejects any release whose Flyway SQL differs from the active release. Run production migrations through the manual procedure until a staging and migration approval workflow exists.
+
 ## Admin Bootstrap
 
 For first deploy only, set these in `/etc/livesetlist/backend.env`:
