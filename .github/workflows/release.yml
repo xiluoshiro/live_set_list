@@ -105,7 +105,7 @@ jobs:
           fi
           python scripts/build_release.py --version "$version"
           archive="dist-release/livesetlist-${version}.tar.gz"
-          sha256sum "$archive" > "${archive}.sha256"
+          (cd dist-release && sha256sum "livesetlist-${version}.tar.gz" > "livesetlist-${version}.tar.gz.sha256")
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cut -d ' ' -f1 "${archive}.sha256")" >> "$GITHUB_OUTPUT"
 
