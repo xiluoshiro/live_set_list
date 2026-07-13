@@ -2,6 +2,14 @@
 
 一个前后端分离的 Live 资料库工程。当前定位是站方维护的演唱会 / Live setlist 数据库：匿名用户可公开查询和浏览，登录用户可收藏，`editor+` 用户可通过控制台维护数据；普通用户暂不直接编辑资料，只通过轻量联系 / 反馈入口报告问题。
 
+## 生产状态
+
+生产站点已部署到 Google Compute Engine。常规应用发布使用 GitHub Actions 的 `vYYYY-MM-DD-NNN` tag：隔离数据库 CI、白名单出包、`production` 人工审批、SSH 部署和公网 smoke test 已验证。
+
+- 实际部署、GitHub Environment 配置、验收、排障与回滚：[docs/production-deployment-runbook.md](D:/Code/PythonCode/5%20LiveSetList/docs/production-deployment-runbook.md)
+- 生产架构、安全基线与剩余 TODO：[docs/design/production-deployment.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/production-deployment.md)
+- 包含 Flyway SQL 的版本不走自动发布；必须先完成独立数据库迁移、备份和验收。
+
 ## 主要功能
 
 ### 公共资料库
@@ -86,6 +94,8 @@ python scripts/run_dev.py --test-db
 默认启动会连接 `infra/postgres/.env.pg-migrate` 中的 `APP_DB`，当前为 `live_statistic`；`--test-db` 会连接 `TEST_DB_NAME`，默认 `live_statistic_test`。
 
 ### 4) 默认 admin 账号
+
+以下是本地开发或空测试库行为。生产数据迁移会保留 dump 中的管理员，生产环境应保持 `AUTH_DEFAULT_ADMIN_ENABLED=false`；详见[生产部署 runbook](D:/Code/PythonCode/5%20LiveSetList/docs/production-deployment-runbook.md)。
 
 在完成数据库迁移并启动后端后，应用会自动确保一个默认 admin 账号存在。
 
@@ -187,6 +197,7 @@ npm run typecheck
 - `DONE` 首页指标卡片数据化：新增 `GET /api/catalog/stats` 端点，三张卡片展示"已收录 Live 总数"、"歌曲 / 场地统计"、"最近更新日期"
 - `DONE` 列表卡片模式：全量和收藏列表支持表格/卡片双视图，单按钮切换（☷/▦），卡片模式支持无限滚动加载，工具栏置于内容上方
 - `DONE` 详情页返回按钮优化：返回按钮移至标题右侧，使用 ✕ 关闭风格（与旧弹窗一致），详情页加白色卡片背景
+- `DONE` 生产发布链路：GCE VM、私有 PostgreSQL、Nginx 同源入口、systemd 备份、GitHub Actions tag 出包与审批后 SSH 部署
 
 ## 当前待办
 
@@ -196,3 +207,4 @@ npm run typecheck
 - `P2` 增加管理员创建用户与用户管理能力（近期暂缓）
 - `P2` 补充 E2E，覆盖首页、搜索、乐队浏览、控制台新增 Live / 追加 setlist 的跨页签链路
 - `P2` 评估截图型视觉回归测试，重点看护顶部导航、首页、详情页和控制台的全局样式回归
+- `P1` 完成 staging、监控告警、安全头、Host 限制和异地备份；细项见生产部署设计

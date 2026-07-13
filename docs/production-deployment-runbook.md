@@ -1,269 +1,187 @@
-# LiveSetList 公网部署实录与自动化发布 TODO
+# LiveSetList 公网部署与自动发布实录
 
-本文档记录 2026-07 首次将 LiveSetList 部署到 Google Cloud Compute Engine 的可复用流程，并定义后续自动化出包、部署的实施顺序。
+本文档是当前生产环境的操作 runbook。生产架构、安全基线和后续优先级见[生产部署设计](design/production-deployment.md)。不要将真实密码、SSH 私钥、数据库 dump 或 `/etc/livesetlist/*.env` 提交到仓库。
 
-它是实际操作 runbook；架构、安全基线和总体待办仍以 [生产部署设计](design/production-deployment.md) 为准。不要把真实密码、SSH 私钥、数据库 dump 或 `/etc/livesetlist/*.env` 提交到仓库。
+## 当前状态
 
-## 已验证的部署结果
+截至 2026-07-14，以下路径已在生产 VM 上验证：
 
-- 运行环境：Google Compute Engine，Debian 12 Bookworm（`debian-12-bookworm-v20260609`）。
-- 部署结构：Nginx 托管 `frontend/dist`，同源 `/api/*` 转发到 FastAPI `127.0.0.1:8000`，PostgreSQL Docker 容器仅绑定 `127.0.0.1:15432`。
-- 公网入口：`bang.dreamliveevents.com` 的 A 记录指向 VM 的静态外部 IP。
-- VPC 防火墙：允许入站 TCP `80`、`443`；不对公网开放 `8000`、`15432`、`5432`。
-- 运行验证：Nginx 本机首页正常、FastAPI 根接口和 `/api/health/db` 正常、公网 HTTP 访问正常，生产 `/openapi.json` 返回 `404`。
-- 业务数据通过 PostgreSQL dump 迁入；迁入的管理员账号保留，`auth_sessions` 保持为空，不启用默认管理员 bootstrap。
+- Google Compute Engine VM：Debian 12 Bookworm（`debian-12-bookworm-v20260609`）。
+- Nginx 托管 `frontend/dist`，同源 `/api/*` 转发至 FastAPI `127.0.0.1:8000`；PostgreSQL Docker 容器仅绑定 `127.0.0.1:15432`。
+- 公网域名：`bang.dreamliveevents.com`；生产 OpenAPI 路径返回 `404`。
+- 业务数据和管理员来自 PostgreSQL dump，`AUTH_DEFAULT_ADMIN_ENABLED=false`，`auth_sessions` 为空是预期状态。
+- `livesetlist-backup.timer` 每天 `03:20` 执行自动备份，根目录为 `/var/backups/livesetlist`。
+- GitHub Actions tag 发布已跑通：CI 创建隔离 PostgreSQL、执行 Flyway 和 `functional`、构建发布包并经 `production` Environment 审批后部署到 VM。
+- 首个完整成功的自动发布 tag 为 `v2026-07-14-006`。
 
-HTTPS、管理员登录、写操作、自动备份和恢复演练应在每次重要发布前后按本文的验收项复核，不应只以首页能打开作为上线成功判断。
+自动发布当前只接受不变更 `backend/db/flyway/sql` 的版本。包含 Flyway SQL 的发布必须先按“数据库迁移”章节手工处理，再发布兼容的应用版本。
 
-## 目标拓扑
+## 生产拓扑与目录
 
 ```text
 Internet
   |
-  +-- TCP 80: Nginx -> HTTPS redirect / ACME challenge
-  +-- TCP 443: Nginx
-        |-- /       -> /opt/livesetlist/current/frontend/dist
-        +-- /api/*  -> FastAPI at 127.0.0.1:8000
-                            |
-                            +-- PostgreSQL at 127.0.0.1:15432 (Docker)
+  +-- Nginx: /       -> /opt/livesetlist/current/frontend/dist
+              /api/* -> FastAPI at 127.0.0.1:8000
+                                  |
+                                  +-- PostgreSQL at 127.0.0.1:15432 (Docker)
 ```
 
-服务器目录约定：
-
 ```text
-/opt/livesetlist/releases/livesetlist-<version>  已解压的只读发布版本
+/opt/livesetlist/releases/livesetlist-<version>  root 持有的只读发布版本
 /opt/livesetlist/current                          指向当前版本的符号链接
 /etc/livesetlist                                  仅服务器持有的环境文件
 /var/log/livesetlist                              后端日志
 /var/backups/livesetlist                          备份文件
+/usr/local/sbin/livesetlist-deploy                root 持有的自动发布入口
 ```
 
-后端 systemd 服务以 `livesetlist` 非 root 用户运行；发布目录由 root 持有、应用仅读。Docker 和 Nginx 由系统服务管理。备份 service 需要调用 Docker，因此以 root 运行，并仅允许写入 `/var/backups/livesetlist`。
+后端以 `livesetlist` 非 root 用户运行。备份 service 和发布脚本需要调用 Docker / systemd，因此以 root 运行；发布 SSH 用户仅获准 sudo 执行 `/usr/local/sbin/livesetlist-deploy`。
 
-## 首次部署流程
+## 日常自动发布
 
-### 1. 本地构建发布包
+### 1. 发布前检查
 
-在仓库根目录执行：
+1. 确认本次不含 `backend/db/flyway/sql` 变化；否则先走“数据库迁移”。
+2. 在目标 commit 本地运行：
+
+   ```powershell
+   python scripts/run_checks.py functional
+   ```
+
+3. 检查 `git status`，确保 tag 指向包含所有目标改动的已推送 commit。
+
+### 2. 创建 tag
+
+版本格式固定为 `vYYYY-MM-DD-NNN`，例如：
 
 ```powershell
-python scripts/run_checks.py functional
-python scripts/build_release.py --version 2026-07-10-003
-Get-FileHash .\dist-release\livesetlist-2026-07-10-003.tar.gz -Algorithm SHA256
+git tag -a v2026-07-14-007 -m "Release 2026-07-14-007"
+git push origin v2026-07-14-007
 ```
 
-`build_release.py` 会先执行 `frontend` 中的 `npm run build`，仅在构建成功后才归档 `frontend/dist`。它是白名单打包器：发布包包含后端应用、Flyway SQL、PostgreSQL 初始化 SQL、前端构建产物、运行配置模板、恢复脚本和必要配置；不包含 `.git`、本地虚拟环境、`node_modules`、日志、缓存、真实 env 和数据库 dump。
+不要移动或复用已触发过的 tag。修复工作流或部署脚本后，提交修复并创建新的递增 tag。
 
-将 `.tar.gz` 和校验值通过受控方式传到 VM 临时目录，例如 `~/tmp`。不要把数据库 dump 上传到 GitHub Releases 或提交到 Git。
+### 3. GitHub Actions 做什么
 
-### 2. 准备 VM 运行时
+`.github/workflows/release.yml` 仅响应 `v*` tag：
 
-安装并启用 Nginx、Docker、Python 运行时和 Certbot。关键检查是 Docker Compose v2 命令可用：
+1. 安装 Node 22.12 和 Python 3.12，安装前后端依赖。
+2. 从 `flyway.toml.example` 生成 CI 临时 Flyway 配置，创建隔离 Docker PostgreSQL，执行 Flyway migrate。
+3. 执行 `python scripts/run_checks.py functional`。
+4. 执行 `python scripts/build_release.py --version <version>`；该脚本会重新构建前端并生成白名单发布包。
+5. 生成 SHA-256，上传 `.tar.gz` 和 `.sha256` artifact，保留 14 天。
+6. `Deploy production` 等待 `production` Environment 审批；批准后才可读取环境级 SSH secrets。
+7. 下载同一 artifact、校验 SHA-256、上传至 VM `/tmp`，调用服务器端部署脚本。
+8. 从 GitHub Runner 对 `PUBLIC_BASE_URL` 检查首页、`/api/health/db` 与 `/openapi.json` 的 `404`。
+
+在 Actions 页面确认 `Verify and package` 成功后，再审阅 tag、commit 和变更内容并批准 `production` 部署。
+
+### 4. 服务器端部署行为
+
+`/usr/local/sbin/livesetlist-deploy <version> <sha256>` 会：
+
+1. 校验版本格式、归档 SHA-256、归档路径和链接文件。
+2. 拒绝 Flyway SQL 与当前版本不同的归档。
+3. 先启动一次数据库备份任务。
+4. 解压到新的 release 目录，使用当前 release 的 Python 创建 venv 并安装依赖。
+5. root 化 release，安装 systemd unit，原子切换 `current`，重启后端与 Nginx。
+6. 最多等待 20 秒，直到 `http://127.0.0.1:8000/api/health/db` 成功。
+7. 成功后再执行一次备份；失败则将 `current` 指回上一 release 并重启后端。
+
+## GitHub Environment 与 VM 前置条件
+
+GitHub 仓库须有 `production` Environment：
+
+- Deployment rule：**Tag** 类型的 `v*`，不是 Branch 规则。
+- Required reviewer：按维护人配置；单人维护时不要启用 self-review 禁止项。
+- Secrets：`DEPLOY_SSH_PRIVATE_KEY`、`DEPLOY_KNOWN_HOSTS`。
+- Variables：`DEPLOY_HOST`、`DEPLOY_PORT`、`DEPLOY_USER=livesetlist-deploy`、`PUBLIC_BASE_URL`。
+
+`DEPLOY_KNOWN_HOSTS` 的第一列必须与 `DEPLOY_HOST` 完全一致。若使用 VM IP，可在 VM 上生成：
 
 ```bash
-docker --version
-docker compose version
-sudo systemctl is-enabled docker nginx
+sudo awk '{print "<VM_IP>", $1, $2}' /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
-`docker.io` 本身不一定携带 `docker compose` 子命令。若上述检查失败，先按 Debian 12 的 Docker Compose v2 安装方式补齐，再继续；不要使用旧的 `docker-compose` 命令替代本文命令。
+GitHub Hosted Runner 使用动态出口 IP。当前直接 SSH 模式要求 GCP 防火墙允许其访问 TCP 22；SSH 必须禁用密码登录和 root 登录，并使用专用部署密钥与受限 sudo。不要把数据库或后端端口开放给公网。
 
-创建运行用户和目录后，上传并解压版本，切换 `current`：
+部署 root 脚本不会由自身自动更新。修改 `infra/production/livesetlist-deploy` 后，必须先以管理员身份更新 VM 上的入口：
 
 ```bash
-VERSION=2026-07-10-003
-sudo tar -xzf "$HOME/tmp/livesetlist-${VERSION}.tar.gz" -C /opt/livesetlist/releases
-sudo chown -R root:root "/opt/livesetlist/releases/livesetlist-${VERSION}"
-sudo ln -sfn "/opt/livesetlist/releases/livesetlist-${VERSION}" /opt/livesetlist/current
+sudo install -o root -g root -m 755 \
+  /tmp/livesetlist-deploy.next \
+  /usr/local/sbin/livesetlist-deploy
 ```
 
-发布包不带 Python 虚拟环境。为当前版本创建虚拟环境并安装固定依赖：
+可先通过 `livesetlist-deploy` SSH 用户把新脚本上传到 `/tmp/livesetlist-deploy.next`，再用管理员会话执行上述安装。
+
+## 数据库迁移
+
+自动发布故意拒绝 Flyway SQL 变化，避免应用切换与不可逆 schema 变更混在同一次无人工数据库审批的操作中。
+
+有 migration 时：
+
+1. 创建生产库手动备份并确认备份文件可被 `pg_restore -l` 读取。
+2. 在非生产环境完成 `flyway validate` / `migrate` 与功能验收。
+3. 在生产窗口手动执行 `flyway validate`，再执行 `migrate`，记录输出。
+4. 确认旧应用与新 schema 兼容后，创建不再包含未应用 Flyway SQL 差异的应用发布版本。
+5. 发布后验证数据库 health、读路径、授权写路径和备份。
+
+不要修改已执行 migration；回滚应用版本不等于回滚数据库。
+
+## 首次环境与数据迁移要点
+
+首次部署使用白名单发布包和 PostgreSQL dump，而不是上传整个工作区。发布包不含 `.git`、`.venv`、`node_modules`、真实 env、日志或 dump。
+
+PostgreSQL 角色密码保存在已初始化 volume 内；即使 `/etc/livesetlist/backend.env` 与 `postgres.env` 互相一致，数据库内部角色仍可能保留旧密码。发生认证失败时，应进入容器使用 `psql` 检查并修正角色，而不是只反复修改 env 文件。
+
+数据库 dump 中若含有 `ALTER DEFAULT PRIVILEGES FOR ROLE live_project_flyway`，恢复执行身份需要对应角色成员关系。`pg_restore` 的 `errors ignored` 不是成功信号。迁入 `app_users` 后保留其中的 admin；清空 `auth_sessions` 是合理的安全处理。
+
+## 验收与排障
+
+每次自动部署后至少验证：
 
 ```bash
-sudo python3 -m venv /opt/livesetlist/current/backend/.venv
-sudo /opt/livesetlist/current/backend/.venv/bin/pip install -r /opt/livesetlist/current/backend/requirements.txt
-```
-
-服务器 Python 版本必须先与项目依赖兼容；不要将开发机 `.venv` 拷贝到 Linux 服务器。`livesetlist` 用户不应拥有发布目录写权限，否则后台进程一旦被利用，可能篡改由 root 执行的备份代码。
-
-### 3. 配置机密和启动数据库
-
-从 `infra/production/env.production.example` 创建以下两个仅服务器可读的文件，再填入真实值：
-
-```text
-/etc/livesetlist/backend.env
-/etc/livesetlist/postgres.env
-```
-
-两个文件中的同一数据库运行时账号密码必须保持一致，例如 `APP_RO_PASSWORD` 与 `DB_PASSWORD`。复杂密码应通过编辑器写入文件，避免未经引用的 shell 替换破坏 `#`、`$` 等字符。
-
-启动数据库：
-
-```bash
-sudo docker compose \
-  --env-file /etc/livesetlist/postgres.env \
-  -f /opt/livesetlist/current/infra/production/docker-compose.postgres.yml \
-  up -d
-sudo docker ps --filter name=live-set-list-postgres
-```
-
-容器首次初始化会创建运行时角色。确认端口只监听本机：
-
-```bash
-sudo ss -ltnp | grep 15432
-```
-
-期望为 `127.0.0.1:15432`，而不是 `0.0.0.0:15432`。
-
-安装并启用备份单元前，确认发布包版本包含生产备份修复，再执行：
-
-```bash
-sudo install -o root -g root -m 644 \
-  /opt/livesetlist/current/infra/production/livesetlist-backup.service \
-  /etc/systemd/system/livesetlist-backup.service
-sudo install -o root -g root -m 644 \
-  /opt/livesetlist/current/infra/production/livesetlist-backup.timer \
-  /etc/systemd/system/livesetlist-backup.timer
-sudo systemctl daemon-reload
-sudo systemctl enable --now livesetlist-backup.timer
-sudo systemctl start livesetlist-backup.service
-sudo journalctl -u livesetlist-backup.service -n 100 --no-pager
-```
-
-成功后 dump 位于 `/var/backups/livesetlist/app/auto`。自动 timer 每天 `03:20` 运行；首次部署必须手动运行一次，不能等到定时任务首次触发才发现问题。
-
-### 4. 首次业务数据迁移
-
-这是一次性流程，不应混入每次应用发布：
-
-1. 在迁移前保存源库 dump 的校验值和表行数。
-2. PostgreSQL 容器及项目角色完成初始化后，使用受控的 `pg_restore` 将 dump 导入目标库。
-3. 若 dump 含有 `ALTER DEFAULT PRIVILEGES FOR ROLE live_project_flyway`，恢复执行身份必须有权修改该角色的默认权限；不要把 `errors ignored` 当作成功。
-4. 对业务表、管理员账号和运行时角色做行数/权限验证。
-5. `auth_sessions` 可以为 0，迁移后用户需要重新登录。
-
-本次迁移曾遇到 default privileges 权限错误和复杂密码被 shell 处理的问题。后续重复迁移前，必须在非生产库演练 dump、角色成员关系和密码写入流程。
-
-因为数据 dump 已包含管理员账号，生产环境保持：
-
-```env
-AUTH_DEFAULT_ADMIN_ENABLED=false
-```
-
-只有全新空库且没有迁入管理员时，才短暂开启 bootstrap；确认登录后立刻关闭并重启后端。
-
-### 5. 启动后端和 Nginx
-
-安装 `infra/production/livesetlist-backend.service`，重载并启动：
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now livesetlist-backend
-curl -f http://127.0.0.1:8000/
+readlink -f /opt/livesetlist/current
+sudo systemctl status livesetlist-backend livesetlist-backup.timer --no-pager
 curl -f http://127.0.0.1:8000/api/health/db
+sudo ss -ltnp
 ```
 
-从 Nginx 模板创建站点配置。申请证书前，生效的 `server` 块必须包含真实域名，而不能保留 `server_name _;`：
+从外部工作站验证：
 
-```nginx
-server_name bang.dreamliveevents.com;
+```powershell
+curl.exe -f <PUBLIC_BASE_URL>/
+curl.exe -f <PUBLIC_BASE_URL>/api/health/db
+curl.exe -I <PUBLIC_BASE_URL>/openapi.json
 ```
 
-配置 DNS A 记录、GCP VPC 入站规则后，验证公网 HTTP：
+最后一项应为 `404`。本机访问自身公网 IP 可能受 hairpin routing 影响，公网验收以外部工作站或 GitHub smoke test 为准。
+
+本次自动化实施中已修复的故障：
+
+| 现象 | 原因 | 固化处理 |
+| --- | --- | --- |
+| CI 找不到 `flyway.toml` | 本地配置被 Git 忽略 | CI 从 `flyway.toml.example` 生成临时配置 |
+| SHA-256 校验找不到归档 | 校验文件记录了构建机的 `dist-release/` 路径 | 在 `dist-release` 内生成校验文件，只记录文件名 |
+| production job 被拒绝 | Environment 将 `v*` 配成 Branch 规则 | 使用 Tag 类型的 `v*` 规则 |
+| Setlist 前端测试偶发找不到 textarea | 等待条件在异步检查出现前提前通过 | 等待目标 textarea 实际渲染 |
+| 部署后立即 health check 失败 | systemd 返回时 Uvicorn 尚未监听端口 | 部署脚本最多等待 20 秒 |
+| VM 本机无法 curl 公网地址 | hairpin 路由不可靠 | 使用外部工作站 / GitHub 进行公网验证 |
+
+若后端在 20 秒后仍未就绪，读取：
 
 ```bash
-curl -I --connect-timeout 5 http://bang.dreamliveevents.com/
+sudo journalctl -u livesetlist-backend -n 120 -l --no-pager
+sudo systemctl status livesetlist-backend --no-pager
 ```
 
-签发并启用证书：
+## 剩余运维 TODO
 
-```bash
-sudo certbot --nginx -d bang.dreamliveevents.com
-curl -I https://bang.dreamliveevents.com/
-curl -f https://bang.dreamliveevents.com/api/health/db
-sudo systemctl status certbot.timer --no-pager
-```
-
-Certbot 选择 HTTP 跳转 HTTPS。只有 HTTPS 生效后，`AUTH_COOKIE_SECURE=true` 的登录 Cookie 才能被浏览器正常使用。
-
-## 常规手工发版
-
-每次发版遵循以下顺序：
-
-1. 本地执行 `python scripts/run_checks.py functional`，再构建前端和白名单发布包。
-2. 记录版本号、Git commit、发布包 SHA-256；在涉及数据库变更前先备份生产数据库。
-3. 上传新发布包，解压到新的 `/opt/livesetlist/releases/livesetlist-<version>` 目录。
-4. 在新版本目录以 root 创建 `.venv` 并安装后端依赖；发布目录保持 root 所有，且不得覆盖 `/etc/livesetlist` 中的真实环境文件。
-5. 若包含新 migration，先对生产库执行 Flyway `validate`，确认通过后再执行 `migrate`。已执行的 migration 绝不能修改。
-6. 将 `/opt/livesetlist/current` 切到新版本，执行 `sudo systemctl restart livesetlist-backend`，再执行 `sudo nginx -t && sudo systemctl reload nginx`。
-7. 运行本机和公网健康检查，浏览器验证登录、读取数据和一项写操作。
-8. 观察 `journalctl -u livesetlist-backend`、应用日志和备份 timer，确认无异常后记录发布完成。
-
-回滚只适用于应用和静态文件：将 `current` 指回上一版本并重启后端。数据库 migration 不是可自动回滚的操作；在执行 migration 前必须完成备份，并让 schema 变更保持前后版本兼容。
-
-## 每次发布的验收清单
-
-- [ ] `python scripts/run_checks.py functional` 在构建机通过。
-- [ ] 发布包 SHA-256 已记录，且包内不含真实 env、dump、`.git`、`.venv` 或 `node_modules`。
-- [ ] `curl -f http://127.0.0.1:8000/api/health/db` 成功。
-- [ ] `curl -I https://bang.dreamliveevents.com/` 返回成功状态或 HTTPS 重定向后的成功状态。
-- [ ] `curl -f https://bang.dreamliveevents.com/api/health/db` 成功。
-- [ ] `https://bang.dreamliveevents.com/openapi.json` 返回 `404`。
-- [ ] 管理员可登录；至少一次读取和一次授权写操作成功。
-- [ ] `sudo ss -ltnp` 未显示 `0.0.0.0:8000`、`0.0.0.0:15432` 或 `0.0.0.0:5432`。
-- [ ] `livesetlist-backend`、`docker`、`nginx`、`certbot.timer` 和备份 timer 状态正常。
-- [ ] 已确认本次发布的回滚版本和数据库备份位置。
-
-## 自动化出包与部署 TODO
-
-自动化目标是减少手工失误，而不是把生产数据库密码或 SSH 主机控制权暴露给 CI。建议先实现 CI 出包，稳定后再加入需要人工审批的生产部署。
-
-### P0：自动化构建，不自动连接生产服务器
-
-- [ ] 在 GitHub Actions 增加 PR/主分支检查工作流：安装项目要求的 Python 和 Node，执行 `python scripts/run_checks.py functional`。
-- [ ] 工作流执行前端生产构建，并运行 `python scripts/build_release.py --version <git-tag-or-run-number>`。
-- [ ] 对 `.tar.gz` 生成 SHA-256，作为构建日志和 artifact 元数据保存。
-- [ ] 将发布包作为 GitHub Actions artifact 上传，设置合理保留期；数据库 dump 不上传。
-- [ ] 只允许 tag 或 `workflow_dispatch` 产生候选发布包，避免每个 PR 自动生成可部署生产包。
-- [ ] 在本地复现一次 CI 使用的构建命令，确保 Node、Python 和依赖版本固定。
-
-完成条件：Actions 可在不接触 VM 的情况下生成经过检查、可下载、可校验的发布包。
-
-### P1：受控自动部署到生产 VM
-
-- [ ] 在 GitHub 创建 `production` Environment，并设置 required reviewers；部署 job 必须绑定该 Environment。
-- [ ] 设置 GitHub Variables：`DEPLOY_HOST`、`DEPLOY_PORT`、`DEPLOY_USER`、`DEPLOY_PATH=/opt/livesetlist`、`DEPLOY_KNOWN_HOSTS`。
-- [ ] 设置 GitHub Secret：专用于部署的最小权限 SSH 私钥 `DEPLOY_SSH_PRIVATE_KEY`。不要将 `/etc/livesetlist/*.env`、数据库密码或管理员密码放进 GitHub Actions。
-- [ ] 在 VM 创建仅用于发布的 SSH 用户或受限 sudo 规则：只能上传 release、切换 `current`、重启指定 systemd 服务和执行受控 migration/备份脚本。
-- [ ] 在仓库增加可重复执行的服务器端发布脚本，参数仅接收已校验的版本号；脚本负责解压、创建 venv、安装依赖、切换符号链接、重启服务和健康检查。
-- [ ] 部署前由服务器端脚本运行数据库备份；如有 migration，先 `validate`，再 `migrate`，并记录结果。
-- [ ] 部署 job 将 artifact 上传到新 release 目录，校验 SHA-256 后才允许切换 `current`。
-- [ ] 后端启动失败或健康检查失败时，自动将 `current` 指回前一版本并重启；migration 失败时停止，不进行盲目数据库回滚。
-- [ ] 部署后执行 HTTPS 首页、DB health、OpenAPI 404 和登录/权限冒烟检查，并保存日志。
-
-完成条件：生产部署只能由已审核的 tag 或手动 workflow 触发，任何部署都有版本、校验值、备份记录、服务日志和可追溯的应用层回滚。
-
-### P2：部署闭环增强
-
-- [ ] 增加 staging VM/数据库，先部署、迁移和验收 staging，再允许 production job。
-- [ ] 将数据库备份上传到独立、加密且有生命周期策略的对象存储；定期做恢复演练。
-- [ ] 增加 Uptime、证书到期、磁盘空间、Docker 容器、systemd 服务和错误日志告警。
-- [ ] 为发布增加变更记录、版本对比和负责人记录。
-- [ ] 在自动化流程中增加可重复的浏览器 E2E 冒烟，覆盖登录、查询和权限边界。
-
-## GitHub Actions 发布流建议
-
-```text
-tag / workflow_dispatch
-  -> functional checks
-  -> frontend build
-  -> strict release archive + SHA-256
-  -> upload artifact
-  -> production Environment manual approval
-  -> SSH upload + server-side SHA-256 verification
-  -> backup -> validate/migrate (if needed)
-  -> switch current -> restart -> HTTPS smoke tests
-  -> retain release metadata and logs
-```
-
-在 P1 完成前，推荐继续采用“GitHub Actions 自动出包 + 人工上传并按本 runbook 部署”的方式。它已能消除构建环境差异，同时不会过早把生产凭据和数据库迁移权限交给 CI。
+- [ ] 建立 staging VM / 数据库，并让 migration 先在 staging 验收。
+- [ ] 接入 HTTPS 安全头、Host allowlist 与真实客户端 IP 记录。
+- [ ] 为服务、证书、磁盘、备份和错误日志建立监控告警。
+- [ ] 将备份复制到独立加密对象存储，并定期完成恢复演练。
+- [ ] 为应用发布记录变更摘要、负责人和回滚版本。
+- [ ] 在流水线加入浏览器 E2E 冒烟，覆盖登录、搜索和授权写操作。

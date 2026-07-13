@@ -1,6 +1,6 @@
 # LiveSetList Production Runbook
 
-This directory contains production deployment templates for a single Google Cloud Compute Engine VM.
+This directory contains the production templates and server-side deployment entry for the live Google Cloud Compute Engine VM. Tag-based GitHub Actions deployment is verified; the operational procedure is in [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md).
 
 Target baseline:
 
@@ -69,7 +69,7 @@ Every release under `/opt/livesetlist/releases` must stay root-owned and non-wri
 
 ## GitHub Actions Deployment Bootstrap
 
-The release workflow is triggered only by a `vYYYY-MM-DD-NNN` tag. It builds a release archive after `functional` checks, waits for the `production` Environment approval, then uploads that exact archive to the VM.
+The release workflow is triggered only by a `vYYYY-MM-DD-NNN` tag. It builds a release archive after isolated PostgreSQL/Flyway CI and `functional`, waits for the `production` Environment approval, then uploads that exact archive to the VM. This path is verified for releases without Flyway SQL changes.
 
 Install the root-owned deployment script once:
 
@@ -79,7 +79,7 @@ sudo install -o root -g root -m 755 \
   /usr/local/sbin/livesetlist-deploy
 ```
 
-Create a separate SSH-only user for GitHub Actions. Its sudoers entry must allow only this script, not a general root shell:
+Create a separate deploy-only SSH user for GitHub Actions. Its sudoers entry must allow only this script, not a general root shell:
 
 ```text
 livesetlist-deploy ALL=(root) NOPASSWD: /usr/local/sbin/livesetlist-deploy *
@@ -87,7 +87,7 @@ livesetlist-deploy ALL=(root) NOPASSWD: /usr/local/sbin/livesetlist-deploy *
 
 Configure the GitHub `production` Environment with `DEPLOY_SSH_PRIVATE_KEY` and `DEPLOY_KNOWN_HOSTS` secrets, plus `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, and `PUBLIC_BASE_URL` variables. Keep database and application env files only under `/etc/livesetlist` on the VM.
 
-The script rejects any release whose Flyway SQL differs from the active release. Run production migrations through the manual procedure until a staging and migration approval workflow exists.
+The script rejects any release whose Flyway SQL differs from the active release. Run production migrations through the manual procedure until a staging and migration approval workflow exists. The installed `/usr/local/sbin/livesetlist-deploy` is intentionally outside release directories; after changing the template, an administrator must install the new script there before the next automated release.
 
 ## Admin Bootstrap
 

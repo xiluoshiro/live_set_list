@@ -82,6 +82,13 @@ python scripts/build_release.py --version 2026-07-10-001
 生产部署模板见：
 
 - [infra/production/README.md](D:/Code/PythonCode/5%20LiveSetList/infra/production/README.md)
+- [生产发布 runbook](D:/Code/PythonCode/5%20LiveSetList/docs/production-deployment-runbook.md)
+
+### 当前自动发布状态
+
+常规生产发布不需要在本机手工上传 `.tar.gz`。推送格式为 `vYYYY-MM-DD-NNN` 的 tag 会触发 `.github/workflows/release.yml`：隔离 PostgreSQL CI、`functional`、前端构建、白名单归档、SHA-256、`production` 审批和 SSH 部署已验证。
+
+`build_release.py` 仍用于首次 VM bootstrap、离线交付或手工排障。包含 `backend/db/flyway/sql` 变化的版本会被服务器端自动发布脚本拒绝，需先按 runbook 手工完成数据库迁移。
 
 ## 数据库恢复
 

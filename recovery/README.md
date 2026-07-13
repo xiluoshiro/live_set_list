@@ -42,6 +42,8 @@ Linux 生产环境应通过环境变量覆盖：
 LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist
 ```
 
+当前生产 VM 已启用 `livesetlist-backup.timer`，每天 `03:20` 执行 `backup-app-auto`。自动发布脚本还会在应用切换前后各触发一次备份；发布与恢复的实际流程见 [docs/production-deployment-runbook.md](../docs/production-deployment-runbook.md)。
+
 其中：
 
 - 自动备份：`app/auto`

@@ -32,6 +32,8 @@ python scripts/run_checks.py functional
 
 5. 不要修改已执行过的 `V...sql`；如需修正，新增下一个版本文件
 
+生产自动发布会比较新旧 `backend/db/flyway/sql`，发现差异即拒绝切换应用版本。带 migration 的发布必须先完成独立备份、生产 `validate/migrate` 和验收；不要依靠应用回滚撤销 schema。实际流程见 [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md)。
+
 ## 恢复测试库
 
 当前测试库 `live_statistic_test` 的恢复分成 3 层：
