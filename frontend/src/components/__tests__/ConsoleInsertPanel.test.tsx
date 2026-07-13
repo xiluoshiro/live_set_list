@@ -148,7 +148,7 @@ describe("ConsoleInsertPanel", () => {
       .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-    await waitFor(() => expect(screen.queryByText("正在检查 Live setlist 状态...")).not.toBeInTheDocument());
+    await screen.findByLabelText("批量粘贴 Setlist 文本");
 
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "<Roselia>\nM1. BLACK SHOUT" },

@@ -56,6 +56,7 @@ def test_production_deploy_script_has_release_safety_guards():
     assert "Flyway SQL changed" in deploy_script
     assert "systemctl start \"$BACKUP_SERVICE\"" in deploy_script
     assert "trap rollback ERR" in deploy_script
+    assert "wait_for_backend" in deploy_script
 
 
 # 测试点：tag 发布工作流应在生产审批后部署同一次构建产物，而非在服务器重新构建。
