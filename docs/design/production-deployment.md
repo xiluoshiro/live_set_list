@@ -283,17 +283,16 @@ VITE_API_BASE_URL=https://api.<domain>
 
 1. 准备 Google Cloud VM、防火墙和静态公网 IP。
 2. 准备域名、DNS 和 HTTPS 证书；暂无域名时只做临时 HTTP/本机验收。
-3. 本地执行 `npm run build` 生成 `frontend/dist`。
-4. 执行 `python scripts/build_release.py --version <version>` 生成白名单发布包。
-5. 上传发布包到 VM，解压到 `/opt/livesetlist/releases/<version>`，并更新 `/opt/livesetlist/current`。
-6. 配置 `/etc/livesetlist/backend.env` 和 `/etc/livesetlist/postgres.env`，不提交到 Git。
-7. 启动本机私有 PostgreSQL compose。
-8. 执行 Flyway validate/migrate。
-9. 临时启用默认 admin bootstrap，启动后端，确认 admin 创建成功。
-10. 关闭默认 admin bootstrap，重启后端。
-11. 启动 Nginx 反向代理，域名到位后启用 HTTPS。
-12. 启用备份 timer，执行首次手动备份和恢复演练。
-13. 执行上线验收。
+3. 执行 `python scripts/build_release.py --version <version>`；脚本会先重建 `frontend/dist`，再生成白名单发布包。
+4. 上传发布包到 VM，解压到 `/opt/livesetlist/releases/<version>`，并更新 `/opt/livesetlist/current`。
+5. 配置 `/etc/livesetlist/backend.env` 和 `/etc/livesetlist/postgres.env`，不提交到 Git。
+6. 启动本机私有 PostgreSQL compose。
+7. 执行 Flyway validate/migrate。
+8. 临时启用默认 admin bootstrap，启动后端，确认 admin 创建成功。
+9. 关闭默认 admin bootstrap，重启后端。
+10. 启动 Nginx 反向代理，域名到位后启用 HTTPS。
+11. 启用备份 timer，执行首次手动备份和恢复演练。
+12. 执行上线验收。
 
 ### 5.2 常规发布流程
 

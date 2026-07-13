@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import tarfile
 
 ROOT = Path(__file__).resolve().parents[3]
 RELEASE_SCRIPT_PATH = ROOT / "scripts" / "build_release.py"
@@ -45,6 +46,28 @@ def test_production_backup_service_uses_root_for_docker_access():
     assert "User=root" in service_text
     assert "Group=root" in service_text
     assert "ReadWritePaths=/var/backups/livesetlist" in service_text
+
+
+# 测试点：发布归档前必须先构建前端，归档中应包含该次构建生成的静态产物。
+def test_release_archive_builds_frontend_before_collecting_release_paths(tmp_path, monkeypatch):
+    test_root = tmp_path / "repo"
+    frontend_dist = test_root / "frontend" / "dist"
+    frontend_dist.mkdir(parents=True)
+
+    monkeypatch.setattr(build_release, "ROOT", test_root)
+    monkeypatch.setattr(build_release, "FRONTEND_DIR", test_root / "frontend")
+    monkeypatch.setattr(build_release, "RELEASE_DIRS", ["frontend/dist"])
+    monkeypatch.setattr(build_release, "RELEASE_FILES", [])
+
+    def fake_build_frontend():
+        (frontend_dist / "rebuilt.js").write_text("fresh asset", encoding="utf-8")
+
+    monkeypatch.setattr(build_release, "build_frontend", fake_build_frontend)
+
+    archive_path = build_release.build_release_archive("test-release", tmp_path / "output")
+
+    with tarfile.open(archive_path, "r:gz") as archive:
+        assert "livesetlist-test-release/frontend/dist/rebuilt.js" in archive.getnames()
 
 
 # 测试点：生产发布包白名单不能包含本地状态、依赖缓存或敏感工作区目录。
