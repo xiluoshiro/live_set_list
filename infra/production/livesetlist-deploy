@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly RELEASE_ROOT=/opt/livesetlist/releases
+readonly CURRENT_LINK=/opt/livesetlist/current
+readonly BACKEND_SERVICE=livesetlist-backend.service
+readonly BACKUP_SERVICE=livesetlist-backup.service
+readonly BACKUP_TIMER=livesetlist-backup.timer
+
+die() {
+  echo "livesetlist-deploy: $*" >&2
+  exit 1
+}
+
+if [ "$#" -ne 2 ]; then
+  die "usage: livesetlist-deploy YYYY-MM-DD-NNN SHA256"
+fi
+
+VERSION=$1
+EXPECTED_SHA256=$2
+[[ "$VERSION" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{3}$ ]] || die "invalid version: $VERSION"
+[[ "$EXPECTED_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]] || die "invalid SHA-256"
+
+readonly RELEASE_NAME="livesetlist-$VERSION"
+readonly ARCHIVE="/tmp/$RELEASE_NAME.tar.gz"
+readonly RELEASE_DIR="$RELEASE_ROOT/$RELEASE_NAME"
+
+[ -f "$ARCHIVE" ] || die "archive not found: $ARCHIVE"
+[ ! -e "$RELEASE_DIR" ] || die "release already exists: $RELEASE_DIR"
+
+actual_sha256="$(sha256sum "$ARCHIVE" | awk '{print $1}')"
+[ "$actual_sha256" = "$EXPECTED_SHA256" ] || die "archive checksum mismatch"
+
+while IFS= read -r entry; do
+  [[ "$entry" == "$RELEASE_NAME/"* ]] || die "unexpected archive entry: $entry"
+  [[ "$entry" != *".."* ]] || die "unsafe archive entry: $entry"
+done < <(tar -tzf "$ARCHIVE")
+
+if ! tar -tvzf "$ARCHIVE" | awk '$1 ~ /^[lh]/ { found = 1 } END { exit found }'; then
+  die "archive contains links"
+fi
+
+if [ -e "$CURRENT_LINK/backend/db/flyway/sql" ]; then
+  staging_for_migrations="$(mktemp -d "$RELEASE_ROOT/.migration-check.XXXXXX")"
+  trap 'rm -rf "$staging_for_migrations"' EXIT
+  tar -xzf "$ARCHIVE" -C "$staging_for_migrations"
+  if ! diff -qr "$CURRENT_LINK/backend/db/flyway/sql" "$staging_for_migrations/$RELEASE_NAME/backend/db/flyway/sql" >/dev/null; then
+    die "Flyway SQL changed; run the migration through the manual production procedure first"
+  fi
+  rm -rf "$staging_for_migrations"
+  trap - EXIT
+fi
+
+systemctl start "$BACKUP_SERVICE"
+
+previous_release="$(readlink -f "$CURRENT_LINK" || true)"
+if [ -x "$CURRENT_LINK/backend/.venv/bin/python" ]; then
+  readonly PYTHON_BIN="$CURRENT_LINK/backend/.venv/bin/python"
+else
+  readonly PYTHON_BIN=python3
+fi
+
+staging_dir="$(mktemp -d "$RELEASE_ROOT/.deploy.XXXXXX")"
+cleanup_staging() {
+  rm -rf "$staging_dir"
+}
+trap cleanup_staging EXIT
+tar -xzf "$ARCHIVE" -C "$staging_dir"
+[ -d "$staging_dir/$RELEASE_NAME" ] || die "archive root directory missing"
+mv "$staging_dir/$RELEASE_NAME" "$RELEASE_DIR"
+cleanup_staging
+trap - EXIT
+
+"$PYTHON_BIN" -m venv "$RELEASE_DIR/backend/.venv"
+"$RELEASE_DIR/backend/.venv/bin/pip" install --disable-pip-version-check --no-cache-dir -r "$RELEASE_DIR/backend/requirements.txt"
+chown -R root:root "$RELEASE_DIR"
+chmod -R u=rwX,go=rX "$RELEASE_DIR"
+
+install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backend.service" "/etc/systemd/system/$BACKEND_SERVICE"
+install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backup.service" "/etc/systemd/system/$BACKUP_SERVICE"
+install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backup.timer" "/etc/systemd/system/$BACKUP_TIMER"
+systemctl daemon-reload
+systemctl enable "$BACKUP_TIMER"
+
+switched=0
+rollback() {
+  if [ "$switched" -eq 1 ] && [ -n "$previous_release" ]; then
+    ln -s "$previous_release" "$CURRENT_LINK.next"
+    mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
+    systemctl restart "$BACKEND_SERVICE" || true
+    nginx -t && systemctl reload nginx || true
+  fi
+}
+trap rollback ERR
+
+ln -s "$RELEASE_DIR" "$CURRENT_LINK.next"
+mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
+switched=1
+systemctl restart "$BACKEND_SERVICE"
+nginx -t
+systemctl reload nginx
+curl --fail --max-time 10 http://127.0.0.1:8000/api/health/db
+systemctl start "$BACKUP_SERVICE"
+rm -f "$ARCHIVE"
+trap - ERR
+
+echo "deployed $RELEASE_NAME"

@@ -48,6 +48,29 @@ def test_production_backup_service_uses_root_for_docker_access():
     assert "ReadWritePaths=/var/backups/livesetlist" in service_text
 
 
+# 测试点：自动部署脚本必须校验归档、拒绝未审查的迁移，并保留失败后的应用回滚路径。
+def test_production_deploy_script_has_release_safety_guards():
+    deploy_script = (ROOT / "infra" / "production" / "livesetlist-deploy").read_text(encoding="utf-8")
+
+    assert "archive checksum mismatch" in deploy_script
+    assert "Flyway SQL changed" in deploy_script
+    assert "systemctl start \"$BACKUP_SERVICE\"" in deploy_script
+    assert "trap rollback ERR" in deploy_script
+
+
+# 测试点：tag 发布工作流应在生产审批后部署同一次构建产物，而非在服务器重新构建。
+def test_release_workflow_requires_tag_build_and_production_environment():
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert "tags:" in workflow
+    assert '"v*"' in workflow
+    assert "python scripts/run_checks.py functional" in workflow
+    assert "environment:" in workflow
+    assert "name: production" in workflow
+    assert "actions/download-artifact@v4" in workflow
+    assert "livesetlist-deploy" in workflow
+
+
 # 测试点：发布归档前必须先构建前端，归档中应包含该次构建生成的静态产物。
 def test_release_archive_builds_frontend_before_collecting_release_paths(tmp_path, monkeypatch):
     test_root = tmp_path / "repo"
