@@ -65,6 +65,7 @@ jobs:
           TEST_ADMIN_PASSWORD=ci_test_admin_password
           TEST_DB_NAME=live_statistic_test
           EOF
+          cp backend/db/flyway/flyway.toml.example backend/db/flyway/flyway.toml
           sed -i 's/password = ".*"/password = "ci_flyway_password"/' backend/db/flyway/flyway.toml
           docker volume create live_set_list_ci_data
           docker compose --env-file infra/postgres/.env.pg-migrate -f infra/postgres/docker-compose.pg-migrate.yml up -d

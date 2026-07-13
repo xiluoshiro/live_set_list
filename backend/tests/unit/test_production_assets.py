@@ -69,6 +69,7 @@ def test_release_workflow_requires_tag_build_and_production_environment():
     assert "name: production" in workflow
     assert "actions/download-artifact@v4" in workflow
     assert "livesetlist-deploy" in workflow
+    assert "cp backend/db/flyway/flyway.toml.example backend/db/flyway/flyway.toml" in workflow
 
 
 # 测试点：发布归档前必须先构建前端，归档中应包含该次构建生成的静态产物。
