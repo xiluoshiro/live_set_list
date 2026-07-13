@@ -1,4 +1,5 @@
 ﻿import argparse
+import os
 from datetime import datetime
 
 from .backup import (
@@ -42,6 +43,22 @@ from .restore import (
     run_flyway_info_capture,
     run_functional_checks,
 )
+
+
+BACKUP_ENV_KEYS = ("POSTGRES_CONTAINER_NAME", "POSTGRES_USER", "APP_DB")
+
+
+def load_backup_env_values() -> dict[str, str]:
+    """Load local defaults when available, then prefer service-injected production values."""
+    values = load_env_file(ENV_FILE) if ENV_FILE.exists() else {}
+    values.update(
+        {
+            key: value
+            for key in BACKUP_ENV_KEYS
+            if (value := os.getenv(key)) is not None
+        }
+    )
+    return values
 
 
 def parse_args() -> argparse.Namespace:
@@ -145,6 +162,13 @@ def recover_main_database(env_values: dict[str, str], docker_cmd: str) -> int:
 def main() -> int:
     # 主流程分成三段：普通备份、测试库就地恢复、主库候选恢复与回滚。
     args = parse_args()
+    if args.target in {"backup-app-auto", "backup-app-manual"}:
+        env_values = load_backup_env_values()
+        docker_cmd = "docker"
+        kind = "auto" if args.target == "backup-app-auto" else "manual"
+        create_app_backup(env_values, docker_cmd, kind=kind)
+        return 0
+
     if not ENV_FILE.exists():
         raise SystemExit(f"未找到环境文件：{ENV_FILE}")
     if not COMPOSE_FILE.exists():
@@ -156,13 +180,6 @@ def main() -> int:
 
     env_values = load_env_file(ENV_FILE)
     docker_cmd = "docker"
-
-    if args.target == "backup-app-auto":
-        create_app_backup(env_values, docker_cmd, kind="auto")
-        return 0
-    if args.target == "backup-app-manual":
-        create_app_backup(env_values, docker_cmd, kind="manual")
-        return 0
 
     if not args.force:
         print("此脚本会执行数据库恢复或重建操作。")

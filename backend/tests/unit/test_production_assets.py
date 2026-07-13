@@ -38,6 +38,15 @@ def test_production_nginx_template_guards_login_and_openapi():
     assert "location = /redoc" in nginx_text
 
 
+# 测试点：备份任务需要 Docker socket，且发布目录只读时才可安全地以 root 运行。
+def test_production_backup_service_uses_root_for_docker_access():
+    service_text = (ROOT / "infra" / "production" / "livesetlist-backup.service").read_text(encoding="utf-8")
+
+    assert "User=root" in service_text
+    assert "Group=root" in service_text
+    assert "ReadWritePaths=/var/backups/livesetlist" in service_text
+
+
 # 测试点：生产发布包白名单不能包含本地状态、依赖缓存或敏感工作区目录。
 def test_release_path_whitelist_excludes_local_state_and_sensitive_directories():
     assert "backend/app" in RELEASE_DIRS
