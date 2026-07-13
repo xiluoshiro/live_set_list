@@ -25,6 +25,8 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 4. 验证接口与页面
 5. 不要修改已执行过的 `V...sql`
 
+`flyway.toml` 是本地配置且不提交；GitHub Actions 会从 `flyway.toml.example` 生成 CI 临时配置。生产自动发布不会执行或携带未审核的 migration：只要 `sql/` 与当前 release 不同，服务器端脚本就会拒绝部署。详见 [docs/production-deployment-runbook.md](../../../docs/production-deployment-runbook.md)。
+
 目录说明：
 
 - `flyway.toml`
