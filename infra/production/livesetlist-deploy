@@ -12,6 +12,16 @@ die() {
   exit 1
 }
 
+wait_for_backend() {
+  for attempt in {1..20}; do
+    if curl --fail --silent --max-time 2 http://127.0.0.1:8000/api/health/db >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 if [ "$#" -ne 2 ]; then
   die "usage: livesetlist-deploy YYYY-MM-DD-NNN SHA256"
 fi
@@ -99,7 +109,7 @@ switched=1
 systemctl restart "$BACKEND_SERVICE"
 nginx -t
 systemctl reload nginx
-curl --fail --max-time 10 http://127.0.0.1:8000/api/health/db
+wait_for_backend
 systemctl start "$BACKUP_SERVICE"
 rm -f "$ARCHIVE"
 trap - ERR
