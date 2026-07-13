@@ -272,6 +272,41 @@ def test_main_allows_backup_without_force(tmp_path, monkeypatch) -> None:
     assert calls == [("docker", "manual")]
 
 
+# 测试点：生产备份只使用 systemd 注入的数据库标识，不依赖发布包中不存在的开发文件。
+def test_backup_main_uses_process_environment_without_development_files(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(core, "ENV_FILE", tmp_path / ".env.pg-migrate")
+    monkeypatch.setattr(core, "COMPOSE_FILE", tmp_path / "docker-compose.yml")
+    monkeypatch.setattr(core, "FLYWAY_CONFIG", tmp_path / "flyway.toml")
+    monkeypatch.setattr(core, "SEED_SQL", tmp_path / "seed.sql")
+    monkeypatch.setattr(core, "parse_args", lambda: Namespace(target="backup-app-auto", force=False))
+    monkeypatch.setenv("POSTGRES_CONTAINER_NAME", "live-set-list-postgres")
+    monkeypatch.setenv("POSTGRES_USER", "postgres")
+    monkeypatch.setenv("APP_DB", "live_statistic")
+
+    calls: list[tuple[dict[str, str], str, str]] = []
+
+    def fake_create_app_backup(
+        env_values: dict[str, str], docker_cmd: str, *, kind: str, container_name: str | None = None
+    ) -> Path:
+        calls.append((env_values, docker_cmd, kind))
+        return Path("backup.dump")
+
+    monkeypatch.setattr(core, "create_app_backup", fake_create_app_backup)
+
+    assert core.main() == 0
+    assert calls == [
+        (
+            {
+                "POSTGRES_CONTAINER_NAME": "live-set-list-postgres",
+                "POSTGRES_USER": "postgres",
+                "APP_DB": "live_statistic",
+            },
+            "docker",
+            "auto",
+        )
+    ]
+
+
 def test_main_test_target_stays_in_place_and_never_touches_candidate_recovery(tmp_path, monkeypatch) -> None:
     # 测试点：test 目标只应重建测试库，不能进入主库候选恢复链路。
     env_file = tmp_path / ".env.pg-migrate"

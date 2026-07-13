@@ -38,7 +38,7 @@ Internet
 /var/backups/livesetlist                          备份文件
 ```
 
-应用 systemd 服务以 `livesetlist` 非 root 用户运行；Docker 和 Nginx 由系统服务管理。
+后端 systemd 服务以 `livesetlist` 非 root 用户运行；发布目录由 root 持有、应用仅读。Docker 和 Nginx 由系统服务管理。备份 service 需要调用 Docker，因此以 root 运行，并仅允许写入 `/var/backups/livesetlist`。
 
 ## 首次部署流程
 
@@ -76,18 +76,18 @@ sudo systemctl is-enabled docker nginx
 ```bash
 VERSION=2026-07-10-003
 sudo tar -xzf "$HOME/tmp/livesetlist-${VERSION}.tar.gz" -C /opt/livesetlist/releases
-sudo chown -R livesetlist:livesetlist "/opt/livesetlist/releases/livesetlist-${VERSION}"
+sudo chown -R root:root "/opt/livesetlist/releases/livesetlist-${VERSION}"
 sudo ln -sfn "/opt/livesetlist/releases/livesetlist-${VERSION}" /opt/livesetlist/current
 ```
 
 发布包不带 Python 虚拟环境。为当前版本创建虚拟环境并安装固定依赖：
 
 ```bash
-sudo -u livesetlist python3 -m venv /opt/livesetlist/current/backend/.venv
-sudo -u livesetlist /opt/livesetlist/current/backend/.venv/bin/pip install -r /opt/livesetlist/current/backend/requirements.txt
+sudo python3 -m venv /opt/livesetlist/current/backend/.venv
+sudo /opt/livesetlist/current/backend/.venv/bin/pip install -r /opt/livesetlist/current/backend/requirements.txt
 ```
 
-服务器 Python 版本必须先与项目依赖兼容；不要将开发机 `.venv` 拷贝到 Linux 服务器。
+服务器 Python 版本必须先与项目依赖兼容；不要将开发机 `.venv` 拷贝到 Linux 服务器。`livesetlist` 用户不应拥有发布目录写权限，否则后台进程一旦被利用，可能篡改由 root 执行的备份代码。
 
 ### 3. 配置机密和启动数据库
 
@@ -117,6 +117,23 @@ sudo ss -ltnp | grep 15432
 ```
 
 期望为 `127.0.0.1:15432`，而不是 `0.0.0.0:15432`。
+
+安装并启用备份单元前，确认发布包版本包含生产备份修复，再执行：
+
+```bash
+sudo install -o root -g root -m 644 \
+  /opt/livesetlist/current/infra/production/livesetlist-backup.service \
+  /etc/systemd/system/livesetlist-backup.service
+sudo install -o root -g root -m 644 \
+  /opt/livesetlist/current/infra/production/livesetlist-backup.timer \
+  /etc/systemd/system/livesetlist-backup.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now livesetlist-backup.timer
+sudo systemctl start livesetlist-backup.service
+sudo journalctl -u livesetlist-backup.service -n 100 --no-pager
+```
+
+成功后 dump 位于 `/var/backups/livesetlist/app/auto`。自动 timer 每天 `03:20` 运行；首次部署必须手动运行一次，不能等到定时任务首次触发才发现问题。
 
 ### 4. 首次业务数据迁移
 
@@ -179,7 +196,7 @@ Certbot 选择 HTTP 跳转 HTTPS。只有 HTTPS 生效后，`AUTH_COOKIE_SECURE=
 1. 本地执行 `python scripts/run_checks.py functional`，再构建前端和白名单发布包。
 2. 记录版本号、Git commit、发布包 SHA-256；在涉及数据库变更前先备份生产数据库。
 3. 上传新发布包，解压到新的 `/opt/livesetlist/releases/livesetlist-<version>` 目录。
-4. 在新版本目录创建 `.venv` 并安装后端依赖；不得覆盖 `/etc/livesetlist` 中的真实环境文件。
+4. 在新版本目录以 root 创建 `.venv` 并安装后端依赖；发布目录保持 root 所有，且不得覆盖 `/etc/livesetlist` 中的真实环境文件。
 5. 若包含新 migration，先对生产库执行 Flyway `validate`，确认通过后再执行 `migrate`。已执行的 migration 绝不能修改。
 6. 将 `/opt/livesetlist/current` 切到新版本，执行 `sudo systemctl restart livesetlist-backend`，再执行 `sudo nginx -t && sudo systemctl reload nginx`。
 7. 运行本机和公网健康检查，浏览器验证登录、读取数据和一项写操作。

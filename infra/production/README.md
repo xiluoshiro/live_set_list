@@ -47,16 +47,19 @@ Create the runtime user and directories:
 ```bash
 sudo useradd --system --home /opt/livesetlist --shell /usr/sbin/nologin livesetlist
 sudo mkdir -p /opt/livesetlist/releases /etc/livesetlist /var/log/livesetlist /var/backups/livesetlist
-sudo chown -R livesetlist:livesetlist /opt/livesetlist /var/log/livesetlist /var/backups/livesetlist
+sudo chown -R root:root /opt/livesetlist
+sudo chown -R livesetlist:livesetlist /var/log/livesetlist /var/backups/livesetlist
 sudo chmod 750 /etc/livesetlist
 ```
+
+Every release under `/opt/livesetlist/releases` must stay root-owned and non-writable by `livesetlist`. The backend only needs read access to application files and write access to `/var/log/livesetlist`. The backup unit runs as root because it invokes Docker, but its writable path is limited to `/var/backups/livesetlist`.
 
 ## First Deploy
 
 1. Build frontend locally: `cd frontend && npm run build`.
 2. Build release archive: `python scripts/build_release.py --version <version>`.
 3. Upload `dist-release/livesetlist-<version>.tar.gz` to the VM.
-4. Unpack to `/opt/livesetlist/releases/<version>` and update `/opt/livesetlist/current`.
+4. Unpack to `/opt/livesetlist/releases/<version>` as root and update `/opt/livesetlist/current`; do not make the release writable by `livesetlist`.
 5. Copy `env.production.example` to `/etc/livesetlist/backend.env` and `/etc/livesetlist/postgres.env`, then fill real secrets. Keep `APP_LOG_FILE=/var/log/livesetlist/app.log`.
 6. Start PostgreSQL with `docker compose --env-file /etc/livesetlist/postgres.env -f /opt/livesetlist/current/infra/production/docker-compose.postgres.yml up -d`.
 7. Run Flyway validate/migrate against the private PostgreSQL port.
