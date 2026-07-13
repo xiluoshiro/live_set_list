@@ -1,10 +1,13 @@
 import argparse
+import os
+import subprocess
 import tarfile
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = ROOT / "dist-release"
+FRONTEND_DIR = ROOT / "frontend"
 
 RELEASE_DIRS = [
     "backend/app",
@@ -60,7 +63,18 @@ def iter_release_paths() -> list[Path]:
     return sorted({path for path in paths if not _has_excluded_part(path.relative_to(ROOT))})
 
 
+def build_frontend() -> None:
+    npm_command = "npm.cmd" if os.name == "nt" else "npm"
+    try:
+        subprocess.run([npm_command, "run", "build"], cwd=FRONTEND_DIR, check=True)
+    except FileNotFoundError as exc:
+        raise SystemExit(f"npm command not found: {npm_command}") from exc
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"frontend production build failed, exit code: {exc.returncode}") from exc
+
+
 def build_release_archive(version: str, output_dir: Path = DEFAULT_OUTPUT_DIR) -> Path:
+    build_frontend()
     output_dir.mkdir(parents=True, exist_ok=True)
     archive_path = output_dir / f"livesetlist-{version}.tar.gz"
     with tarfile.open(archive_path, "w:gz") as archive:

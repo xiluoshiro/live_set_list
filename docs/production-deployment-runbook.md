@@ -48,14 +48,11 @@ Internet
 
 ```powershell
 python scripts/run_checks.py functional
-Set-Location frontend
-npm run build
-Set-Location ..
 python scripts/build_release.py --version 2026-07-10-003
 Get-FileHash .\dist-release\livesetlist-2026-07-10-003.tar.gz -Algorithm SHA256
 ```
 
-`build_release.py` 是白名单打包器。发布包包含后端应用、Flyway SQL、PostgreSQL 初始化 SQL、前端构建产物、运行配置模板、恢复脚本和必要配置；不包含 `.git`、本地虚拟环境、`node_modules`、日志、缓存、真实 env 和数据库 dump。
+`build_release.py` 会先执行 `frontend` 中的 `npm run build`，仅在构建成功后才归档 `frontend/dist`。它是白名单打包器：发布包包含后端应用、Flyway SQL、PostgreSQL 初始化 SQL、前端构建产物、运行配置模板、恢复脚本和必要配置；不包含 `.git`、本地虚拟环境、`node_modules`、日志、缓存、真实 env 和数据库 dump。
 
 将 `.tar.gz` 和校验值通过受控方式传到 VM 临时目录，例如 `~/tmp`。不要把数据库 dump 上传到 GitHub Releases 或提交到 Git。
 

@@ -71,21 +71,13 @@ python scripts/export_openapi.py
 
 ## 生产发布包
 
-生产服务器不要直接上传整个工作区。先构建前端：
-
-```powershell
-cd frontend
-npm run build
-cd ..
-```
-
-再从项目根目录生成白名单发布包：
+生产服务器不要直接上传整个工作区。直接从项目根目录生成白名单发布包：
 
 ```powershell
 python scripts/build_release.py --version 2026-07-10-001
 ```
 
-发布包只包含运行所需的后端、前端构建产物、Flyway、生产 infra 模板和备份恢复入口，不包含 `.git`、`.codex`、`.agents`、`old`、`node_modules`、`.venv`、真实 env、日志或缓存。
+脚本会先在 `frontend/` 执行 `npm run build`；构建失败则不会创建发布包。发布包只包含运行所需的后端、前端构建产物、Flyway、生产 infra 模板和备份恢复入口，不包含 `.git`、`.codex`、`.agents`、`old`、`node_modules`、`.venv`、真实 env、日志或缓存。
 
 生产部署模板见：
 
