@@ -87,7 +87,7 @@ livesetlist-deploy ALL=(root) NOPASSWD: /usr/local/sbin/livesetlist-deploy *
 
 Configure the GitHub `production` Environment with `DEPLOY_SSH_PRIVATE_KEY` and `DEPLOY_KNOWN_HOSTS` secrets, plus `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, and `PUBLIC_BASE_URL` variables. Keep database and application env files only under `/etc/livesetlist` on the VM.
 
-The script rejects any release whose Flyway SQL differs from the active release. Run production migrations through the manual procedure until a staging and migration approval workflow exists. The installed `/usr/local/sbin/livesetlist-deploy` is intentionally outside release directories; after changing the template, an administrator must install the new script there before the next automated release.
+The script rejects any release whose Flyway SQL differs from the active release. Production V9 -> V11 was completed manually with backup, safe env parsing, `migrate`, `validate`, and a hand-controlled app switch. The next automation step is a protected two-stage migration workflow: migration attestation first, app switch only after that attestation matches the archive SHA-256. The installed `/usr/local/sbin/livesetlist-deploy` is intentionally outside release directories; after changing the template, an administrator must install the new script there before the next automated release.
 
 ## Admin Bootstrap
 

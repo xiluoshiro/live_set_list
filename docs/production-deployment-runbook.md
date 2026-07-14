@@ -13,6 +13,7 @@
 - `livesetlist-backup.timer` 每天 `03:20` 执行自动备份，根目录为 `/var/backups/livesetlist`。
 - GitHub Actions tag 发布已跑通：CI 创建隔离 PostgreSQL、执行 Flyway 和 `functional`、构建发布包并经 `production` Environment 审批后部署到 VM。
 - 首个完整成功的自动发布 tag 为 `v2026-07-14-006`。
+- 首个 migration release 已完成：生产数据库从 V9 升至 V11，新 release 已切换、后端数据库 health 验收成功。
 
 自动发布当前只接受不变更 `backend/db/flyway/sql` 的版本。包含 Flyway SQL 的 **migration release 本身** 必须按“数据库迁移”章节完整手工发布；只有该 release 已成为 `current` 后，后续不再改变 SQL 的应用版本才可继续自动发布。
 
@@ -124,11 +125,45 @@ sudo install -o root -g root -m 755 \
 
 1. 创建生产库手动备份并确认备份文件可被 `pg_restore -l` 读取。
 2. 在非生产环境完成 `flyway validate` / `migrate` 与功能验收。
-3. 在生产窗口手动执行 `flyway validate`，再执行 `migrate`，记录输出。
+3. 在生产窗口先确认 pending migration，再执行 `migrate`，最后执行 `validate` 和 `info`，记录输出。不要用 Bash `source` 或 `docker compose config --environment` 读取 `/etc/livesetlist/postgres.env`：密码中的 `$`、`!` 等字符会被 shell 或 Compose 插值。应使用 `python-dotenv` 的 `interpolate=False` 读取，并通过 Python 子进程环境将变量传给 Docker。
 4. 解压该 release、用其 `sql/` 手工完成 migration，并手工切换该 release 为 `current`；不能调用当前自动部署脚本，因为它会拒绝 SQL 文件差异。
 5. 验证数据库 health、读路径、授权写路径和备份。该 release 成为 `current` 后，后续 SQL 不变的版本可恢复自动发布。
 
 不要修改已执行 migration；回滚应用版本不等于回滚数据库。
+
+### 已执行记录：V9 -> V11
+
+本次生产数据库已从 V9 成功迁移至 V11：
+
+- `V10__allow_same_song_name_for_different_bands.sql` 成功将歌曲唯一约束调整为 `(song_name, band_id)`。
+- `V11__normalize_empty_other_members.sql` 成功规范化 `live_setlist.other_member` 中的空值。
+- 迁移顺序为 `info -> migrate -> validate -> info`；在存在 pending migration 时先执行 `validate` 会被 Flyway 12 拒绝，这是预期行为。
+- 服务器 env 中的密码包含 `$` 等字符。Bash `source` 会触发 `unbound variable`，Docker Compose 环境解析会插值并给出变量缺失警告；迁移使用 `python-dotenv(interpolate=False)` 读取后，由 Python 子进程环境把变量传给 Docker。
+
+迁移 release 已完成手工切换，后端数据库 health 通过。后续 SQL 不变的版本可继续使用现有自动发布路径。
+
+## 后续计划：两阶段 migration 发布
+
+当前自动发布继续拒绝 SQL 差异。迁移发布改为单独的两阶段流程，不让普通 tag 在未经数据库审批时执行 schema 变更。
+
+### 阶段 A：受保护的 migration
+
+1. tag CI 构建候选 release 并完成隔离 PostgreSQL、Flyway、`functional` 检查。
+2. `migrate-production` job 绑定独立的 `production-migration` Environment，要求额外人工审批。
+3. 服务器端 `livesetlist-migrate` 脚本校验归档 SHA-256，创建备份，将 release 解压到 staging 目录，但不更新 `current`。
+4. 该脚本用 `python-dotenv(interpolate=False)` 读取生产 env，执行 `info -> migrate -> validate -> info`，并确认目标版本全部为 `Success`。
+5. 成功后写入 root-only attestation，至少记录 release version、archive SHA-256、Flyway 最终版本、执行时间和备份文件路径。
+
+阶段 A 绝不自动数据库回滚。migration 失败时停止并保留日志；是否恢复备份由人工判断和恢复 runbook 决定。
+
+### 阶段 B：应用切换
+
+1. `deploy-production` 继续需要 `production` Environment 审批。
+2. 对 SQL 无变化的 release，沿用现有发布脚本。
+3. 对 SQL 有变化的 release，发布脚本必须验证阶段 A 的 attestation 与版本和 SHA-256 完全匹配，且数据库 Flyway version 已达到 attestation 记录，才允许原子切换 `current`。
+4. 切换后执行后端就绪等待、数据库 health、备份和公网 smoke test；失败只回滚应用符号链接，不回滚 schema。
+
+实施前置条件：先有 staging 迁移演练、固定 Flyway 镜像版本、生产 env 安全读取、可恢复备份和明确的扩展/收缩 migration 规范。
 
 ## 首次环境与数据迁移要点
 
@@ -166,6 +201,7 @@ curl.exe -I <PUBLIC_BASE_URL>/openapi.json
 | CI 找不到 `flyway.toml` | 本地配置被 Git 忽略 | CI 从 `flyway.toml.example` 生成临时配置 |
 | SHA-256 校验找不到归档 | 校验文件记录了构建机的 `dist-release/` 路径 | 在 `dist-release` 内生成校验文件，只记录文件名 |
 | production job 被拒绝 | Environment 将 `v*` 配成 Branch 规则 | 使用 Tag 类型的 `v*` 规则 |
+| Flyway 命令读取 env 报 `unbound variable` 或 Compose 提示变量未设置 | 用 Bash `source` 或 Compose 读取含 `$` 的密码 | 用 `python-dotenv(interpolate=False)` 读取并由 Python 将变量传给 Docker |
 | Setlist 前端测试偶发找不到 textarea | 等待条件在异步检查出现前提前通过 | 等待目标 textarea 实际渲染 |
 | 部署后立即 health check 失败 | systemd 返回时 Uvicorn 尚未监听端口 | 部署脚本最多等待 20 秒 |
 | VM 本机无法 curl 公网地址 | hairpin 路由不可靠 | 使用外部工作站 / GitHub 进行公网验证 |
