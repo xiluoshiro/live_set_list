@@ -8,7 +8,7 @@
 
 - 实际部署、GitHub Environment 配置、验收、排障与回滚：[docs/production-deployment-runbook.md](D:/Code/PythonCode/5%20LiveSetList/docs/production-deployment-runbook.md)
 - 生产架构、安全基线与剩余 TODO：[docs/design/production-deployment.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/production-deployment.md)
-- 包含 Flyway SQL 的版本不走自动发布；必须先完成独立数据库迁移、备份和验收。
+- 当前生产 schema 已到 V11。包含 Flyway SQL 的版本暂不走普通自动发布；后续将实施“受保护 migration + attestation 后应用切换”的两阶段流程。
 
 ## 主要功能
 
@@ -48,7 +48,7 @@
 - 接口会执行真实业务查询；健康检查接口会执行 `select 1;`
 - 前端使用 `React + TypeScript + Vite`
 - 前端样式入口已收敛到 `frontend/src/styles/index.css`，旧的根级 `frontend/src/styles.css` 已移除
-- 已引入 Flyway baseline 和 `V2~V9` 认证、收藏、权限、控制台与 live_type 相关迁移
+- 已引入 Flyway baseline 和 `V2~V11` 认证、收藏、权限、控制台、live_type 与 setlist 数据规范化相关迁移
 - 提供一键启动脚本，可同时启动前后端并统一关闭
 - `scripts/run_dev.py` 默认连接生产库，`--test-db` 连接测试库；脚本会显式注入后端 DB host / port / name，降低父 shell 环境污染风险
 - `scripts/run_dev.py` 启动前会清理 8000 端口残留后端；若旧后端无法清理且端口仍不可用，会停止启动，避免新旧后端同时服务导致误连测试库
