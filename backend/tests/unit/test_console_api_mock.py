@@ -264,7 +264,6 @@ def test_console_insert_mock_requires_valid_csrf(path: str, json_body: dict):
     [
         ("/api/console/songs", {}),
         ("/api/console/songs", _valid_song_payload(song_name="   ")),
-        ("/api/console/songs", _valid_song_payload(band_id=0)),
         ("/api/console/songs", _valid_song_payload(cover="not-bool")),
         ("/api/console/venues", {}),
         ("/api/console/venues", _valid_venue_payload(venue_name="   ")),
@@ -289,6 +288,36 @@ def test_console_insert_mock_rejects_schema_invalid_payloads(path: str, json_bod
     response = client.post(path, json=json_body, headers={"X-CSRF-Token": CSRF_TOKEN})
 
     assert response.status_code == 422
+
+
+# 测试点：新增歌曲允许使用 id=0 的 Other bands 作为归属乐队。
+def test_console_create_song_mock_accepts_other_bands_id_zero():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (99,)])
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/songs",
+            json=_valid_song_payload(song_name="Other Band Cover", band_id=0, cover=True),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["item"] == {
+        "song_id": 99,
+        "song_name": "Other Band Cover",
+        "band_id": 0,
+        "cover": True,
+    }
+    assert cursor.execute.call_args_list[1] == call(
+        """
+                    INSERT INTO song_list (song_name, band_id, is_cover)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                    """,
+        ("Other Band Cover", 0, True),
+    )
 
 
 # 测试点：新增歌曲成功时应返回创建结果，并写入歌曲行和审计日志。

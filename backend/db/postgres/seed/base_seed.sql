@@ -22,6 +22,7 @@ VALUES
 
 INSERT INTO public.band_attrs (id, band_abbr, band_name, band_members)
 VALUES
+    (0, '', 'Other bands', ARRAY[]::text[]),
     (1, 'ppp', 'Poppin''Party', ARRAY['Kasumi', 'Tae', 'Rimi', 'Saaya', 'Arisa']),
     (2, 'rsl', 'Roselia', ARRAY['Yukina', 'Sayo', 'Lisa', 'Ako', 'Rinko']),
     (3, 'mygo', 'MyGO!!!!!', ARRAY['Tomori', 'Anon', 'Raana', 'Soyo', 'Taki']);
