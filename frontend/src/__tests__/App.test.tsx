@@ -454,6 +454,29 @@ describe("App", () => {
     }
   });
 
+  test("全部内容下滑后显示回到顶部按钮并平滑滚动", async () => {
+    // 测试点：长列表滚动超过阈值时必须提供可点击的回到顶部入口。
+    const originalScrollY = Object.getOwnPropertyDescriptor(window, "scrollY");
+    const originalScrollTo = window.scrollTo;
+    Object.defineProperty(window, "scrollY", { value: 480, configurable: true });
+    window.scrollTo = vi.fn();
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    try {
+      const user = userEvent.setup();
+      renderApp();
+      await openAllContent(user);
+      fireEvent.scroll(window);
+
+      await user.click(await screen.findByRole("button", { name: "回到顶部" }));
+      expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
+    } finally {
+      if (originalScrollY) Object.defineProperty(window, "scrollY", originalScrollY);
+      window.scrollTo = originalScrollTo;
+    }
+  });
+
   test("首页搜索会进入搜索结果，并可从结果打开详情", async () => {
     // 测试点：首页搜索框接入公共搜索，Live 结果继续复用现有详情弹窗。
     getLivesMock.mockResolvedValue(
