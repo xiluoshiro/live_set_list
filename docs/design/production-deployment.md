@@ -297,8 +297,8 @@ VITE_API_BASE_URL=https://api.<domain>
 
 ### 5.2 常规发布流程
 
-1. 如有 Flyway SQL 变化，先完成独立的备份、staging 验证和生产 migration；自动发布脚本会拒绝未处理的 SQL 差异。
-2. 在目标 commit 运行 `python scripts/run_checks.py functional`。
+1. 如有 Flyway SQL 变化，当前自动脚本不能部署该 migration release；先完成独立的备份、staging 验证、生产 migration 和手工 release 切换。
+2. 在 SQL 已与 `current` 对齐后的普通应用版本，运行 `python scripts/run_checks.py functional`。
 3. 创建并推送 `vYYYY-MM-DD-NNN` tag。
 4. 等待 GitHub Actions 完成隔离数据库 CI、`functional` 和白名单出包。
 5. 审阅 `production` Environment 中的 tag/commit 后批准部署。

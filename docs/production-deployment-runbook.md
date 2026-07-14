@@ -14,7 +14,7 @@
 - GitHub Actions tag 发布已跑通：CI 创建隔离 PostgreSQL、执行 Flyway 和 `functional`、构建发布包并经 `production` Environment 审批后部署到 VM。
 - 首个完整成功的自动发布 tag 为 `v2026-07-14-006`。
 
-自动发布当前只接受不变更 `backend/db/flyway/sql` 的版本。包含 Flyway SQL 的发布必须先按“数据库迁移”章节手工处理，再发布兼容的应用版本。
+自动发布当前只接受不变更 `backend/db/flyway/sql` 的版本。包含 Flyway SQL 的 **migration release 本身** 必须按“数据库迁移”章节完整手工发布；只有该 release 已成为 `current` 后，后续不再改变 SQL 的应用版本才可继续自动发布。
 
 ## 生产拓扑与目录
 
@@ -125,8 +125,8 @@ sudo install -o root -g root -m 755 \
 1. 创建生产库手动备份并确认备份文件可被 `pg_restore -l` 读取。
 2. 在非生产环境完成 `flyway validate` / `migrate` 与功能验收。
 3. 在生产窗口手动执行 `flyway validate`，再执行 `migrate`，记录输出。
-4. 确认旧应用与新 schema 兼容后，创建不再包含未应用 Flyway SQL 差异的应用发布版本。
-5. 发布后验证数据库 health、读路径、授权写路径和备份。
+4. 解压该 release、用其 `sql/` 手工完成 migration，并手工切换该 release 为 `current`；不能调用当前自动部署脚本，因为它会拒绝 SQL 文件差异。
+5. 验证数据库 health、读路径、授权写路径和备份。该 release 成为 `current` 后，后续 SQL 不变的版本可恢复自动发布。
 
 不要修改已执行 migration；回滚应用版本不等于回滚数据库。
 
