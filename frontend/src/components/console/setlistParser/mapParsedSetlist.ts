@@ -106,6 +106,8 @@ export function mapParsedSetlist(
   let currentContextLine = 0;
   let lastSegmentType = "";
   let lastSegmentOrderByType: Record<string, number> = {};
+  let absoluteOffset = 0;
+  let activeSegmentMaxOrder = 0;
   let nextRowKey = rowKeyStart;
   let nextOtherMemberEntryKey = otherMemberEntryKeyStart;
   const warnings: ParsedSetlistWarning[] = [];
@@ -158,8 +160,14 @@ export function mapParsedSetlist(
       });
     }
 
-    const segmentStartType = line.segmentType !== lastSegmentType ? line.segmentType : "";
+    const startsNewSegment = line.segmentType !== lastSegmentType;
+    if (startsNewSegment) {
+      absoluteOffset += activeSegmentMaxOrder;
+      activeSegmentMaxOrder = 0;
+    }
+    const segmentStartType = startsNewSegment ? line.segmentType : "";
     lastSegmentType = line.segmentType;
+    activeSegmentMaxOrder = Math.max(activeSegmentMaxOrder, line.segmentOrder);
     lastSegmentOrderByType = {
       ...lastSegmentOrderByType,
       [line.segmentType]: line.segmentOrder,
@@ -170,6 +178,8 @@ export function mapParsedSetlist(
       song_name: line.songName,
       song_id: "",
       segment_start_type: segmentStartType,
+      // abs 保留段内跳号，并累加此前各段的最大编号，避免从 1 重新顺排。
+      absolute_order: absoluteOffset + line.segmentOrder,
       // 保留原文段内编号；即使从 M2 开始，也不能在应用草稿时静默回退为 1。
       sub_order: line.segmentOrder,
       is_short: false,
