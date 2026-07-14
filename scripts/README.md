@@ -114,6 +114,24 @@ python scripts/recovery_db.py <arguments> [--force]
 
 - [recovery/README.md](D:/Code/PythonCode/5%20LiveSetList/recovery/README.md)
 
+## 从生产 VM 覆盖本地主库
+
+仅在明确允许覆盖本地 `live_statistic` 时使用：
+
+```powershell
+python scripts/sync_production_db.py --ssh-host <SSH-配置别名> --force
+```
+
+预先检查 SSH 环境（不下载 dump、不会改动本地数据库）可执行：
+
+```powershell
+python scripts/sync_production_db.py --ssh-host <SSH-配置别名> --precheck
+```
+
+预检会在 VM 上实际启动一次备份 service，并验证当前 SSH 账户可无交互读取最新 dump；因此可准确发现 `sudo -n` 权限不足。正式同步会下载最新自动备份，先用 `pg_restore -l` 校验，再覆盖本地主库；它不会启动本地后端或 Vite。恢复完成后，按正常方式运行 `python scripts/run_dev.py`，再访问 `http://127.0.0.1:5173/`。本地 PostgreSQL 容器仍会按需启动，以完成恢复。
+
+前提是 SSH 别名已配置好密钥和主机指纹，且 VM 管理账户可无交互执行 `sudo -n` 启动该备份 service 并读取 `/var/backups/livesetlist/app/auto` 下的备份。该流程会复制完整生产数据（包括用户、会话和审计记录）；本地写入不会回传 VM，但下次同步会覆盖本地改动。
+
 ## Windows 定时任务
 
 可直接挂 `scripts/backup_app_auto.ps1` 到 Windows Task Scheduler。
