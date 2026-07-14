@@ -159,6 +159,7 @@ function App() {
   });
   const [cardPage, setCardPage] = useState(1);
   const [cardLoadingMore, setCardLoadingMore] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const [page, setPage] = useState(1);
   const [jumpPageInput, setJumpPageInput] = useState("1");
@@ -815,6 +816,22 @@ function App() {
     return () => window.cancelAnimationFrame(frameId);
   }, [items.length, loading, tab]);
 
+  useEffect(() => {
+    if (tab !== "all" && tab !== "favorites") {
+      setShowBackToTop(false);
+      return;
+    }
+    const syncVisibility = () => setShowBackToTop(window.scrollY > 360);
+    syncVisibility();
+    window.addEventListener("scroll", syncVisibility, { passive: true });
+    return () => window.removeEventListener("scroll", syncVisibility);
+  }, [tab]);
+
+  const scrollBackToTop = () => {
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    window.scrollTo({ top: 0, behavior: reducedMotion ? "auto" : "smooth" });
+  };
+
   const loadMoreCards = useCallback(async () => {
     if (tab !== "all" && tab !== "favorites") return;
     const sessionKey = getCardSessionKey(tab);
@@ -1321,7 +1338,20 @@ function App() {
                   )}
                 </tbody>
               </table>
-            </div>
+              </div>
+            )}
+            {showBackToTop && (
+              <button
+                type="button"
+                className="back-to-top-btn"
+                aria-label="回到顶部"
+                title="回到顶部"
+                onClick={scrollBackToTop}
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path d="m3 10 5-5 5 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
             )}
           </>
         ) : showConsolePanel ? (
