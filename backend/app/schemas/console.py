@@ -25,7 +25,7 @@ def _strip_required_text(value: str) -> str:
 
 class ConsoleSongCreateRequest(BaseModel):
     song_name: str = Field(..., min_length=1, max_length=255, description="Song title")
-    band_id: int = Field(..., ge=1, description="band_attrs.id")
+    band_id: int = Field(..., ge=0, description="band_attrs.id; 0 represents Other bands")
     cover: bool = Field(default=False, description="Whether the song is a cover")
 
     @field_validator("song_name")

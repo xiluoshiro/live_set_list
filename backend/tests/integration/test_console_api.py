@@ -304,6 +304,45 @@ def test_console_create_song_persists_row_and_audit_log(
     )
 
 
+# 测试点：歌曲可归属 Other bands，且不同乐队可复用同一歌曲名。
+def test_console_create_song_accepts_other_bands_and_same_name_for_another_band(
+    integration_test_client,
+    integration_admin_connection,
+):
+    """Verify band id 0 and the song-name-plus-band unique constraint both allow valid new songs."""
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    other_bands_response = integration_test_client.post(
+        "/api/console/songs",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"song_name": "Shared Cover Title", "band_id": 0, "cover": True},
+    )
+    named_band_response = integration_test_client.post(
+        "/api/console/songs",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"song_name": "Shared Cover Title", "band_id": 2, "cover": False},
+    )
+
+    assert other_bands_response.status_code == 201
+    assert named_band_response.status_code == 201
+    assert other_bands_response.json()["item"]["band_id"] == 0
+    assert named_band_response.json()["item"]["band_id"] == 2
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT band_id, is_cover FROM song_list WHERE song_name = %s ORDER BY band_id",
+            ("Shared Cover Title",),
+        )
+        rows = cursor.fetchall()
+
+    assert rows == [(0, True), (2, False)]
+
+
 # 测试点：新增歌曲接口应拒绝 viewer 和缺失 CSRF 的写请求，防止前端可见性绕过后直接落库。
 def test_console_create_song_requires_editor_role_and_csrf(
     integration_test_client,
