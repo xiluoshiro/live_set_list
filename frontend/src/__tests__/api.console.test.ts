@@ -29,18 +29,18 @@ describe("console lookup api", () => {
     vi.unstubAllGlobals();
   });
 
+  // 测试点：歌曲候选查询封装应生成后端期望的 q/limit 参数并透传乐队名称。
   test("getConsoleSongs 会按 q/limit 请求 console songs 并返回 items", async () => {
-    // 测试点：歌曲候选查询封装应生成后端期望的 q/limit 参数并透传响应结构。
     fetchMock.mockResolvedValueOnce(
       makeJsonResponse({
-        items: [{ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, cover: false }],
+        items: [{ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, cover: false, band_name: "Poppin'Party" }],
       }),
     );
     const { getConsoleSongs } = await import("../api");
 
     const payload = await getConsoleSongs("  BanG  ", 10);
 
-    expect(payload.items[0]).toEqual({ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, cover: false });
+    expect(payload.items[0]).toEqual({ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, cover: false, band_name: "Poppin'Party" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs?limit=10&q=BanG");
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ credentials: "include" }));

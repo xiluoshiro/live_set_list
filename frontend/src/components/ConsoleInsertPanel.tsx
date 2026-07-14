@@ -125,6 +125,7 @@ function toSongInsertRow(item: ConsoleSongItem): SongInsertRow {
     song_name: item.song_name,
     band_id: item.band_id,
     cover: item.cover,
+    band_name: item.band_name,
   };
 }
 

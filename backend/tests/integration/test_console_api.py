@@ -100,6 +100,7 @@ def test_console_lookup_endpoints_return_seeded_options(
                 "song_name": "Yes! BanG_Dream!",
                 "band_id": 1,
                 "cover": False,
+                "band_name": "Poppin'Party",
             }
         ]
     }
@@ -150,7 +151,9 @@ def test_console_song_lookup_prioritizes_exact_title_match(
     response = integration_test_client.get("/api/console/songs?q=R&limit=1")
 
     assert response.status_code == 200
-    assert response.json()["items"] == [{"song_id": song_id, "song_name": "R", "band_id": 1, "cover": False}]
+    assert response.json()["items"] == [
+        {"song_id": song_id, "song_name": "R", "band_id": 1, "cover": False, "band_name": "Poppin'Party"}
+    ]
 
 
 # 测试点：歌曲查询应把常见等价标点归一化，允许半角输入命中含弯引号和全角符号的歌名。
@@ -177,7 +180,13 @@ def test_console_song_lookup_matches_punctuation_equivalent_title(
 
     assert response.status_code == 200
     assert response.json()["items"] == [
-        {"song_id": song_id, "song_name": "Song ‘A’，B；C〜D", "band_id": 1, "cover": False}
+        {
+            "song_id": song_id,
+            "song_name": "Song ‘A’，B；C〜D",
+            "band_id": 1,
+            "cover": False,
+            "band_name": "Poppin'Party",
+        }
     ]
 
 

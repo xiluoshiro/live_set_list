@@ -64,14 +64,16 @@ def list_songs(
                         """
                         WITH normalized_song_list AS (
                             SELECT
-                                id,
-                                song_name,
-                                band_id,
-                                is_cover,
-                                translate(song_name, %s, %s) AS normalized_song_name
-                            FROM song_list
+                                s.id,
+                                s.song_name,
+                                s.band_id,
+                                s.is_cover,
+                                b.band_name,
+                                translate(s.song_name, %s, %s) AS normalized_song_name
+                            FROM song_list AS s
+                            JOIN band_attrs AS b ON b.id = s.band_id
                         )
-                        SELECT id, song_name, band_id, is_cover
+                        SELECT id, song_name, band_id, is_cover, band_name
                         FROM normalized_song_list
                         WHERE song_name ILIKE %s ESCAPE '\\'
                            OR normalized_song_name ILIKE %s ESCAPE '\\'
@@ -98,9 +100,10 @@ def list_songs(
                 else:
                     cur.execute(
                         """
-                        SELECT id, song_name, band_id, is_cover
-                        FROM song_list
-                        ORDER BY song_name, id
+                        SELECT s.id, s.song_name, s.band_id, s.is_cover, b.band_name
+                        FROM song_list AS s
+                        JOIN band_attrs AS b ON b.id = s.band_id
+                        ORDER BY s.song_name, s.id
                         LIMIT %s
                         """,
                         (limit,),
@@ -125,6 +128,7 @@ def list_songs(
                 "song_name": row[1],
                 "band_id": int(row[2]),
                 "cover": bool(row[3]),
+                "band_name": row[4],
             }
             for row in rows
         ]
