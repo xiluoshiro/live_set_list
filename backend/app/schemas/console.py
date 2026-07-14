@@ -42,6 +42,10 @@ class ConsoleSongItem(BaseModel):
     cover: bool = Field(..., description="Whether the song is a cover")
 
 
+class ConsoleSongLookupItem(ConsoleSongItem):
+    band_name: str = Field(..., description="Owning band display name")
+
+
 class ConsoleSongMutationResponse(BaseModel):
     ok: bool = Field(..., description="Whether the write succeeded")
     item: ConsoleSongItem = Field(..., description="Created song payload")
@@ -59,7 +63,7 @@ class ConsoleSongBatchCreateResponse(BaseModel):
 
 
 class ConsoleSongListResponse(BaseModel):
-    items: list[ConsoleSongItem] = Field(..., description="Songs available for console lookup")
+    items: list[ConsoleSongLookupItem] = Field(..., description="Songs available for console lookup")
 
 
 class ConsoleBandItem(BaseModel):

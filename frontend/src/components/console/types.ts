@@ -32,6 +32,7 @@ export type SongInsertRow = {
   song_name: string;
   band_id: number;
   cover: boolean;
+  band_name?: string;
 };
 
 export type SetlistInsertRow = {

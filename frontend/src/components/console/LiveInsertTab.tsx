@@ -673,6 +673,7 @@ export function LiveInsertTab({
                     <tr>
                       <th>song_id</th>
                       <th>song_name</th>
+                      <th>band_name</th>
                       <th>操作</th>
                     </tr>
                   </thead>
@@ -681,6 +682,7 @@ export function LiveInsertTab({
                       <tr key={song.song_id}>
                         <td>{song.song_id}</td>
                         <td>{song.song_name}</td>
+                        <td>{song.band_name ?? "-"}</td>
                         <td>
                           <button
                             type="button"

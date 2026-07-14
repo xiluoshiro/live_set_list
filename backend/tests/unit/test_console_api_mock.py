@@ -134,7 +134,7 @@ def test_console_lookup_mock_requires_authenticated_editor_role():
 def test_console_lookup_mock_returns_items_without_csrf_for_editor():
     _set_authenticated_role("editor")
     songs_conn, _ = _build_connection_mock(
-        fetchall_side_effect=[[(1, "Yes! BanG_Dream!", 1, False)]],
+        fetchall_side_effect=[[(1, "Yes! BanG_Dream!", 1, False, "Poppin'Party")]],
     )
     bands_conn, _ = _build_connection_mock(
         fetchall_side_effect=[[(2, "Roselia", "rsl", ["Yukina", "Sayo"])]],
@@ -151,7 +151,15 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
 
     assert songs_response.status_code == 200
     assert songs_response.json() == {
-        "items": [{"song_id": 1, "song_name": "Yes! BanG_Dream!", "band_id": 1, "cover": False}]
+        "items": [
+            {
+                "song_id": 1,
+                "song_name": "Yes! BanG_Dream!",
+                "band_id": 1,
+                "cover": False,
+                "band_name": "Poppin'Party",
+            }
+        ]
     }
     assert bands_response.status_code == 200
     assert bands_response.json() == {

@@ -285,8 +285,8 @@ describe("ConsoleInsertPanel", () => {
     expect(within(dialog).queryByText("CORUSCATE -DNA")).not.toBeInTheDocument();
   });
 
+  // 测试点：模糊查询返回多个候选时，弹窗显示所属乐队并允许选择正确 sid。
   test("查询歌曲多候选时弹窗选择sid", async () => {
-    // 测试点：模糊查询返回多个候选时不自动误配，用户可从弹窗中选择 sid。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 9, band_name: "Roselia", band_abbr: "rsl", band_members: ["湊友希那"] }],
@@ -295,8 +295,8 @@ describe("ConsoleInsertPanel", () => {
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
         items: [
-          { song_id: 906, song_name: "CORUSCATE -DNA-", band_id: 9, cover: false },
-          { song_id: 907, song_name: "CORUSCATE -DNA-A", band_id: 9, cover: false },
+          { song_id: 906, song_name: "CORUSCATE -DNA-", band_id: 9, cover: false, band_name: "Roselia" },
+          { song_id: 907, song_name: "CORUSCATE -DNA-A", band_id: 9, cover: false, band_name: "Roselia" },
         ],
       });
 
@@ -316,6 +316,7 @@ describe("ConsoleInsertPanel", () => {
     const dialog = screen.getByRole("dialog", { name: "歌曲查询结果" });
     expect(within(dialog).getByText("CORUSCATE -DNA-")).toBeInTheDocument();
     expect(within(dialog).getByText("CORUSCATE -DNA-A")).toBeInTheDocument();
+    expect(within(dialog).getAllByText("Roselia")).toHaveLength(2);
     await user.click(within(dialog).getAllByRole("button", { name: "选择" })[1]);
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "歌曲查询结果" })).not.toBeInTheDocument());
