@@ -238,7 +238,7 @@ export type ConsoleLiveSetlistRowPayload = {
   sub_order: number;
   is_short: boolean;
   band_member: Record<string, string[] | string>;
-  other_member?: Record<string, string[] | string> | null;
+  other_member?: Record<string, string[] | string | null> | null;
   comment?: string | null;
 };
 

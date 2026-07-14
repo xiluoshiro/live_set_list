@@ -567,7 +567,7 @@ def test_console_create_live_persists_live_row(
     )
 
 
-# 测试点：向无已有 setlist 的 Live 追加行应成功插入并返回正确的行计数。
+# 测试点：追加 Setlist 时应保留具名空成员，并将完全为空的 other_member 写成 NULL。
 def test_console_append_live_setlist_inserts_rows_to_clean_live(
     integration_test_client,
     integration_admin_connection,
@@ -602,7 +602,17 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
                     "sub_order": 1,
                     "is_short": True,
                     "band_member": {"Roselia": ["Yukina", "Sayo", "Lisa"]},
-                    "other_member": {"支援": "Keyboard"},
+                    "other_member": {"支援": []},
+                    "comment": None,
+                },
+                {
+                    "song_id": 1,
+                    "absolute_order": 3,
+                    "segment_type": "M",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "other_member": None,
                     "comment": None,
                 },
             ]
@@ -615,8 +625,8 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
         "ok": True,
         "item": {
             "live_id": 41,
-            "inserted_row_count": 2,
-            "total_setlist_row_count": 2,
+            "inserted_row_count": 3,
+            "total_setlist_row_count": 3,
         },
     }
 
@@ -649,19 +659,29 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
             1,
             True,
             {"Roselia": ["Yukina", "Sayo", "Lisa"]},
-            {"支援": "Keyboard"},
+            {"支援": None},
+            None,
+        ),
+        (
+            3,
+            "M",
+            1,
+            False,
+            {"Poppin'Party": ["Kasumi"]},
+            None,
             None,
         ),
     ]
-    assert [row["row_id"] for row in detail_response.json()["detail_rows"]] == ["EN1", "SP1"]
+    assert [row["row_id"] for row in detail_response.json()["detail_rows"]] == ["EN1", "SP1", "M1"]
     assert detail_response.json()["detail_rows"][0]["song_name"] == "STAR BEAT!〜ホシノコドウ〜"
     assert detail_response.json()["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["MASKING", "LOCK"]}]
     assert detail_response.json()["detail_rows"][1]["comments"] == ["短版"]
-    assert detail_response.json()["detail_rows"][1]["other_members"] == [{"key": "支援", "value": ["Keyboard"]}]
+    assert detail_response.json()["detail_rows"][1]["other_members"] == [{"key": "支援", "value": []}]
+    assert detail_response.json()["detail_rows"][2]["other_members"] == []
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "live_setlist_append",
         "41",
-        {"inserted_row_count": 2, "total_setlist_row_count": 2},
+        {"inserted_row_count": 3, "total_setlist_row_count": 3},
     )
 
 

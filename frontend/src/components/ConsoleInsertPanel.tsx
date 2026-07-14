@@ -281,6 +281,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   } | null>(null);
   const [didSongLookup, setDidSongLookup] = useState(false);
   const [otherMemberEntryKey, setOtherMemberEntryKey] = useState(100);
+  const [otherMemberValueSeparator, setOtherMemberValueSeparator] = useState(",");
   const [editingBandRowKey, setEditingBandRowKey] = useState<number | null>(null);
   const [bandMemberMenuPos, setBandMemberMenuPos] = useState<Position | null>(null);
   const [editingOtherRowKey, setEditingOtherRowKey] = useState<number | null>(null);
@@ -1065,7 +1066,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         sub_order: effectiveSub[originalIndex],
         is_short: row.is_short,
         band_member: row.band_member,
-        other_member: buildOtherMemberPayloadObject(row.other_member),
+        other_member: buildOtherMemberPayloadObject(row.other_member, otherMemberValueSeparator),
       };
     });
     const previewRows = setlistPayload.map((row, idx) => ({
@@ -1767,6 +1768,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onUpdateOtherMemberEntry={updateOtherMemberEntry}
           onRemoveOtherMemberEntry={removeOtherMemberEntry}
           onAddOtherMemberEntry={addOtherMemberEntry}
+          otherMemberValueSeparator={otherMemberValueSeparator}
+          onOtherMemberValueSeparatorChange={setOtherMemberValueSeparator}
           renderSongAdminSection={renderSongAdminSection}
         />
       )}

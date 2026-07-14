@@ -138,7 +138,7 @@ describe("ConsoleInsertPanel", () => {
   });
 
   test("提交新增Setlist会调用真实追加接口并出现插入记录", async () => {
-    // 测试点：新增 Setlist 应调用后端追加接口，且只在成功后更新本地提交预览。
+    // 测试点：新增 Setlist 未填写 other_member 时应传 null，且只在成功后更新本地提交预览。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
@@ -178,7 +178,7 @@ describe("ConsoleInsertPanel", () => {
             sub_order: 1,
             is_short: false,
             band_member: { Roselia: ["湊友希那"] },
-            other_member: {},
+            other_member: null,
           },
         ],
       },

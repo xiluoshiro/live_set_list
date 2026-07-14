@@ -116,18 +116,18 @@ def _normalize_band_member_payload(raw: Mapping[str, Any]) -> dict[str, list[str
     return normalized
 
 
-def _normalize_other_member_payload(raw: Mapping[str, Any] | None) -> dict[str, str | list[str]]:
+def _normalize_other_member_payload(raw: Mapping[str, Any] | None) -> dict[str, str | list[str] | None] | None:
     """Coerce optional other_member input into the compact JSON shape stored in the DB."""
     if raw is None:
-        return {}
-    normalized: dict[str, str | list[str]] = {}
+        return None
+    normalized: dict[str, str | list[str] | None] = {}
     for member_key, member_value_raw in raw.items():
         normalized_key = str(member_key).strip()
         values = _to_string_list(member_value_raw)
-        if normalized_key == "" or len(values) == 0:
+        if normalized_key == "":
             continue
-        normalized[normalized_key] = values[0] if len(values) == 1 else values
-    return normalized
+        normalized[normalized_key] = None if len(values) == 0 else values[0] if len(values) == 1 else values
+    return normalized or None
 
 
 def _format_date(value: date) -> str:
@@ -593,7 +593,7 @@ def append_live_setlist(
                             normalized_row["sub_order"],
                             normalized_row["is_short"],
                             Json(normalized_row["band_member"]),
-                            Json(normalized_row["other_member"]),
+                            Json(normalized_row["other_member"]) if normalized_row["other_member"] is not None else None,
                             normalized_row["comment"],
                         ),
                     )

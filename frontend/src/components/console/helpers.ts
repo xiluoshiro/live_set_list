@@ -20,18 +20,30 @@ export function getBandMembersTemplate(_bandName: string): string[] {
   return [...DEFAULT_BAND_MEMBERS];
 }
 
-export function buildOtherMemberPayloadObject(entries: OtherMemberDraft[]): Record<string, string> {
-  const pairs = entries
-    .map((entry) => ({
-      key: entry.member_key.trim(),
-      value: entry.member_value.trim(),
-    }))
-    .filter((entry) => entry.key !== "");
-  return Object.fromEntries(pairs.map((entry) => [entry.key, entry.value]));
+export function buildOtherMemberPayloadObject(
+  entries: OtherMemberDraft[],
+  separator: string,
+): Record<string, string[] | null> | null {
+  const effectiveSeparator = separator || ",";
+  const payload = entries.reduce<Record<string, string[] | null>>((payload, entry) => {
+    const key = entry.member_key.trim();
+    if (key === "") return payload;
+    const values = entry.member_value
+      .split(effectiveSeparator)
+      .map((value) => value.trim())
+      .filter((value) => value !== "");
+    if (values.length === 0) {
+      payload[key] ??= null;
+    } else {
+      payload[key] = [...(Array.isArray(payload[key]) ? payload[key] : []), ...values];
+    }
+    return payload;
+  }, {});
+  return Object.keys(payload).length === 0 ? null : payload;
 }
 
-export function buildOtherMemberPayload(entries: OtherMemberDraft[]): string {
-  return JSON.stringify(buildOtherMemberPayloadObject(entries));
+export function buildOtherMemberPayload(entries: OtherMemberDraft[], separator: string): string {
+  return JSON.stringify(buildOtherMemberPayloadObject(entries, separator));
 }
 
 export function summarizeBandMember(row: SetlistDraftRow): string {
