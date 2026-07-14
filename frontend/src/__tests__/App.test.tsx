@@ -1,4 +1,5 @@
 ﻿import { render, screen, waitFor, within } from "@testing-library/react";
+import { act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { fireEvent } from "@testing-library/react";
 import { vi } from "vitest";
@@ -386,6 +387,71 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
+  });
+
+  test("卡片详情返回会保留已加载页并继续触发无限加载", async () => {
+    // 测试点：详情期间完成的卡片分页请求不能让返回后的列表卡在第一页。
+    localStorage.setItem("live-view-mode", "cards");
+    const secondPage = deferred<LivesResponse>();
+    getLivesMock.mockImplementation((requestedPage) => {
+      if (requestedPage === 2) return secondPage.promise;
+      if (requestedPage === 3) {
+        return Promise.resolve(makeResponse({ page: 3, pageSize: 20, total: 60, totalPages: 3, itemCount: 20, startId: 41 }));
+      }
+      return Promise.resolve(makeResponse({ page: 1, pageSize: 20, total: 60, totalPages: 3, itemCount: 20 }));
+    });
+
+    let observerCallback: IntersectionObserverCallback | undefined;
+    const originalObserver = Object.getOwnPropertyDescriptor(globalThis, "IntersectionObserver");
+    Object.defineProperty(globalThis, "IntersectionObserver", {
+      value: class {
+        constructor(callback: IntersectionObserverCallback) {
+          observerCallback = callback;
+        }
+
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      const user = userEvent.setup();
+      renderApp();
+      await openAllContent(user);
+      await screen.findByText("示例 Live 名称 1");
+
+      await act(async () => {
+        observerCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+      });
+      await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(2, 20));
+
+      const sourceState = window.history.state;
+      await user.click(screen.getByText("示例 Live 名称 1"));
+      await screen.findByRole("button", { name: "返回" });
+      await act(async () => {
+        secondPage.resolve(makeResponse({ page: 2, pageSize: 20, total: 60, totalPages: 3, itemCount: 20, startId: 21 }));
+      });
+      await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(2, 20));
+
+      await act(async () => {
+        window.history.replaceState(sourceState, "", window.location.href);
+        fireEvent.popState(window, { state: sourceState });
+      });
+      await screen.findByText("示例 Live 名称 21");
+
+      await act(async () => {
+        observerCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+      });
+      await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(3, 20));
+      await screen.findByText("示例 Live 名称 41");
+    } finally {
+      if (originalObserver) {
+        Object.defineProperty(globalThis, "IntersectionObserver", originalObserver);
+      }
+    }
   });
 
   test("首页搜索会进入搜索结果，并可从结果打开详情", async () => {

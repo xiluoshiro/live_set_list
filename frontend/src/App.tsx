@@ -63,11 +63,19 @@ type AppHistoryState = {
   detailFallback?: LiveDetailFallback;
   searchQuery?: string;
   catalogBandId?: number | null;
+  listState?: {
+    page: number;
+    cardPage: number;
+    scrollY: number;
+  };
 };
 type ListSnapshot = {
   items: LiveRow[];
   total: number;
   totalPages: number;
+};
+type CardListSession = ListSnapshot & {
+  cardPage: number;
 };
 
 function getNextThemeMode(mode: ThemeMode): ThemeMode {
@@ -188,6 +196,10 @@ function App() {
   const listSnapshotsRef = useRef<Record<string, ListSnapshot>>({});
   const favoritesReconcileGateRef = useRef(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const cardSessionsRef = useRef<Record<string, CardListSession>>({});
+  const activeCardSessionKeyRef = useRef<string | null>(null);
+  const cardLoadInFlightRef = useRef(false);
+  const pendingScrollRestoreRef = useRef<number | null>(null);
   const listEnabled = (tab === "all" || tab === "favorites") && !auth.isLoading;
   const canUseFavoriteFeatures = auth.isAuthenticated;
   const canUseConsoleFeatures = auth.isAuthenticated && canAccessConsole(auth.user?.role);
@@ -199,6 +211,20 @@ function App() {
     { key: "console", label: "控制台", visible: canUseConsoleFeatures },
   ];
 
+  const getCardSessionKey = (listTab: ListTabKey) => buildListSnapshotKey(listTab, 1, pageSize);
+
+  const captureCurrentListState = (state: AppHistoryState): AppHistoryState => {
+    if (tab !== "all" && tab !== "favorites") return state;
+    return {
+      ...state,
+      listState: {
+        page,
+        cardPage,
+        scrollY: window.scrollY,
+      },
+    };
+  };
+
   const applyHistoryState = (state: AppHistoryState) => {
     const requestedTab = state.tab;
     const allowedTab = requestedTab === "favorites" && !canUseFavoriteFeatures
@@ -206,7 +232,6 @@ function App() {
       : requestedTab === "console" && !canUseConsoleFeatures
         ? "home"
         : requestedTab;
-    setPage(1);
     setUserMenuOpen(false);
     if (allowedTab === "detail" && state.detailLiveId && state.detailFallback && state.previousTab) {
       setDetailLiveId(state.detailLiveId);
@@ -217,12 +242,26 @@ function App() {
     }
     setDetailLiveId(null);
     setDetailFallback(null);
-    setTab(allowedTab === "detail" ? "home" : allowedTab);
+    const nextTab = allowedTab === "detail" ? "home" : allowedTab;
+    if (nextTab === "all" || nextTab === "favorites") {
+      const restoredPage = state.listState?.page ?? 1;
+      const restoredCardPage = state.listState?.cardPage ?? 1;
+      setPage(restoredPage);
+      setCardPage(restoredCardPage);
+      pendingScrollRestoreRef.current = state.listState?.scrollY ?? null;
+    } else {
+      setPage(1);
+      pendingScrollRestoreRef.current = null;
+    }
+    setTab(nextTab);
     if (state.searchQuery !== undefined) setSearchQuery(state.searchQuery);
     if (state.catalogBandId !== undefined) setSelectedCatalogBandId(state.catalogBandId);
   };
 
   const pushHistoryState = (state: AppHistoryState) => {
+    if (isAppHistoryState(window.history.state)) {
+      window.history.replaceState(captureCurrentListState(window.history.state), "", window.location.href);
+    }
     window.history.pushState(state, "", window.location.href);
     applyHistoryState(state);
   };
@@ -295,6 +334,7 @@ function App() {
   useEffect(() => {
     // 登录用户切换或匿名/登录状态变化后，之前页签快照不再可信，直接清空。
     listSnapshotsRef.current = {};
+    cardSessionsRef.current = {};
   }, [auth.isAuthenticated, auth.user?.id]);
 
   useEffect(() => {
@@ -303,6 +343,11 @@ function App() {
     Object.keys(currentSnapshots).forEach((key) => {
       if (key.startsWith("favorites:")) {
         delete currentSnapshots[key];
+      }
+    });
+    Object.keys(cardSessionsRef.current).forEach((key) => {
+      if (key.startsWith("favorites:")) {
+        delete cardSessionsRef.current[key];
       }
     });
     clearMyFavoriteLivesCache();
@@ -464,15 +509,33 @@ function App() {
     let canceled = false;
     const requestedSnapshotKey = buildListSnapshotKey(tab, page, pageSize);
     const cachedSnapshot = listSnapshotsRef.current[requestedSnapshotKey];
+    const cardSessionKey = getCardSessionKey(tab as ListTabKey);
+    const cachedCardSession = viewMode === "cards" ? cardSessionsRef.current[cardSessionKey] : undefined;
 
     // 列表加载状态机：优先命中页快照/收藏缓存，再回源；切 tab 时先清空旧列表避免残影。
     const fetchLives = async () => {
+      if (cachedCardSession && cachedCardSession.cardPage >= cardPage) {
+        setItems(cachedCardSession.items);
+        setServerTotal(cachedCardSession.total);
+        setServerTotalPages(cachedCardSession.totalPages);
+        setCardPage(cachedCardSession.cardPage);
+        setLoadError(null);
+        setLoading(false);
+        return;
+      }
       if (cachedSnapshot) {
         setItems(cachedSnapshot.items);
         setServerTotal(cachedSnapshot.total);
         setServerTotalPages(cachedSnapshot.totalPages);
         setLoadError(null);
         setLoading(false);
+        if (viewMode === "cards") {
+          cardSessionsRef.current[cardSessionKey] = {
+            ...cachedSnapshot,
+            cardPage: page,
+          };
+          setCardPage(page);
+        }
         return;
       }
       const cachedFavoritePage =
@@ -489,6 +552,15 @@ function App() {
           total: cachedFavoritePage.pagination.total,
           totalPages: cachedFavoritePage.pagination.total_pages,
         };
+        if (viewMode === "cards") {
+          cardSessionsRef.current[cardSessionKey] = {
+            items: mappedItems,
+            total: cachedFavoritePage.pagination.total,
+            totalPages: cachedFavoritePage.pagination.total_pages,
+            cardPage: cachedFavoritePage.pagination.page,
+          };
+          setCardPage(cachedFavoritePage.pagination.page);
+        }
         if (cachedFavoritePage.pagination.page !== page) {
           setPage(cachedFavoritePage.pagination.page);
         }
@@ -512,6 +584,15 @@ function App() {
           total: data.pagination.total,
           totalPages: data.pagination.total_pages,
         };
+        if (viewMode === "cards") {
+          cardSessionsRef.current[cardSessionKey] = {
+            items: mappedItems,
+            total: data.pagination.total,
+            totalPages: data.pagination.total_pages,
+            cardPage: canonicalPage,
+          };
+          setCardPage(canonicalPage);
+        }
         if (canonicalSnapshotKey !== requestedSnapshotKey) {
           delete listSnapshotsRef.current[requestedSnapshotKey];
         }
@@ -548,7 +629,7 @@ function App() {
     return () => {
       canceled = true;
     };
-  }, [canUseFavoriteFeatures, listEnabled, page, pageSize, tab]);
+  }, [canUseFavoriteFeatures, listEnabled, page, pageSize, tab, viewMode]);
 
   useEffect(() => {
     if (tab !== "all" && tab !== "favorites") return;
@@ -631,6 +712,7 @@ function App() {
 
   const handleConsoleLiveDataChanged = () => {
     listSnapshotsRef.current = {};
+    cardSessionsRef.current = {};
     clearLivesCache();
     clearMyFavoriteLivesCache();
     setHomeRecentRows([]);
@@ -716,23 +798,63 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    activeCardSessionKeyRef.current = viewMode === "cards" && (tab === "all" || tab === "favorites")
+      ? getCardSessionKey(tab)
+      : null;
+  }, [pageSize, tab, viewMode]);
+
+  useEffect(() => {
+    if (pendingScrollRestoreRef.current === null) return;
+    if (tab !== "all" && tab !== "favorites") return;
+    if (loading || items.length === 0) return;
+    const scrollY = pendingScrollRestoreRef.current;
+    pendingScrollRestoreRef.current = null;
+    if (scrollY <= 0) return;
+    const frameId = window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    return () => window.cancelAnimationFrame(frameId);
+  }, [items.length, loading, tab]);
+
   const loadMoreCards = useCallback(async () => {
-    if (cardLoadingMore || cardPage >= serverTotalPages) return;
-    const nextPage = cardPage + 1;
+    if (tab !== "all" && tab !== "favorites") return;
+    const sessionKey = getCardSessionKey(tab);
+    const session = cardSessionsRef.current[sessionKey];
+    const loadedCardPage = session?.cardPage ?? cardPage;
+    const totalPages = session?.totalPages ?? serverTotalPages;
+    if (cardLoadingMore || cardLoadInFlightRef.current || loadedCardPage >= totalPages) return;
+    const nextPage = loadedCardPage + 1;
+    cardLoadInFlightRef.current = true;
     setCardLoadingMore(true);
     try {
       const data = tab === "favorites"
         ? await getMyFavoriteLives(nextPage, pageSize)
         : await getLives(nextPage, pageSize);
       const mappedItems = data.items.map(toLiveRow);
-      setItems((prev) => [...prev, ...mappedItems]);
-      setCardPage(nextPage);
+      const currentSession = cardSessionsRef.current[sessionKey];
+      if (currentSession && currentSession.cardPage >= data.pagination.page) return;
+      const baseItems = currentSession?.items ?? items;
+      const existingIds = new Set(baseItems.map((item) => item.liveId));
+      const mergedItems = [...baseItems, ...mappedItems.filter((item) => !existingIds.has(item.liveId))];
+      const nextSession: CardListSession = {
+        items: mergedItems,
+        total: data.pagination.total,
+        totalPages: data.pagination.total_pages,
+        cardPage: data.pagination.page,
+      };
+      cardSessionsRef.current[sessionKey] = nextSession;
+      if (activeCardSessionKeyRef.current === sessionKey) {
+        setItems(mergedItems);
+        setServerTotal(nextSession.total);
+        setServerTotalPages(nextSession.totalPages);
+        setCardPage(nextSession.cardPage);
+      }
     } catch {
       // load more 失败不覆盖已有数据
     } finally {
+      cardLoadInFlightRef.current = false;
       setCardLoadingMore(false);
     }
-  }, [cardLoadingMore, cardPage, serverTotalPages, pageSize, tab]);
+  }, [cardLoadingMore, cardPage, items, pageSize, serverTotalPages, tab]);
 
   useEffect(() => {
     if (viewMode !== "cards") return;
@@ -749,10 +871,6 @@ function App() {
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [viewMode, loadMoreCards]);
-
-  useEffect(() => {
-    setCardPage(1);
-  }, [tab]);
 
   const showFavoriteColumn = tab === "all" && auth.isAuthenticated;
 
