@@ -87,12 +87,26 @@ describe("parseSetlistText", () => {
     ]);
   });
 
+  // 测试点：M2/M3 即使触发起始异常提示，应用草稿也必须保留原始 sub 与 abs 编号。
   test("保留非 1 起始的连续原始段内编号", () => {
-    // 测试点：M2/M3 即使触发起始异常提示，应用草稿也必须保留原始 sub 编号。
     const result = parseSetlistText("<Roselia>\nM2. Song A\nM3. Song B", bands, 1, 1);
 
     expect(result.rows.map((row) => row.sub_order)).toEqual([2, 3]);
+    expect(result.rows.map((row) => row.absolute_order)).toEqual([2, 3]);
     expect(result.warnings.map((warning) => warning.message)).toContain("M 段落编号不从 1 开始，请人工确认。");
+  });
+
+  // 测试点：跨段跳号时 abs 应累加此前段的最大 sub，而不是按表格行号重新顺排。
+  test("跨段跳号时按此前段最大编号计算 absolute order", () => {
+    const result = parseSetlistText(
+      "<Roselia>\nOP2. Opening A\nOP3. Opening B\nM5. Main A\nM8. Main B",
+      bands,
+      1,
+      1,
+    );
+
+    expect(result.rows.map((row) => row.sub_order)).toEqual([2, 3, 5, 8]);
+    expect(result.rows.map((row) => row.absolute_order)).toEqual([2, 3, 8, 11]);
   });
 
   test("支持 OP/ED/WEN 段类型并标记 segment_start_type", () => {
