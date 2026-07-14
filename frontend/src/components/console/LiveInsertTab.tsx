@@ -71,6 +71,8 @@ type LiveInsertTabProps = {
   ) => void;
   onRemoveOtherMemberEntry: (rowKey: number, entryId: number) => void;
   onAddOtherMemberEntry: (rowKey: number) => void;
+  otherMemberValueSeparator: string;
+  onOtherMemberValueSeparatorChange: (value: string) => void;
   renderSongAdminSection: () => ReactNode;
 };
 
@@ -135,6 +137,8 @@ export function LiveInsertTab({
   onUpdateOtherMemberEntry,
   onRemoveOtherMemberEntry,
   onAddOtherMemberEntry,
+  otherMemberValueSeparator,
+  onOtherMemberValueSeparatorChange,
   renderSongAdminSection,
  }: LiveInsertTabProps) {
   const [pasteConfirmOpen, setPasteConfirmOpen] = useState(false);
@@ -612,6 +616,17 @@ export function LiveInsertTab({
           style={{ top: otherMemberMenuPos.top, left: otherMemberMenuPos.left, width: otherMemberMenuPos.width }}
         >
           <div className="other-member-editor">
+            <label className="other-member-separator">
+              值分隔符
+              <input
+                aria-label="other_member 值分隔符"
+                value={otherMemberValueSeparator}
+                onChange={(event) => onOtherMemberValueSeparatorChange(event.target.value)}
+                placeholder=","
+                maxLength={8}
+              />
+            </label>
+            <p className="other-member-separator-hint">同一 key 的多项 value 按此分隔符拆分。</p>
             {editingOtherRow.other_member.map((entry) => (
               <div key={entry.entry_id} className="other-member-row">
                 <input

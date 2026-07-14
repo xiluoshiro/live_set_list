@@ -152,7 +152,7 @@ class ConsoleLiveSetlistRowRequest(BaseModel):
     sub_order: int = Field(..., ge=1, description="Sub-order within the segment")
     is_short: bool = Field(default=False, description="Whether the row is a short version")
     band_member: dict[str, list[str] | str] = Field(..., description="Band member payload")
-    other_member: dict[str, list[str] | str] | None = Field(default=None, description="Other member payload")
+    other_member: dict[str, list[str] | str | None] | None = Field(default=None, description="Other member payload")
     comment: str | None = Field(default=None, max_length=1024, description="Optional row comment")
 
     @field_validator("segment_type")
