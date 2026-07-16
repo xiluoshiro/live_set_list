@@ -77,7 +77,7 @@ python scripts/export_openapi.py
 python scripts/build_release.py --version 2026-07-10-001
 ```
 
-脚本会先在 `frontend/` 执行 `npm run build`；构建失败则不会创建发布包。发布包只包含运行所需的后端、前端构建产物、Flyway、生产 infra 模板和备份恢复入口，不包含 `.git`、`.codex`、`.agents`、`old`、`node_modules`、`.venv`、真实 env、日志或缓存。
+脚本会先在 `frontend/` 执行 `npm run build`；构建失败则不会创建发布包。发布包只包含运行所需的后端、前端构建产物、Flyway SQL/公开模板、生产 infra 模板和备份恢复入口，不包含 `.git`、`.codex`、`.agents`、`old`、`node_modules`、`.venv`、`backend/db/flyway/flyway.toml`、运行时 env、`recovery/.runtime`、日志或缓存。敏感路径会在归档收集阶段显式拒绝，即使它们位于允许递归收集的目录中。
 
 生产部署模板见：
 

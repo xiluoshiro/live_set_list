@@ -198,7 +198,7 @@ PostgreSQL: private network only
 - [ ] 统一生产日志输出策略：控制台、文件、轮转、采集目标。
 - [ ] 为后端、前端静态服务、数据库、磁盘空间、证书过期设置监控。
 - [ ] 增加 staging 环境，先在 staging 完成真实域名、HTTPS、迁移、备份演练。
-- [ ] 实现两阶段 migration 发布：`production-migration` 审批、服务器端 migration attestation、受 attestation 约束的应用切换。
+- [ ] 按 runbook 中的实施方案实现两阶段 migration 发布：服务器端按 `current` 分类、`production-migration` 审批或 `workflow_dispatch` 人工门、root-only migration attestation、受 attestation 约束的应用切换。
 - [ ] 对公共搜索、列表、详情批量接口增加流量保护策略。
 - [x] 补充生产部署 runbook、`infra/production/README.md` 和 GitHub Actions 配置说明。
 - [ ] 补充最小 E2E 冒烟：打开首页、搜索、详情、登录、收藏、控制台权限拒绝/允许。

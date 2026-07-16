@@ -142,32 +142,73 @@ sudo install -o root -g root -m 755 \
 
 迁移 release 已完成手工切换，后端数据库 health 通过。后续 SQL 不变的版本可继续使用现有自动发布路径。
 
-## 后续计划：两阶段 migration 发布
+## 后续方案：Flyway 变化时的两阶段自动发布
 
-当前自动发布继续拒绝 SQL 差异。迁移发布改为单独的两阶段流程，不让普通 tag 在未经数据库审批时执行 schema 变更。
+本节是实施方案，当前代码尚未实现。现有自动发布继续拒绝 SQL 差异，直到以下服务器端脚本、审批门和 attestation 校验全部落地；不能先删除现有拒绝逻辑再逐步补安全措施。
 
-### 阶段 A：受保护的 migration
+### 设计原则
 
-1. tag CI 构建候选 release 并完成隔离 PostgreSQL、Flyway、`functional` 检查。
-2. `migrate-production` job 绑定独立的 `production-migration` Environment，要求额外人工审批。
-3. 服务器端 `livesetlist-migrate` 脚本校验归档 SHA-256，创建备份，将 release 解压到 staging 目录，但不更新 `current`。
-4. 该脚本用 `python-dotenv(interpolate=False)` 读取生产 env，执行 `info -> migrate -> validate -> info`，并确认目标版本全部为 `Success`。
-5. 成功后写入 root-only attestation，至少记录 release version、archive SHA-256、Flyway 最终版本、执行时间和备份文件路径。
+1. 以生产 VM 的 `/opt/livesetlist/current/backend/db/flyway/sql` 为比较基准，不使用“上一个 Git tag”推断生产状态。生产可能跳过版本、手工回滚或发生迁移 release 手工切换，Git 历史不能替代服务器事实。
+2. 同一个 tag 只构建一次归档。分类、迁移和应用切换始终使用同一 version 与 SHA-256，不在 VM 重新构建。
+3. 数据库凭据只保留在 `/etc/livesetlist`。GitHub 只持有受限 SSH 凭据，不读取生产数据库密码。
+4. migration 先执行、应用后切换，因此 migration 必须遵守 expand/contract：迁移完成后旧应用仍应可运行。删除列、改名或收紧约束等破坏性变更必须拆到后续 contract release。
+5. migration 失败绝不自动恢复数据库；应用切换失败只回滚 `current` 符号链接，不回滚 schema。
 
-阶段 A 绝不自动数据库回滚。migration 失败时停止并保留日志；是否恢复备份由人工判断和恢复 runbook 决定。
+### 流水线状态机
 
-### 阶段 B：应用切换
+```text
+build-and-verify
+  -> prepare-production
+       -> app-only -------> deploy-production -> smoke
+       -> migration-needed
+            -> migrate-production -> migration attestation
+            -> deploy-production  -> smoke
+```
 
-1. `deploy-production` 继续需要 `production` Environment 审批。
-2. 对 SQL 无变化的 release，沿用现有发布脚本。
-3. 对 SQL 有变化的 release，发布脚本必须验证阶段 A 的 attestation 与版本和 SHA-256 完全匹配，且数据库 Flyway version 已达到 attestation 记录，才允许原子切换 `current`。
-4. 切换后执行后端就绪等待、数据库 health、备份和公网 smoke test；失败只回滚应用符号链接，不回滚 schema。
+所有生产阶段使用同一个 `livesetlist-production` concurrency group，禁止两个 release 交叉 prepare、migrate 或 deploy。
 
-实施前置条件：先有 staging 迁移演练、固定 Flyway 镜像版本、生产 env 安全读取、可恢复备份和明确的扩展/收缩 migration 规范。
+### 1. 构建和候选包准备
+
+1. tag CI 完成隔离 PostgreSQL、Flyway migration、`functional`、前端构建、白名单归档和 SHA-256。
+2. `prepare-production` 将归档上传到 VM 后调用 root-owned `livesetlist-prepare-release <version> <sha256>`。
+3. prepare 脚本重复校验 SHA-256、归档根目录、路径穿越和链接文件，将候选包解压到 root-only staging 目录。
+4. 脚本比较候选包和 `current` 的完整 Flyway SQL 文件树，输出结构化分类：`app-only` 或 `migration-needed`。分类必须来自服务器比较结果，供后续 job 使用。
+5. `app-only` 继续进入现有应用部署；`migration-needed` 不允许直接切换，必须进入 migration 审批门。
+
+### 2. 阶段 A：受保护的 migration
+
+1. `migrate-production` job 绑定独立的 `production-migration` Environment，并要求与普通应用发布分离的人工确认。若当前 GitHub 套餐不支持私有仓库所需的 Environment reviewer，则用带 version、SHA-256 输入的 `workflow_dispatch` 作为显式人工门，凭据使用 repository secrets；普通 tag 不得直接执行生产 migration。
+2. job 调用 root-owned `livesetlist-migrate <version> <sha256>`。脚本只接受已经 prepare 且分类为 `migration-needed` 的候选包。
+3. 脚本先执行生产备份并用 `pg_restore -l` 验证可读性，记录备份路径和备份文件 SHA-256；备份失败立即停止。
+4. Flyway 镜像固定到明确版本或 digest，不能继续使用 `redgate/flyway:latest`。生产 env 由 Python 使用 `python-dotenv(interpolate=False)` 读取，再通过子进程环境传给 Docker/Flyway。
+5. 执行顺序固定为 `info -> migrate -> validate -> info`，优先使用 Flyway 结构化输出记录迁移前版本、已应用 migration 和最终版本，不解析易变的人类可读文本。
+6. 仅在所有步骤成功后写入 `/var/lib/livesetlist/deploy-attestations/<version>.json`，文件必须为 `root:root`、`0600`。至少记录：version、归档 SHA-256、新旧 SQL 树 SHA-256、迁移前后 Flyway version、已应用 migration、执行时间、备份路径与备份 SHA-256。
+7. 同一 version 重试时，若已有 attestation，只有 version、归档 SHA-256、SQL 树 SHA-256 和数据库最终版本全部一致才可视为幂等成功；任一项不同都必须停止并人工处理。
+
+阶段 A 完成后仍不更新 `current`。migration 失败时保留 staging、备份和日志，由人工决定修复 migration 还是按恢复 runbook 还原数据库。
+
+### 3. 阶段 B：受 attestation 约束的应用切换
+
+1. `deploy-production` 保留独立人工审批。对 `app-only` release 沿用当前备份与原子切换流程。
+2. 对 `migration-needed` release，扩展后的 `livesetlist-deploy` 必须读取 root-only attestation，并验证 version、归档 SHA-256、SQL 树 SHA-256 全部匹配。
+3. 部署脚本再次查询生产 Flyway version，确认不低于 attestation 的最终版本；缺少 attestation、字段不匹配或数据库版本不符时全部 fail closed。
+4. 验证通过后才创建 venv、安装依赖、安装 systemd unit、原子切换 `current`，然后执行后端就绪等待、数据库 health、发布后备份和公网 smoke test。
+5. 应用启动或 smoke 失败时恢复上一版 `current`，但保留已经迁移的 schema。旧版应用能否继续工作由 expand/contract 兼容要求保证。
+6. 发布成功后把 attestation 标记为 `deployed`，记录切换前后 release、Git commit/tag 和 GitHub run id，形成服务器端部署审计。
+
+### 4. 实施拆分与验收
+
+1. 新增 `infra/production/livesetlist-prepare-release` 和 `infra/production/livesetlist-migrate`，并将其作为 root-owned 固定入口安装到 `/usr/local/sbin`；release 内的模板不能自动覆盖已安装入口。
+2. 扩展 `infra/production/livesetlist-deploy`：保留 app-only SQL 相同路径，新增 attestation 校验路径，任何未知状态均拒绝发布。
+3. 扩展 `.github/workflows/release.yml`：增加 prepare 分类输出、migration 条件 job、统一 concurrency，以及 GitHub 套餐不支持 Environment reviewer 时的 `workflow_dispatch` 入口。
+4. 先在独立 staging 数据库验证 app-only、migration 成功、migration 失败、attestation 篡改、重复执行、应用切换失败六类场景。
+5. 生产启用前固定 Flyway 版本，完成备份恢复演练，并确认现有应用能在迁移后 schema 上继续运行。
+
+完成标准：普通 release 仍只需一次应用审批；migration release 必须经过 migration 人工门、生成可验证 attestation，再经应用切换审批，且任何失败都不会自动执行数据库回滚。
 
 ## 首次环境与数据迁移要点
 
-首次部署使用白名单发布包和 PostgreSQL dump，而不是上传整个工作区。发布包不含 `.git`、`.venv`、`node_modules`、真实 env、日志或 dump。
+首次部署使用白名单发布包和 PostgreSQL dump，而不是上传整个工作区。发布包不含 `.git`、`.venv`、`node_modules`、真实 env、`backend/db/flyway/flyway.toml`、`recovery/.runtime`、日志或 dump。
 
 PostgreSQL 角色密码保存在已初始化 volume 内；即使 `/etc/livesetlist/backend.env` 与 `postgres.env` 互相一致，数据库内部角色仍可能保留旧密码。发生认证失败时，应进入容器使用 `psql` 检查并修正角色，而不是只反复修改 env 文件。
 
@@ -199,6 +240,7 @@ curl.exe -I <PUBLIC_BASE_URL>/openapi.json
 | 现象 | 原因 | 固化处理 |
 | --- | --- | --- |
 | CI 找不到 `flyway.toml` | 本地配置被 Git 忽略 | CI 从 `flyway.toml.example` 生成临时配置 |
+| 发布包包含本机 Flyway 配置或恢复沙箱 | 出包脚本递归收集白名单目录时未排除被 Git 忽略的 runtime 文件 | 显式排除 `flyway.toml`、运行时 env 和 `.runtime`，并用归档级测试校验 |
 | SHA-256 校验找不到归档 | 校验文件记录了构建机的 `dist-release/` 路径 | 在 `dist-release` 内生成校验文件，只记录文件名 |
 | production job 被拒绝 | Environment 将 `v*` 配成 Branch 规则 | 使用 Tag 类型的 `v*` 规则 |
 | Flyway 命令读取 env 报 `unbound variable` 或 Compose 提示变量未设置 | 用 Bash `source` 或 Compose 读取含 `$` 的密码 | 用 `python-dotenv(interpolate=False)` 读取并由 Python 将变量传给 Docker |
