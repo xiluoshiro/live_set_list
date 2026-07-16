@@ -27,9 +27,15 @@ export function LoginDialog({ open, loading, error, onClose, onSubmit }: LoginDi
 
   return (
     <div className="modal-mask" onClick={onClose}>
-      <div className="modal login-modal" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="modal login-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="login-dialog-title"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="modal-head">
-          <h2>登录</h2>
+          <h2 id="login-dialog-title">登录</h2>
           <div className="modal-actions">
             <button
               type="button"

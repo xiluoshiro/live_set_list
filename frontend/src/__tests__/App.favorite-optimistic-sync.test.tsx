@@ -312,7 +312,7 @@ describe("App optimistic favorite sync", () => {
     await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
     expect(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "取消收藏" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "我的收藏" }));
+    await user.click(screen.getByRole("button", { name: "仅收藏" }));
     await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
     await waitFor(() => expect(getAuthMeMock).toHaveBeenCalledTimes(2));
 
@@ -388,12 +388,11 @@ describe("App optimistic favorite sync", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument());
     await openAllContent(user);
     await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
-    await user.click(screen.getByRole("button", { name: "我的收藏" }));
+    await user.click(screen.getByRole("button", { name: "仅收藏" }));
 
-    await waitFor(() => expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "仅收藏" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "登录" }).length).toBeGreaterThan(0);
   });
