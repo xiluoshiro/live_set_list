@@ -235,6 +235,7 @@ def _prepare_migration_candidate(tmp_path, monkeypatch):
     monkeypatch.setattr(release_manager, "STATE_ROOT", state_root)
     monkeypatch.setattr(release_manager, "ATTESTATION_ROOT", attestation_root)
     monkeypatch.setattr(release_manager, "CURRENT_LINK", current)
+    monkeypatch.setattr(release_manager.os, "chown", lambda *args, **kwargs: None, raising=False)
 
     archive_sha256 = release_manager.sha256_file(archive)
     release_type = release_manager.prepare_release(version, archive_sha256)
