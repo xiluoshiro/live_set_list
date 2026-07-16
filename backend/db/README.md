@@ -32,7 +32,7 @@ python scripts/run_checks.py functional
 
 5. 不要修改已执行过的 `V...sql`；如需修正，新增下一个版本文件
 
-生产自动发布会比较新旧 `backend/db/flyway/sql`，发现差异即拒绝切换应用版本。带 migration 的发布必须先完成独立备份、生产 `validate/migrate` 和验收；不要依靠应用回滚撤销 schema。实际流程见 [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md)。
+生产 prepare 会比较候选包和 VM `current` 的 `backend/db/flyway/sql`。带 migration 的发布必须通过独立 `migrate` 人工阶段完成备份、固定版本 Flyway 和 root-only attestation，随后才可在第二个 `deploy` 阶段切换应用；不要依靠应用回滚撤销 schema。VM 启用步骤和应急手工流程见 [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md)。
 
 ## 恢复测试库
 

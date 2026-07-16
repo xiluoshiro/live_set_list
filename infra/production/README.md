@@ -79,15 +79,32 @@ sudo install -o root -g root -m 755 \
   /usr/local/sbin/livesetlist-deploy
 ```
 
-Create a separate deploy-only SSH user for GitHub Actions. Its sudoers entry must allow only this script, not a general root shell:
+Create a separate deploy-only SSH user for GitHub Actions. Its sudoers entry must allow only the release prepare/migrate entrypoints and deploy script, not a general root shell:
 
 ```text
-livesetlist-deploy ALL=(root) NOPASSWD: /usr/local/sbin/livesetlist-deploy *
+Cmnd_Alias LIVESETLIST_PREPARE = /usr/local/sbin/livesetlist-release-manager prepare *
+Cmnd_Alias LIVESETLIST_MIGRATE = /usr/local/sbin/livesetlist-release-manager migrate *
+Cmnd_Alias LIVESETLIST_DEPLOY = /usr/local/sbin/livesetlist-deploy *
+livesetlist-deploy ALL=(root) NOPASSWD: LIVESETLIST_PREPARE, LIVESETLIST_MIGRATE, LIVESETLIST_DEPLOY
 ```
 
-Configure the GitHub `production` Environment with `DEPLOY_SSH_PRIVATE_KEY` and `DEPLOY_KNOWN_HOSTS` secrets, plus `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, and `PUBLIC_BASE_URL` variables. Keep database and application env files only under `/etc/livesetlist` on the VM.
+Configure `DEPLOY_SSH_PRIVATE_KEY` and `DEPLOY_KNOWN_HOSTS` as repository secrets because the prepare job intentionally runs before any Environment gate. Configure `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, and `PUBLIC_BASE_URL` as repository variables. Keep the `production` Environment and add `production-migration`; required reviewers are optional extra protection where the GitHub plan supports them. Keep database and application env files only under `/etc/livesetlist` on the VM.
 
-The script rejects any release whose Flyway SQL differs from the active release. Production V9 -> V11 was completed manually with backup, safe env parsing, `migrate`, `validate`, and a hand-controlled app switch. The next automation step is a protected two-stage migration workflow: migration attestation first, app switch only after that attestation matches the archive SHA-256. The installed `/usr/local/sbin/livesetlist-deploy` is intentionally outside release directories; after changing the template, an administrator must install the new script there before the next automated release.
+The repository now contains a protected two-stage migration workflow. `release_manager.py prepare` classifies the exact archive against the VM's active Flyway SQL. App-only releases continue through the tag workflow; migration releases stop until two separate `workflow_dispatch` runs perform `migrate` and then `deploy`. Migration uses pinned `redgate/flyway:12.11.0`, creates a verified backup, writes a root-only attestation, and never automatically restores the database. `livesetlist-deploy` accepts a migration release only when the attestation, archive SHA-256, SQL tree hashes, and live Flyway version match.
+
+Before enabling the new workflows, install both root-owned entrypoints and create their state directories:
+
+```bash
+sudo install -o root -g root -m 755 /tmp/livesetlist-release-manager.next /usr/local/sbin/livesetlist-release-manager
+sudo install -o root -g root -m 755 /tmp/livesetlist-deploy.next /usr/local/sbin/livesetlist-deploy
+sudo install -d -o root -g root -m 700 /opt/livesetlist/staging
+sudo install -d -o root -g root -m 700 /var/lib/livesetlist/release-state
+sudo install -d -o root -g root -m 700 /var/lib/livesetlist/deploy-attestations
+sudo install -d -o root -g root -m 700 /var/lib/livesetlist/release-archives
+sudo docker pull redgate/flyway:12.11.0
+```
+
+The exact sudoers rules, GitHub repository secrets/variables, activation order, and verification commands are in [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md). The installed `/usr/local/sbin` files are intentionally outside release directories and must be updated by an administrator before a workflow that depends on a new entrypoint is enabled.
 
 ## Admin Bootstrap
 

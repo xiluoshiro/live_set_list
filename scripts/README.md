@@ -86,9 +86,9 @@ python scripts/build_release.py --version 2026-07-10-001
 
 ### 当前自动发布状态
 
-常规生产发布不需要在本机手工上传 `.tar.gz`。推送格式为 `vYYYY-MM-DD-NNN` 的 tag 会触发 `.github/workflows/release.yml`：隔离 PostgreSQL CI、`functional`、前端构建、白名单归档、SHA-256、`production` 审批和 SSH 部署已验证。
+常规生产发布不需要在本机手工上传 `.tar.gz`。推送格式为 `vYYYY-MM-DD-NNN` 的 tag 会触发 `.github/workflows/release.yml`：隔离 PostgreSQL CI、`functional`、前端构建、白名单归档、SHA-256，并在 VM 按当前 SQL 分类。app-only release 继续进入 `production` 部署；migration release 停止并等待 `.github/workflows/migration-release.yml` 的两次手工阶段。
 
-`build_release.py` 仍用于首次 VM bootstrap、离线交付或手工排障。包含 `backend/db/flyway/sql` 变化的版本会被服务器端自动发布脚本拒绝，需先按 runbook 手工完成数据库迁移。
+`build_release.py` 仍用于首次 VM bootstrap、离线交付或手工排障。包含 `backend/db/flyway/sql` 变化的版本必须先运行 `phase=migrate` 生成服务器端 attestation，验收后再运行 `phase=deploy`；部署入口会拒绝缺少或不匹配 attestation 的 migration release。
 
 ## 数据库恢复
 

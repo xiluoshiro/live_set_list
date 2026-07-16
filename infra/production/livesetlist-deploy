@@ -6,6 +6,8 @@ readonly CURRENT_LINK=/opt/livesetlist/current
 readonly BACKEND_SERVICE=livesetlist-backend.service
 readonly BACKUP_SERVICE=livesetlist-backup.service
 readonly BACKUP_TIMER=livesetlist-backup.timer
+readonly RELEASE_MANAGER=/usr/local/sbin/livesetlist-release-manager
+readonly ARCHIVE_ROOT=/var/lib/livesetlist/release-archives
 
 die() {
   echo "livesetlist-deploy: $*" >&2
@@ -32,7 +34,7 @@ EXPECTED_SHA256=$2
 [[ "$EXPECTED_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]] || die "invalid SHA-256"
 
 readonly RELEASE_NAME="livesetlist-$VERSION"
-readonly ARCHIVE="/tmp/$RELEASE_NAME.tar.gz"
+readonly ARCHIVE="$ARCHIVE_ROOT/$RELEASE_NAME.tar.gz"
 readonly RELEASE_DIR="$RELEASE_ROOT/$RELEASE_NAME"
 
 [ -f "$ARCHIVE" ] || die "archive not found: $ARCHIVE"
@@ -50,16 +52,8 @@ if ! tar -tvzf "$ARCHIVE" | awk '$1 ~ /^[lh]/ { found = 1 } END { exit found }';
   die "archive contains links"
 fi
 
-if [ -e "$CURRENT_LINK/backend/db/flyway/sql" ]; then
-  staging_for_migrations="$(mktemp -d "$RELEASE_ROOT/.migration-check.XXXXXX")"
-  trap 'rm -rf "$staging_for_migrations"' EXIT
-  tar -xzf "$ARCHIVE" -C "$staging_for_migrations"
-  if ! diff -qr "$CURRENT_LINK/backend/db/flyway/sql" "$staging_for_migrations/$RELEASE_NAME/backend/db/flyway/sql" >/dev/null; then
-    die "Flyway SQL changed; run the migration through the manual production procedure first"
-  fi
-  rm -rf "$staging_for_migrations"
-  trap - EXIT
-fi
+[ -x "$RELEASE_MANAGER" ] || die "release manager is not installed: $RELEASE_MANAGER"
+"$RELEASE_MANAGER" verify-deploy "$VERSION" "$EXPECTED_SHA256"
 
 systemctl start "$BACKUP_SERVICE"
 
@@ -111,7 +105,7 @@ nginx -t
 systemctl reload nginx
 wait_for_backend
 systemctl start "$BACKUP_SERVICE"
-rm -f "$ARCHIVE"
+"$RELEASE_MANAGER" mark-deployed "$VERSION" "$EXPECTED_SHA256"
 trap - ERR
 
 echo "deployed $RELEASE_NAME"

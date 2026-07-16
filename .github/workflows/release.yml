@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: livesetlist-production
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Verify and package
@@ -88,7 +92,7 @@ jobs:
           docker run --rm --network host \
             -v "$GITHUB_WORKSPACE:/workspace" \
             -w /workspace \
-            redgate/flyway:latest \
+            redgate/flyway:12.11.0 \
             -configFiles=backend/db/flyway/flyway.toml migrate
 
       - name: Run functional checks
@@ -118,16 +122,12 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  deploy-production:
-    name: Deploy production
+  prepare-production:
+    name: Prepare production candidate
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: ${{ vars.PUBLIC_BASE_URL }}
-    concurrency:
-      group: livesetlist-production
-      cancel-in-progress: false
+    outputs:
+      release_type: ${{ steps.prepare.outputs.release_type }}
 
     steps:
       - uses: actions/download-artifact@v4
@@ -150,7 +150,8 @@ jobs:
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
-      - name: Upload and deploy release
+      - name: Upload and prepare release
+        id: prepare
         shell: bash
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
@@ -161,6 +162,46 @@ jobs:
         run: |
           archive="livesetlist-${VERSION}.tar.gz"
           scp -P "$DEPLOY_PORT" "release/$archive" "$DEPLOY_USER@$DEPLOY_HOST:/tmp/$archive"
+          prepare_output="$(ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "sudo /usr/local/sbin/livesetlist-release-manager prepare '$VERSION' '$SHA256'")"
+          printf '%s\n' "$prepare_output"
+          release_type="$(printf '%s\n' "$prepare_output" | sed -n 's/^release_type=//p')"
+          case "$release_type" in
+            app-only|migration-needed) ;;
+            *) echo "Unexpected release type: $release_type" >&2; exit 1 ;;
+          esac
+          echo "release_type=$release_type" >> "$GITHUB_OUTPUT"
+
+  deploy-production:
+    name: Deploy app-only release
+    needs: [build, prepare-production]
+    if: needs.prepare-production.outputs.release_type == 'app-only'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_BASE_URL }}
+
+    steps:
+      - name: Configure deployment SSH key
+        shell: bash
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Deploy prepared release
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA256: ${{ needs.build.outputs.sha256 }}
+        run: |
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
             "sudo /usr/local/sbin/livesetlist-deploy '$VERSION' '$SHA256'"
 
@@ -173,3 +214,27 @@ jobs:
           curl --fail --location --max-time 15 "$PUBLIC_BASE_URL/api/health/db"
           status="$(curl --silent --output /dev/null --write-out '%{http_code}' "$PUBLIC_BASE_URL/openapi.json")"
           test "$status" = "404"
+
+  migration-pending:
+    name: Migration release awaits two manual phases
+    needs: [build, prepare-production]
+    if: needs.prepare-production.outputs.release_type == 'migration-needed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write migration handoff
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA256: ${{ needs.build.outputs.sha256 }}
+        run: |
+          {
+            echo "## Production migration required"
+            echo
+            echo "The candidate is staged on the VM and has not changed the database or current release."
+            echo
+            echo "Run **Migration release control** twice:"
+            echo "1. phase=migrate, confirmation=MIGRATE"
+            echo "2. after validation, phase=deploy, confirmation=DEPLOY"
+            echo
+            echo "- version: \`$VERSION\`"
+            echo "- sha256: \`$SHA256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
