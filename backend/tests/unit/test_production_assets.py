@@ -353,6 +353,38 @@ def test_release_manager_rejects_archive_links(tmp_path):
         release_manager.validate_archive(archive, version, release_manager.sha256_file(archive))
 
 
+# 测试点：候选包解压不应依赖旧版 Python 尚未提供的 tarfile extraction filter。
+def test_release_manager_extracts_archive_without_extractall_filter(tmp_path, monkeypatch):
+    version = "2026-07-17-003"
+    source_root = tmp_path / "source" / f"livesetlist-{version}"
+    sql_file = source_root / "backend" / "db" / "flyway" / "sql" / "V12__example.sql"
+    sql_file.parent.mkdir(parents=True)
+    sql_file.write_text("select 12;", encoding="utf-8")
+    archive_path = tmp_path / f"livesetlist-{version}.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        archive.add(source_root, arcname=source_root.name)
+
+    monkeypatch.setattr(
+        tarfile.TarFile,
+        "extractall",
+        lambda *args, **kwargs: (_ for _ in ()).throw(TypeError("filter is unsupported")),
+    )
+    destination = tmp_path / "extracted"
+    destination.mkdir()
+
+    release_manager.extract_archive(archive_path, version, destination)
+
+    assert (
+        destination
+        / f"livesetlist-{version}"
+        / "backend"
+        / "db"
+        / "flyway"
+        / "sql"
+        / "V12__example.sql"
+    ).read_text(encoding="utf-8") == "select 12;"
+
+
 # 测试点：生产 env 解析必须原样保留密码中的美元符号和感叹号，不执行 shell 或 Compose 插值。
 def test_release_manager_loads_shell_significant_env_values_without_interpolation(tmp_path):
     env_file = tmp_path / "postgres.env"

@@ -111,20 +111,8 @@ def sql_tree_sha256(sql_dir: Path) -> str:
     return digest.hexdigest()
 
 
-def validate_archive(path: Path, version: str, expected_sha256: str) -> None:
-    if not path.is_file():
-        raise ReleaseError(f"archive not found: {path}")
-    actual_sha256 = sha256_file(path)
-    if actual_sha256 != expected_sha256:
-        raise ReleaseError("archive checksum mismatch")
-
+def validate_archive_members(members: list[tarfile.TarInfo], version: str) -> None:
     expected_root = release_name(version)
-    try:
-        with tarfile.open(path, "r:gz") as archive:
-            members = archive.getmembers()
-    except (tarfile.TarError, OSError) as exc:
-        raise ReleaseError(f"invalid release archive: {exc}") from exc
-
     if not members:
         raise ReleaseError("release archive is empty")
     if len(members) > MAX_ARCHIVE_MEMBER_COUNT:
@@ -143,9 +131,38 @@ def validate_archive(path: Path, version: str, expected_sha256: str) -> None:
             raise ReleaseError("release archive expands beyond the allowed size")
 
 
+def validate_archive(path: Path, version: str, expected_sha256: str) -> None:
+    if not path.is_file():
+        raise ReleaseError(f"archive not found: {path}")
+    actual_sha256 = sha256_file(path)
+    if actual_sha256 != expected_sha256:
+        raise ReleaseError("archive checksum mismatch")
+
+    try:
+        with tarfile.open(path, "r:gz") as archive:
+            validate_archive_members(archive.getmembers(), version)
+    except (tarfile.TarError, OSError) as exc:
+        raise ReleaseError(f"invalid release archive: {exc}") from exc
+
+
 def extract_archive(path: Path, version: str, destination: Path) -> None:
-    with tarfile.open(path, "r:gz") as archive:
-        archive.extractall(destination, filter="data")
+    try:
+        with tarfile.open(path, "r:gz") as archive:
+            members = archive.getmembers()
+            validate_archive_members(members, version)
+            for member in members:
+                target = destination.joinpath(*PurePosixPath(member.name).parts)
+                if member.isdir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                source = archive.extractfile(member)
+                if source is None:
+                    raise ReleaseError(f"cannot read archive entry: {member.name}")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with source, target.open("wb") as output:
+                    shutil.copyfileobj(source, output)
+    except (tarfile.TarError, OSError) as exc:
+        raise ReleaseError(f"cannot extract release archive: {exc}") from exc
     extracted_root = destination / release_name(version)
     if not extracted_root.is_dir():
         raise ReleaseError("archive root directory missing after extraction")
