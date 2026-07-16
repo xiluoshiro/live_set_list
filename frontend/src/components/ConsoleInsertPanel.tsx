@@ -29,7 +29,8 @@ import { SongAdminSection } from "./console/SongAdminSection";
 import {
   INITIAL_SETLIST_ROWS,
   LIVE_TYPE_OPTIONS,
-  TIMEZONE_OPTIONS,
+  TIMEZONE_HOUR_OPTIONS,
+  TIMEZONE_MINUTE_SUFFIXES,
   formatLiveType,
 } from "./console/constants";
 import {
@@ -217,6 +218,16 @@ const DEFAULT_LIVE_OPENING_TIME = "18:00";
 const DEFAULT_LIVE_START_TIME = "19:00";
 const DEFAULT_LIVE_TIMEZONE = "+09:00";
 
+function getTimezoneHourValue(timezone: string): string {
+  return `${timezone[0]}${Number(timezone.slice(1, 3))}`;
+}
+
+function buildTimezoneOffset(hourValue: string, minuteSuffix: string): string {
+  const hour = Number(hourValue);
+  const sign = hour < 0 ? "-" : "+";
+  return `${sign}${String(Math.abs(hour)).padStart(2, "0")}${minuteSuffix}`;
+}
+
 function getTodayDateInputValue(): string {
   const today = new Date();
   const year = today.getFullYear();
@@ -299,6 +310,24 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const otherMemberMenuRef = useRef<HTMLDivElement | null>(null);
   const consoleLogIdRef = useRef(0);
   const didInitialVenueFocusRef = useRef(false);
+
+  const timezoneHour = getTimezoneHourValue(timezone);
+  const timezoneMinute = timezone.slice(3);
+  const timezoneMinuteDisabled = timezoneHour === "-12" || timezoneHour === "+14";
+
+  const changeTimezoneHour = (hourValue: string) => {
+    const minuteSuffix = hourValue === "-12" || hourValue === "+14" ? ":00" : timezoneMinute;
+    setTimezone(buildTimezoneOffset(hourValue, minuteSuffix));
+  };
+
+  const cycleTimezoneMinute = () => {
+    if (timezoneMinuteDisabled) return;
+    const currentIndex = TIMEZONE_MINUTE_SUFFIXES.indexOf(
+      timezoneMinute as (typeof TIMEZONE_MINUTE_SUFFIXES)[number],
+    );
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % TIMEZONE_MINUTE_SUFFIXES.length : 0;
+    setTimezone(buildTimezoneOffset(timezoneHour, TIMEZONE_MINUTE_SUFFIXES[nextIndex]));
+  };
 
   useEffect(() => {
     if (mode !== "live_create" || didInitialVenueFocusRef.current) return;
@@ -1684,11 +1713,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           liveUrl={liveUrl}
           openingTime={openingTime}
           startTime={startTime}
-          timezone={timezone}
+          timezoneHour={timezoneHour}
+          timezoneMinute={timezoneMinute}
+          timezoneMinuteDisabled={timezoneMinuteDisabled}
           selectedVenueId={selectedVenueId}
           venueQueryText={venueQueryText}
           venues={venues}
-          timezoneOptions={TIMEZONE_OPTIONS}
+          timezoneHourOptions={TIMEZONE_HOUR_OPTIONS}
           liveTypeOptions={LIVE_TYPE_OPTIONS}
           venueOpen={venueOpen}
           venueMenuPos={venueMenuPos}
@@ -1702,7 +1733,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onLiveUrlChange={setLiveUrl}
           onOpeningTimeChange={setOpeningTime}
           onStartTimeChange={setStartTime}
-          onTimezoneChange={setTimezone}
+          onTimezoneHourChange={changeTimezoneHour}
+          onCycleTimezoneMinute={cycleTimezoneMinute}
           onVenueQueryTextChange={setVenueQueryText}
           onOpenVenueMenu={openVenueMenu}
           onSelectVenue={(venueId) => {
