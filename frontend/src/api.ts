@@ -221,6 +221,7 @@ export type ConsoleLiveCreatePayload = {
   start_time: string;
   timezone: string;
   venue_id: number;
+  default_band_ids: number[];
 };
 
 export type ConsoleLiveMutationItem = {
@@ -232,6 +233,7 @@ export type ConsoleLiveMutationItem = {
   opening_time: string;
   start_time: string;
   venue_id: number;
+  default_band_ids: number[];
 };
 
 export type ConsoleLiveMutationResponse = {

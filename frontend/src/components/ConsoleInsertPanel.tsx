@@ -63,6 +63,7 @@ type LiveInsertDraft = {
   start_time: string;
   timezone: string;
   venue_id: number;
+  default_band_ids: number[];
 };
 
 type ConsoleInsertPanelProps = {
@@ -271,6 +272,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [startTime, setStartTime] = useState(DEFAULT_LIVE_START_TIME);
   const [timezone, setTimezone] = useState(DEFAULT_LIVE_TIMEZONE);
   const [selectedVenueId, setSelectedVenueId] = useState<number>(0);
+  const [defaultBandIds, setDefaultBandIds] = useState<number[]>([]);
   const [venueQueryText, setVenueQueryText] = useState("");
   const [venueOpen, setVenueOpen] = useState(false);
   const [venueMenuPos, setVenueMenuPos] = useState<Position | null>(null);
@@ -596,6 +598,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setOpeningTime(DEFAULT_LIVE_OPENING_TIME);
     setStartTime(DEFAULT_LIVE_START_TIME);
     setTimezone(DEFAULT_LIVE_TIMEZONE);
+    setDefaultBandIds([]);
+  };
+
+  const toggleDefaultBand = (bandId: number) => {
+    setDefaultBandIds((current) =>
+      current.includes(bandId)
+        ? current.filter((currentBandId) => currentBandId !== bandId)
+        : [...current, bandId].sort((left, right) => left - right),
+    );
   };
 
   const clearLiveForm = () => {
@@ -1233,6 +1244,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         start_time: startTime,
         timezone,
         venue_id: selectedVenueId,
+        default_band_ids: defaultBandIds,
       },
       venueName: selectedVenue?.venue_name ?? "-",
     });
@@ -1254,6 +1266,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         start_time: response.item.start_time,
         timezone: payload.timezone,
         venue_id: response.item.venue_id,
+        default_band_ids: response.item.default_band_ids ?? [],
       };
 
       setInsertedLives((prev) => [inserted, ...prev]);
@@ -1265,7 +1278,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
               live_date: inserted.live_date,
               live_title: inserted.live_title,
               live_type: inserted.live_type,
-              bands: [],
+              bands: inserted.default_band_ids,
               url: inserted.url,
             },
             ...prev,
@@ -1505,6 +1518,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         ["timezone", payload.timezone],
         ["venue_id", payload.venue_id],
         ["venue_name", pendingConfirmation.venueName],
+        ["default_band_ids", payload.default_band_ids.join(", ") || "-"],
       ]);
     }
 
@@ -1717,6 +1731,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           timezoneMinute={timezoneMinute}
           timezoneMinuteDisabled={timezoneMinuteDisabled}
           selectedVenueId={selectedVenueId}
+          defaultBandIds={defaultBandIds}
+          bandOptions={bands}
           venueQueryText={venueQueryText}
           venues={venues}
           timezoneHourOptions={TIMEZONE_HOUR_OPTIONS}
@@ -1741,6 +1757,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
             setSelectedVenueId(venueId);
             setVenueOpen(false);
           }}
+          onToggleDefaultBand={toggleDefaultBand}
           onQueryVid={queryVid}
           onInsertVenue={requestVenueConfirmation}
           onClearInsertLive={clearLiveForm}

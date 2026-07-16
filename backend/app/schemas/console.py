@@ -115,6 +115,11 @@ class ConsoleLiveCreateRequest(BaseModel):
         max_length=32,
         description="Live type code: oneman, taiban, multi_act, festival, event, other.",
     )
+    default_band_ids: list[int] = Field(
+        default_factory=list,
+        max_length=100,
+        description="Fallback band_attrs IDs used only while the live has no setlist rows.",
+    )
 
     @field_validator("live_title", "url")
     @classmethod
@@ -128,6 +133,14 @@ class ConsoleLiveCreateRequest(BaseModel):
         """Reject blank or unknown live_type values."""
         return _validate_live_type(value)
 
+    @field_validator("default_band_ids")
+    @classmethod
+    def validate_default_band_ids(cls, value: list[int]) -> list[int]:
+        """Require positive IDs and normalize the optional fallback list for stable output."""
+        if any(band_id <= 0 for band_id in value):
+            raise ValueError("default_band_ids must contain only positive band IDs")
+        return sorted(set(value))
+
 
 class ConsoleLiveItem(BaseModel):
     live_id: int = Field(..., description="Created live ID")
@@ -138,6 +151,7 @@ class ConsoleLiveItem(BaseModel):
     opening_time: str = Field(..., description="Opening time with timezone")
     start_time: str = Field(..., description="Start time with timezone")
     venue_id: int = Field(..., description="venue_list.id")
+    default_band_ids: list[int] = Field(..., description="Normalized fallback band_attrs IDs")
 
 
 class ConsoleLiveMutationResponse(BaseModel):

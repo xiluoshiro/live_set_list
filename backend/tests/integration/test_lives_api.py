@@ -33,14 +33,14 @@ def test_get_lives_returns_seeded_items(integration_test_client):
         "total_pages": 1,
     }
     assert [item["live_id"] for item in payload["items"]] == [41, 2, 1, 38]
-    assert payload["items"][0]["bands"] == []
+    assert payload["items"][0]["bands"] == [3]
     assert payload["items"][1]["bands"] == [1, 3]
     assert payload["items"][2]["bands"] == [1, 2]
     assert payload["items"][3]["bands"] == [1]
 
 
 def test_get_lives_includes_seeded_live_without_setlist(integration_test_client):
-    # 测试点：seed 中没有 setlist 的 Live 也应进入列表分页与结果。
+    # 测试点：无 setlist 的 Live 应进入列表，并使用 default_band_ids 作为列表图标来源。
     response = integration_test_client.get("/api/lives?page=1&page_size=20")
 
     assert response.status_code == 200
@@ -50,19 +50,20 @@ def test_get_lives_includes_seeded_live_without_setlist(integration_test_client)
         "live_date": "2026-05-30",
         "live_title": "Console Draft Live",
         "live_type": "other",
-        "bands": [],
+        "bands": [3],
         "url": "https://example.com/lives/console-draft",
         "is_favorite": False,
     }
 
 
 def test_get_lives_without_setlist_excludes_seeded_lives_with_rows(integration_test_client):
-    # 测试点：without_setlist 候选只包含没有任何 setlist 行的 Live。
+    # 测试点：without_setlist 候选只包含没有任何 setlist 行的 Live，并保留默认 Band。
     response = integration_test_client.get("/api/lives?page=1&page_size=20&without_setlist=true")
 
     assert response.status_code == 200
     payload = response.json()
     assert [item["live_id"] for item in payload["items"]] == [41]
+    assert payload["items"][0]["bands"] == [3]
     assert payload["pagination"] == {
         "page": 1,
         "page_size": 20,
@@ -95,6 +96,25 @@ def test_get_lives_combines_public_filters(integration_test_client):
     }
     assert [item["live_id"] for item in payload["items"]] == [1]
     assert payload["items"][0]["bands"] == [1, 2]
+
+
+# 测试点：无 setlist 的默认 Band 应参与全部内容的关键词和 band_id 筛选。
+def test_get_lives_filters_match_default_bands_only_without_setlist(integration_test_client):
+    response = integration_test_client.get(
+        "/api/lives",
+        params={
+            "page": 1,
+            "page_size": 20,
+            "q": "MyGO",
+            "live_type": "other",
+            "band_id": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["live_id"] for item in payload["items"]] == [41]
+    assert payload["items"][0]["bands"] == [3]
 
 
 # 测试点：日期升序应同时使用 live_date 与 id 形成稳定排序。

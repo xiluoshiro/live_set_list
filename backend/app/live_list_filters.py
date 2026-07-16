@@ -7,6 +7,20 @@ LiveType = Literal["oneman", "taiban", "multi_act", "festival", "event", "other"
 LiveListSort = Literal["date_desc", "date_asc"]
 
 
+def effective_band_ids_sql(*, live_alias: str, setlist_alias: str, band_alias: str) -> str:
+    """Build the shared list rule: default bands apply only while a live has no setlist rows."""
+    return f"""
+        CASE
+            WHEN COUNT({setlist_alias}.id) = 0 THEN {live_alias}.default_band_ids
+            ELSE COALESCE(
+                array_agg(DISTINCT {band_alias}.id ORDER BY {band_alias}.id)
+                    FILTER (WHERE {band_alias}.id IS NOT NULL),
+                ARRAY[]::int[]
+            )
+        END
+    """
+
+
 @dataclass(frozen=True)
 class LiveListFilters:
     q: str | None = None
@@ -74,10 +88,26 @@ def _build_where(filters: LiveListFilters) -> tuple[str, list[object]]:
                           OR filter_band.band_abbr ILIKE %s ESCAPE '\\'
                       )
                 )
+                OR (
+                    NOT EXISTS (
+                        SELECT 1
+                        FROM live_setlist default_band_setlist
+                        WHERE default_band_setlist.live_id = l.id
+                    )
+                    AND EXISTS (
+                        SELECT 1
+                        FROM band_attrs default_band
+                        WHERE default_band.id = ANY(l.default_band_ids)
+                          AND (
+                              default_band.band_name ILIKE %s ESCAPE '\\'
+                              OR default_band.band_abbr ILIKE %s ESCAPE '\\'
+                          )
+                    )
+                )
             )
             """
         )
-        params.extend([pattern, pattern, pattern, pattern, pattern])
+        params.extend([pattern, pattern, pattern, pattern, pattern, pattern, pattern])
 
     if filters.year is not None:
         conditions.append("l.live_date >= %s AND l.live_date < %s")
@@ -92,12 +122,25 @@ def _build_where(filters: LiveListFilters) -> tuple[str, list[object]]:
             """
             EXISTS (
                 SELECT 1
-                FROM live_setlist filter_band_setlist
-                JOIN band_attrs selected_band
-                    ON selected_band.id = %s
-                WHERE filter_band_setlist.live_id = l.id
-                  AND jsonb_typeof(filter_band_setlist.band_member) = 'object'
-                  AND filter_band_setlist.band_member ? selected_band.band_name
+                FROM band_attrs selected_band
+                WHERE selected_band.id = %s
+                  AND (
+                      EXISTS (
+                          SELECT 1
+                          FROM live_setlist filter_band_setlist
+                          WHERE filter_band_setlist.live_id = l.id
+                            AND jsonb_typeof(filter_band_setlist.band_member) = 'object'
+                            AND filter_band_setlist.band_member ? selected_band.band_name
+                      )
+                      OR (
+                          NOT EXISTS (
+                              SELECT 1
+                              FROM live_setlist default_band_setlist
+                              WHERE default_band_setlist.live_id = l.id
+                          )
+                          AND selected_band.id = ANY(l.default_band_ids)
+                      )
+                  )
             )
             """
         )
@@ -136,6 +179,11 @@ def build_filtered_live_queries(
         else "matched.live_date DESC, matched.id DESC"
     )
     matched_params = tuple([*leading_params, *filter_params])
+    band_ids_sql = effective_band_ids_sql(
+        live_alias="matched",
+        setlist_alias="setlist",
+        band_alias="band",
+    )
     count_query = f"""
         SELECT COUNT(*)
         FROM live_attrs l
@@ -149,7 +197,8 @@ def build_filtered_live_queries(
                 l.live_date,
                 l.live_title,
                 l.url,
-                l.live_type
+                l.live_type,
+                l.default_band_ids
             FROM live_attrs l
             {favorite_join}
             WHERE {where_sql}
@@ -160,11 +209,7 @@ def build_filtered_live_queries(
             matched.id,
             matched.live_date,
             matched.live_title,
-            COALESCE(
-                array_agg(DISTINCT band.id ORDER BY band.id)
-                    FILTER (WHERE band.id IS NOT NULL),
-                ARRAY[]::int[]
-            ) AS band_ids,
+            {band_ids_sql} AS band_ids,
             matched.url,
             matched.live_type
         FROM matched_lives matched
@@ -176,7 +221,13 @@ def build_filtered_live_queries(
         ) band_name ON true
         LEFT JOIN band_attrs band
             ON band.band_name = band_name.band_name
-        GROUP BY matched.id, matched.live_date, matched.live_title, matched.url, matched.live_type
+        GROUP BY
+            matched.id,
+            matched.live_date,
+            matched.live_title,
+            matched.url,
+            matched.live_type,
+            matched.default_band_ids
         ORDER BY {result_order_sql}
     """
     return count_query, matched_params, page_query, matched_params

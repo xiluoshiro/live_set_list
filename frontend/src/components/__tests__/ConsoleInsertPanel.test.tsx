@@ -75,6 +75,7 @@ describe("ConsoleInsertPanel", () => {
         opening_time: "18:00:00+09:00",
         start_time: "19:00:00+09:00",
         venue_id: 88,
+        default_band_ids: [3],
       },
     });
     apiMocks.createConsoleSong.mockResolvedValue({
@@ -456,7 +457,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText("新增Live失败：live_date 与 live_title 为必填项。")).not.toBeInTheDocument();
   });
 
-  // 测试点：新增 Live 将分开的 -3:30 控件值标准化提交，成功后恢复 +9:00 默认值。
+  // 测试点：新增 Live 应提交选中的默认 Band 与时区，并在成功后重置表单。
   test("新增Live会调用真实写入接口并使用后端返回的live_id", async () => {
     const user = userEvent.setup();
     const onLiveDataChanged = vi.fn();
@@ -464,11 +465,15 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleVenues.mockResolvedValue({
       items: [{ venue_id: 88, venue_name: "New Venue" }],
     });
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: [] }],
+    });
 
     render(<ConsoleInsertPanel onLiveDataChanged={onLiveDataChanged} />);
 
     await user.click(screen.getByRole("tab", { name: "新增Live" }));
     await screen.findByRole("button", { name: "88 - New Venue" });
+    await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
     expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
     fireEvent.change(screen.getByLabelText("live_date"), { target: { value: "2026-04-01" } });
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Inserted Live");
@@ -495,6 +500,7 @@ describe("ConsoleInsertPanel", () => {
         start_time: "19:00",
         timezone: "-03:30",
         venue_id: 88,
+        default_band_ids: [3],
       },
       "csrf-token",
     ));
@@ -505,6 +511,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
     expect(screen.getByLabelText("timezone")).toHaveValue("+9");
     expect(screen.getByLabelText("timezone minute offset")).toHaveTextContent(":00");
+    expect(screen.getByRole("checkbox", { name: /MyGO/ })).not.toBeChecked();
     expect(onLiveDataChanged).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
