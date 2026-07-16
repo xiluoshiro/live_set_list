@@ -69,7 +69,7 @@ Every release under `/opt/livesetlist/releases` must stay root-owned and non-wri
 
 ## GitHub Actions Deployment Bootstrap
 
-The release workflow is triggered only by a `vYYYY-MM-DD-NNN` tag. It builds a release archive after isolated PostgreSQL/Flyway CI and `functional`, waits for the `production` Environment approval, then uploads that exact archive to the VM. This path is verified for releases without Flyway SQL changes.
+Both app-only and migration releases start from one `vYYYY-MM-DD-NNN` tag; a migration release does not use a second tag. The workflow builds one release archive after isolated PostgreSQL/Flyway CI and `functional`, uploads that exact archive to the VM, and classifies it against the active Flyway SQL. App-only releases continue through `production`; migration releases reuse the same version and SHA-256 in separate `migrate` and `deploy` workflow-dispatch runs.
 
 Install the root-owned deployment script once:
 
@@ -92,7 +92,7 @@ Configure `DEPLOY_SSH_PRIVATE_KEY` and `DEPLOY_KNOWN_HOSTS` as repository secret
 
 The repository now contains a protected two-stage migration workflow. `release_manager.py prepare` classifies the exact archive against the VM's active Flyway SQL. App-only releases continue through the tag workflow; migration releases stop until two separate `workflow_dispatch` runs perform `migrate` and then `deploy`. Migration uses pinned `redgate/flyway:12.11.0`, creates a verified backup, writes a root-only attestation, and never automatically restores the database. `livesetlist-deploy` accepts a migration release only when the attestation, archive SHA-256, SQL tree hashes, and live Flyway version match.
 
-Before enabling the new workflows, install both root-owned entrypoints and create their state directories:
+The production VM entrypoints, state directories, sudoers rules, and GitHub configuration were installed for the initial two-stage rollout on 2026-07-17. The commands below are bootstrap/upgrade commands, not per-release steps; repeat them only when an administrator intentionally updates the root-owned entrypoints:
 
 ```bash
 sudo install -o root -g root -m 755 /tmp/livesetlist-release-manager.next /usr/local/sbin/livesetlist-release-manager
@@ -104,7 +104,7 @@ sudo install -d -o root -g root -m 700 /var/lib/livesetlist/release-archives
 sudo docker pull redgate/flyway:12.11.0
 ```
 
-The exact sudoers rules, GitHub repository secrets/variables, activation order, and verification commands are in [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md). The installed `/usr/local/sbin` files are intentionally outside release directories and must be updated by an administrator before a workflow that depends on a new entrypoint is enabled.
+The exact sudoers rules, GitHub repository secrets/variables, activation order, and optional verification commands are in [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md). Normal releases do not require an operator to SSH into the VM. The installed `/usr/local/sbin` files are intentionally outside release directories and must be updated by an administrator before a workflow that depends on a new entrypoint is enabled.
 
 ## Admin Bootstrap
 

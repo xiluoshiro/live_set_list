@@ -9,7 +9,7 @@
 - 生产 VM、同源入口、私有 PostgreSQL、备份、Nginx 和 HTTPS/公开访问基线已经落地；首次生产数据迁移也已完成。
 - tag 驱动的 GitHub Actions 已验证可完成隔离 CI、白名单出包、`production` 审批、SSH 上传、服务器端备份/切换/回滚和公网 smoke test。
 - 生产数据库已从 V9 手工迁移至 V11，并完成新应用 release 切换与 health 验收。
-- 两阶段 migration 发布代码已实现：tag 自动分类，migration 与 deploy 由两个显式人工阶段控制，服务器端使用 root-only attestation 约束应用切换；仍需完成 VM 入口安装和 staging 六类场景验收后才能视为生产启用。
+- 两阶段 migration 发布代码、VM root-owned 入口、sudoers 和 GitHub 配置已完成：tag 自动分类，migration 与 deploy 由两个显式人工阶段控制，服务器端使用 root-only attestation 约束应用切换；尚待首个新 tag 的生产端到端验收和 staging 六类场景演练。
 - 剩余重点从“能否上线”转为 staging、监控告警、安全头、Host 限制、备份异地保存和 migration 自动化前的安全设计。
 - 推荐采用同源部署：公网只暴露 `https://<domain>`，静态前端由反向代理托管，`/api/*` 反代到后端，PostgreSQL 只允许后端内网访问。
 - 上线前的最后验收应包含功能检查、浏览器实测、生产环境健康检查、备份恢复演练和回滚演练。
@@ -198,7 +198,9 @@ PostgreSQL: private network only
 - [ ] 统一生产日志输出策略：控制台、文件、轮转、采集目标。
 - [ ] 为后端、前端静态服务、数据库、磁盘空间、证书过期设置监控。
 - [ ] 增加 staging 环境，先在 staging 完成真实域名、HTTPS、迁移、备份演练。
-- [ ] 在 VM 安装并完成 staging/生产验收两阶段 migration 发布代码；仓库侧 prepare、双 `workflow_dispatch` 人工门、root-only attestation 和受证明约束的应用切换已完成。
+- [x] 在生产 VM 安装两阶段 migration 入口，完成 sudoers 和 GitHub repository secrets/variables/Environments 配置。
+- [ ] 通过首个新 tag 完成生产 prepare、migration attestation、应用切换和公网 smoke 端到端验收。
+- [ ] 在 staging 完成 app-only、migration 成功、migration 失败、attestation 篡改、重复执行、应用切换失败六类场景演练。
 - [ ] 对公共搜索、列表、详情批量接口增加流量保护策略。
 - [x] 补充生产部署 runbook、`infra/production/README.md` 和 GitHub Actions 配置说明。
 - [ ] 补充最小 E2E 冒烟：打开首页、搜索、详情、登录、收藏、控制台权限拒绝/允许。
@@ -300,12 +302,12 @@ VITE_API_BASE_URL=https://api.<domain>
 
 ### 5.2 常规发布流程
 
-1. 如有 Flyway SQL 变化，当前自动脚本不能部署该 migration release；先完成独立的备份、staging 验证、生产 migration 和手工 release 切换。
-2. 在 SQL 已与 `current` 对齐后的普通应用版本，运行 `python scripts/run_checks.py functional`。
-3. 创建并推送 `vYYYY-MM-DD-NNN` tag。
-4. 等待 GitHub Actions 完成隔离数据库 CI、`functional` 和白名单出包。
-5. 审阅 `production` Environment 中的 tag/commit 后批准部署。
-6. 流水线执行服务器端备份、原子切换、后端就绪等待与公网 smoke test。
+1. 在目标 commit 运行 `python scripts/run_checks.py functional`，审阅是否包含 Flyway SQL 变化。
+2. 无论 app-only 还是 migration release，都只创建并推送一个 `vYYYY-MM-DD-NNN` tag。
+3. GitHub Actions 自动完成隔离数据库 CI、`functional`、白名单出包、SHA-256 校验、上传 VM 和服务器侧 prepare 分类。
+4. `app-only` 候选包继续进入 `production` 并自动执行备份、原子切换、后端就绪等待与公网 smoke test。
+5. `migration-needed` 候选包停止自动切换；维护人使用 Summary 中同一 version/SHA-256 先手动运行 `Migration release control` 的 `migrate` / `MIGRATE`，验收旧应用兼容性后再运行 `deploy` / `DEPLOY`。
+6. 日常发布无需手工登录 VM；VM 命令仅用于入口升级、首次验收和故障排查。
 7. 复核服务、备份和外部访问；记录发布版本与回滚版本。
 
 ### 5.3 回滚流程
