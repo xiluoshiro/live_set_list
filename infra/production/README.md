@@ -94,9 +94,16 @@ The repository now contains a protected two-stage migration workflow. `release_m
 
 The production VM entrypoints, state directories, sudoers rules, and GitHub configuration were installed for the initial two-stage rollout on 2026-07-17. The commands below are bootstrap/upgrade commands, not per-release steps; repeat them only when an administrator intentionally updates the root-owned entrypoints:
 
+Upload both entrypoints as the deploy-only user. Keep the repeatable staging files in that user's home instead of fixed `/tmp/*.next` paths, which can become non-overwritable when an earlier copy is owned by another user:
+
+```powershell
+scp infra/production/release_manager.py livesetlist-deploy@<VM_IP>:/home/livesetlist-deploy/livesetlist-release-manager.next
+scp infra/production/livesetlist-deploy livesetlist-deploy@<VM_IP>:/home/livesetlist-deploy/livesetlist-deploy.next
+```
+
 ```bash
-sudo install -o root -g root -m 755 /tmp/livesetlist-release-manager.next /usr/local/sbin/livesetlist-release-manager
-sudo install -o root -g root -m 755 /tmp/livesetlist-deploy.next /usr/local/sbin/livesetlist-deploy
+sudo install -o root -g root -m 755 /home/livesetlist-deploy/livesetlist-release-manager.next /usr/local/sbin/livesetlist-release-manager
+sudo install -o root -g root -m 755 /home/livesetlist-deploy/livesetlist-deploy.next /usr/local/sbin/livesetlist-deploy
 sudo install -d -o root -g root -m 700 /opt/livesetlist/staging
 sudo install -d -o root -g root -m 700 /var/lib/livesetlist/release-state
 sudo install -d -o root -g root -m 700 /var/lib/livesetlist/deploy-attestations

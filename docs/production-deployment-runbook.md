@@ -118,14 +118,14 @@ GitHub Hosted Runner 使用动态出口 IP。当前直接 SSH 模式要求 GCP �
 
 ```bash
 sudo install -o root -g root -m 755 \
-  /tmp/livesetlist-release-manager.next \
+  /home/livesetlist-deploy/livesetlist-release-manager.next \
   /usr/local/sbin/livesetlist-release-manager
 sudo install -o root -g root -m 755 \
-  /tmp/livesetlist-deploy.next \
+  /home/livesetlist-deploy/livesetlist-deploy.next \
   /usr/local/sbin/livesetlist-deploy
 ```
 
-可先通过 `livesetlist-deploy` SSH 用户把新脚本上传到 `/tmp/livesetlist-deploy.next`，再用管理员会话执行上述安装。
+先通过 `livesetlist-deploy` SSH 用户把两个新脚本上传到该用户自己的 home，再用管理员会话执行上述安装。不要使用固定的 `/tmp/*.next` 路径：`/tmp` 的 sticky bit 会阻止部署用户覆盖由管理员或其他用户留下的同名文件，导致后续升级不可重复执行。
 
 ## 数据库迁移与旧手工流程
 
@@ -222,21 +222,23 @@ build-and-verify
 
 ### 1. 上传并安装服务器入口
 
-从可信的本地 checkout 上传两个文件：
+从可信的本地 checkout，以 `livesetlist-deploy` 用户上传两个文件。home 中的暂存文件始终由部署用户持有，因此重复执行 `scp` 可以安全覆盖上一次上传：
 
 ```powershell
-scp infra/production/release_manager.py <ADMIN_USER>@<VM_IP>:/tmp/livesetlist-release-manager.next
-scp infra/production/livesetlist-deploy <ADMIN_USER>@<VM_IP>:/tmp/livesetlist-deploy.next
+scp infra/production/release_manager.py livesetlist-deploy@<VM_IP>:/home/livesetlist-deploy/livesetlist-release-manager.next
+scp infra/production/livesetlist-deploy livesetlist-deploy@<VM_IP>:/home/livesetlist-deploy/livesetlist-deploy.next
 ```
+
+如果本机已配置 `livesetlist-vm` SSH 别名，可将上面的 `livesetlist-deploy@<VM_IP>` 直接替换为 `livesetlist-vm`。
 
 在 VM 管理员会话执行：
 
 ```bash
 sudo install -o root -g root -m 755 \
-  /tmp/livesetlist-release-manager.next \
+  /home/livesetlist-deploy/livesetlist-release-manager.next \
   /usr/local/sbin/livesetlist-release-manager
 sudo install -o root -g root -m 755 \
-  /tmp/livesetlist-deploy.next \
+  /home/livesetlist-deploy/livesetlist-deploy.next \
   /usr/local/sbin/livesetlist-deploy
 
 sudo install -d -o root -g root -m 700 /opt/livesetlist/staging
@@ -246,7 +248,13 @@ sudo install -d -o root -g root -m 700 /var/lib/livesetlist/release-archives
 sudo docker pull redgate/flyway:12.11.0
 ```
 
-确认 `python3 --version` 可运行本脚本，并确认 `/etc/livesetlist/postgres.env` 至少包含 `POSTGRES_HOST`、`POSTGRES_PORT`、`APP_DB`、`FLYWAY_USER`、`FLYWAY_PASSWORD`；`/etc/livesetlist/backend.env` 应保持 `LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist`。
+入口验证完成后，由部署用户清理暂存文件：
+
+```powershell
+ssh livesetlist-deploy@<VM_IP> "rm -f /home/livesetlist-deploy/livesetlist-release-manager.next /home/livesetlist-deploy/livesetlist-deploy.next"
+```
+
+确认 `python3 --version` 至少为 Python 3.11。release manager 不依赖新版 `tarfile.extractall(filter=...)`，而是只手工写出通过白名单校验的普通文件与目录，因此支持 Debian 12 自带 Python。同时确认 `/etc/livesetlist/postgres.env` 至少包含 `POSTGRES_HOST`、`POSTGRES_PORT`、`APP_DB`、`FLYWAY_USER`、`FLYWAY_PASSWORD`；`/etc/livesetlist/backend.env` 应保持 `LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist`。
 
 ### 2. 更新 deploy-only sudoers
 
@@ -337,7 +345,9 @@ curl.exe -I <PUBLIC_BASE_URL>/openapi.json
 | CI 找不到 `flyway.toml` | 本地配置被 Git 忽略 | CI 从 `flyway.toml.example` 生成临时配置 |
 | 发布包包含本机 Flyway 配置或恢复沙箱 | 出包脚本递归收集白名单目录时未排除被 Git 忽略的 runtime 文件 | 显式排除 `flyway.toml`、运行时 env 和 `.runtime`，并用归档级测试校验 |
 | SHA-256 校验找不到归档 | 校验文件记录了构建机的 `dist-release/` 路径 | 在 `dist-release` 内生成校验文件，只记录文件名 |
+| `scp` 上传 `/tmp/livesetlist-*.next` 报 `dest open ... Permission denied` | `/tmp` 有 sticky bit，同名旧文件由管理员或其他用户持有，部署用户不能覆盖 | 将可重复上传的暂存文件固定放在 `/home/livesetlist-deploy`，安装时再由管理员以 `sudo install` 复制到 `/usr/local/sbin` |
 | production job 被拒绝 | Environment 将 `v*` 配成 Branch 规则 | 使用 Tag 类型的 `v*` 规则 |
+| prepare 解压报 `extractall() got an unexpected keyword argument 'filter'` | VM Python 的 `tarfile` 尚未提供 extraction filter | release manager 改为手工解压已验证的普通文件/目录，保持 Python 3.11 兼容与路径安全校验 |
 | Flyway 命令读取 env 报 `unbound variable` 或 Compose 提示变量未设置 | 用 Bash `source` 或 Compose 读取含 `$` 的密码 | 用 `python-dotenv(interpolate=False)` 读取并由 Python 将变量传给 Docker |
 | Setlist 前端测试偶发找不到 textarea | 等待条件在异步检查出现前提前通过 | 等待目标 textarea 实际渲染 |
 | 部署后立即 health check 失败 | systemd 返回时 Uvicorn 尚未监听端口 | 部署脚本最多等待 20 秒 |
