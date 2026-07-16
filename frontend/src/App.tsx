@@ -221,7 +221,6 @@ function App() {
   const canUseFavoriteFeatures = auth.isAuthenticated;
   const canUseConsoleFeatures = auth.isAuthenticated && canAccessConsole(auth.user?.role);
   const navigationItems: Array<{ key: TabKey; label: string; visible: boolean }> = [
-    { key: "favorites", label: "我的收藏", visible: auth.isAuthenticated },
     { key: "all", label: "全部内容", visible: true },
     { key: "browse", label: "乐队浏览", visible: true },
     { key: "about", label: "联系我们", visible: true },
@@ -1084,7 +1083,7 @@ function App() {
             {navigationItems.filter((item) => item.visible).map((item) => (
               <button
                 key={item.key}
-                className={`tab-btn ${tab === item.key ? "active" : ""}`}
+                className={`tab-btn ${tab === item.key || (item.key === "all" && tab === "favorites") ? "active" : ""}`}
                 onClick={() => handleTabChange(item.key)}
               >
                 {item.label}
@@ -1190,7 +1189,7 @@ function App() {
                   <button
                     key={item.key}
                     type="button"
-                    className={`nav-drawer-item ${tab === item.key ? "active" : ""}`}
+                    className={`nav-drawer-item ${tab === item.key || (item.key === "all" && tab === "favorites") ? "active" : ""}`}
                     onClick={() => handleTabChange(item.key)}
                   >
                     {item.label}
@@ -1256,8 +1255,8 @@ function App() {
           <>
             <header className="list-page-heading">
               <div>
-                <h1>{tab === "favorites" ? "我的收藏" : "全部内容"}</h1>
-                <p>{tab === "favorites" ? "筛选并重新查看收藏的 Live" : "浏览已收录的 Live 与出演记录"}</p>
+                <h1>全部内容</h1>
+                <p>浏览已收录的 Live，也可以只查看收藏内容</p>
               </div>
               <span className="view-toggle">
                 <button
@@ -1274,9 +1273,11 @@ function App() {
             </header>
             <LiveListFiltersToolbar
               filters={listFilters}
+              favoriteOnly={tab === "favorites"}
               years={catalogStats?.years ?? []}
               bands={listFilterBands}
               onChange={handleListFiltersChange}
+              onFavoriteOnlyChange={(favoriteOnly) => handleTabChange(favoriteOnly ? "favorites" : "all")}
             />
             <footer className="pager">
               <div className="toolbar">

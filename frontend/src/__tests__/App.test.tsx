@@ -552,7 +552,7 @@ describe("App", () => {
   });
 
   test("viewer 角色登录后不显示控制台入口", async () => {
-    // 测试点：控制台仅对 editor+ 开放；viewer 登录后也不应看到控制台页签。
+    // 测试点：viewer 可在全部内容中使用仅收藏切换，但仍不应看到控制台页签。
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
       user: { id: 1, username: "viewer", display_name: "Viewer", role: "viewer" },
@@ -564,7 +564,8 @@ describe("App", () => {
     );
     renderApp({ withAuthProvider: true });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument());
+    await userEvent.setup().click(await screen.findByRole("button", { name: "全部内容" }));
+    expect(screen.getByRole("button", { name: "仅收藏" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "控制台" })).not.toBeInTheDocument();
   });
 
@@ -654,8 +655,8 @@ describe("App", () => {
     expect(unfavoriteLiveMock).toHaveBeenCalledTimes(0);
   });
 
-  test("已登录时显示收藏页签，切换到全量页后显示收藏列和星标按钮", async () => {
-    // 测试点：登录后才显示收藏入口，且全量页展示星标列。
+  test("已登录时全部内容页显示范围切换、收藏列和星标按钮", async () => {
+    // 测试点：收藏不再占用独立导航页签，而是在全部内容内作为范围切换。
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
       user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
@@ -667,17 +668,19 @@ describe("App", () => {
     );
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
-    await waitFor(() => expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "全部内容" }));
+    await user.click(await screen.findByRole("button", { name: "全部内容" }));
 
     expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
+    expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "仅收藏" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("columnheader", { name: /收藏/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "收藏本页" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
   });
 
-  test("已登录时收藏页走服务端接口，并展示服务端收藏列表", async () => {
-    // 测试点：收藏页不再使用本地过滤，而是直接拉取服务端收藏列表。
+  test("已登录时仅收藏范围走服务端接口，并展示服务端收藏列表", async () => {
+    // 测试点：仅收藏切换保留服务端收藏列表接口，并在同一页面替换数据范围。
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
       user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
@@ -691,11 +694,13 @@ describe("App", () => {
       makeResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2, startId: 101 }),
     );
 
+    const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
-
-    await userEvent.setup().click(await screen.findByRole("button", { name: "我的收藏" }));
+    await openAllContent(user);
+    await user.click(screen.getByRole("button", { name: "仅收藏" }));
     await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
-    expect(screen.getByRole("button", { name: "我的收藏" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "仅收藏" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
     expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument();
   });
 
@@ -711,8 +716,25 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "加入收藏" })).not.toBeInTheDocument();
   });
 
+  test("匿名用户点击仅收藏会打开登录弹窗", async () => {
+    // 测试点：仅收藏切换始终可发现，但匿名用户使用时必须先通过登录闸门。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    const user = userEvent.setup();
+    renderApp({ withAuthProvider: true });
+    await screen.findAllByRole("button", { name: "登录" });
+    await openAllContent(user);
+
+    await user.click(screen.getByRole("button", { name: "仅收藏" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   test("登录成功后切换到已登录模式并显示收藏入口", async () => {
-    // 测试点：用户登录成功后显示收藏入口，并可打开用户下拉看到用户名/角色/退出。
+    // 测试点：用户登录成功后显示首页收藏快捷入口，并可打开用户下拉看到用户名/角色/退出。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -726,7 +748,7 @@ describe("App", () => {
     await user.click(loginButtons[loginButtons.length - 1]);
 
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith("admin", "test-admin-pass"));
-    expect(screen.getByRole("button", { name: "我的收藏" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /查看我的收藏/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "用户菜单：Administrator" }));
     expect(screen.getByText("Administrator")).toBeInTheDocument();
@@ -769,7 +791,7 @@ describe("App", () => {
     await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "我的收藏" }));
+    await user.click(screen.getByRole("button", { name: "仅收藏" }));
 
     expect(screen.queryByRole("button", { name: "示例 Live 名称 1" })).not.toBeInTheDocument();
     expect(screen.getByText("加载中...")).toBeInTheDocument();
@@ -800,7 +822,7 @@ describe("App", () => {
     await openAllContent(user);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "我的收藏" }));
+    await user.click(screen.getByRole("button", { name: "仅收藏" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "全部内容" }));
 
@@ -849,7 +871,7 @@ describe("App", () => {
     await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
     expect(getAuthMeMock).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("button", { name: "我的收藏" }));
+    await user.click(screen.getByRole("button", { name: "仅收藏" }));
 
     expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument();
     expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
@@ -1220,7 +1242,7 @@ describe("App", () => {
     await openAllContent(user);
 
     await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2, 3]));
-    await user.click(screen.getByRole("button", { name: "我的收藏" }));
+    await user.click(screen.getByRole("button", { name: "仅收藏" }));
     await waitFor(() => expect(getLiveDetailsBatchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
     expect(getLiveDetailsBatchMock).toHaveBeenLastCalledWith([101, 102]);
   });

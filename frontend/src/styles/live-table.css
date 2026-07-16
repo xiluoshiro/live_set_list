@@ -441,6 +441,37 @@ tbody tr:hover {
   align-items: end;
 }
 
+.list-scope-toggle {
+  display: inline-flex;
+  justify-self: start;
+  padding: 3px;
+  border: 1px solid var(--border-normal);
+  border-radius: 9px;
+  background: var(--surface-chip-soft);
+}
+
+.list-scope-toggle button {
+  min-width: 72px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 7px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.list-scope-toggle button.active {
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
+}
+
+.list-scope-toggle button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 .list-filter-field {
   display: grid;
   gap: 6px;
