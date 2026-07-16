@@ -87,11 +87,12 @@
 - `q` 会 trim；空字符串等同于未传，最大长度为 `255`，匹配 Live 标题、场地、歌曲、乐队名和乐队缩写
 - `year` 范围为 `1900..2100`
 - `live_type` 只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
-- `band_id` 必须大于等于 `1`，按 `live_setlist.band_member` 中的乐队名判断是否出演
+- `band_id` 必须大于等于 `1`；有 setlist 时按 `live_setlist.band_member` 判断，无 setlist 时按 `live_attrs.default_band_ids` 判断
 - `sort` 只允许 `date_desc` 或 `date_asc`，默认 `date_desc`
 - 多个筛选条件按 AND 组合；文本值使用参数绑定并转义 `%`、`_`、`\`
 - 当请求页码超过最后一页时，后端会自动钳制到最后一页
-- `bands` 来自 `live_setlist.band_member` 中聚合出的乐队 ID
+- `bands` 在 Live 存在任意 setlist 行时来自 `live_setlist.band_member` 聚合；仅在完全没有 setlist 行时回退到 `live_attrs.default_band_ids`
+- 一旦存在任意 setlist 行，即使无法聚合出有效乐队，也不会再回退 `default_band_ids`
 - `bands` 会去重并按升序返回
 - `url` 当前来自 `live_attrs.url`
 - `is_favorite` 会按当前登录用户的 `user_live_favorites` 计算；匿名请求统一返回 `false`
@@ -196,6 +197,8 @@
   - 要求 `venue_id` 已存在
   - `opening_time` / `start_time` 接受 `HH:mm` 或 `HH:mm:ss`，并与 `timezone` 组合成带时区时间
   - `live_type` 必填，只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
+  - `default_band_ids` 可选，最多 100 项；后端要求每项为已存在的正数 `band_attrs.id`，并去重、升序后写入
+  - `default_band_ids` 只在该 Live 尚无任何 setlist 行时作为列表 Band 使用
 - `POST /api/console/lives/{live_id}/setlist`
   - 要求目标 Live 存在
   - 如果目标 Live 已有任何 setlist 行，返回 `409`

@@ -487,7 +487,7 @@ def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
 
 
-# 测试点：新增 Live 接口应写入 live_attrs 并持久化 live_type；兼容旧字段 type 的中文输入。
+# 测试点：新增 Live 接口应校验、去重并持久化 default_band_ids 与 live_type。
 def test_console_create_live_persists_live_row(
     integration_test_client,
     integration_admin_connection,
@@ -512,6 +512,7 @@ def test_console_create_live_persists_live_row(
             "start_time": "19:00:30",
             "timezone": "+09:00",
             "venue_id": 2,
+            "default_band_ids": [3, 1, 3],
         },
     )
 
@@ -529,6 +530,7 @@ def test_console_create_live_persists_live_row(
             "opening_time": "18:00:00+09:00",
             "start_time": "19:00:30+09:00",
             "venue_id": 2,
+            "default_band_ids": [1, 3],
         },
     }
 
@@ -536,7 +538,17 @@ def test_console_create_live_persists_live_row(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT id, live_date::text, live_title, live_type, is_internal, url, opening_time::text, start_time::text, venue_id
+            SELECT
+                id,
+                live_date::text,
+                live_title,
+                live_type,
+                is_internal,
+                url,
+                opening_time::text,
+                start_time::text,
+                venue_id,
+                default_band_ids
             FROM live_attrs
             WHERE id = %s
             """,
@@ -554,6 +566,7 @@ def test_console_create_live_persists_live_row(
         "18:00:00+09",
         "19:00:30+09",
         2,
+        [1, 3],
     )
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "live_create",
@@ -563,6 +576,7 @@ def test_console_create_live_persists_live_row(
             "opening_time": "18:00:00+09:00",
             "start_time": "19:00:30+09:00",
             "live_type": "oneman",
+            "default_band_ids": [1, 3],
         },
     )
 

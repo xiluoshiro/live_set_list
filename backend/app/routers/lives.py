@@ -10,7 +10,12 @@ from psycopg2.errors import QueryCanceled
 from app.auth import AuthUser, get_current_user_optional
 from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set, is_live_favorite
-from app.live_list_filters import LiveListFilters, build_filtered_live_queries, normalize_list_query
+from app.live_list_filters import (
+    LiveListFilters,
+    build_filtered_live_queries,
+    effective_band_ids_sql,
+    normalize_list_query,
+)
 from app.logging_config import get_logger
 from app.schemas import (
     ErrorResponse,
@@ -34,16 +39,14 @@ CASE
 END
 """
 
-LIVES_BASE_QUERY = """
+LIVES_BAND_IDS_SQL = effective_band_ids_sql(live_alias="l", setlist_alias="ls", band_alias="b")
+
+LIVES_BASE_QUERY = f"""
 SELECT
     l.id,
     l.live_date,
     l.live_title,
-    COALESCE(
-        array_agg(DISTINCT b.id ORDER BY b.id)
-            FILTER (WHERE b.id IS NOT NULL),
-        ARRAY[]::int[]
-    ) AS band_ids,
+    {LIVES_BAND_IDS_SQL} AS band_ids,
     l.url AS url,
     l.live_type
 FROM live_attrs l
@@ -55,7 +58,7 @@ LEFT JOIN LATERAL (
 ) t ON true
 LEFT JOIN band_attrs b
     ON b.band_name = t.key
-GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url
+GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids
 """
 
 LIVES_COUNT_QUERY = f"""
@@ -75,7 +78,7 @@ SELECT
     l.id,
     l.live_date,
     l.live_title,
-    ARRAY[]::int[] AS band_ids,
+    l.default_band_ids AS band_ids,
     l.url AS url,
     l.live_type
 FROM live_attrs l

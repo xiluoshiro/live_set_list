@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 
 import { formatLiveType } from "./constants";
-import type { Position, VenueOption } from "./types";
+import type { BandOption, Position, VenueOption } from "./types";
 
 type LiveAdminSectionProps = {
   liveDate: string;
@@ -14,6 +14,8 @@ type LiveAdminSectionProps = {
   timezoneMinute: string;
   timezoneMinuteDisabled: boolean;
   selectedVenueId: number;
+  defaultBandIds: number[];
+  bandOptions: BandOption[];
   venueQueryText: string;
   venues: VenueOption[];
   timezoneHourOptions: string[];
@@ -33,6 +35,7 @@ type LiveAdminSectionProps = {
     start_time: string;
     timezone: string;
     venue_id: number;
+    default_band_ids: number[];
   }>;
   onLiveDateChange: (value: string) => void;
   onLiveTitleChange: (value: string) => void;
@@ -45,6 +48,7 @@ type LiveAdminSectionProps = {
   onVenueQueryTextChange: (value: string) => void;
   onOpenVenueMenu: () => void;
   onSelectVenue: (venueId: number) => void;
+  onToggleDefaultBand: (bandId: number) => void;
   onQueryVid: () => void;
   onInsertVenue: () => void;
   onClearInsertLive: () => void;
@@ -64,6 +68,8 @@ export function LiveAdminSection({
   timezoneMinute,
   timezoneMinuteDisabled,
   selectedVenueId,
+  defaultBandIds,
+  bandOptions,
   venueQueryText,
   venues,
   timezoneHourOptions,
@@ -85,6 +91,7 @@ export function LiveAdminSection({
   onVenueQueryTextChange,
   onOpenVenueMenu,
   onSelectVenue,
+  onToggleDefaultBand,
   onQueryVid,
   onInsertVenue,
   onClearInsertLive,
@@ -128,6 +135,26 @@ export function LiveAdminSection({
         >
           {selectedVenueText}
         </button>
+      </div>
+
+      <div className="live-id-selector live-create-tools live-default-bands-row">
+        <span className="live-default-bands-label">默认 Band</span>
+        <div className="live-default-band-options" role="group" aria-label="default_band_ids">
+          {bandOptions.filter((band) => band.band_id > 0).length === 0 ? (
+            <span className="live-default-bands-empty">暂无可选 Band</span>
+          ) : (
+            bandOptions.filter((band) => band.band_id > 0).map((band) => (
+              <label key={band.band_id}>
+                <input
+                  type="checkbox"
+                  checked={defaultBandIds.includes(band.band_id)}
+                  onChange={() => onToggleDefaultBand(band.band_id)}
+                />
+                <span>{band.band_id} - {band.band_name}</span>
+              </label>
+            ))
+          )}
+        </div>
       </div>
 
       <div className="console-table-wrap">
@@ -251,12 +278,13 @@ export function LiveAdminSection({
               <th>start_time</th>
               <th>timezone</th>
               <th>venue_id</th>
+              <th>default_band_ids</th>
             </tr>
           </thead>
           <tbody>
             {insertedLives.length === 0 ? (
               <tr>
-                <td colSpan={9} className="empty-cell">暂无新增Live记录</td>
+                <td colSpan={10} className="empty-cell">暂无新增Live记录</td>
               </tr>
             ) : (
               insertedLives.map((row) => (
@@ -270,6 +298,7 @@ export function LiveAdminSection({
                   <td>{row.start_time}</td>
                   <td>{row.timezone}</td>
                   <td>{row.venue_id}</td>
+                  <td>{(row.default_band_ids ?? []).join(", ") || "-"}</td>
                 </tr>
               ))
             )}

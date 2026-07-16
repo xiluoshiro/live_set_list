@@ -56,7 +56,8 @@ INSERT INTO public.live_attrs (
     opening_time,
     start_time,
     venue_id,
-    live_type
+    live_type,
+    default_band_ids
 )
 VALUES
     (
@@ -68,7 +69,8 @@ VALUES
         TIME WITH TIME ZONE '16:30:00+09',
         TIME WITH TIME ZONE '17:30:00+09',
         1,
-        'multi_act'
+        'multi_act',
+        ARRAY[3]
     ),
     (
         2,
@@ -79,7 +81,8 @@ VALUES
         TIME WITH TIME ZONE '15:00:00+09',
         TIME WITH TIME ZONE '16:00:00+09',
         2,
-        'festival'
+        'festival',
+        ARRAY[2]
     ),
     (
         38,
@@ -90,7 +93,8 @@ VALUES
         TIME WITH TIME ZONE '17:00:00+09',
         TIME WITH TIME ZONE '18:00:00+09',
         24,
-        'oneman'
+        'oneman',
+        ARRAY[2]
     ),
     (
         41,
@@ -101,7 +105,8 @@ VALUES
         TIME WITH TIME ZONE '17:00:00+09',
         TIME WITH TIME ZONE '18:00:00+09',
         1,
-        'other'
+        'other',
+        ARRAY[3]
     );
 
 INSERT INTO public.live_setlist (

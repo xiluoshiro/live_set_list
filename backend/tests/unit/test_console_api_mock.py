@@ -409,7 +409,7 @@ def test_console_create_venue_mock_success_persists_and_audits():
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[1].args[0]
 
 
-# 测试点：新增 Live 成功时应补齐时间秒数和时区，持久化 live_type，并返回创建结果。
+# 测试点：新增 Live 成功时应补齐时间秒数和时区，并返回规范化的空默认 Band。
 def test_console_create_live_mock_success_normalizes_times_and_audits():
     _set_authenticated_role("admin")
     conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (77,)])
@@ -432,9 +432,52 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         "opening_time": "18:00:00+09:00",
         "start_time": "19:00:30+09:00",
         "venue_id": 2,
+        "default_band_ids": [],
     }
     assert "INSERT INTO live_attrs" in cursor.execute.call_args_list[1].args[0]
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
+
+
+# 测试点：新增 Live 应校验默认 Band 存在，并将去重升序后的数组写入数据库。
+def test_console_create_live_mock_validates_and_persists_default_bands():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(
+        fetchone_side_effect=[(1,), (79,)],
+        fetchall_side_effect=[[(1,), (3,)]],
+    )
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/lives",
+            json=_valid_live_payload(default_band_ids=[3, 1, 3]),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["item"]["default_band_ids"] == [1, 3]
+    assert cursor.execute.call_args_list[1].args[1] == ([1, 3],)
+    assert cursor.execute.call_args_list[2].args[1][-1] == [1, 3]
+
+
+# 测试点：新增 Live 应拒绝 default_band_ids 中不存在的 Band。
+def test_console_create_live_mock_rejects_missing_default_band():
+    _set_authenticated_role("editor")
+    conn, _ = _build_connection_mock(
+        fetchone_side_effect=[(1,)],
+        fetchall_side_effect=[[(1,)]],
+    )
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/lives",
+            json=_valid_live_payload(default_band_ids=[1, 999]),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Band ids not found: 999"
 
 
 # 测试点：新增 Live 允许当天结束时刻 24:00，并接受四十五分钟 UTC 偏移。

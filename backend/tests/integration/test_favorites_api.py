@@ -178,6 +178,25 @@ def test_favorite_live_adds_server_side_state_and_marks_lives_responses(
     assert me_response.json()["favorite_live_ids"] == [1]
 
 
+# 测试点：收藏范围中的无 setlist Live 应与全部内容一致地返回默认 Band。
+def test_favorite_live_without_setlist_uses_default_bands(integration_test_client):
+    csrf_token = _login_and_get_csrf(integration_test_client)
+
+    favorite_response = integration_test_client.put(
+        "/api/me/favorites/lives/41",
+        headers={"X-CSRF-Token": csrf_token},
+    )
+    list_response = integration_test_client.get(
+        "/api/me/favorites/lives",
+        params={"page": 1, "page_size": 20},
+    )
+
+    assert favorite_response.status_code == 204
+    assert list_response.status_code == 200
+    assert list_response.json()["items"][0]["live_id"] == 41
+    assert list_response.json()["items"][0]["bands"] == [3]
+
+
 # 测试点：收藏列表应复用全量列表的关键词、年份、类型、乐队和排序筛选契约。
 def test_get_my_favorite_lives_applies_shared_filters(integration_test_client):
     csrf_token = _login_and_get_csrf(integration_test_client)

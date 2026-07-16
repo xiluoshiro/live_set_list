@@ -382,7 +382,10 @@ def create_venue(
     status_code=201,
     response_model=ConsoleLiveMutationResponse,
     summary="新增 Live",
-    description="`editor+` 用户新增 Live 基础信息。`live_type` 为必填字段，值为稳定 code（oneman/taiban/multi_act/festival/event/other）。",
+    description=(
+        "`editor+` 用户新增 Live 基础信息。`live_type` 为必填字段，值为稳定 code"
+        "（oneman/taiban/multi_act/festival/event/other）；`default_band_ids` 仅在 Live 尚无 setlist 时用于列表展示。"
+    ),
     responses={
         400: {"model": ErrorResponse, "description": "业务参数错误"},
         401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
@@ -412,6 +415,19 @@ def create_live(
                 if cur.fetchone() is None:
                     raise HTTPException(status_code=404, detail=f"Venue id {payload.venue_id} not found")
 
+                if payload.default_band_ids:
+                    cur.execute(
+                        "SELECT id FROM band_attrs WHERE id = ANY(%s) ORDER BY id",
+                        (payload.default_band_ids,),
+                    )
+                    existing_band_ids = {int(row[0]) for row in cur.fetchall()}
+                    missing_band_ids = [
+                        band_id for band_id in payload.default_band_ids if band_id not in existing_band_ids
+                    ]
+                    if missing_band_ids:
+                        missing_text = ", ".join(str(band_id) for band_id in missing_band_ids)
+                        raise HTTPException(status_code=404, detail=f"Band ids not found: {missing_text}")
+
                 cur.execute(
                     """
                     INSERT INTO live_attrs (
@@ -422,9 +438,10 @@ def create_live(
                         url,
                         opening_time,
                         start_time,
-                        venue_id
+                        venue_id,
+                        default_band_ids
                     )
-                    VALUES (%s, %s, %s, false, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -435,6 +452,7 @@ def create_live(
                         opening_time,
                         start_time,
                         payload.venue_id,
+                        payload.default_band_ids,
                     ),
                 )
                 created_row = cur.fetchone()
@@ -446,6 +464,7 @@ def create_live(
                     "opening_time": opening_time,
                     "start_time": start_time,
                     "live_type": payload.live_type,
+                    "default_band_ids": payload.default_band_ids,
                 }
 
                 _write_console_audit_log(
@@ -481,6 +500,7 @@ def create_live(
             "opening_time": opening_time,
             "start_time": start_time,
             "venue_id": payload.venue_id,
+            "default_band_ids": payload.default_band_ids,
         },
     }
 

@@ -9,7 +9,12 @@ from psycopg2.extras import Json
 from app.auth import AuthSessionContext, AuthUser, assert_valid_csrf, get_current_auth_context, get_current_user
 from app.db import get_db_connection, get_user_write_db_connection
 from app.favorites import apply_favorites_batch, live_exists
-from app.live_list_filters import LiveListFilters, build_filtered_live_queries, normalize_list_query
+from app.live_list_filters import (
+    LiveListFilters,
+    build_filtered_live_queries,
+    effective_band_ids_sql,
+    normalize_list_query,
+)
 from app.logging_config import get_logger
 from app.routers.lives import ALLOWED_PAGE_SIZE
 from app.schemas import ErrorResponse, LivesResponse
@@ -20,16 +25,14 @@ from app.schemas.favorites import FavoriteBatchRequest, FavoriteBatchResponse
 router = APIRouter(prefix="/api/me", tags=["me"])
 logger = get_logger(__name__)
 
-FAVORITE_LIVES_BASE_QUERY = """
+FAVORITE_BAND_IDS_SQL = effective_band_ids_sql(live_alias="l", setlist_alias="ls", band_alias="b")
+
+FAVORITE_LIVES_BASE_QUERY = f"""
 SELECT
     l.id,
     l.live_date,
     l.live_title,
-    COALESCE(
-        array_agg(DISTINCT b.id ORDER BY b.id)
-            FILTER (WHERE b.id IS NOT NULL),
-        ARRAY[]::int[]
-    ) AS band_ids,
+    {FAVORITE_BAND_IDS_SQL} AS band_ids,
     l.url AS url,
     l.live_type
 FROM user_live_favorites f
@@ -44,7 +47,7 @@ LEFT JOIN LATERAL (
 LEFT JOIN band_attrs b
     ON b.band_name = t.key
 WHERE f.user_id = %s
-GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url
+GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids
 """
 
 FAVORITE_LIVES_COUNT_QUERY = f"""
