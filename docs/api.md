@@ -84,6 +84,12 @@
 
 - `page_size` 当前只允许 `15` 或 `20`
 - `without_setlist=true` 时，仅返回尚无 `live_setlist` 数据的 Live；控制台“新增 Setlist”候选使用该筛选
+- `q` 会 trim；空字符串等同于未传，最大长度为 `255`，匹配 Live 标题、场地、歌曲、乐队名和乐队缩写
+- `year` 范围为 `1900..2100`
+- `live_type` 只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
+- `band_id` 必须大于等于 `1`，按 `live_setlist.band_member` 中的乐队名判断是否出演
+- `sort` 只允许 `date_desc` 或 `date_asc`，默认 `date_desc`
+- 多个筛选条件按 AND 组合；文本值使用参数绑定并转义 `%`、`_`、`\`
 - 当请求页码超过最后一页时，后端会自动钳制到最后一页
 - `bands` 来自 `live_setlist.band_member` 中聚合出的乐队 ID
 - `bands` 会去重并按升序返回
@@ -124,12 +130,13 @@
 
 - 该接口要求已登录
 - 返回结构与 `GET /api/lives` 保持一致
+- 支持与 `GET /api/lives` 相同的 `q/year/live_type/band_id/sort` 参数，筛选发生在收藏分页之前
 - `items[].is_favorite` 恒为 `true`
 - 取消收藏后，该接口会立即反映最新结果
 
 ### 5. 公共 catalog 接口
 
-`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives` 用于匿名可访问的公共资料库搜索与浏览。
+`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/stats` 用于匿名可访问的公共资料库搜索与浏览。
 
 - 三个接口都不要求登录。
 - 登录用户访问搜索结果或乐队 Live 列表时，Live 项的 `is_favorite` 会按当前用户收藏计算；匿名请求统一返回 `false`。
@@ -155,6 +162,9 @@
   - 页码超过最后一页时会自动钳制到最后一页
   - 未找到乐队时返回 `404`
   - Live 结果按 `live_date DESC, id DESC` 排序
+- `GET /api/catalog/stats`
+  - `years` 返回数据库实际存在的 Live 年份，按降序排列
+  - 前端年份筛选只显示年份本身，不显示命中数量
 
 ### 6. 控制台 lookup 接口
 

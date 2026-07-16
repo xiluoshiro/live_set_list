@@ -178,6 +178,36 @@ def test_favorite_live_adds_server_side_state_and_marks_lives_responses(
     assert me_response.json()["favorite_live_ids"] == [1]
 
 
+# 测试点：收藏列表应复用全量列表的关键词、年份、类型、乐队和排序筛选契约。
+def test_get_my_favorite_lives_applies_shared_filters(integration_test_client):
+    csrf_token = _login_and_get_csrf(integration_test_client)
+    for live_id in (1, 2):
+        response = integration_test_client.put(
+            f"/api/me/favorites/lives/{live_id}",
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        assert response.status_code == 204
+
+    response = integration_test_client.get(
+        "/api/me/favorites/lives",
+        params={
+            "page": 1,
+            "page_size": 20,
+            "q": "MyGO",
+            "year": 2026,
+            "live_type": "festival",
+            "band_id": 3,
+            "sort": "date_asc",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["pagination"]["total"] == 1
+    assert [item["live_id"] for item in payload["items"]] == [2]
+    assert payload["items"][0]["is_favorite"] is True
+
+
 # 测试点：收藏与取消收藏都应保持幂等，重复调用不应报错。
 def test_favorite_live_put_and_delete_are_idempotent(
     integration_test_client,

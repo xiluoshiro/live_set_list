@@ -1,5 +1,5 @@
 from math import ceil
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
 from psycopg2 import Error, OperationalError
@@ -9,6 +9,7 @@ from psycopg2.extras import Json
 from app.auth import AuthSessionContext, AuthUser, assert_valid_csrf, get_current_auth_context, get_current_user
 from app.db import get_db_connection, get_user_write_db_connection
 from app.favorites import apply_favorites_batch, live_exists
+from app.live_list_filters import LiveListFilters, build_filtered_live_queries, normalize_list_query
 from app.logging_config import get_logger
 from app.routers.lives import ALLOWED_PAGE_SIZE
 from app.schemas import ErrorResponse, LivesResponse
@@ -127,15 +128,42 @@ def _write_favorite_batch_audit_log(
 def get_my_favorite_lives(
     page: int = Query(default=1, ge=1, description="页码，从 1 开始。"),
     page_size: int = Query(default=20, description="每页条数，当前仅允许 15 或 20。"),
+    q: str | None = Query(default=None, max_length=255, description="匹配 Live、乐队、歌曲或场地的关键词。"),
+    year: int | None = Query(default=None, ge=1900, le=2100, description="Live 年份。"),
+    live_type: Literal["oneman", "taiban", "multi_act", "festival", "event", "other"] | None = Query(
+        default=None,
+        description="Live 类型。",
+    ),
+    band_id: int | None = Query(default=None, ge=1, description="包含指定乐队的 Live。"),
+    sort: Literal["date_desc", "date_asc"] = Query(default="date_desc", description="按 Live 日期排序。"),
     current_user: AuthUser = Depends(get_current_user),
 ):
     if page_size not in ALLOWED_PAGE_SIZE:
         raise HTTPException(status_code=400, detail="page_size must be 15 or 20")
 
+    filters = LiveListFilters(
+        q=normalize_list_query(q),
+        year=year,
+        live_type=live_type,
+        band_id=band_id,
+        sort=sort,
+    )
+
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(FAVORITE_LIVES_COUNT_QUERY, (current_user.id,))
+                if filters.is_default:
+                    count_query = FAVORITE_LIVES_COUNT_QUERY
+                    count_params: tuple[object, ...] = (current_user.id,)
+                    page_query = FAVORITE_LIVES_PAGE_QUERY
+                    page_params: tuple[object, ...] = (current_user.id,)
+                else:
+                    count_query, count_params, page_query, page_params = build_filtered_live_queries(
+                        filters,
+                        favorite_user_id=current_user.id,
+                    )
+
+                cur.execute(count_query, count_params)
                 count_row = cur.fetchone()
                 total = int(count_row[0]) if count_row else 0
 
@@ -143,7 +171,7 @@ def get_my_favorite_lives(
                 safe_page = min(page, total_pages)
                 offset = (safe_page - 1) * page_size
 
-                cur.execute(FAVORITE_LIVES_PAGE_QUERY, (current_user.id, page_size, offset))
+                cur.execute(page_query, (*page_params, page_size, offset))
                 rows = cur.fetchall()
     except QueryCanceled as exc:
         logger.exception(

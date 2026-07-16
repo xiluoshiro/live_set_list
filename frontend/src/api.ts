@@ -1,5 +1,12 @@
 import { LruRequestCache, RecentPromiseDebouncer } from "./cache/queryCache";
+import {
+  liveListFiltersKey,
+  normalizedLiveListFilters,
+  type LiveListFilters,
+} from "./liveListFilters";
 import { logError, logInfo } from "./logger";
+
+export type { LiveListFilters, LiveListSort } from "./liveListFilters";
 
 export type DbHealthResponse = {
   ok: boolean;
@@ -97,6 +104,7 @@ export type CatalogStatsResponse = {
   song_count: number;
   venue_count: number;
   latest_live_date: string | null;
+  years?: number[];
 };
 
 export type LiveDetailBandMember = {
@@ -316,12 +324,26 @@ export class ApiError extends Error {
   }
 }
 
-function livesCacheKey(page: number, pageSize: 15 | 20, withoutSetlist = false): string {
-  return `lives:${page}:${pageSize}:${withoutSetlist ? "without_setlist" : "all"}`;
+function appendLiveListFilters(query: URLSearchParams, filters?: LiveListFilters): void {
+  const normalized = normalizedLiveListFilters(filters);
+  if (normalized.q !== "") query.set("q", normalized.q);
+  if (normalized.year !== null) query.set("year", String(normalized.year));
+  if (normalized.liveType !== null) query.set("live_type", normalized.liveType);
+  if (normalized.bandId !== null) query.set("band_id", String(normalized.bandId));
+  if (normalized.sort !== "date_desc") query.set("sort", normalized.sort);
 }
 
-function favoriteLivesCacheKey(page: number, pageSize: 15 | 20): string {
-  return `favorite_lives:${page}:${pageSize}`;
+function livesCacheKey(
+  page: number,
+  pageSize: 15 | 20,
+  withoutSetlist = false,
+  filters?: LiveListFilters,
+): string {
+  return `lives:${page}:${pageSize}:${withoutSetlist ? "without_setlist" : "all"}:${liveListFiltersKey(filters)}`;
+}
+
+function favoriteLivesCacheKey(page: number, pageSize: 15 | 20, filters?: LiveListFilters): string {
+  return `favorite_lives:${page}:${pageSize}:${liveListFiltersKey(filters)}`;
 }
 
 function detailCacheKey(liveId: number): string {
@@ -445,6 +467,7 @@ async function fetchLivesRemote(
   page: number,
   pageSize: 15 | 20,
   withoutSetlist = false,
+  filters?: LiveListFilters,
 ): Promise<LivesResponse> {
   const query = new URLSearchParams({
     page: String(page),
@@ -453,25 +476,35 @@ async function fetchLivesRemote(
   if (withoutSetlist) {
     query.set("without_setlist", "true");
   }
+  appendLiveListFilters(query, filters);
   const response = await fetchWithTimeout(`${BASE_URL}/api/lives?${query.toString()}`, undefined, {
     requestKind: "lives",
   });
   return expectJsonResponse<LivesResponse>(response);
 }
 
-async function fetchMyFavoriteLivesRemote(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
+async function fetchMyFavoriteLivesRemote(
+  page: number,
+  pageSize: 15 | 20,
+  filters?: LiveListFilters,
+): Promise<LivesResponse> {
   const query = new URLSearchParams({
     page: String(page),
     page_size: String(pageSize),
   });
+  appendLiveListFilters(query, filters);
   const response = await fetchWithTimeout(`${BASE_URL}/api/me/favorites/lives?${query.toString()}`, undefined, {
     requestKind: "favorite_lives",
   });
   return expectJsonResponse<LivesResponse>(response);
 }
 
-export function peekMyFavoriteLives(page: number, pageSize: 15 | 20): LivesResponse | undefined {
-  return favoriteLivesCache.getFresh(favoriteLivesCacheKey(page, pageSize), LIVES_CACHE_TTL_MS);
+export function peekMyFavoriteLives(
+  page: number,
+  pageSize: 15 | 20,
+  filters?: LiveListFilters,
+): LivesResponse | undefined {
+  return favoriteLivesCache.getFresh(favoriteLivesCacheKey(page, pageSize, filters), LIVES_CACHE_TTL_MS);
 }
 
 export function clearMyFavoriteLivesCache(): void {
@@ -487,8 +520,12 @@ function clearLiveCollectionCaches(): void {
   clearMyFavoriteLivesCache();
 }
 
-export async function getMyFavoriteLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
-  const requestedKey = favoriteLivesCacheKey(page, pageSize);
+export async function getMyFavoriteLives(
+  page: number,
+  pageSize: 15 | 20,
+  filters?: LiveListFilters,
+): Promise<LivesResponse> {
+  const requestedKey = favoriteLivesCacheKey(page, pageSize, filters);
   const fresh = favoriteLivesCache.getFresh(requestedKey, LIVES_CACHE_TTL_MS);
   if (fresh !== undefined) {
     return fresh;
@@ -496,11 +533,11 @@ export async function getMyFavoriteLives(page: number, pageSize: 15 | 20): Promi
   const inFlight = favoriteLivesCache.getInFlight(requestedKey);
   if (inFlight) return inFlight;
 
-  const requestPromise = fetchMyFavoriteLivesRemote(page, pageSize)
+  const requestPromise = fetchMyFavoriteLivesRemote(page, pageSize, filters)
     .then((payload) => {
       const updatedAt = Date.now();
       favoriteLivesCache.setData(requestedKey, payload, updatedAt);
-      const canonicalKey = favoriteLivesCacheKey(payload.pagination.page, pageSize);
+      const canonicalKey = favoriteLivesCacheKey(payload.pagination.page, pageSize, filters);
       if (canonicalKey !== requestedKey) {
         favoriteLivesCache.setData(canonicalKey, payload, updatedAt);
       }
@@ -811,9 +848,11 @@ export async function appendConsoleLiveSetlist(
 export async function getLives(
   page: number,
   pageSize: 15 | 20,
-  withoutSetlist = false,
+  withoutSetlistOrFilters: boolean | LiveListFilters = false,
 ): Promise<LivesResponse> {
-  const requestedKey = livesCacheKey(page, pageSize, withoutSetlist);
+  const withoutSetlist = typeof withoutSetlistOrFilters === "boolean" ? withoutSetlistOrFilters : false;
+  const filters = typeof withoutSetlistOrFilters === "boolean" ? undefined : withoutSetlistOrFilters;
+  const requestedKey = livesCacheKey(page, pageSize, withoutSetlist, filters);
   const fresh = livesCache.getFresh(requestedKey, LIVES_CACHE_TTL_MS);
   if (fresh !== undefined) {
     return fresh;
@@ -821,11 +860,11 @@ export async function getLives(
   const inFlight = livesCache.getInFlight(requestedKey);
   if (inFlight) return inFlight;
 
-  const requestPromise = fetchLivesRemote(page, pageSize, withoutSetlist)
+  const requestPromise = fetchLivesRemote(page, pageSize, withoutSetlist, filters)
     .then((payload) => {
       const updatedAt = Date.now();
       livesCache.setData(requestedKey, payload, updatedAt);
-      const canonicalKey = livesCacheKey(payload.pagination.page, pageSize, withoutSetlist);
+      const canonicalKey = livesCacheKey(payload.pagination.page, pageSize, withoutSetlist, filters);
       if (canonicalKey !== requestedKey) {
         livesCache.setData(canonicalKey, payload, updatedAt);
       }

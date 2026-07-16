@@ -71,6 +71,43 @@ def test_get_lives_without_setlist_excludes_seeded_lives_with_rows(integration_t
     }
 
 
+# 测试点：关键词、年份、类型和乐队应在分页前按 AND 组合，并保留正确的聚合列表字段。
+def test_get_lives_combines_public_filters(integration_test_client):
+    response = integration_test_client.get(
+        "/api/lives",
+        params={
+            "page": 1,
+            "page_size": 20,
+            "q": "Shibuya",
+            "year": 2026,
+            "live_type": "multi_act",
+            "band_id": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["pagination"] == {
+        "page": 1,
+        "page_size": 20,
+        "total": 1,
+        "total_pages": 1,
+    }
+    assert [item["live_id"] for item in payload["items"]] == [1]
+    assert payload["items"][0]["bands"] == [1, 2]
+
+
+# 测试点：日期升序应同时使用 live_date 与 id 形成稳定排序。
+def test_get_lives_supports_date_ascending_sort(integration_test_client):
+    response = integration_test_client.get(
+        "/api/lives",
+        params={"page": 1, "page_size": 20, "sort": "date_asc"},
+    )
+
+    assert response.status_code == 200
+    assert [item["live_id"] for item in response.json()["items"]] == [38, 1, 2, 41]
+
+
 def test_get_lives_large_page_clamps_to_last_page(integration_test_client):
     # 测试点：真实测试库只有 1 页数据时，请求超大页码应钳制回最后一页。
     response = integration_test_client.get("/api/lives?page=99&page_size=20")

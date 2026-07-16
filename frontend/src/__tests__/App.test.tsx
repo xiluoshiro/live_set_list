@@ -322,6 +322,7 @@ describe("App", () => {
       song_count: 17,
       venue_count: 3,
       latest_live_date: "2026-05-30",
+      years: [2026, 2025],
     });
   });
 
@@ -884,7 +885,7 @@ describe("App", () => {
     const secondPageInfo = getPageInfo();
     expect(secondPageInfo.page).toBe(Math.min(2, secondPageInfo.totalPages));
 
-    await user.selectOptions(screen.getByRole("combobox"), "15");
+    await user.selectOptions(screen.getByLabelText("每页行数"), "15");
     const pageInfoAfterResize = getPageInfo();
     expect(pageInfoAfterResize.page).toBe(1);
     expect(pageInfoAfterResize.totalPages).toBe(Math.ceil(total / 15));
@@ -1168,7 +1169,7 @@ describe("App", () => {
     await openAllContent(user);
 
     await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(1, 20));
-    await user.selectOptions(screen.getByRole("combobox"), "15");
+    await user.selectOptions(screen.getByLabelText("每页行数"), "15");
     await waitFor(() => expect(getLivesMock).toHaveBeenCalledWith(1, 15));
   });
 
@@ -1550,6 +1551,37 @@ describe("App", () => {
     await waitFor(() => expect(document.querySelector(".table-wrap")).not.toBeNull());
     expect(screen.getByRole("button", { name: "切换为卡片模式" })).toBeInTheDocument();
     expect(localStorage.getItem("live-view-mode")).toBe("table");
+  });
+
+  test("全部内容筛选栏提交共享筛选参数且选项不显示数量", async () => {
+    // 测试点：关键词、年份、类型、乐队和排序会共同刷新服务端列表，年份与乐队只显示名称。
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 6, totalPages: 1, itemCount: 6 }),
+    );
+    const user = userEvent.setup();
+    renderApp();
+    await openAllContent(user);
+
+    await user.clear(screen.getByLabelText("关键词"));
+    await user.type(screen.getByLabelText("关键词"), "Roselia");
+    await user.click(screen.getByRole("button", { name: "搜索" }));
+    await user.selectOptions(screen.getByLabelText("年份"), "2026");
+    await user.selectOptions(screen.getByLabelText("Live 类型"), "oneman");
+    await user.selectOptions(screen.getByLabelText("乐队 / 艺人"), "2");
+    await user.selectOptions(screen.getByLabelText("排序"), "date_asc");
+
+    await waitFor(() => {
+      expect(getLivesMock).toHaveBeenLastCalledWith(1, 20, {
+        q: "Roselia",
+        year: 2026,
+        liveType: "oneman",
+        bandId: 2,
+        sort: "date_asc",
+      });
+    });
+    expect(screen.getByRole("option", { name: "2026" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Roselia" })).toBeInTheDocument();
+    expect(screen.queryByText(/（\d+）/)).not.toBeInTheDocument();
   });
 
 });

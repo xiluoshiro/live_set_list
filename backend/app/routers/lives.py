@@ -1,7 +1,7 @@
 ﻿import json
 from collections.abc import Mapping
 from math import ceil
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from psycopg2 import Error, OperationalError
@@ -10,6 +10,7 @@ from psycopg2.errors import QueryCanceled
 from app.auth import AuthUser, get_current_user_optional
 from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set, is_live_favorite
+from app.live_list_filters import LiveListFilters, build_filtered_live_queries, normalize_list_query
 from app.logging_config import get_logger
 from app.schemas import (
     ErrorResponse,
@@ -558,17 +559,55 @@ def get_lives(
     page: int = Query(default=1, ge=1, description="页码，从 1 开始。"),
     page_size: int = Query(default=20, description="每页条数，当前仅允许 15 或 20。"),
     without_setlist: bool = Query(default=False, description="是否仅返回尚无 setlist 数据的 Live。"),
+    q: str | None = Query(default=None, max_length=255, description="匹配 Live、乐队、歌曲或场地的关键词。"),
+    year: int | None = Query(default=None, ge=1900, le=2100, description="Live 年份。"),
+    live_type: Literal["oneman", "taiban", "multi_act", "festival", "event", "other"] | None = Query(
+        default=None,
+        description="Live 类型。",
+    ),
+    band_id: int | None = Query(default=None, ge=1, description="包含指定乐队的 Live。"),
+    sort: Literal["date_desc", "date_asc"] = Query(default="date_desc", description="按 Live 日期排序。"),
     current_user: AuthUser | None = Depends(get_current_user_optional),
 ):
     if page_size not in ALLOWED_PAGE_SIZE:
         raise HTTPException(status_code=400, detail="page_size must be 15 or 20")
 
+    filters = LiveListFilters(
+        q=normalize_list_query(q),
+        year=year,
+        live_type=live_type,
+        band_id=band_id,
+        sort=sort,
+        without_setlist=without_setlist,
+    )
+
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                count_query = LIVES_WITHOUT_SETLIST_COUNT_QUERY if without_setlist else LIVES_COUNT_QUERY
-                page_query = LIVES_WITHOUT_SETLIST_PAGE_QUERY if without_setlist else LIVES_PAGE_QUERY
-                cur.execute(count_query)
+                if filters.is_default:
+                    count_query = LIVES_COUNT_QUERY
+                    count_params: tuple[object, ...] = ()
+                    page_query = LIVES_PAGE_QUERY
+                    page_params: tuple[object, ...] = ()
+                elif (
+                    without_setlist
+                    and filters.q is None
+                    and year is None
+                    and live_type is None
+                    and band_id is None
+                    and sort == "date_desc"
+                ):
+                    count_query = LIVES_WITHOUT_SETLIST_COUNT_QUERY
+                    count_params = ()
+                    page_query = LIVES_WITHOUT_SETLIST_PAGE_QUERY
+                    page_params = ()
+                else:
+                    count_query, count_params, page_query, page_params = build_filtered_live_queries(filters)
+
+                if count_params:
+                    cur.execute(count_query, count_params)
+                else:
+                    cur.execute(count_query)
                 count_row = cur.fetchone()
                 total = int(count_row[0]) if count_row else 0
 
@@ -576,7 +615,7 @@ def get_lives(
                 safe_page = min(page, total_pages)
                 offset = (safe_page - 1) * page_size
 
-                cur.execute(page_query, (page_size, offset))
+                cur.execute(page_query, (*page_params, page_size, offset))
                 rows = cur.fetchall()
                 favorite_live_ids = set()
                 if current_user is not None:
