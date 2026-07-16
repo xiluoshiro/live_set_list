@@ -49,4 +49,4 @@ class CatalogStatsResponse(BaseModel):
     song_count: int = Field(..., description="Total number of songs")
     venue_count: int = Field(..., description="Total number of venues")
     latest_live_date: str | None = Field(default=None, description="Most recent live date in ISO format")
-
+    years: list[int] = Field(default_factory=list, description="Distinct Live years ordered descending")

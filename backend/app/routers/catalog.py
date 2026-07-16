@@ -447,7 +447,7 @@ def get_catalog_band_lives(
     "/stats",
     response_model=CatalogStatsResponse,
     summary="Get catalog aggregate stats",
-    description="Return total band / song / venue counts and the most recent live date.",
+    description="Return catalog counts, the most recent live date, and available Live years.",
 )
 def get_catalog_stats():
     conn = get_db_connection()
@@ -458,7 +458,12 @@ def get_catalog_stats():
                     (SELECT COUNT(*) FROM band_attrs) AS band_count,
                     (SELECT COUNT(*) FROM song_list)   AS song_count,
                     (SELECT COUNT(*) FROM venue_list)  AS venue_count,
-                    (SELECT MAX(live_date) FROM live_attrs) AS latest_live_date
+                    (SELECT MAX(live_date) FROM live_attrs) AS latest_live_date,
+                    ARRAY(
+                        SELECT DISTINCT EXTRACT(YEAR FROM live_date)::int AS live_year
+                        FROM live_attrs
+                        ORDER BY live_year DESC
+                    ) AS years
             """)
             row = cur.fetchone()
             return CatalogStatsResponse(
@@ -466,6 +471,7 @@ def get_catalog_stats():
                 song_count=row[1],
                 venue_count=row[2],
                 latest_live_date=row[3].isoformat() if row[3] else None,
+                years=list(row[4] or []),
             )
     except OperationalError as exc:
         if "timeout expired" in str(exc).lower():

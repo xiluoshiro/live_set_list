@@ -28,8 +28,16 @@ import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { HomeDashboard, type HomeLiveRow } from "./components/HomeDashboard";
 import { LiveCardGrid } from "./components/LiveCardGrid";
 import { LiveDetailPage } from "./components/LiveDetailPage";
+import { LiveListFiltersToolbar } from "./components/LiveListFilters";
 import { LoginDialog } from "./components/LoginDialog";
+import { formatLiveType } from "./components/console/constants";
 import { useFavorites } from "./favorites/FavoriteProvider";
+import {
+  DEFAULT_LIVE_LIST_FILTERS,
+  hasActiveLiveListFilters,
+  liveListFiltersKey,
+  type LiveListFilters,
+} from "./liveListFilters";
 import { logError } from "./logger";
 import {
   prefetchCurrentPageDetails,
@@ -43,6 +51,7 @@ type LiveRow = {
   liveId: number;
   liveDate: string;
   liveTitle: string;
+  liveType: string;
   icons: BandIconInput[];
   url: string | null;
 };
@@ -103,8 +112,13 @@ function getThemeToggleMeta(mode: ThemeMode, resolvedTheme: "light" | "dark") {
   };
 }
 
-function buildListSnapshotKey(tab: ListTabKey, page: number, pageSize: 15 | 20): string {
-  return `${tab}:${page}:${pageSize}`;
+function buildListSnapshotKey(
+  tab: ListTabKey,
+  page: number,
+  pageSize: 15 | 20,
+  filtersKey = "",
+): string {
+  return `${tab}:${filtersKey}:${page}:${pageSize}`;
 }
 
 function isAppHistoryState(value: unknown): value is AppHistoryState {
@@ -162,6 +176,8 @@ function App() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const [page, setPage] = useState(1);
+  const [listFilters, setListFilters] = useState<LiveListFilters>({ ...DEFAULT_LIVE_LIST_FILTERS });
+  const [listFilterBands, setListFilterBands] = useState<CatalogBandItem[]>([]);
   const [jumpPageInput, setJumpPageInput] = useState("1");
   const [tab, setTab] = useState<TabKey>("home");
   const [detailLiveId, setDetailLiveId] = useState<number | null>(null);
@@ -211,8 +227,12 @@ function App() {
     { key: "about", label: "联系我们", visible: true },
     { key: "console", label: "控制台", visible: canUseConsoleFeatures },
   ];
+  const currentListFiltersKey = liveListFiltersKey(listFilters);
+  const listFiltersActive = hasActiveLiveListFilters(listFilters);
 
-  const getCardSessionKey = (listTab: ListTabKey) => buildListSnapshotKey(listTab, 1, pageSize);
+  const getCardSessionKey = (listTab: ListTabKey) => (
+    buildListSnapshotKey(listTab, 1, pageSize, currentListFiltersKey)
+  );
 
   const captureCurrentListState = (state: AppHistoryState): AppHistoryState => {
     if (tab !== "all" && tab !== "favorites") return state;
@@ -299,6 +319,7 @@ function App() {
     liveId: item.live_id,
     liveDate: item.live_date,
     liveTitle: item.live_title,
+    liveType: item.live_type,
     icons: item.bands ?? [],
     url: item.url,
   });
@@ -488,7 +509,7 @@ function App() {
   }, [catalogBandPage, pageSize, selectedCatalogBandId, tab]);
 
   useEffect(() => {
-    if (tab !== "home") return;
+    if (tab !== "home" && tab !== "all" && tab !== "favorites") return;
     let canceled = false;
     const fetchStats = async () => {
       try {
@@ -506,9 +527,28 @@ function App() {
 
   useEffect(() => {
     if (!listEnabled) return;
+    let canceled = false;
+
+    const fetchListFilterBands = async () => {
+      try {
+        const data = await getCatalogBands(100);
+        if (!canceled) setListFilterBands(data.items);
+      } catch {
+        if (!canceled) setListFilterBands([]);
+      }
+    };
+
+    void fetchListFilterBands();
+    return () => {
+      canceled = true;
+    };
+  }, [listEnabled]);
+
+  useEffect(() => {
+    if (!listEnabled) return;
     if (tab === "favorites" && !canUseFavoriteFeatures) return;
     let canceled = false;
-    const requestedSnapshotKey = buildListSnapshotKey(tab, page, pageSize);
+    const requestedSnapshotKey = buildListSnapshotKey(tab, page, pageSize, currentListFiltersKey);
     const cachedSnapshot = listSnapshotsRef.current[requestedSnapshotKey];
     const cardSessionKey = getCardSessionKey(tab as ListTabKey);
     const cachedCardSession = viewMode === "cards" ? cardSessionsRef.current[cardSessionKey] : undefined;
@@ -540,7 +580,9 @@ function App() {
         return;
       }
       const cachedFavoritePage =
-        tab === "favorites" ? peekMyFavoriteLives(page, pageSize) : undefined;
+        tab === "favorites"
+          ? peekMyFavoriteLives(page, pageSize, listFiltersActive ? listFilters : undefined)
+          : undefined;
       if (cachedFavoritePage) {
         const mappedItems = cachedFavoritePage.items.map(toLiveRow);
         setItems(mappedItems);
@@ -575,11 +617,17 @@ function App() {
       setServerTotal(0);
       setServerTotalPages(1);
       try {
-        const data = tab === "favorites" ? await getMyFavoriteLives(page, pageSize) : await getLives(page, pageSize);
+        const data = tab === "favorites"
+          ? listFiltersActive
+            ? await getMyFavoriteLives(page, pageSize, listFilters)
+            : await getMyFavoriteLives(page, pageSize)
+          : listFiltersActive
+            ? await getLives(page, pageSize, listFilters)
+            : await getLives(page, pageSize);
         if (canceled) return;
         const mappedItems = data.items.map(toLiveRow);
         const canonicalPage = data.pagination.page;
-        const canonicalSnapshotKey = buildListSnapshotKey(tab, canonicalPage, pageSize);
+        const canonicalSnapshotKey = buildListSnapshotKey(tab, canonicalPage, pageSize, currentListFiltersKey);
         listSnapshotsRef.current[canonicalSnapshotKey] = {
           items: mappedItems,
           total: data.pagination.total,
@@ -630,7 +678,17 @@ function App() {
     return () => {
       canceled = true;
     };
-  }, [canUseFavoriteFeatures, listEnabled, page, pageSize, tab, viewMode]);
+  }, [
+    canUseFavoriteFeatures,
+    currentListFiltersKey,
+    listEnabled,
+    listFilters,
+    listFiltersActive,
+    page,
+    pageSize,
+    tab,
+    viewMode,
+  ]);
 
   useEffect(() => {
     if (tab !== "all" && tab !== "favorites") return;
@@ -642,13 +700,13 @@ function App() {
         live_id: row.liveId,
         live_date: row.liveDate,
         live_title: row.liveTitle,
-        live_type: "",
+        live_type: row.liveType,
         bands: row.icons,
         url: row.url,
         is_favorite: isFavorite(row.liveId),
       })),
     ).catch(() => undefined);
-    if (tab !== "all") {
+    if (tab !== "all" || listFiltersActive) {
       return () => undefined;
     }
     const cancelIdlePrefetch = scheduleIdleNextPagePrefetch({
@@ -663,7 +721,7 @@ function App() {
       cancelIdlePrefetch();
       cancelFavoritePrefetch();
     };
-  }, [canUseFavoriteFeatures, items, page, pageSize, serverTotalPages, tab]);
+  }, [canUseFavoriteFeatures, items, listFiltersActive, page, pageSize, serverTotalPages, tab]);
 
   const isFavorite = (id: number) => favorites.favoriteLiveIdSet.has(id);
   const showConsolePanel = tab === "console" && canUseConsoleFeatures;
@@ -709,6 +767,15 @@ function App() {
   const handlePageSizeChange = (value: 15 | 20) => {
     setPageSize(value);
     setPage(1);
+  };
+
+  const handleListFiltersChange = (nextFilters: LiveListFilters) => {
+    setListFilters(nextFilters);
+    setPage(1);
+    setCardPage(1);
+    setItems([]);
+    setLoadError(null);
+    pendingScrollRestoreRef.current = null;
   };
 
   const handleConsoleLiveDataChanged = () => {
@@ -780,8 +847,12 @@ function App() {
       setLoadError(null);
       try {
         const data = tab === "favorites"
-          ? await getMyFavoriteLives(1, pageSize)
-          : await getLives(1, pageSize);
+          ? listFiltersActive
+            ? await getMyFavoriteLives(1, pageSize, listFilters)
+            : await getMyFavoriteLives(1, pageSize)
+          : listFiltersActive
+            ? await getLives(1, pageSize, listFilters)
+            : await getLives(1, pageSize);
         setItems(data.items.map(toLiveRow));
         setServerTotal(data.pagination.total);
         setServerTotalPages(data.pagination.total_pages);
@@ -803,7 +874,7 @@ function App() {
     activeCardSessionKeyRef.current = viewMode === "cards" && (tab === "all" || tab === "favorites")
       ? getCardSessionKey(tab)
       : null;
-  }, [pageSize, tab, viewMode]);
+  }, [currentListFiltersKey, pageSize, tab, viewMode]);
 
   useEffect(() => {
     if (pendingScrollRestoreRef.current === null) return;
@@ -844,8 +915,12 @@ function App() {
     setCardLoadingMore(true);
     try {
       const data = tab === "favorites"
-        ? await getMyFavoriteLives(nextPage, pageSize)
-        : await getLives(nextPage, pageSize);
+        ? listFiltersActive
+          ? await getMyFavoriteLives(nextPage, pageSize, listFilters)
+          : await getMyFavoriteLives(nextPage, pageSize)
+        : listFiltersActive
+          ? await getLives(nextPage, pageSize, listFilters)
+          : await getLives(nextPage, pageSize);
       const mappedItems = data.items.map(toLiveRow);
       const currentSession = cardSessionsRef.current[sessionKey];
       if (currentSession && currentSession.cardPage >= data.pagination.page) return;
@@ -871,7 +946,17 @@ function App() {
       cardLoadInFlightRef.current = false;
       setCardLoadingMore(false);
     }
-  }, [cardLoadingMore, cardPage, items, pageSize, serverTotalPages, tab]);
+  }, [
+    cardLoadingMore,
+    cardPage,
+    currentListFiltersKey,
+    items,
+    listFilters,
+    listFiltersActive,
+    pageSize,
+    serverTotalPages,
+    tab,
+  ]);
 
   useEffect(() => {
     if (viewMode !== "cards") return;
@@ -1169,20 +1254,32 @@ function App() {
           <AboutPanel />
         ) : showListPanel ? (
           <>
+            <header className="list-page-heading">
+              <div>
+                <h1>{tab === "favorites" ? "我的收藏" : "全部内容"}</h1>
+                <p>{tab === "favorites" ? "筛选并重新查看收藏的 Live" : "浏览已收录的 Live 与出演记录"}</p>
+              </div>
+              <span className="view-toggle">
+                <button
+                  type="button"
+                  className="view-toggle-btn"
+                  data-active="true"
+                  onClick={() => handleViewModeChange(viewMode === "cards" ? "table" : "cards")}
+                  aria-label={viewMode === "cards" ? "切换为表格模式" : "切换为卡片模式"}
+                  title={viewMode === "cards" ? "切换为表格模式" : "切换为卡片模式"}
+                >
+                  {viewMode === "cards" ? "▦" : "☷"}
+                </button>
+              </span>
+            </header>
+            <LiveListFiltersToolbar
+              filters={listFilters}
+              years={catalogStats?.years ?? []}
+              bands={listFilterBands}
+              onChange={handleListFiltersChange}
+            />
             <footer className="pager">
               <div className="toolbar">
-                <span className="view-toggle">
-                  <button
-                    type="button"
-                    className="view-toggle-btn"
-                    data-active="true"
-                    onClick={() => handleViewModeChange(viewMode === "cards" ? "table" : "cards")}
-                    aria-label={viewMode === "cards" ? "切换为表格模式" : "切换为卡片模式"}
-                    title={viewMode === "cards" ? "切换为表格模式" : "切换为卡片模式"}
-                  >
-                    {viewMode === "cards" ? "▦" : "☷"}
-                  </button>
-                </span>
                 {viewMode === "table" && (
                   <label>
                     每页行数
@@ -1273,6 +1370,7 @@ function App() {
                     )}
                     <th>日期</th>
                     <th>Live 名称</th>
+                    <th>类型</th>
                     <th>乐队</th>
                     <th>URL</th>
                   </tr>
@@ -1303,6 +1401,7 @@ function App() {
                           {row.liveTitle}
                         </button>
                       </td>
+                      <td>{formatLiveType(row.liveType)}</td>
                       <td className="band-cell" title={`${row.icons.length} 支乐队`}>
                         <BandIconsCell icons={row.icons} rowId={row.liveId} />
                       </td>
@@ -1324,14 +1423,14 @@ function App() {
                   ))}
                   {loadError && (
                     <tr>
-                      <td colSpan={showFavoriteColumn ? 5 : 4} className="empty-cell">
+                      <td colSpan={showFavoriteColumn ? 6 : 5} className="empty-cell">
                         数据加载失败: {loadError}
                       </td>
                     </tr>
                   )}
                   {!loadError && pagedRows.length === 0 && (
                     <tr>
-                      <td colSpan={showFavoriteColumn ? 5 : 4} className="empty-cell">
+                      <td colSpan={showFavoriteColumn ? 6 : 5} className="empty-cell">
                         {loading ? "加载中..." : "当前没有可展示的数据"}
                       </td>
                     </tr>

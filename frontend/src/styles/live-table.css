@@ -57,12 +57,18 @@ tbody tr:hover {
 
 .table-with-fav th:nth-child(4),
 .table-with-fav td:nth-child(4) {
-  width: 140px;
-  min-width: 140px;
+  width: 100px;
+  white-space: nowrap;
 }
 
 .table-with-fav th:nth-child(5),
 .table-with-fav td:nth-child(5) {
+  width: 140px;
+  min-width: 140px;
+}
+
+.table-with-fav th:nth-child(6),
+.table-with-fav td:nth-child(6) {
   width: 90px;
   white-space: nowrap;
   text-align: center;
@@ -82,12 +88,18 @@ tbody tr:hover {
 
 .table-no-fav th:nth-child(3),
 .table-no-fav td:nth-child(3) {
-  width: 140px;
-  min-width: 140px;
+  width: 100px;
+  white-space: nowrap;
 }
 
 .table-no-fav th:nth-child(4),
 .table-no-fav td:nth-child(4) {
+  width: 140px;
+  min-width: 140px;
+}
+
+.table-no-fav th:nth-child(5),
+.table-no-fav td:nth-child(5) {
   width: 90px;
   white-space: nowrap;
   text-align: center;
@@ -314,6 +326,12 @@ tbody tr:hover {
   font-size: 16px;
 }
 
+.live-card-type {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .live-card-title {
   border: none;
   background: none;
@@ -385,4 +403,180 @@ tbody tr:hover {
   color: var(--text-muted);
   font-size: 13px;
   margin: 0 24px;
+}
+
+.list-page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 24px 24px 0;
+}
+
+.list-page-heading h1 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: 24px;
+}
+
+.list-page-heading p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.list-filter-panel {
+  display: grid;
+  gap: 12px;
+  margin: 18px 24px 0;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+
+.list-filter-form {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) repeat(4, minmax(120px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.list-filter-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.list-filter-field input,
+.list-filter-field select {
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--surface-input);
+  color: var(--text-main);
+  font: inherit;
+}
+
+.list-filter-query-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.list-filter-query-row button,
+.list-filter-mobile-toggle,
+.list-active-filters button {
+  border: 1px solid var(--border-normal);
+  border-radius: 8px;
+  background: var(--surface-chip-soft);
+  color: var(--text-main);
+  padding: 7px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.list-filter-query-row button,
+.list-filter-mobile-toggle {
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
+  border-color: var(--accent-primary);
+}
+
+.list-filter-secondary {
+  display: contents;
+}
+
+.list-filter-mobile-toggle {
+  display: none;
+}
+
+.list-active-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.list-active-filters button {
+  padding: 5px 9px;
+}
+
+.list-active-filters .list-filter-clear {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-link);
+}
+
+@media (max-width: 900px) {
+  .list-filter-form {
+    grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(130px, 1fr));
+  }
+
+  .list-filter-secondary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(130px, 1fr));
+    grid-column: 1 / -1;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 620px) {
+  .list-page-heading {
+    margin: 18px 12px 0;
+  }
+
+  .list-page-heading h1 {
+    font-size: 21px;
+  }
+
+  .list-filter-panel {
+    margin: 14px 12px 0;
+    padding: 12px;
+  }
+
+  .list-filter-form {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .list-filter-query {
+    grid-column: 1 / -1;
+  }
+
+  .list-filter-mobile-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+  }
+
+  .list-filter-sort {
+    grid-column: 2;
+  }
+
+  .list-filter-sort > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .list-filter-secondary,
+  .list-filter-secondary[data-open="false"] {
+    display: none;
+  }
+
+  .list-filter-secondary[data-open="true"] {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-column: 1 / -1;
+    gap: 10px;
+    padding-top: 4px;
+  }
 }

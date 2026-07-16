@@ -1,10 +1,12 @@
 import { type MutableRefObject } from "react";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
+import { formatLiveType } from "./console/constants";
 
 export type LiveRow = {
   liveId: number;
   liveDate: string;
   liveTitle: string;
+  liveType: string;
   icons: BandIconInput[];
   url: string | null;
 };
@@ -68,6 +70,7 @@ export function LiveCardGrid({
                 </button>
               )}
               <span className="live-card-date">{row.liveDate}</span>
+              <span className="live-card-type">{formatLiveType(row.liveType)}</span>
             </div>
             <span className="live-card-title">{row.liveTitle}</span>
             <div className="live-card-footer">

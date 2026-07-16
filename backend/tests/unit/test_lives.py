@@ -131,6 +131,51 @@ def test_get_lives_without_setlist_uses_filtered_pagination_queries():
     ]
 
 
+# 测试点：筛选值必须通过参数绑定传入，关键词中的通配符需要按字面量转义。
+def test_get_lives_filtered_query_binds_escaped_parameters():
+    conn, cursor = _build_connection_mock(0, [])
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.get(
+            "/api/lives",
+            params={
+                "page": 1,
+                "page_size": 20,
+                "q": r"100%_Live\\",
+                "year": 2026,
+                "live_type": "oneman",
+                "band_id": 2,
+                "sort": "date_asc",
+            },
+        )
+
+    assert response.status_code == 200
+    count_call, page_call = cursor.execute.call_args_list
+    assert "ILIKE %s" in count_call.args[0]
+    assert "ORDER BY l.live_date ASC, l.id ASC" in page_call.args[0]
+    assert count_call.args[1][0] == r"%100\%\_Live\\\\%"
+    assert count_call.args[1][-2:] == ("oneman", 2)
+    assert page_call.args[1][-2:] == (20, 0)
+
+
+# 测试点：年份、类型、乐队和排序的非法值应由 FastAPI 参数校验拒绝。
+@pytest.mark.parametrize(
+    "query",
+    [
+        "year=1899",
+        "live_type=unknown",
+        "band_id=0",
+        "sort=title_asc",
+    ],
+)
+def test_get_lives_rejects_invalid_filter_values(query):
+    client = TestClient(app)
+    response = client.get(f"/api/lives?page=1&page_size=20&{query}")
+
+    assert response.status_code == 422
+
+
 def test_get_lives_invalid_page_size_returns_400():
     # 测试点：page_size 非 15/20 时应返回 400 参数错误。
     client = TestClient(app)

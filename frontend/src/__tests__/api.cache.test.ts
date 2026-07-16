@@ -78,6 +78,33 @@ describe("api cache behavior", () => {
     expect(fetchMock.mock.calls[1][0]).toBe("/api/lives?page=1&page_size=20&without_setlist=true");
   });
 
+  test("getLives 列表筛选会进入 URL 与缓存键", async () => {
+    // 测试点：不同筛选组合必须请求各自的服务端分页，不能误命中未筛选缓存。
+    fetchMock.mockResolvedValue(
+      makeJsonResponse({
+        items: [],
+        pagination: { page: 1, page_size: 20, total: 0, total_pages: 1 },
+      }),
+    );
+    const { getLives } = await import("../api");
+    const filters = {
+      q: "Roselia",
+      year: 2026,
+      liveType: "oneman",
+      bandId: 2,
+      sort: "date_asc" as const,
+    };
+
+    await getLives(1, 20);
+    await getLives(1, 20, filters);
+    await getLives(1, 20, filters);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "/api/lives?page=1&page_size=20&q=Roselia&year=2026&live_type=oneman&band_id=2&sort=date_asc",
+    );
+  });
+
   test("getLives 并发相同请求会复用 inFlight promise", async () => {
     // 测试点：并发去重，避免同参数重复打后端。
     const d = deferred<Response>();
