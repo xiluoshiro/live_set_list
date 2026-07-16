@@ -602,12 +602,43 @@
 .live-admin-form-table th:nth-child(5),
 .live-admin-form-table td:nth-child(5),
 .live-admin-form-table th:nth-child(6),
-.live-admin-form-table td:nth-child(6),
-.live-admin-form-table th:nth-child(7),
-.live-admin-form-table td:nth-child(7) {
+.live-admin-form-table td:nth-child(6) {
   width: 112px;
   min-width: 112px;
   max-width: 112px;
+}
+
+.live-admin-form-table th:nth-child(7),
+.live-admin-form-table td:nth-child(7) {
+  width: 144px;
+  min-width: 144px;
+  max-width: 144px;
+}
+
+.timezone-input-group {
+  display: flex;
+  width: 100%;
+}
+
+.console-admin-table .timezone-input-group select {
+  min-width: 0;
+  border-radius: 7px 0 0 7px;
+}
+
+.timezone-minute-btn {
+  flex: 0 0 50px;
+  border: 1px solid var(--border-normal);
+  border-left: 0;
+  border-radius: 0 7px 7px 0;
+  background: var(--surface-input);
+  color: var(--text-main);
+  cursor: pointer;
+  font: inherit;
+}
+
+.timezone-minute-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .live-create-tools {

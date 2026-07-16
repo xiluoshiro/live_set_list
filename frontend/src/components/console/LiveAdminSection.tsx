@@ -10,11 +10,13 @@ type LiveAdminSectionProps = {
   liveUrl: string;
   openingTime: string;
   startTime: string;
-  timezone: string;
+  timezoneHour: string;
+  timezoneMinute: string;
+  timezoneMinuteDisabled: boolean;
   selectedVenueId: number;
   venueQueryText: string;
   venues: VenueOption[];
-  timezoneOptions: string[];
+  timezoneHourOptions: string[];
   liveTypeOptions: { value: string; label: string }[];
   venueOpen: boolean;
   venueMenuPos: Position | null;
@@ -38,7 +40,8 @@ type LiveAdminSectionProps = {
   onLiveUrlChange: (value: string) => void;
   onOpeningTimeChange: (value: string) => void;
   onStartTimeChange: (value: string) => void;
-  onTimezoneChange: (value: string) => void;
+  onTimezoneHourChange: (value: string) => void;
+  onCycleTimezoneMinute: () => void;
   onVenueQueryTextChange: (value: string) => void;
   onOpenVenueMenu: () => void;
   onSelectVenue: (venueId: number) => void;
@@ -57,11 +60,13 @@ export function LiveAdminSection({
   liveUrl,
   openingTime,
   startTime,
-  timezone,
+  timezoneHour,
+  timezoneMinute,
+  timezoneMinuteDisabled,
   selectedVenueId,
   venueQueryText,
   venues,
-  timezoneOptions,
+  timezoneHourOptions,
   liveTypeOptions,
   venueOpen,
   venueMenuPos,
@@ -75,7 +80,8 @@ export function LiveAdminSection({
   onLiveUrlChange,
   onOpeningTimeChange,
   onStartTimeChange,
-  onTimezoneChange,
+  onTimezoneHourChange,
+  onCycleTimezoneMinute,
   onVenueQueryTextChange,
   onOpenVenueMenu,
   onSelectVenue,
@@ -170,13 +176,29 @@ export function LiveAdminSection({
                 <input type="time" aria-label="start_time" value={startTime} onChange={(e) => onStartTimeChange(e.target.value)} />
               </td>
               <td>
-                <select aria-label="timezone" value={timezone} onChange={(e) => onTimezoneChange(e.target.value)}>
-                  {timezoneOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                <div className="timezone-input-group">
+                  <select
+                    aria-label="timezone"
+                    value={timezoneHour}
+                    onChange={(e) => onTimezoneHourChange(e.target.value)}
+                  >
+                    {timezoneHourOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="timezone-minute-btn"
+                    aria-label="timezone minute offset"
+                    title="每次增加 15 分钟"
+                    disabled={timezoneMinuteDisabled}
+                    onClick={onCycleTimezoneMinute}
+                  >
+                    {timezoneMinute}
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>

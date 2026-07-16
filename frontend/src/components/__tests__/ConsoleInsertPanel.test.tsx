@@ -116,8 +116,8 @@ describe("ConsoleInsertPanel", () => {
     });
   });
 
+  // 测试点：控制台首次进入应优先新增 Live，聚焦场地查询并显示默认 +9:00 时区。
   test("默认渲染新增 Live 并聚焦场地查询", async () => {
-    // 测试点：控制台首次进入应优先新增 Live，并把录入起点放在场地查询。
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
     await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20, true));
@@ -134,7 +134,39 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("opening_time")).toHaveAttribute("type", "time");
     expect(screen.getByLabelText("start_time")).toHaveValue("19:00");
     expect(screen.getByLabelText("start_time")).toHaveAttribute("type", "time");
-    expect(screen.getByLabelText("timezone")).toHaveValue("+09:00");
+    expect(screen.getByLabelText("timezone")).toHaveValue("+9");
+    expect(screen.getByLabelText("timezone minute offset")).toHaveTextContent(":00");
+  });
+
+  // 测试点：时区分钟后缀按 15 分钟循环，切换普通小时时保留，边界小时强制归零。
+  test("时区分钟后缀可循环并处理边界小时", async () => {
+    const user = userEvent.setup();
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+
+    const timezoneSelect = screen.getByLabelText("timezone");
+    const minuteButton = screen.getByLabelText("timezone minute offset");
+
+    for (const expectedMinute of [":15", ":30", ":45", ":00"]) {
+      await user.click(minuteButton);
+      expect(minuteButton).toHaveTextContent(expectedMinute);
+    }
+
+    await user.selectOptions(timezoneSelect, "-3");
+    await user.click(minuteButton);
+    await user.click(minuteButton);
+    expect(timezoneSelect).toHaveValue("-3");
+    expect(minuteButton).toHaveTextContent(":30");
+
+    await user.selectOptions(timezoneSelect, "+10");
+    expect(minuteButton).toHaveTextContent(":30");
+
+    await user.selectOptions(timezoneSelect, "-12");
+    expect(minuteButton).toHaveTextContent(":00");
+    expect(minuteButton).toBeDisabled();
+
+    await user.selectOptions(timezoneSelect, "+14");
+    expect(minuteButton).toHaveTextContent(":00");
+    expect(minuteButton).toBeDisabled();
   });
 
   test("提交新增Setlist会调用真实追加接口并出现插入记录", async () => {
@@ -424,8 +456,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText("新增Live失败：live_date 与 live_title 为必填项。")).not.toBeInTheDocument();
   });
 
+  // 测试点：新增 Live 将分开的 -3:30 控件值标准化提交，成功后恢复 +9:00 默认值。
   test("新增Live会调用真实写入接口并使用后端返回的live_id", async () => {
-    // 测试点：新增 Live 应交给后端自增 live_id，成功后同步候选分页并通知外层刷新。
     const user = userEvent.setup();
     const onLiveDataChanged = vi.fn();
     const todayDate = getTodayDateInputValue();
@@ -441,12 +473,16 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.change(screen.getByLabelText("live_date"), { target: { value: "2026-04-01" } });
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Inserted Live");
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/inserted");
+    await user.selectOptions(screen.getByLabelText("timezone"), "-3");
+    await user.click(screen.getByLabelText("timezone minute offset"));
+    await user.click(screen.getByLabelText("timezone minute offset"));
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
     expect(apiMocks.createConsoleLive).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "确认新增 Live" })).toBeInTheDocument();
     expect(screen.getByText("Inserted Live")).toBeInTheDocument();
     expect(screen.getByText("New Venue")).toBeInTheDocument();
+    expect(screen.getByText("-03:30")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
@@ -457,7 +493,7 @@ describe("ConsoleInsertPanel", () => {
         url: "https://example.com/inserted",
         opening_time: "18:00",
         start_time: "19:00",
-        timezone: "+09:00",
+        timezone: "-03:30",
         venue_id: 88,
       },
       "csrf-token",
@@ -467,6 +503,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("");
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
+    expect(screen.getByLabelText("timezone")).toHaveValue("+9");
+    expect(screen.getByLabelText("timezone minute offset")).toHaveTextContent(":00");
     expect(onLiveDataChanged).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
