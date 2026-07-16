@@ -1,0 +1,127 @@
+name: Migration release control
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Run database migration first, then deploy in a separate invocation
+        required: true
+        type: choice
+        options:
+          - migrate
+          - deploy
+      version:
+        description: Release version without the leading v
+        required: true
+        type: string
+      sha256:
+        description: SHA-256 emitted by the tag release workflow
+        required: true
+        type: string
+      confirmation:
+        description: Enter MIGRATE or DEPLOY to match the selected phase
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: livesetlist-production
+  cancel-in-progress: false
+
+jobs:
+  migrate-production:
+    name: Migrate production database
+    if: inputs.phase == 'migrate'
+    runs-on: ubuntu-latest
+    environment:
+      name: production-migration
+
+    steps:
+      - name: Validate migration input
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          SHA256: ${{ inputs.sha256 }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{3}$ ]]
+          [[ "$SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]
+          test "$CONFIRMATION" = "MIGRATE"
+
+      - name: Configure deployment SSH key
+        shell: bash
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Run protected production migration
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          VERSION: ${{ inputs.version }}
+          SHA256: ${{ inputs.sha256 }}
+        run: |
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "sudo /usr/local/sbin/livesetlist-release-manager migrate '$VERSION' '$SHA256'"
+
+  deploy-production:
+    name: Deploy attested migration release
+    if: inputs.phase == 'deploy'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_BASE_URL }}
+
+    steps:
+      - name: Validate deploy input
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          SHA256: ${{ inputs.sha256 }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{3}$ ]]
+          [[ "$SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]
+          test "$CONFIRMATION" = "DEPLOY"
+
+      - name: Configure deployment SSH key
+        shell: bash
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Deploy attested release
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          VERSION: ${{ inputs.version }}
+          SHA256: ${{ inputs.sha256 }}
+        run: |
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "sudo /usr/local/sbin/livesetlist-deploy '$VERSION' '$SHA256'"
+
+      - name: Verify public deployment
+        shell: bash
+        env:
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+        run: |
+          curl --fail --location --max-time 15 "$PUBLIC_BASE_URL/"
+          curl --fail --location --max-time 15 "$PUBLIC_BASE_URL/api/health/db"
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' "$PUBLIC_BASE_URL/openapi.json")"
+          test "$status" = "404"

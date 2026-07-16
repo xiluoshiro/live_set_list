@@ -4,7 +4,7 @@
 
 ## 生产状态
 
-生产站点已部署到 Google Compute Engine。常规应用发布使用 GitHub Actions 的 `vYYYY-MM-DD-NNN` tag：隔离数据库 CI、白名单出包、`production` 人工审批、SSH 部署和公网 smoke test 已验证。
+生产站点已部署到 Google Compute Engine。常规应用发布使用 GitHub Actions 的 `vYYYY-MM-DD-NNN` tag：隔离数据库 CI、白名单出包、`production` 人工审批、SSH 部署和公网 smoke test 已验证。仓库已增加 Flyway 变化的两阶段 migration/attestation 代码，需先按 runbook 更新 VM root-owned 入口并完成 staging 验收后启用。
 
 - 实际部署、GitHub Environment 配置、验收、排障与回滚：[docs/production-deployment-runbook.md](D:/Code/PythonCode/5%20LiveSetList/docs/production-deployment-runbook.md)
 - 生产架构、安全基线与剩余 TODO：[docs/design/production-deployment.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/production-deployment.md)

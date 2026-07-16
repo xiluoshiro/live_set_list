@@ -15,7 +15,7 @@
 - 首个完整成功的自动发布 tag 为 `v2026-07-14-006`。
 - 首个 migration release 已完成：生产数据库从 V9 升至 V11，新 release 已切换、后端数据库 health 验收成功。
 
-自动发布当前只接受不变更 `backend/db/flyway/sql` 的版本。包含 Flyway SQL 的 **migration release 本身** 必须按“数据库迁移”章节完整手工发布；只有该 release 已成为 `current` 后，后续不再改变 SQL 的应用版本才可继续自动发布。
+仓库已实现两阶段 migration 发布代码，但在完成本页“VM 启用两阶段入口”前，当前生产 VM 仍只接受不变更 `backend/db/flyway/sql` 的版本。新入口启用后，tag workflow 会自动准备并分类候选包；app-only release 继续自动部署，migration release 必须分别手动触发 `migrate` 和 `deploy` 两个阶段。
 
 ## 生产拓扑与目录
 
@@ -43,7 +43,7 @@ Internet
 
 ### 1. 发布前检查
 
-1. 确认本次不含 `backend/db/flyway/sql` 变化；否则先走“数据库迁移”。
+1. 检查本次是否包含 `backend/db/flyway/sql` 变化；SQL 不变会走 app-only 自动部署，SQL 变化会在 prepare 后停止并进入两阶段 migration。
 2. 在目标 commit 本地运行：
 
    ```powershell
@@ -72,32 +72,32 @@ git push origin v2026-07-14-007
 3. 执行 `python scripts/run_checks.py functional`。
 4. 执行 `python scripts/build_release.py --version <version>`；该脚本会重新构建前端并生成白名单发布包。
 5. 生成 SHA-256，上传 `.tar.gz` 和 `.sha256` artifact，保留 14 天。
-6. `Deploy production` 等待 `production` Environment 审批；批准后才可读取环境级 SSH secrets。
-7. 下载同一 artifact、校验 SHA-256、上传至 VM `/tmp`，调用服务器端部署脚本。
-8. 从 GitHub Runner 对 `PUBLIC_BASE_URL` 检查首页、`/api/health/db` 与 `/openapi.json` 的 `404`。
+6. `Prepare production candidate` 下载同一 artifact、校验 SHA-256、上传至 VM，并由服务器按 `current` 分类。
+7. app-only release 进入 `production` 后调用部署脚本；migration release 不改数据库也不切换应用，只在 Job Summary 给出两阶段 handoff 参数。
+8. 应用部署完成后，从 GitHub Runner 对 `PUBLIC_BASE_URL` 检查首页、`/api/health/db` 与 `/openapi.json` 的 `404`。
 
-在 Actions 页面确认 `Verify and package` 成功后，再审阅 tag、commit 和变更内容并批准 `production` 部署。
+在 Actions 页面确认 `Verify and package`、`Prepare production candidate` 成功后，app-only release 审阅 tag、commit 和变更内容并批准 `production` 部署；migration release 按本页两阶段流程操作。
 
 ### 4. 服务器端部署行为
 
 `/usr/local/sbin/livesetlist-deploy <version> <sha256>` 会：
 
 1. 校验版本格式、归档 SHA-256、归档路径和链接文件。
-2. 拒绝 Flyway SQL 与当前版本不同的归档。
+2. 调用 release manager 校验 prepared 状态；migration release 还必须匹配 root-only attestation、SQL 树 hash 和生产 Flyway version。
 3. 先启动一次数据库备份任务。
 4. 解压到新的 release 目录，使用当前 release 的 Python 创建 venv 并安装依赖。
 5. root 化 release，安装 systemd unit，原子切换 `current`，重启后端与 Nginx。
 6. 最多等待 20 秒，直到 `http://127.0.0.1:8000/api/health/db` 成功。
-7. 成功后再执行一次备份；失败则将 `current` 指回上一 release 并重启后端。
+7. 成功后再执行一次备份并把服务器状态标记为 deployed；失败则将 `current` 指回上一 release 并重启后端，schema 不自动回滚。
 
 ## GitHub Environment 与 VM 前置条件
 
-GitHub 仓库须有 `production` Environment：
+GitHub 仓库须有 `production` Environment，并建议增加 `production-migration`：
 
 - Deployment rule：**Tag** 类型的 `v*`，不是 Branch 规则。
 - Required reviewer：按维护人配置；单人维护时不要启用 self-review 禁止项。
-- Secrets：`DEPLOY_SSH_PRIVATE_KEY`、`DEPLOY_KNOWN_HOSTS`。
-- Variables：`DEPLOY_HOST`、`DEPLOY_PORT`、`DEPLOY_USER=livesetlist-deploy`、`PUBLIC_BASE_URL`。
+- Repository secrets：`DEPLOY_SSH_PRIVATE_KEY`、`DEPLOY_KNOWN_HOSTS`；prepare job 不绑定 Environment，因此不能只配置为 Environment secret。
+- Repository variables：`DEPLOY_HOST`、`DEPLOY_PORT`、`DEPLOY_USER=livesetlist-deploy`、`PUBLIC_BASE_URL`。
 
 `DEPLOY_KNOWN_HOSTS` 的第一列必须与 `DEPLOY_HOST` 完全一致。若使用 VM IP，可在 VM 上生成：
 
@@ -107,9 +107,12 @@ sudo awk '{print "<VM_IP>", $1, $2}' /etc/ssh/ssh_host_ed25519_key.pub
 
 GitHub Hosted Runner 使用动态出口 IP。当前直接 SSH 模式要求 GCP 防火墙允许其访问 TCP 22；SSH 必须禁用密码登录和 root 登录，并使用专用部署密钥与受限 sudo。不要把数据库或后端端口开放给公网。
 
-部署 root 脚本不会由自身自动更新。修改 `infra/production/livesetlist-deploy` 后，必须先以管理员身份更新 VM 上的入口：
+部署 root 脚本不会由自身自动更新。修改 `infra/production/livesetlist-deploy` 或 `release_manager.py` 后，必须先以管理员身份更新 VM 上的入口；完整命令见“VM 启用两阶段入口”。
 
 ```bash
+sudo install -o root -g root -m 755 \
+  /tmp/livesetlist-release-manager.next \
+  /usr/local/sbin/livesetlist-release-manager
 sudo install -o root -g root -m 755 \
   /tmp/livesetlist-deploy.next \
   /usr/local/sbin/livesetlist-deploy
@@ -117,16 +120,16 @@ sudo install -o root -g root -m 755 \
 
 可先通过 `livesetlist-deploy` SSH 用户把新脚本上传到 `/tmp/livesetlist-deploy.next`，再用管理员会话执行上述安装。
 
-## 数据库迁移
+## 数据库迁移与旧手工流程
 
-自动发布故意拒绝 Flyway SQL 变化，避免应用切换与不可逆 schema 变更混在同一次无人工数据库审批的操作中。
+新版两阶段入口会自动执行备份、Flyway 和 attestation，但 migration 与应用切换仍是两次独立人工触发。以下手工步骤保留为新入口尚未启用时的旧流程和自动 migration 故障时的应急参考。
 
 有 migration 时：
 
 1. 创建生产库手动备份并确认备份文件可被 `pg_restore -l` 读取。
 2. 在非生产环境完成 `flyway validate` / `migrate` 与功能验收。
 3. 在生产窗口先确认 pending migration，再执行 `migrate`，最后执行 `validate` 和 `info`，记录输出。不要用 Bash `source` 或 `docker compose config --environment` 读取 `/etc/livesetlist/postgres.env`：密码中的 `$`、`!` 等字符会被 shell 或 Compose 插值。应使用 `python-dotenv` 的 `interpolate=False` 读取，并通过 Python 子进程环境将变量传给 Docker。
-4. 解压该 release、用其 `sql/` 手工完成 migration，并手工切换该 release 为 `current`；不能调用当前自动部署脚本，因为它会拒绝 SQL 文件差异。
+4. 解压该 release、用其 `sql/` 手工完成 migration，并手工切换该 release 为 `current`；若新版两阶段入口已启用，应优先使用受 attestation 约束的 workflow，不要混用手工切换。
 5. 验证数据库 health、读路径、授权写路径和备份。该 release 成为 `current` 后，后续 SQL 不变的版本可恢复自动发布。
 
 不要修改已执行 migration；回滚应用版本不等于回滚数据库。
@@ -142,9 +145,9 @@ sudo install -o root -g root -m 755 \
 
 迁移 release 已完成手工切换，后端数据库 health 通过。后续 SQL 不变的版本可继续使用现有自动发布路径。
 
-## 后续方案：Flyway 变化时的两阶段自动发布
+## Flyway 变化时的两阶段自动发布
 
-本节是实施方案，当前代码尚未实现。现有自动发布继续拒绝 SQL 差异，直到以下服务器端脚本、审批门和 attestation 校验全部落地；不能先删除现有拒绝逻辑再逐步补安全措施。
+实现入口为 `infra/production/release_manager.py`、`infra/production/livesetlist-deploy`、`.github/workflows/release.yml` 和 `.github/workflows/migration-release.yml`。必须先在 VM 安装新版 root-owned 入口，再合并或启用新 workflow；不能让新 workflow 调用旧服务器脚本。
 
 ### 设计原则
 
@@ -161,8 +164,8 @@ build-and-verify
   -> prepare-production
        -> app-only -------> deploy-production -> smoke
        -> migration-needed
-            -> migrate-production -> migration attestation
-            -> deploy-production  -> smoke
+            -> workflow_dispatch(migrate) -> migration attestation
+            -> workflow_dispatch(deploy)  -> smoke
 ```
 
 所有生产阶段使用同一个 `livesetlist-production` concurrency group，禁止两个 release 交叉 prepare、migrate 或 deploy。
@@ -170,17 +173,17 @@ build-and-verify
 ### 1. 构建和候选包准备
 
 1. tag CI 完成隔离 PostgreSQL、Flyway migration、`functional`、前端构建、白名单归档和 SHA-256。
-2. `prepare-production` 将归档上传到 VM 后调用 root-owned `livesetlist-prepare-release <version> <sha256>`。
+2. `prepare-production` 将归档上传到 VM 后调用 root-owned `livesetlist-release-manager prepare <version> <sha256>`。
 3. prepare 脚本重复校验 SHA-256、归档根目录、路径穿越和链接文件，将候选包解压到 root-only staging 目录。
 4. 脚本比较候选包和 `current` 的完整 Flyway SQL 文件树，输出结构化分类：`app-only` 或 `migration-needed`。分类必须来自服务器比较结果，供后续 job 使用。
 5. `app-only` 继续进入现有应用部署；`migration-needed` 不允许直接切换，必须进入 migration 审批门。
 
 ### 2. 阶段 A：受保护的 migration
 
-1. `migrate-production` job 绑定独立的 `production-migration` Environment，并要求与普通应用发布分离的人工确认。若当前 GitHub 套餐不支持私有仓库所需的 Environment reviewer，则用带 version、SHA-256 输入的 `workflow_dispatch` 作为显式人工门，凭据使用 repository secrets；普通 tag 不得直接执行生产 migration。
-2. job 调用 root-owned `livesetlist-migrate <version> <sha256>`。脚本只接受已经 prepare 且分类为 `migration-needed` 的候选包。
+1. tag workflow 检测到 `migration-needed` 后停止，并在 Job Summary 写出 version 与 SHA-256。维护人手动运行 `Migration release control`，选择 `phase=migrate` 并输入确认词 `MIGRATE`。这一步本身就是 GitHub Free 私有仓库可用的显式人工门；支持 Environment reviewer 时还可在 `production-migration` 上增加审批。
+2. job 调用 root-owned `livesetlist-release-manager migrate <version> <sha256>`。脚本只接受已经 prepare 且分类为 `migration-needed` 的候选包。
 3. 脚本先执行生产备份并用 `pg_restore -l` 验证可读性，记录备份路径和备份文件 SHA-256；备份失败立即停止。
-4. Flyway 镜像固定到明确版本或 digest，不能继续使用 `redgate/flyway:latest`。生产 env 由 Python 使用 `python-dotenv(interpolate=False)` 读取，再通过子进程环境传给 Docker/Flyway。
+4. Flyway 镜像固定为 `redgate/flyway:12.11.0`。生产 env 由 Python 直接读取且不执行插值，再通过子进程环境传给 Docker/Flyway；密码值不会进入命令行参数或发布包。
 5. 执行顺序固定为 `info -> migrate -> validate -> info`，优先使用 Flyway 结构化输出记录迁移前版本、已应用 migration 和最终版本，不解析易变的人类可读文本。
 6. 仅在所有步骤成功后写入 `/var/lib/livesetlist/deploy-attestations/<version>.json`，文件必须为 `root:root`、`0600`。至少记录：version、归档 SHA-256、新旧 SQL 树 SHA-256、迁移前后 Flyway version、已应用 migration、执行时间、备份路径与备份 SHA-256。
 7. 同一 version 重试时，若已有 attestation，只有 version、归档 SHA-256、SQL 树 SHA-256 和数据库最终版本全部一致才可视为幂等成功；任一项不同都必须停止并人工处理。
@@ -189,22 +192,106 @@ build-and-verify
 
 ### 3. 阶段 B：受 attestation 约束的应用切换
 
-1. `deploy-production` 保留独立人工审批。对 `app-only` release 沿用当前备份与原子切换流程。
+1. migration 验收后再次手动运行 `Migration release control`，选择 `phase=deploy` 并输入确认词 `DEPLOY`。对 `app-only` release 则由 tag workflow 沿用一次 `production` 审批和原子切换流程。
 2. 对 `migration-needed` release，扩展后的 `livesetlist-deploy` 必须读取 root-only attestation，并验证 version、归档 SHA-256、SQL 树 SHA-256 全部匹配。
 3. 部署脚本再次查询生产 Flyway version，确认不低于 attestation 的最终版本；缺少 attestation、字段不匹配或数据库版本不符时全部 fail closed。
 4. 验证通过后才创建 venv、安装依赖、安装 systemd unit、原子切换 `current`，然后执行后端就绪等待、数据库 health、发布后备份和公网 smoke test。
 5. 应用启动或 smoke 失败时恢复上一版 `current`，但保留已经迁移的 schema。旧版应用能否继续工作由 expand/contract 兼容要求保证。
-6. 发布成功后把 attestation 标记为 `deployed`，记录切换前后 release、Git commit/tag 和 GitHub run id，形成服务器端部署审计。
+6. migration attestation 保持为迁移完成时的不可变证明；发布成功后只把 release state 原子标记为 `deployed`，记录 active release 与切换时间。version 和归档 SHA-256 可用于关联 tag 与 GitHub run。
 
 ### 4. 实施拆分与验收
 
-1. 新增 `infra/production/livesetlist-prepare-release` 和 `infra/production/livesetlist-migrate`，并将其作为 root-owned 固定入口安装到 `/usr/local/sbin`；release 内的模板不能自动覆盖已安装入口。
-2. 扩展 `infra/production/livesetlist-deploy`：保留 app-only SQL 相同路径，新增 attestation 校验路径，任何未知状态均拒绝发布。
-3. 扩展 `.github/workflows/release.yml`：增加 prepare 分类输出、migration 条件 job、统一 concurrency，以及 GitHub 套餐不支持 Environment reviewer 时的 `workflow_dispatch` 入口。
-4. 先在独立 staging 数据库验证 app-only、migration 成功、migration 失败、attestation 篡改、重复执行、应用切换失败六类场景。
-5. 生产启用前固定 Flyway 版本，完成备份恢复演练，并确认现有应用能在迁移后 schema 上继续运行。
+1. `release_manager.py prepare` 校验并解压候选包、按生产 `current` 分类，状态写入 `/var/lib/livesetlist/release-state`。
+2. `release_manager.py migrate` 执行备份和固定版本 Flyway，attestation 写入 `/var/lib/livesetlist/deploy-attestations`，文件权限为 root-only。
+3. `livesetlist-deploy` 对 app-only 检查 prepared 状态，对 migration 检查 attestation 与生产 Flyway version，任何未知状态均拒绝发布。
+4. `.github/workflows/release.yml` 负责 build、prepare 和 app-only 部署；`.github/workflows/migration-release.yml` 用两次 `workflow_dispatch` 分别执行 migration 和应用切换。两个 workflow 共用 `livesetlist-production` concurrency group。
+5. 生产启用前仍需在独立 staging 数据库验证 app-only、migration 成功、migration 失败、attestation 篡改、重复执行、应用切换失败六类场景。
 
 完成标准：普通 release 仍只需一次应用审批；migration release 必须经过 migration 人工门、生成可验证 attestation，再经应用切换审批，且任何失败都不会自动执行数据库回滚。
+
+## VM 启用两阶段入口
+
+以下操作必须在包含本次代码的 tag 被推送前完成。生产 release 内的模板不会自动覆盖 `/usr/local/sbin` 下的 root-owned 入口。
+
+### 1. 上传并安装服务器入口
+
+从可信的本地 checkout 上传两个文件：
+
+```powershell
+scp infra/production/release_manager.py <ADMIN_USER>@<VM_IP>:/tmp/livesetlist-release-manager.next
+scp infra/production/livesetlist-deploy <ADMIN_USER>@<VM_IP>:/tmp/livesetlist-deploy.next
+```
+
+在 VM 管理员会话执行：
+
+```bash
+sudo install -o root -g root -m 755 \
+  /tmp/livesetlist-release-manager.next \
+  /usr/local/sbin/livesetlist-release-manager
+sudo install -o root -g root -m 755 \
+  /tmp/livesetlist-deploy.next \
+  /usr/local/sbin/livesetlist-deploy
+
+sudo install -d -o root -g root -m 700 /opt/livesetlist/staging
+sudo install -d -o root -g root -m 700 /var/lib/livesetlist/release-state
+sudo install -d -o root -g root -m 700 /var/lib/livesetlist/deploy-attestations
+sudo install -d -o root -g root -m 700 /var/lib/livesetlist/release-archives
+sudo docker pull redgate/flyway:12.11.0
+```
+
+确认 `python3 --version` 可运行本脚本，并确认 `/etc/livesetlist/postgres.env` 至少包含 `POSTGRES_HOST`、`POSTGRES_PORT`、`APP_DB`、`FLYWAY_USER`、`FLYWAY_PASSWORD`；`/etc/livesetlist/backend.env` 应保持 `LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist`。
+
+### 2. 更新 deploy-only sudoers
+
+使用 `sudo visudo -f /etc/sudoers.d/livesetlist-deploy` 写入：
+
+```sudoers
+Cmnd_Alias LIVESETLIST_PREPARE = /usr/local/sbin/livesetlist-release-manager prepare *
+Cmnd_Alias LIVESETLIST_MIGRATE = /usr/local/sbin/livesetlist-release-manager migrate *
+Cmnd_Alias LIVESETLIST_DEPLOY = /usr/local/sbin/livesetlist-deploy *
+livesetlist-deploy ALL=(root) NOPASSWD: LIVESETLIST_PREPARE, LIVESETLIST_MIGRATE, LIVESETLIST_DEPLOY
+```
+
+然后检查权限和入口：
+
+```bash
+sudo chmod 440 /etc/sudoers.d/livesetlist-deploy
+sudo visudo -cf /etc/sudoers.d/livesetlist-deploy
+sudo -u livesetlist-deploy sudo -n -l
+sudo /usr/local/sbin/livesetlist-release-manager --help
+sudo systemctl start livesetlist-backup.service
+sudo systemctl status livesetlist-backup.service --no-pager
+```
+
+不要为了测试入口而在生产执行伪造的 `migrate` 参数；真正的 manager 命令只由完成 CI 和 SHA-256 校验的 release workflow 调用。
+
+### 3. 调整 GitHub 配置
+
+`prepare-production` 不绑定 Environment，因此 SSH 凭据必须配置为 repository secrets，而不能只存在于 `production` Environment：
+
+- Repository secrets：`DEPLOY_SSH_PRIVATE_KEY`、`DEPLOY_KNOWN_HOSTS`。
+- Repository variables：`DEPLOY_HOST`、`DEPLOY_PORT`、`DEPLOY_USER=livesetlist-deploy`、`PUBLIC_BASE_URL`。
+- Environment：保留 `production`；另建 `production-migration`。套餐支持时为两者配置 required reviewer；不支持时，两次独立 `workflow_dispatch` 和确认词仍会阻止普通 tag 自动迁移数据库。
+
+### 4. 首次启用顺序
+
+1. 先完成上述 VM 安装、sudoers 校验、Flyway 镜像预拉取和备份 service 验证。
+2. 再合并并推送本次 workflow 代码。
+3. 建议先发一个 SQL 不变的 app-only tag，确认 prepare 分类、production deploy、状态文件和公网 smoke 均正常。
+4. migration tag 完成 CI 后，在 tag workflow 的 Summary 复制 version 和 SHA-256。
+5. 手动运行 `Migration release control`：先选 `migrate` / `MIGRATE`；检查备份、Flyway 输出、attestation 和旧应用读写。
+6. 验收通过后再次运行同一 workflow：选 `deploy` / `DEPLOY`；完成应用切换和公网 smoke。
+
+服务器侧检查：
+
+```bash
+sudo cat /var/lib/livesetlist/release-state/<version>.json
+sudo cat /var/lib/livesetlist/deploy-attestations/<version>.json
+sudo sha256sum /var/lib/livesetlist/release-archives/livesetlist-<version>.tar.gz
+readlink -f /opt/livesetlist/current
+curl -f http://127.0.0.1:8000/api/health/db
+sudo systemctl status livesetlist-backend livesetlist-backup.timer --no-pager
+```
 
 ## 首次环境与数据迁移要点
 

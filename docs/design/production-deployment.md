@@ -9,7 +9,7 @@
 - 生产 VM、同源入口、私有 PostgreSQL、备份、Nginx 和 HTTPS/公开访问基线已经落地；首次生产数据迁移也已完成。
 - tag 驱动的 GitHub Actions 已验证可完成隔离 CI、白名单出包、`production` 审批、SSH 上传、服务器端备份/切换/回滚和公网 smoke test。
 - 生产数据库已从 V9 手工迁移至 V11，并完成新应用 release 切换与 health 验收。
-- 自动路径故意拒绝 Flyway SQL 差异；后续计划以受保护的 migration 阶段生成可验证 attestation，再由应用切换阶段消费该证明。
+- 两阶段 migration 发布代码已实现：tag 自动分类，migration 与 deploy 由两个显式人工阶段控制，服务器端使用 root-only attestation 约束应用切换；仍需完成 VM 入口安装和 staging 六类场景验收后才能视为生产启用。
 - 剩余重点从“能否上线”转为 staging、监控告警、安全头、Host 限制、备份异地保存和 migration 自动化前的安全设计。
 - 推荐采用同源部署：公网只暴露 `https://<domain>`，静态前端由反向代理托管，`/api/*` 反代到后端，PostgreSQL 只允许后端内网访问。
 - 上线前的最后验收应包含功能检查、浏览器实测、生产环境健康检查、备份恢复演练和回滚演练。
@@ -198,7 +198,7 @@ PostgreSQL: private network only
 - [ ] 统一生产日志输出策略：控制台、文件、轮转、采集目标。
 - [ ] 为后端、前端静态服务、数据库、磁盘空间、证书过期设置监控。
 - [ ] 增加 staging 环境，先在 staging 完成真实域名、HTTPS、迁移、备份演练。
-- [ ] 按 runbook 中的实施方案实现两阶段 migration 发布：服务器端按 `current` 分类、`production-migration` 审批或 `workflow_dispatch` 人工门、root-only migration attestation、受 attestation 约束的应用切换。
+- [ ] 在 VM 安装并完成 staging/生产验收两阶段 migration 发布代码；仓库侧 prepare、双 `workflow_dispatch` 人工门、root-only attestation 和受证明约束的应用切换已完成。
 - [ ] 对公共搜索、列表、详情批量接口增加流量保护策略。
 - [x] 补充生产部署 runbook、`infra/production/README.md` 和 GitHub Actions 配置说明。
 - [ ] 补充最小 E2E 冒烟：打开首页、搜索、详情、登录、收藏、控制台权限拒绝/允许。
