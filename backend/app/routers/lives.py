@@ -69,6 +69,34 @@ ORDER BY l.live_date DESC, l.id DESC
 LIMIT %s OFFSET %s
 """
 
+LIVES_WITHOUT_SETLIST_BASE_QUERY = """
+SELECT
+    l.id,
+    l.live_date,
+    l.live_title,
+    ARRAY[]::int[] AS band_ids,
+    l.url AS url,
+    l.live_type
+FROM live_attrs l
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM live_setlist ls
+    WHERE ls.live_id = l.id
+)
+"""
+
+LIVES_WITHOUT_SETLIST_COUNT_QUERY = f"""
+SELECT COUNT(*) FROM (
+    {LIVES_WITHOUT_SETLIST_BASE_QUERY}
+) q
+"""
+
+LIVES_WITHOUT_SETLIST_PAGE_QUERY = f"""
+{LIVES_WITHOUT_SETLIST_BASE_QUERY}
+ORDER BY l.live_date DESC, l.id DESC
+LIMIT %s OFFSET %s
+"""
+
 LIVE_DETAIL_HEADER_QUERY = """
 SELECT
     l.id AS live_id,
@@ -529,6 +557,7 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
 def get_lives(
     page: int = Query(default=1, ge=1, description="页码，从 1 开始。"),
     page_size: int = Query(default=20, description="每页条数，当前仅允许 15 或 20。"),
+    without_setlist: bool = Query(default=False, description="是否仅返回尚无 setlist 数据的 Live。"),
     current_user: AuthUser | None = Depends(get_current_user_optional),
 ):
     if page_size not in ALLOWED_PAGE_SIZE:
@@ -537,7 +566,9 @@ def get_lives(
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(LIVES_COUNT_QUERY)
+                count_query = LIVES_WITHOUT_SETLIST_COUNT_QUERY if without_setlist else LIVES_COUNT_QUERY
+                page_query = LIVES_WITHOUT_SETLIST_PAGE_QUERY if without_setlist else LIVES_PAGE_QUERY
+                cur.execute(count_query)
                 count_row = cur.fetchone()
                 total = int(count_row[0]) if count_row else 0
 
@@ -545,7 +576,7 @@ def get_lives(
                 safe_page = min(page, total_pages)
                 offset = (safe_page - 1) * page_size
 
-                cur.execute(LIVES_PAGE_QUERY, (page_size, offset))
+                cur.execute(page_query, (page_size, offset))
                 rows = cur.fetchall()
                 favorite_live_ids = set()
                 if current_user is not None:

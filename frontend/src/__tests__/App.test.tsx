@@ -510,15 +510,15 @@ describe("App", () => {
     expect(await screen.findByText("没有找到与“不存在”匹配的资料。")).toBeInTheDocument();
   });
 
-  test("乐队页可加载乐队 Live 并打开详情", async () => {
-    // 测试点：公开乐队页加载关联 Live，不依赖后台控制台权限。
+  // 测试点：公开乐队浏览入口使用完整导航文案，并可加载关联 Live、打开详情。
+  test("乐队浏览页可加载乐队 Live 并打开详情", async () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(screen.getAllByRole("button", { name: "乐队" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "乐队浏览" })[0]);
 
     await waitFor(() => expect(getCatalogBandsMock).toHaveBeenCalledWith(30));
     await waitFor(() => expect(getCatalogBandLivesMock).toHaveBeenCalledWith(1, 1, 20));

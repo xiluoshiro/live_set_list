@@ -59,6 +59,25 @@ describe("api cache behavior", () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ credentials: "include" }));
   });
 
+  test("getLives 无 setlist 筛选使用独立请求与缓存", async () => {
+    // 测试点：控制台候选会传递 without_setlist，且不会误用公共 Live 列表缓存。
+    fetchMock.mockResolvedValue(
+      makeJsonResponse({
+        items: [],
+        pagination: { page: 1, page_size: 20, total: 0, total_pages: 1 },
+      }),
+    );
+    const { getLives } = await import("../api");
+
+    await getLives(1, 20);
+    await getLives(1, 20, true);
+    await getLives(1, 20, true);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/lives?page=1&page_size=20");
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/lives?page=1&page_size=20&without_setlist=true");
+  });
+
   test("getLives 并发相同请求会复用 inFlight promise", async () => {
     // 测试点：并发去重，避免同参数重复打后端。
     const d = deferred<Response>();

@@ -347,6 +347,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const hasExistingSetlist = (setlistDetailData?.detail_rows ?? []).length > 0;
   // 校验规则 3：新增 Setlist 的“提交插入”要求每一行 song_name/sid/band_member 均非空。
   const isSetlistSubmitDisabled =
+    selectedLiveId <= 0 ||
     setlistRows.length === 0 ||
     hasExistingSetlist ||
     setlistRows.some((row) => {
@@ -428,7 +429,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
     const loadLivePage = async () => {
       try {
-        const response = await getLives(livePage, 20);
+        const response = await getLives(livePage, 20, true);
         if (canceled) return;
         const nextLives = sortLivesForConsole(response.items.map(toLiveInsertRow));
         setLives(nextLives);
@@ -1105,6 +1106,17 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       };
       setSubmittedBundles((prev) => [newBundle, ...prev]);
       setDisplayedBundle(newBundle);
+      const remainingLives = lives.filter((live) => live.live_id !== targetLive.live_id);
+      setLives(remainingLives);
+      setSelectedLiveId(remainingLives[0]?.live_id ?? 0);
+      setLivePagination((prev) => {
+        const total = Math.max(0, prev.total - 1);
+        return {
+          ...prev,
+          total,
+          total_pages: Math.max(1, Math.ceil(total / prev.page_size)),
+        };
+      });
       onLiveDataChanged?.();
       clearSetlistPastePreview();
       clearSetlistData();
