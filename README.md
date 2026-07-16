@@ -4,11 +4,11 @@
 
 ## 生产状态
 
-生产站点已部署到 Google Compute Engine。常规应用发布使用 GitHub Actions 的 `vYYYY-MM-DD-NNN` tag：隔离数据库 CI、白名单出包、`production` 人工审批、SSH 部署和公网 smoke test 已验证。仓库已增加 Flyway 变化的两阶段 migration/attestation 代码，需先按 runbook 更新 VM root-owned 入口并完成 staging 验收后启用。
+生产站点已部署到 Google Compute Engine。常规应用发布使用 GitHub Actions 的 `vYYYY-MM-DD-NNN` tag：隔离数据库 CI、白名单出包、SSH 部署和公网 smoke test 已验证。Flyway 变化的两阶段 migration/attestation 代码、VM root-owned 入口、sudoers 以及 GitHub repository secrets/variables/Environments 已配置，待通过首个新 tag 完成端到端验收。
 
 - 实际部署、GitHub Environment 配置、验收、排障与回滚：[docs/production-deployment-runbook.md](D:/Code/PythonCode/5%20LiveSetList/docs/production-deployment-runbook.md)
 - 生产架构、安全基线与剩余 TODO：[docs/design/production-deployment.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/production-deployment.md)
-- 当前生产 schema 已到 V11。包含 Flyway SQL 的版本暂不走普通自动发布；后续将实施“受保护 migration + attestation 后应用切换”的两阶段流程。
+- 当前生产 schema 已到 V11。无论 app-only 还是 migration release，都只推送一个 `v*` tag：app-only 自动部署；migration 由同一候选包先后执行 GitHub `migrate` 和 `deploy` 两次人工阶段，日常流程无需手工登录 VM。
 
 ## 主要功能
 

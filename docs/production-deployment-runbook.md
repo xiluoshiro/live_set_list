@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-截至 2026-07-14，以下路径已在生产 VM 上验证：
+截至 2026-07-17，以下路径已在生产 VM 上验证：
 
 - Google Compute Engine VM：Debian 12 Bookworm（`debian-12-bookworm-v20260609`）。
 - Nginx 托管 `frontend/dist`，同源 `/api/*` 转发至 FastAPI `127.0.0.1:8000`；PostgreSQL Docker 容器仅绑定 `127.0.0.1:15432`。
@@ -15,7 +15,7 @@
 - 首个完整成功的自动发布 tag 为 `v2026-07-14-006`。
 - 首个 migration release 已完成：生产数据库从 V9 升至 V11，新 release 已切换、后端数据库 health 验收成功。
 
-仓库已实现两阶段 migration 发布代码，但在完成本页“VM 启用两阶段入口”前，当前生产 VM 仍只接受不变更 `backend/db/flyway/sql` 的版本。新入口启用后，tag workflow 会自动准备并分类候选包；app-only release 继续自动部署，migration release 必须分别手动触发 `migrate` 和 `deploy` 两个阶段。
+两阶段 migration 发布代码、VM root-owned 入口、deploy-only sudoers 和 GitHub repository secrets/variables/Environments 已完成配置。当前待办是通过首个新 tag 完成端到端验收；tag workflow 会自动准备并分类候选包，app-only release 继续自动部署，migration release 必须分别手动触发 `migrate` 和 `deploy` 两个阶段。
 
 ## 生产拓扑与目录
 
@@ -37,9 +37,16 @@ Internet
 /usr/local/sbin/livesetlist-deploy                root 持有的自动发布入口
 ```
 
-后端以 `livesetlist` 非 root 用户运行。备份 service 和发布脚本需要调用 Docker / systemd，因此以 root 运行；发布 SSH 用户仅获准 sudo 执行 `/usr/local/sbin/livesetlist-deploy`。
+后端以 `livesetlist` 非 root 用户运行。备份 service 和发布脚本需要调用 Docker / systemd，因此以 root 运行；发布 SSH 用户仅获准 sudo 执行 release manager 的 `prepare` / `migrate` 入口与 `/usr/local/sbin/livesetlist-deploy`。
 
 ## 日常自动发布
+
+最短操作路径：
+
+- app-only 和 migration release 都只创建并推送一个 `vYYYY-MM-DD-NNN` tag，不为 migration 再创建第二个 tag。
+- tag workflow 自动完成 CI、出包、SHA-256 校验、上传 VM 和服务器侧分类。
+- `app-only` 继续自动部署；`migration-needed` 停在 GitHub，维护人先运行一次 `Migration release control` 的 `migrate` / `MIGRATE`，验收后再运行一次 `deploy` / `DEPLOY`。
+- 日常发布不需要人工 SSH 登录 VM。本页 VM 命令只用于一次性入口安装、首次验收和故障排查。
 
 ### 1. 发布前检查
 
@@ -273,16 +280,17 @@ sudo systemctl status livesetlist-backup.service --no-pager
 - Repository variables：`DEPLOY_HOST`、`DEPLOY_PORT`、`DEPLOY_USER=livesetlist-deploy`、`PUBLIC_BASE_URL`。
 - Environment：保留 `production`；另建 `production-migration`。套餐支持时为两者配置 required reviewer；不支持时，两次独立 `workflow_dispatch` 和确认词仍会阻止普通 tag 自动迁移数据库。
 
-### 4. 首次启用顺序
+### 4. 首次启用验收顺序
 
-1. 先完成上述 VM 安装、sudoers 校验、Flyway 镜像预拉取和备份 service 验证。
-2. 再合并并推送本次 workflow 代码。
-3. 建议先发一个 SQL 不变的 app-only tag，确认 prepare 分类、production deploy、状态文件和公网 smoke 均正常。
-4. migration tag 完成 CI 后，在 tag workflow 的 Summary 复制 version 和 SHA-256。
-5. 手动运行 `Migration release control`：先选 `migrate` / `MIGRATE`；检查备份、Flyway 输出、attestation 和旧应用读写。
-6. 验收通过后再次运行同一 workflow：选 `deploy` / `DEPLOY`；完成应用切换和公网 smoke。
+1. **已完成**：VM 入口安装、sudoers 校验、Flyway 镜像预拉取和备份 service 验证。
+2. **已完成**：合并并推送 workflow 代码。
+3. **已完成**：配置 repository secrets/variables，保留 `production` 并新建 `production-migration` Environment。
+4. **待执行**：推送一个包含当前代码的 `v*` tag，确认 CI、prepare 分类、状态文件与 Summary 正常。对当前包含 V10/V11 SQL 而 VM `current` 尚无该 SQL 文件的情况，预期分类为 `migration-needed`，不必为 app-only 演练另造 tag。
+5. tag workflow 完成 CI 后，在 Summary 复制不带 `v` 的 version 和归档 SHA-256。
+6. 手动运行 `Migration release control`：先选 `migrate` / `MIGRATE`；检查备份、Flyway 输出、attestation 和旧应用读写。
+7. 验收通过后再次运行同一 workflow：选 `deploy` / `DEPLOY`；完成应用切换和公网 smoke。两次手工阶段始终使用同一 version 和 SHA-256，不再推送 tag。
 
-服务器侧检查：
+首次验收或故障排查时可选执行的服务器侧检查（不是日常发布的人工步骤）：
 
 ```bash
 sudo cat /var/lib/livesetlist/release-state/<version>.json
