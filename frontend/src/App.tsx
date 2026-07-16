@@ -207,7 +207,7 @@ function App() {
   const navigationItems: Array<{ key: TabKey; label: string; visible: boolean }> = [
     { key: "favorites", label: "我的收藏", visible: auth.isAuthenticated },
     { key: "all", label: "全部内容", visible: true },
-    { key: "browse", label: "乐队", visible: true },
+    { key: "browse", label: "乐队浏览", visible: true },
     { key: "about", label: "联系我们", visible: true },
     { key: "console", label: "控制台", visible: canUseConsoleFeatures },
   ];

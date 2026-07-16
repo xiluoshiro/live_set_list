@@ -316,8 +316,8 @@ export class ApiError extends Error {
   }
 }
 
-function livesCacheKey(page: number, pageSize: 15 | 20): string {
-  return `lives:${page}:${pageSize}`;
+function livesCacheKey(page: number, pageSize: 15 | 20, withoutSetlist = false): string {
+  return `lives:${page}:${pageSize}:${withoutSetlist ? "without_setlist" : "all"}`;
 }
 
 function favoriteLivesCacheKey(page: number, pageSize: 15 | 20): string {
@@ -441,11 +441,18 @@ export async function checkDbHealth(): Promise<DbHealthResponse> {
   return expectJsonResponse<DbHealthResponse>(response);
 }
 
-async function fetchLivesRemote(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
+async function fetchLivesRemote(
+  page: number,
+  pageSize: 15 | 20,
+  withoutSetlist = false,
+): Promise<LivesResponse> {
   const query = new URLSearchParams({
     page: String(page),
     page_size: String(pageSize),
   });
+  if (withoutSetlist) {
+    query.set("without_setlist", "true");
+  }
   const response = await fetchWithTimeout(`${BASE_URL}/api/lives?${query.toString()}`, undefined, {
     requestKind: "lives",
   });
@@ -801,8 +808,12 @@ export async function appendConsoleLiveSetlist(
   return responsePayload;
 }
 
-export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesResponse> {
-  const requestedKey = livesCacheKey(page, pageSize);
+export async function getLives(
+  page: number,
+  pageSize: 15 | 20,
+  withoutSetlist = false,
+): Promise<LivesResponse> {
+  const requestedKey = livesCacheKey(page, pageSize, withoutSetlist);
   const fresh = livesCache.getFresh(requestedKey, LIVES_CACHE_TTL_MS);
   if (fresh !== undefined) {
     return fresh;
@@ -810,11 +821,11 @@ export async function getLives(page: number, pageSize: 15 | 20): Promise<LivesRe
   const inFlight = livesCache.getInFlight(requestedKey);
   if (inFlight) return inFlight;
 
-  const requestPromise = fetchLivesRemote(page, pageSize)
+  const requestPromise = fetchLivesRemote(page, pageSize, withoutSetlist)
     .then((payload) => {
       const updatedAt = Date.now();
       livesCache.setData(requestedKey, payload, updatedAt);
-      const canonicalKey = livesCacheKey(payload.pagination.page, pageSize);
+      const canonicalKey = livesCacheKey(payload.pagination.page, pageSize, withoutSetlist);
       if (canonicalKey !== requestedKey) {
         livesCache.setData(canonicalKey, payload, updatedAt);
       }

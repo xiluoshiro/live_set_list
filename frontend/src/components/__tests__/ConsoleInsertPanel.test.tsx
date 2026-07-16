@@ -120,7 +120,7 @@ describe("ConsoleInsertPanel", () => {
     // 测试点：控制台首次进入应优先新增 Live，并把录入起点放在场地查询。
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-    await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20));
+    await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20, true));
 
     expect(screen.getByRole("tab", { name: "新增Live" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "新增Setlist" })).toBeInTheDocument();
@@ -138,7 +138,7 @@ describe("ConsoleInsertPanel", () => {
   });
 
   test("提交新增Setlist会调用真实追加接口并出现插入记录", async () => {
-    // 测试点：新增 Setlist 未填写 other_member 时应传 null，且只在成功后更新本地提交预览。
+    // 测试点：新增 Setlist 成功后传递正确数据、更新预览，并从无 setlist 候选中移除该 Live。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
@@ -188,6 +188,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("批量粘贴 Setlist 文本")).toHaveValue("");
     expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("");
     expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
+    expect(screen.getByRole("option", { name: "暂无 live 候选" })).toBeInTheDocument();
     expect(screen.queryByText("暂无插入记录")).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "setlist_rows" })).toBeInTheDocument();
     const resultTable = document.querySelector(".setlist-preview-wrap table") as HTMLElement;
@@ -528,7 +529,7 @@ describe("ConsoleInsertPanel", () => {
   });
 
   test("live_id 候选支持20条分页切换", async () => {
-    // 测试点：live_id 选择器按 20 条一页请求，并可切换到下一页候选。
+    // 测试点：live_id 选择器按 20 条一页请求无 setlist 候选，并可切换到下一页。
     const user = userEvent.setup();
     apiMocks.getLives.mockImplementation(async (page: number) => ({
       items:
@@ -560,13 +561,13 @@ describe("ConsoleInsertPanel", () => {
 
     expect(await screen.findByText("44 - Page One Live (2026-04-20)")).toBeInTheDocument();
     expect(screen.getByText("第 1 / 2 页，共 21 条")).toBeInTheDocument();
-    expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20);
+    expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20, true);
 
     await user.click(screen.getByRole("button", { name: "下一页" }));
 
     expect(await screen.findByText("24 - Page Two Live (2026-03-20)")).toBeInTheDocument();
     expect(screen.getByText("第 2 / 2 页，共 21 条")).toBeInTheDocument();
-    expect(apiMocks.getLives).toHaveBeenCalledWith(2, 20);
+    expect(apiMocks.getLives).toHaveBeenCalledWith(2, 20, true);
   });
 
   test("显示详细信息会复用主页详情API与详情表格", async () => {
@@ -598,7 +599,7 @@ describe("ConsoleInsertPanel", () => {
     });
     render(<ConsoleInsertPanel />);
 
-    await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20));
+    await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20, true));
     await user.click(screen.getByRole("button", { name: "显示详细信息" }));
 
     await waitFor(() => expect(apiMocks.getLiveDetail).toHaveBeenCalledWith(101));

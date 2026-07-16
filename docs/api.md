@@ -83,6 +83,7 @@
 自动文档能看到字段结构，但以下规则更值得额外说明：
 
 - `page_size` 当前只允许 `15` 或 `20`
+- `without_setlist=true` 时，仅返回尚无 `live_setlist` 数据的 Live；控制台“新增 Setlist”候选使用该筛选
 - 当请求页码超过最后一页时，后端会自动钳制到最后一页
 - `bands` 来自 `live_setlist.band_member` 中聚合出的乐队 ID
 - `bands` 会去重并按升序返回

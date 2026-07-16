@@ -13,6 +13,8 @@ from app.routers.lives import (
     LIVE_DETAIL_HEADER_QUERY,
     LIVE_DETAIL_ROWS_QUERY,
     LIVES_PAGE_QUERY,
+    LIVES_WITHOUT_SETLIST_COUNT_QUERY,
+    LIVES_WITHOUT_SETLIST_PAGE_QUERY,
 )
 
 
@@ -109,6 +111,24 @@ def test_get_lives_returns_url_from_live_attrs():
 
     assert response.status_code == 200
     assert response.json()["items"][0]["url"] == "https://example.com/live/7?from=list"
+
+
+def test_get_lives_without_setlist_uses_filtered_pagination_queries():
+    # 测试点：without_setlist 应在数据库分页前排除已有 setlist 的 Live。
+    rows = [(41, "2026-05-30", "Draft Live", [], None, "other")]
+    conn, cursor = _build_connection_mock(1, rows)
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.get("/api/lives?page=1&page_size=20&without_setlist=true")
+
+    assert response.status_code == 200
+    assert [item["live_id"] for item in response.json()["items"]] == [41]
+    assert response.json()["pagination"]["total"] == 1
+    assert cursor.execute.call_args_list == [
+        call(LIVES_WITHOUT_SETLIST_COUNT_QUERY),
+        call(LIVES_WITHOUT_SETLIST_PAGE_QUERY, (20, 0)),
+    ]
 
 
 def test_get_lives_invalid_page_size_returns_400():
