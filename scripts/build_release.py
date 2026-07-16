@@ -33,6 +33,7 @@ EXCLUDED_PARTS = {
     ".mypy_cache_run_checks",
     ".opencode",
     ".pytest_cache",
+    ".runtime",
     ".venv",
     "__pycache__",
     "dist-release",
@@ -41,9 +42,28 @@ EXCLUDED_PARTS = {
     "old",
 }
 
+SENSITIVE_FILE_NAMES = {
+    "flyway.toml",
+}
+
+
+def _is_runtime_env_file(path: Path) -> bool:
+    name = path.name.lower()
+    if name.endswith(".example"):
+        return False
+    return (
+        name == ".env"
+        or name.startswith(".env.")
+        or name.endswith(".env")
+        or ".env." in name
+        or name.startswith("env.")
+    )
+
 
 def _has_excluded_part(path: Path) -> bool:
     if len(path.parts) >= 2 and path.parts[0] == "recovery" and path.parts[1] == "tests":
+        return True
+    if path.name.lower() in SENSITIVE_FILE_NAMES or _is_runtime_env_file(path):
         return True
     return any(part in EXCLUDED_PARTS for part in path.parts)
 

@@ -108,5 +108,67 @@ def test_release_path_whitelist_excludes_local_state_and_sensitive_directories()
     assert _has_excluded_part(Path(".agents/context.md"))
     assert _has_excluded_part(Path("frontend/node_modules/react/index.js"))
     assert _has_excluded_part(Path("backend/.venv/pyvenv.cfg"))
+    assert _has_excluded_part(Path("backend/db/flyway/flyway.toml"))
+    assert _has_excluded_part(Path("infra/production/backend.env"))
+    assert _has_excluded_part(Path("infra/production/backend.env.local"))
+    assert _has_excluded_part(Path("infra/production/.env.production"))
+    assert _has_excluded_part(Path("infra/production/env.production"))
+    assert _has_excluded_part(Path("recovery/.runtime/sandbox/flyway.toml"))
     assert _has_excluded_part(Path("recovery/tests/test_recovery_unit.py"))
+    assert not _has_excluded_part(Path("backend/db/flyway/flyway.toml.example"))
     assert not _has_excluded_part(Path("infra/production/env.production.example"))
+
+
+# 测试点：最终发布归档必须排除 Flyway 凭据、运行时 env 和恢复沙箱，同时保留公开模板与运行文件。
+def test_release_archive_excludes_sensitive_runtime_files(tmp_path, monkeypatch):
+    test_root = tmp_path / "repo"
+    release_files = {
+        "backend/db/flyway/sql/V1__baseline.sql": "select 1;",
+        "backend/db/flyway/flyway.toml": "password = 'secret'",
+        "backend/db/flyway/flyway.toml.example": "password = 'replace_me'",
+        "infra/production/backend.env": "DB_PASSWORD=secret",
+        "infra/production/backend.env.local": "DB_PASSWORD=secret",
+        "infra/production/.env.production": "DB_PASSWORD=secret",
+        "infra/production/env.production": "DB_PASSWORD=secret",
+        "infra/production/env.production.example": "DB_PASSWORD=replace_me",
+        "recovery/core.py": "SAFE = True",
+        "recovery/.runtime/sandbox/flyway.toml": "password = 'secret'",
+    }
+    for relative_path, content in release_files.items():
+        file_path = test_root / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content, encoding="utf-8")
+
+    frontend_dist = test_root / "frontend" / "dist"
+    frontend_dist.mkdir(parents=True)
+
+    monkeypatch.setattr(build_release, "ROOT", test_root)
+    monkeypatch.setattr(build_release, "FRONTEND_DIR", test_root / "frontend")
+    monkeypatch.setattr(
+        build_release,
+        "RELEASE_DIRS",
+        ["backend/db/flyway", "frontend/dist", "infra/production", "recovery"],
+    )
+    monkeypatch.setattr(build_release, "RELEASE_FILES", [])
+
+    def fake_build_frontend():
+        (frontend_dist / "index.html").write_text("fresh asset", encoding="utf-8")
+
+    monkeypatch.setattr(build_release, "build_frontend", fake_build_frontend)
+
+    archive_path = build_release.build_release_archive("test-release", tmp_path / "output")
+
+    with tarfile.open(archive_path, "r:gz") as archive:
+        names = set(archive.getnames())
+
+    archive_root = "livesetlist-test-release"
+    assert f"{archive_root}/backend/db/flyway/flyway.toml" not in names
+    assert f"{archive_root}/infra/production/backend.env" not in names
+    assert f"{archive_root}/infra/production/backend.env.local" not in names
+    assert f"{archive_root}/infra/production/.env.production" not in names
+    assert f"{archive_root}/infra/production/env.production" not in names
+    assert f"{archive_root}/recovery/.runtime/sandbox/flyway.toml" not in names
+    assert f"{archive_root}/backend/db/flyway/flyway.toml.example" in names
+    assert f"{archive_root}/infra/production/env.production.example" in names
+    assert f"{archive_root}/recovery/core.py" in names
+    assert f"{archive_root}/frontend/dist/index.html" in names
