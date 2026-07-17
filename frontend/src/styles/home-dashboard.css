@@ -16,27 +16,9 @@
   background: var(--surface-2);
 }
 
-.home-kicker {
-  margin: 0 0 8px;
-  color: var(--accent-primary);
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.home-intro h2,
 .home-section h3 {
   margin: 0;
   color: var(--text-heading);
-}
-
-.home-intro h2 {
-  font-size: 28px;
-}
-
-.home-summary {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
 }
 
 .home-search {

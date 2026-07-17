@@ -6,6 +6,7 @@ import type {
   CatalogSearchResponse,
   LiveItem,
 } from "../api";
+import { PageTitle } from "./PageTitle";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
 
 export type CatalogLiveRow = {
@@ -126,11 +127,7 @@ export function SearchResultsPanel({
   return (
     <div className="catalog-panel">
       <div className="catalog-panel-head">
-        <div>
-          <p className="catalog-kicker">Search</p>
-          <h2>搜索结果</h2>
-          <p>按 Live、乐队、歌曲和场地分组展示。</p>
-        </div>
+        <PageTitle kicker="Search" title="搜索结果" description="按 Live、乐队、歌曲和场地分组展示。" />
         <button type="button" className="secondary-btn" onClick={onShowAbout}>
           联系我们
         </button>
@@ -221,11 +218,7 @@ export function BandBrowsePanel({
   return (
     <div className="catalog-panel">
       <div className="catalog-panel-head">
-        <div>
-          <p className="catalog-kicker">Browse</p>
-          <h2>乐队</h2>
-          <p>选择乐队后查看已收录的相关 Live。</p>
-        </div>
+        <PageTitle kicker="Browse" title="乐队浏览" description="选择乐队后查看已收录的相关 Live。" />
       </div>
 
       {error && <p className="catalog-state catalog-error">浏览加载失败: {error}</p>}
@@ -280,11 +273,7 @@ export function AboutPanel() {
   return (
     <div className="catalog-panel about-panel">
       <div className="catalog-panel-head">
-        <div>
-          <p className="catalog-kicker">About</p>
-          <h2>联系我们</h2>
-          <p>本站是站方整理维护的演唱会歌单数据库。</p>
-        </div>
+        <PageTitle kicker="About" title="联系我们" description="本站是站方整理维护的演唱会歌单数据库。" />
       </div>
 
       <div className="about-grid">

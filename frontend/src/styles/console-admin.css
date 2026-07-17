@@ -2,10 +2,8 @@
   padding: 24px;
 }
 
-.console-admin h3 {
-  margin: 0 0 8px;
-  color: var(--text-heading);
-  font-size: 18px;
+.console-admin > .page-title {
+  margin-bottom: 12px;
 }
 
 .console-admin-hint {

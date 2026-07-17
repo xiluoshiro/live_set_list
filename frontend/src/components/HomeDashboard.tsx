@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { CatalogStatsResponse } from "../api";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
+import { PageTitle } from "./PageTitle";
 
 export type HomeLiveRow = {
   liveId: number;
@@ -54,9 +55,12 @@ export function HomeDashboard({
     <div className="home-dashboard">
       <section className="home-intro" aria-labelledby="home-title">
         <div className="home-intro-copy">
-          <p className="home-kicker">Community live database</p>
-          <h2 id="home-title">BanG Dream! Live 资料库</h2>
-          <p className="home-summary">浏览和整理 Live、setlist、出演成员与来源链接。</p>
+          <PageTitle
+            kicker="Community live database"
+            title="BanG Dream! Live 资料库"
+            description="浏览和整理 Live、setlist、出演成员与来源链接。"
+            id="home-title"
+          />
         </div>
         <form
           className="home-search"

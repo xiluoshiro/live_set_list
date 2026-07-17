@@ -26,6 +26,7 @@ import {
 } from "./components/CatalogPanels";
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { HomeDashboard, type HomeLiveRow } from "./components/HomeDashboard";
+import { PageTitle } from "./components/PageTitle";
 import { LiveCardGrid } from "./components/LiveCardGrid";
 import { LiveDetailPage } from "./components/LiveDetailPage";
 import { LiveListFiltersToolbar } from "./components/LiveListFilters";
@@ -1254,10 +1255,11 @@ function App() {
         ) : showListPanel ? (
           <>
             <header className="list-page-heading">
-              <div>
-                <h1>演出资料</h1>
-                <p>浏览已收录的 Live，也可以只查看收藏内容</p>
-              </div>
+              <PageTitle
+                kicker="Live archive"
+                title="演出资料"
+                description="浏览已收录的 Live，也可以只查看收藏内容。"
+              />
               <span className="view-toggle">
                 <button
                   type="button"

@@ -12,26 +12,17 @@
   gap: 16px;
 }
 
-.catalog-panel-head h2,
 .catalog-section h3,
 .about-panel h3 {
   margin: 0;
   color: var(--text-heading);
 }
 
-.catalog-panel-head p,
+.catalog-panel-head .page-title-description,
 .catalog-section p,
 .catalog-empty,
 .catalog-state {
   color: var(--text-secondary);
-}
-
-.catalog-kicker {
-  margin: 0 0 6px;
-  color: var(--accent-primary);
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
 }
 
 .catalog-search-form {
