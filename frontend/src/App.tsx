@@ -221,7 +221,7 @@ function App() {
   const canUseFavoriteFeatures = auth.isAuthenticated;
   const canUseConsoleFeatures = auth.isAuthenticated && canAccessConsole(auth.user?.role);
   const navigationItems: Array<{ key: TabKey; label: string; visible: boolean }> = [
-    { key: "all", label: "全部内容", visible: true },
+    { key: "all", label: "演出资料", visible: true },
     { key: "browse", label: "乐队浏览", visible: true },
     { key: "about", label: "联系我们", visible: true },
     { key: "console", label: "控制台", visible: canUseConsoleFeatures },
@@ -1255,7 +1255,7 @@ function App() {
           <>
             <header className="list-page-heading">
               <div>
-                <h1>全部内容</h1>
+                <h1>演出资料</h1>
                 <p>浏览已收录的 Live，也可以只查看收藏内容</p>
               </div>
               <span className="view-toggle">

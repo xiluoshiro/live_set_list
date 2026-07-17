@@ -258,7 +258,7 @@ function renderApp(options?: { withAuthProvider?: boolean }) {
 }
 
 async function openAllContent(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("button", { name: "全部内容" }));
+  await user.click(await screen.findByRole("button", { name: "演出资料" }));
 }
 
 describe("App", () => {
@@ -355,8 +355,8 @@ describe("App", () => {
     expect(getCatalogStatsMock).toHaveBeenCalled();
   });
 
-  test("首页最近 Live 可打开详情，并能进入全部内容", async () => {
-    // 测试点：首页最近收录复用详情页，并提供进入全量列表的入口。
+  // 测试点：首页最近收录复用详情页，并提供进入全量列表的入口。
+  test("首页最近 Live 可打开详情，并能进入演出资料", async () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -369,11 +369,11 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "查看全部 Live →" }));
 
     await waitFor(() => expect(screen.getByText("总计 47 条")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
   });
 
+  // 测试点：History popstate 必须把 SPA 从详情还原到实际来源页面，支持鼠标侧键。
   test("浏览器返回会还原前一个主页面和详情来源", async () => {
-    // 测试点：History popstate 必须把 SPA 从详情还原到实际来源页面，支持鼠标侧键。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -387,7 +387,7 @@ describe("App", () => {
     fireEvent.popState(window, { state: { app: "live-set-list", tab: "all" } });
 
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
   });
 
   test("卡片详情返回会保留已加载页并继续触发无限加载", async () => {
@@ -455,8 +455,8 @@ describe("App", () => {
     }
   });
 
-  test("全部内容下滑后显示回到顶部按钮并平滑滚动", async () => {
-    // 测试点：长列表滚动超过阈值时必须提供可点击的回到顶部入口。
+  // 测试点：长列表滚动超过阈值时必须提供可点击的回到顶部入口。
+  test("演出资料下滑后显示回到顶部按钮并平滑滚动", async () => {
     const originalScrollY = Object.getOwnPropertyDescriptor(window, "scrollY");
     const originalScrollTo = window.scrollTo;
     Object.defineProperty(window, "scrollY", { value: 480, configurable: true });
@@ -541,18 +541,18 @@ describe("App", () => {
     expect(screen.queryByRole("heading", { name: "反馈与补充信息" })).not.toBeInTheDocument();
   });
 
+  // 测试点：匿名模式下控制台页签必须隐藏，避免未登录用户触发控制台逻辑。
   test("未登录时不显示控制台入口", async () => {
-    // 测试点：匿名模式下控制台页签必须隐藏，避免未登录用户触发控制台逻辑。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     renderApp();
-    await waitFor(() => expect(screen.getByRole("button", { name: "全部内容" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "演出资料" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "控制台" })).not.toBeInTheDocument();
   });
 
+  // 测试点：viewer 可在演出资料中使用仅收藏切换，但仍不应看到控制台页签。
   test("viewer 角色登录后不显示控制台入口", async () => {
-    // 测试点：viewer 可在全部内容中使用仅收藏切换，但仍不应看到控制台页签。
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
       user: { id: 1, username: "viewer", display_name: "Viewer", role: "viewer" },
@@ -564,7 +564,7 @@ describe("App", () => {
     );
     renderApp({ withAuthProvider: true });
 
-    await userEvent.setup().click(await screen.findByRole("button", { name: "全部内容" }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: "演出资料" }));
     expect(screen.getByRole("button", { name: "仅收藏" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "控制台" })).not.toBeInTheDocument();
   });
@@ -655,8 +655,8 @@ describe("App", () => {
     expect(unfavoriteLiveMock).toHaveBeenCalledTimes(0);
   });
 
-  test("已登录时全部内容页显示范围切换、收藏列和星标按钮", async () => {
-    // 测试点：收藏不再占用独立导航页签，而是在全部内容内作为范围切换。
+  // 测试点：收藏不再占用独立导航页签，而是在演出资料内作为范围切换。
+  test("已登录时演出资料页显示范围切换、收藏列和星标按钮", async () => {
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
       user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
@@ -668,9 +668,9 @@ describe("App", () => {
     );
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
-    await user.click(await screen.findByRole("button", { name: "全部内容" }));
+    await user.click(await screen.findByRole("button", { name: "演出资料" }));
 
-    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
     expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "仅收藏" })).toHaveAttribute("aria-pressed", "false");
@@ -679,8 +679,8 @@ describe("App", () => {
     expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
   });
 
+  // 测试点：仅收藏切换保留服务端收藏列表接口，并在同一页面替换数据范围。
   test("已登录时仅收藏范围走服务端接口，并展示服务端收藏列表", async () => {
-    // 测试点：仅收藏切换保留服务端收藏列表接口，并在同一页面替换数据范围。
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
       user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
@@ -700,17 +700,17 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "仅收藏" }));
     await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
     expect(screen.getByRole("button", { name: "仅收藏" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "全部内容" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
     expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument();
   });
 
+  // 测试点：未登录模式下不应该渲染收藏星标按钮。
   test("匿名模式不显示星标入口", async () => {
-    // 测试点：未登录模式下不应该渲染收藏星标按钮。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     renderApp();
-    await userEvent.setup().click(await screen.findByRole("button", { name: "全部内容" }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: "演出资料" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "取消收藏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入收藏" })).not.toBeInTheDocument();
@@ -803,8 +803,8 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument());
   });
 
+  // 测试点：同一登录态下已访问过的全量/收藏页再次切回时，应直接命中本地快照。
   test("已加载过的页签再次切回时会直接复用快照，不重复显示刷新态", async () => {
-    // 测试点：同一登录态下已访问过的全量/收藏页再次切回时，应直接命中本地快照。
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
       user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
@@ -824,7 +824,7 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "仅收藏" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "全部内容" }));
+    await user.click(screen.getByRole("button", { name: "演出资料" }));
 
     expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument();
     expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
@@ -1458,8 +1458,8 @@ describe("App", () => {
     });
   });
 
+  // 测试点：登录后切换分页，收藏操作仍会按同一 live_id 发到服务端。
   test("跨页后收藏状态仍按 live_id 生效", async () => {
-    // 测试点：登录后切换分页，收藏操作仍会按同一 live_id 发到服务端。
     getLivesMock
       .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20, startId: 1 }),
@@ -1485,7 +1485,7 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp({ withAuthProvider: true });
 
-    await user.click(screen.getByRole("button", { name: "全部内容" }));
+    await user.click(screen.getByRole("button", { name: "演出资料" }));
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
     });
@@ -1575,8 +1575,8 @@ describe("App", () => {
     expect(localStorage.getItem("live-view-mode")).toBe("table");
   });
 
-  test("全部内容筛选栏提交共享筛选参数且选项不显示数量", async () => {
-    // 测试点：关键词、年份、类型、乐队和排序会共同刷新服务端列表，年份与乐队只显示名称。
+  // 测试点：关键词、年份、类型、乐队和排序会共同刷新服务端列表，年份与乐队只显示名称。
+  test("演出资料筛选栏提交共享筛选参数且选项不显示数量", async () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 6, totalPages: 1, itemCount: 6 }),
     );

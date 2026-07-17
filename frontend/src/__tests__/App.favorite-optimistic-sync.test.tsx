@@ -182,7 +182,7 @@ function renderApp() {
 }
 
 async function openAllContent(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("button", { name: "全部内容" }));
+  await user.click(await screen.findByRole("button", { name: "演出资料" }));
 }
 
 describe("App optimistic favorite sync", () => {
@@ -282,8 +282,8 @@ describe("App optimistic favorite sync", () => {
     });
   });
 
+  // 测试点：全量页残留的乐观收藏状态，会在进入收藏页后通过服务端快照重新对齐。
   test("进入收藏页时会用服务端快照收敛之前失败的乐观收藏", async () => {
-    // 测试点：全量页残留的乐观收藏状态，会在进入收藏页后通过服务端快照重新对齐。
     getAuthMeMock
       .mockResolvedValueOnce({
         authenticated: true,
@@ -316,7 +316,7 @@ describe("App optimistic favorite sync", () => {
     await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
     await waitFor(() => expect(getAuthMeMock).toHaveBeenCalledTimes(2));
 
-    await user.click(screen.getByRole("button", { name: "全部内容" }));
+    await user.click(screen.getByRole("button", { name: "演出资料" }));
     expect(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" })).toBeInTheDocument();
   });
 
