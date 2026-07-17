@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 import type {
   CatalogBandItem,
@@ -7,7 +7,12 @@ import type {
   LiveItem,
 } from "../api";
 import { PageTitle } from "./PageTitle";
-import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
+import {
+  BandIconsCell,
+  getBandIconSrc,
+  getBandRepresentativeColor,
+  type BandIconInput,
+} from "./BandIconsCell";
 
 export type CatalogLiveRow = {
   liveId: number;
@@ -229,17 +234,32 @@ export function BandBrowsePanel({
           ) : bands.length === 0 ? (
             <p className="catalog-empty">当前没有可浏览的乐队。</p>
           ) : (
-            bands.map((band) => (
-              <button
-                key={band.band_id}
-                type="button"
-                className={`catalog-band-btn ${selectedBandId === band.band_id ? "active" : ""}`}
-                onClick={() => onSelectBand(band.band_id)}
-              >
-                <strong>{band.band_name}</strong>
-                <span>{band.live_count} 场</span>
-              </button>
-            ))
+            bands.map((band) => {
+              const backgroundIconSrc = getBandIconSrc(band.band_id);
+              const representativeColor = getBandRepresentativeColor(band.band_id);
+              return (
+                <button
+                  key={band.band_id}
+                  type="button"
+                  className={`catalog-band-btn ${backgroundIconSrc ? "has-band-art" : ""} ${selectedBandId === band.band_id ? "active" : ""}`}
+                  style={representativeColor ? ({ "--band-color": representativeColor } as CSSProperties) : undefined}
+                  onClick={() => onSelectBand(band.band_id)}
+                >
+                  {backgroundIconSrc && (
+                    <img
+                      className="catalog-band-btn-art"
+                      src={backgroundIconSrc}
+                      alt=""
+                      aria-hidden="true"
+                    />
+                  )}
+                  <div className="catalog-band-btn-content">
+                    <strong>{band.band_name}</strong>
+                    <span>{band.live_count} 场</span>
+                  </div>
+                </button>
+              );
+            })
           )}
         </aside>
 

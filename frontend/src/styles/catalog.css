@@ -181,6 +181,36 @@
   background: var(--surface-2);
 }
 
+.catalog-band-btn.has-band-art {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--band-color) 12%, var(--surface-chip));
+}
+
+.catalog-band-btn.has-band-art.active {
+  background: color-mix(in srgb, var(--band-color) 17%, var(--surface-2));
+}
+
+.catalog-band-btn-art {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  right: -10px;
+  width: 92px;
+  height: 92px;
+  transform: translateY(-50%);
+  object-fit: contain;
+  opacity: 0.22;
+  pointer-events: none;
+  user-select: none;
+}
+
+.catalog-band-btn-content {
+  position: relative;
+  z-index: 1;
+}
+
 .catalog-entity-list li {
   padding: 10px 0;
   border-top: 1px solid var(--border-table-row);
