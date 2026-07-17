@@ -235,15 +235,15 @@ describe("App dark mode", () => {
     });
   });
 
+  // 测试点：夜间主题在多交互路径（切页签/开关弹窗）中应保持一致不丢失。
   test("夜间主题在切换页签和打开详情后保持一致", async () => {
-    // 测试点：夜间主题在多交互路径（切页签/开关弹窗）中应保持一致不丢失。
     installMatchMedia(false);
     localStorage.setItem("live-theme-mode", "dark");
     const user = userEvent.setup();
     renderWithTheme();
 
     await waitFor(() => expect(document.documentElement.getAttribute("data-theme")).toBe("dark"));
-    await user.click(screen.getByRole("button", { name: "全部内容" }));
+    await user.click(screen.getByRole("button", { name: "演出资料" }));
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
 
     await waitFor(() => {
@@ -251,7 +251,7 @@ describe("App dark mode", () => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     });
     await user.click(screen.getByRole("button", { name: "返回" }));
-    await user.click(screen.getByRole("button", { name: "全部内容" }));
+    await user.click(screen.getByRole("button", { name: "演出资料" }));
 
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     expect(screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" })).toBeInTheDocument();
