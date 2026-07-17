@@ -6,6 +6,7 @@ import {
   getCatalogBandLives,
   getCatalogBands,
   getCatalogStats,
+  getCatalogStatistics,
   getLives,
   getMyFavoriteLives,
   peekMyFavoriteLives,
@@ -14,6 +15,9 @@ import {
   type CatalogBandLivesResponse,
   type CatalogSearchResponse,
   type CatalogStatsResponse,
+  type CatalogStatisticsFilters,
+  type CatalogStatisticsResponse,
+  type StatisticsScope,
   type LiveItem,
 } from "./api";
 import { useAuth } from "./auth/AuthProvider";
@@ -31,6 +35,7 @@ import { LiveCardGrid } from "./components/LiveCardGrid";
 import { LiveDetailPage } from "./components/LiveDetailPage";
 import { LiveListFiltersToolbar } from "./components/LiveListFilters";
 import { LoginDialog } from "./components/LoginDialog";
+import { StatisticsPanel } from "./components/StatisticsPanel";
 import { formatLiveType } from "./components/console/constants";
 import { useFavorites } from "./favorites/FavoriteProvider";
 import {
@@ -63,7 +68,7 @@ type LiveDetailFallback = {
   url: string | null;
 };
 
-type TabKey = "home" | "favorites" | "all" | "console" | "search" | "browse" | "about" | "detail";
+type TabKey = "home" | "favorites" | "all" | "statistics" | "console" | "search" | "browse" | "about" | "detail";
 type ListTabKey = "favorites" | "all";
 type AppHistoryState = {
   app: "live-set-list";
@@ -206,6 +211,11 @@ function App() {
   const [selectedCatalogBandId, setSelectedCatalogBandId] = useState<number | null>(null);
   const [catalogBandPage, setCatalogBandPage] = useState(1);
   const [catalogStats, setCatalogStats] = useState<CatalogStatsResponse | null>(null);
+  const [statisticsScope, setStatisticsScope] = useState<StatisticsScope>("all");
+  const [statisticsFilters, setStatisticsFilters] = useState<CatalogStatisticsFilters>({});
+  const [statisticsData, setStatisticsData] = useState<CatalogStatisticsResponse | null>(null);
+  const [statisticsLoading, setStatisticsLoading] = useState(false);
+  const [statisticsError, setStatisticsError] = useState<string | null>(null);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -223,6 +233,7 @@ function App() {
   const canUseConsoleFeatures = auth.isAuthenticated && canAccessConsole(auth.user?.role);
   const navigationItems: Array<{ key: TabKey; label: string; visible: boolean }> = [
     { key: "all", label: "演出资料", visible: true },
+    { key: "statistics", label: "数据统计", visible: true },
     { key: "browse", label: "乐队浏览", visible: true },
     { key: "about", label: "联系我们", visible: true },
     { key: "console", label: "控制台", visible: canUseConsoleFeatures },
@@ -509,7 +520,7 @@ function App() {
   }, [catalogBandPage, pageSize, selectedCatalogBandId, tab]);
 
   useEffect(() => {
-    if (tab !== "home" && tab !== "all" && tab !== "favorites") return;
+    if (tab !== "home" && tab !== "all" && tab !== "favorites" && tab !== "statistics") return;
     let canceled = false;
     const fetchStats = async () => {
       try {
@@ -526,7 +537,7 @@ function App() {
   }, [tab]);
 
   useEffect(() => {
-    if (!listEnabled) return;
+    if (!listEnabled && tab !== "statistics") return;
     let canceled = false;
 
     const fetchListFilterBands = async () => {
@@ -542,7 +553,30 @@ function App() {
     return () => {
       canceled = true;
     };
-  }, [listEnabled]);
+  }, [listEnabled, tab]);
+
+  useEffect(() => {
+    if (tab !== "statistics") return;
+    if (statisticsScope === "favorites" && !auth.isAuthenticated) return;
+    let canceled = false;
+    const fetchStatistics = async () => {
+      setStatisticsLoading(true);
+      setStatisticsError(null);
+      try {
+        const data = await getCatalogStatistics(statisticsScope, statisticsFilters);
+        if (!canceled) setStatisticsData(data);
+      } catch (error) {
+        if (canceled) return;
+        if (error instanceof ApiError && error.status === 401) auth.setAnonymous();
+        setStatisticsData(null);
+        setStatisticsError(error instanceof Error ? error.message : "统计加载失败");
+      } finally {
+        if (!canceled) setStatisticsLoading(false);
+      }
+    };
+    void fetchStatistics();
+    return () => { canceled = true; };
+  }, [auth, statisticsFilters, statisticsScope, tab]);
 
   useEffect(() => {
     if (!listEnabled) return;
@@ -729,6 +763,7 @@ function App() {
   const showListPanel = tab === "all" || tab === "favorites";
   const showSearchPanel = tab === "search";
   const showBrowsePanel = tab === "browse";
+  const showStatisticsPanel = tab === "statistics";
   const showAboutPanel = tab === "about";
   const rows = showListPanel ? items : [];
 
@@ -798,6 +833,15 @@ function App() {
   const handleCatalogBandSelect = (bandId: number) => {
     setCatalogBandPage(1);
     navigateToTab("browse", { catalogBandId: bandId });
+  };
+
+  const handleStatisticsScopeChange = (scope: StatisticsScope) => {
+    if (scope === "favorites" && !auth.isAuthenticated) {
+      setLoginError(null);
+      setLoginDialogOpen(true);
+      return;
+    }
+    setStatisticsScope(scope);
   };
 
   const openCatalogLive = (row: CatalogLiveRow) => {
@@ -1249,6 +1293,20 @@ function App() {
             onSelectBand={handleCatalogBandSelect}
             onOpenLive={openCatalogLive}
             onPageChange={setCatalogBandPage}
+          />
+        ) : showStatisticsPanel ? (
+          <StatisticsPanel
+            scope={statisticsScope}
+            filters={statisticsFilters}
+            data={statisticsData}
+            bands={listFilterBands}
+            years={catalogStats?.years ?? []}
+            loading={statisticsLoading}
+            error={statisticsError}
+            isAuthenticated={auth.isAuthenticated}
+            onScopeChange={handleStatisticsScopeChange}
+            onFiltersChange={setStatisticsFilters}
+            onOpenLive={(live) => openLiveDetail({ ...live, url: null, liveType: "other", icons: [] }, "statistics")}
           />
         ) : showAboutPanel ? (
           <AboutPanel />

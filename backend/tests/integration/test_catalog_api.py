@@ -17,9 +17,9 @@ def test_catalog_stats_returns_seeded_counts(integration_test_client):
     assert body["years"] == [2026]
 
 
+# 测试点：旧版概览响应体继续保持稳定，避免首页指标契约被新统计接口破坏。
 def test_catalog_stats_response_structure(integration_test_client):
     """验证 stats 端点返回的 JSON 字段完整且类型正确。"""
-    # 测试点：响应体应包含概览与年份选项字段，且类型符合预期。
     response = integration_test_client.get("/api/catalog/stats")
 
     assert response.status_code == 200
@@ -32,3 +32,42 @@ def test_catalog_stats_response_structure(integration_test_client):
     assert isinstance(body["venue_count"], int)
     assert isinstance(body["latest_live_date"], str)
     assert isinstance(body["years"], list)
+
+
+# 测试点：未选乐队时每队只返回内部第一名，并按 band_id 升序稳定展示。
+def test_catalog_statistics_returns_all_scope(integration_test_client):
+    response = integration_test_client.get("/api/catalog/statistics")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scope"] == "all"
+    assert body["overview"]["live_count"] == 4
+    assert body["overview"]["setlist_live_count"] == 3
+    assert body["overview"]["band_count"] == 3
+    assert body["years"] == [{"key": "2026", "label": "2026 年", "live_count": 4}]
+    ranked_band_ids = [item["band_id"] for item in body["top_songs"]]
+    assert ranked_band_ids == [1, 2, 3]
+    assert body["top_songs"][0]["live_count"] >= 1
+    assert body["stale_songs"] == []
+
+
+# 测试点：乐队筛选按 setlist 实际演唱者返回该乐队 Top N，不混入其他乐队的演唱记录。
+def test_catalog_statistics_filters_by_band(integration_test_client):
+    response = integration_test_client.get("/api/catalog/statistics", params={"band_id": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["filters"]["band_id"] == 1
+    assert body["overview"]["live_count"] == 3
+    top_song_ids = {item["song_id"] for item in body["top_songs"]}
+    assert 1 in top_song_ids
+    assert 2 not in top_song_ids
+    assert 3 not in top_song_ids
+    assert all(item["band_id"] == 1 and item["band_name"] == "Poppin'Party" for item in body["top_songs"])
+
+
+# 测试点：收藏统计不会向匿名访问者泄露用户范围数据。
+def test_catalog_statistics_requires_login_for_favorites(integration_test_client):
+    response = integration_test_client.get("/api/catalog/statistics", params={"scope": "favorites"})
+
+    assert response.status_code == 401

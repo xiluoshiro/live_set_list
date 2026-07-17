@@ -50,3 +50,64 @@ class CatalogStatsResponse(BaseModel):
     venue_count: int = Field(..., description="Total number of venues")
     latest_live_date: str | None = Field(default=None, description="Most recent live date in ISO format")
     years: list[int] = Field(default_factory=list, description="Distinct Live years ordered descending")
+
+
+class StatisticsFilters(BaseModel):
+    year: int | None = None
+    live_type: str | None = None
+    band_id: int | None = None
+
+
+class StatisticsOverview(BaseModel):
+    live_count: int
+    setlist_live_count: int
+    band_count: int
+    song_count: int
+    venue_count: int
+    earliest_live_date: date | None = None
+    latest_live_date: date | None = None
+
+
+class StatisticsDimensionItem(BaseModel):
+    key: str
+    label: str
+    live_count: int
+
+
+class StatisticsSongItem(BaseModel):
+    song_id: int
+    song_name: str
+    band_id: int
+    band_name: str | None = None
+    is_cover: bool
+    live_count: int
+    performance_count: int
+    first_live_id: int
+    first_live_date: date
+    first_live_title: str
+    latest_live_id: int
+    latest_live_date: date
+    latest_live_title: str
+
+
+class StatisticsStaleSongItem(BaseModel):
+    song_id: int
+    song_name: str
+    band_name: str | None = None
+    live_count: int
+    latest_live_id: int
+    latest_live_date: date
+    latest_live_title: str
+    reference_live_date: date
+    stale_days: int
+    missed_live_count: int
+
+
+class CatalogStatisticsResponse(BaseModel):
+    scope: str
+    filters: StatisticsFilters
+    overview: StatisticsOverview
+    years: list[StatisticsDimensionItem]
+    live_types: list[StatisticsDimensionItem]
+    top_songs: list[StatisticsSongItem]
+    stale_songs: list[StatisticsStaleSongItem]

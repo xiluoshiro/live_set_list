@@ -14,6 +14,7 @@
 
 ## 当前设计
 
+- [公共统计 S1 实现设计](design/public-statistics-s1.md)
 - [公共端 UI 精修](design/public-ui-refresh.md)
 - [E2E 测试设计](design/e2e.md)
 - [首页阶段 1 开发设计](design/homepage-community-database-phase1.md)：历史阶段设计，当前状态以产品需求文档为准。
