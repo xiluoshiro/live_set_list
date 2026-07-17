@@ -107,6 +107,37 @@ export type CatalogStatsResponse = {
   years?: number[];
 };
 
+export type StatisticsScope = "all" | "favorites";
+export type CatalogStatisticsFilters = {
+  year?: number;
+  liveType?: string;
+  bandId?: number;
+};
+export type StatisticsDimensionItem = { key: string; label: string; live_count: number };
+export type StatisticsSongItem = {
+  song_id: number; song_name: string; band_id: number; band_name: string | null; is_cover: boolean;
+  live_count: number; performance_count: number;
+  first_live_id: number; first_live_date: string; first_live_title: string;
+  latest_live_id: number; latest_live_date: string; latest_live_title: string;
+};
+export type StatisticsStaleSongItem = {
+  song_id: number; song_name: string; band_name: string | null; live_count: number;
+  latest_live_id: number; latest_live_date: string; latest_live_title: string;
+  reference_live_date: string; stale_days: number; missed_live_count: number;
+};
+export type CatalogStatisticsResponse = {
+  scope: StatisticsScope;
+  filters: { year: number | null; live_type: string | null; band_id: number | null };
+  overview: {
+    live_count: number; setlist_live_count: number; band_count: number; song_count: number; venue_count: number;
+    earliest_live_date: string | null; latest_live_date: string | null;
+  };
+  years: StatisticsDimensionItem[];
+  live_types: StatisticsDimensionItem[];
+  top_songs: StatisticsSongItem[];
+  stale_songs: StatisticsStaleSongItem[];
+};
+
 export type LiveDetailBandMember = {
   band_id: number | null;
   band_name: string;
@@ -292,7 +323,8 @@ type RequestKind =
   | "catalog_search"
   | "catalog_bands"
   | "catalog_band_lives"
-  | "catalog_stats";
+  | "catalog_stats"
+  | "catalog_statistics";
 
 type RequestLogMeta = {
   requestKind: RequestKind;
@@ -744,6 +776,21 @@ export async function getCatalogStats(): Promise<CatalogStatsResponse> {
     requestKind: "catalog_stats",
   });
   return expectJsonResponse<CatalogStatsResponse>(response);
+}
+
+export async function getCatalogStatistics(
+  scope: StatisticsScope,
+  filters: CatalogStatisticsFilters = {},
+  limit = 10,
+): Promise<CatalogStatisticsResponse> {
+  const query = new URLSearchParams({ scope, limit: String(limit) });
+  if (filters.year !== undefined) query.set("year", String(filters.year));
+  if (filters.liveType) query.set("live_type", filters.liveType);
+  if (filters.bandId !== undefined) query.set("band_id", String(filters.bandId));
+  const response = await fetchWithTimeout(`${BASE_URL}/api/catalog/statistics?${query.toString()}`, undefined, {
+    requestKind: "catalog_statistics",
+  });
+  return expectJsonResponse<CatalogStatisticsResponse>(response);
 }
 
 export async function createConsoleSong(

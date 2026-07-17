@@ -15,6 +15,7 @@ import {
   getCatalogBandLives,
   getCatalogBands,
   getCatalogStats,
+  getCatalogStatistics,
   getLiveDetail,
   getLiveDetailsBatch,
   getAuthMe,
@@ -37,6 +38,7 @@ vi.mock("../api", () => ({
   getLives: vi.fn(),
   searchCatalog: vi.fn(),
   getCatalogStats: vi.fn(),
+  getCatalogStatistics: vi.fn(),
   getCatalogBands: vi.fn(),
   getCatalogBandLives: vi.fn(),
   getLiveDetail: vi.fn(),
@@ -78,6 +80,7 @@ const searchCatalogMock = vi.mocked(searchCatalog);
 const getCatalogBandsMock = vi.mocked(getCatalogBands);
 const getCatalogBandLivesMock = vi.mocked(getCatalogBandLives);
 const getCatalogStatsMock = vi.mocked(getCatalogStats);
+const getCatalogStatisticsMock = vi.mocked(getCatalogStatistics);
 const getLiveDetailMock = vi.mocked(getLiveDetail);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
 const getAuthMeMock = vi.mocked(getAuthMe);
@@ -272,6 +275,7 @@ describe("App", () => {
     getCatalogBandsMock.mockReset();
     getCatalogBandLivesMock.mockReset();
     getCatalogStatsMock.mockReset();
+    getCatalogStatisticsMock.mockReset();
     getLiveDetailMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
     getAuthMeMock.mockReset();
@@ -324,6 +328,28 @@ describe("App", () => {
       latest_live_date: "2026-05-30",
       years: [2026, 2025],
     });
+    getCatalogStatisticsMock.mockResolvedValue({
+      scope: "all",
+      filters: { year: null, live_type: null, band_id: null },
+      overview: { live_count: 4, setlist_live_count: 3, band_count: 3, song_count: 15, venue_count: 3, earliest_live_date: "2026-01-03", latest_live_date: "2026-05-30" },
+      years: [{ key: "2026", label: "2026 年", live_count: 4 }],
+      live_types: [{ key: "oneman", label: "oneman", live_count: 1 }],
+      top_songs: [{ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, band_name: "Poppin'Party", is_cover: false, live_count: 2, performance_count: 2, first_live_id: 38, first_live_date: "2026-01-03", first_live_title: "New Year", latest_live_id: 1, latest_live_date: "2026-03-28", latest_live_title: "Unit Live" }],
+      stale_songs: [],
+    });
+  });
+
+  // 测试点：公共导航可进入统计页，并展示统一接口返回的资料库指标和歌曲排行。
+  test("数据统计页展示概览与高频歌曲", async () => {
+    getLivesMock.mockResolvedValue(makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }));
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "数据统计" }));
+    expect(await screen.findByRole("heading", { name: "数据统计" })).toBeInTheDocument();
+    await waitFor(() => expect(getCatalogStatisticsMock).toHaveBeenCalledWith("all", {}));
+    expect(screen.getByText("Yes! BanG_Dream!")).toBeInTheDocument();
+    expect(screen.getByText("高频歌曲")).toBeInTheDocument();
   });
 
   test("匿名模式默认进入首页，且不显示收藏入口", async () => {

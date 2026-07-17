@@ -49,6 +49,8 @@
   - 按乐队浏览相关 Live，匿名可用，登录时会附带收藏状态
 - `GET /api/catalog/stats`
   - 首页和筛选器使用的 Live / 乐队 / 歌曲 / 场地总数、最新 Live 日期与可用年份
+- `GET /api/catalog/statistics`
+  - 公共统计页接口；统一支持全部 / 当前用户收藏范围，以及年份、乐队和 Live 类型筛选
 - `GET /api/console/songs`
   - `editor+` 查询控制台歌曲候选
 - `GET /api/console/bands`
@@ -69,6 +71,7 @@
 说明：
 - 全量路径、请求参数、响应 schema 请直接查看自动文档
 - 控制台写接口都要求有效登录态、`editor+` 角色和 `X-CSRF-Token`
+- `GET /api/catalog/statistics?scope=favorites` 要求登录，但不接收 `user_id`，只统计当前 session 用户的收藏
 
 ## 自动文档中已覆盖的内容
 

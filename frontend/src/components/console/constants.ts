@@ -2,17 +2,19 @@ import type { BandOption, LiveInsertRow, SetlistDraftRow, SongInsertRow, VenueOp
 
 export const SEGMENT_OPTIONS = ["M", "OP", "ED", "EN", "WEN", "SP"];
 export const DEFAULT_BAND_MEMBERS = ["主唱", "吉他", "贝斯", "鼓手", "键盘"];
-export const LIVE_TYPE_OPTIONS = [
-  { value: "oneman", label: "专场" },
-  { value: "multi_act", label: "拼盘" },
-  { value: "taiban", label: "对邦" },
-  { value: "festival", label: "音乐节" },
-  { value: "event", label: "活动" },
-  { value: "other", label: "其他" },
-];
+export const LIVE_TYPE_LABELS = {
+  oneman: "专场",
+  multi_act: "拼盘",
+  taiban: "对邦",
+  festival: "音乐节",
+  event: "活动",
+  other: "其他",
+} as const;
+
+export const LIVE_TYPE_OPTIONS = Object.entries(LIVE_TYPE_LABELS).map(([value, label]) => ({ value, label }));
 
 export function formatLiveType(value: string): string {
-  return LIVE_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value;
+  return LIVE_TYPE_LABELS[value as keyof typeof LIVE_TYPE_LABELS] ?? value;
 }
 export const TIMEZONE_HOUR_OPTIONS = Array.from({ length: 27 }, (_, index) => {
   const hour = index - 12;
