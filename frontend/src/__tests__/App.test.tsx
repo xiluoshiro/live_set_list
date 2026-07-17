@@ -536,8 +536,14 @@ describe("App", () => {
     expect(await screen.findByText("没有找到与“不存在”匹配的资料。")).toBeInTheDocument();
   });
 
-  // 测试点：公开乐队浏览入口使用完整导航文案，并可加载关联 Live、打开详情。
+  // 测试点：乐队浏览按钮仅为存在 SVG 的 Band 渲染图案与 SVG 代表色，并保持关联 Live 可打开。
   test("乐队浏览页可加载乐队 Live 并打开详情", async () => {
+    getCatalogBandsMock.mockResolvedValue({
+      items: [
+        { band_id: 1, band_name: "Poppin'Party", band_abbr: "PoPiPa", live_count: 2 },
+        { band_id: 13, band_name: "No Icon Band", band_abbr: "none", live_count: 0 },
+      ],
+    });
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -548,6 +554,14 @@ describe("App", () => {
 
     await waitFor(() => expect(getCatalogBandsMock).toHaveBeenCalledWith(30));
     await waitFor(() => expect(getCatalogBandLivesMock).toHaveBeenCalledWith(1, 1, 20));
+    const bandWithIcon = screen.getByRole("button", { name: "Poppin'Party 2 场" });
+    const bandWithoutIcon = screen.getByRole("button", { name: "No Icon Band 0 场" });
+    expect(bandWithIcon).toHaveClass("has-band-art");
+    expect(bandWithIcon.querySelector(".catalog-band-btn-art")).toHaveAttribute("src", "/icons/Band_1.svg");
+    expect(bandWithIcon.style.getPropertyValue("--band-color")).toBe("#ff3377");
+    expect(bandWithoutIcon).not.toHaveClass("has-band-art");
+    expect(bandWithoutIcon.querySelector(".catalog-band-btn-art")).toBeNull();
+    expect(bandWithoutIcon.style.getPropertyValue("--band-color")).toBe("");
     await user.click(await screen.findByRole("button", { name: "Poppin'Party Browse Live" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(201));
   });
