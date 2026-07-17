@@ -25,7 +25,7 @@
 - `LiveItem`、`LiveDetailResponse`、`ConsoleLiveCreatePayload`、`ConsoleLiveMutationItem` 均包含 `live_type: string`。
 - `ConsoleInsertPanel` 的 `liveType` 状态存 code，payload 发送 `live_type`，成功回填使用 `response.item.live_type`，确认面板用 `formatLiveType` 展示 label。
 - `LiveAdminSection` 的 select 用 `option.value`/`option.label` 渲染，表头改为 `live_type`，历史行用 `formatLiveType` 展示。
-- 主详情弹窗暂不展示类型（第二阶段）。
+- 演出资料支持按 Live 类型筛选；独立详情视图使用 `formatLiveType()` 展示中文类型标签。
 
 ### 1.4 测试
 
@@ -57,10 +57,9 @@
 6. [x] 后端 lives/me 读接口全部返回 `live_type`。
 7. [x] 更新后端单元和集成测试。
 8. [x] 更新前端 API 类型和控制台新增 Live 表单。
+9. [x] 在演出资料筛选器和独立详情视图展示 Live 类型。
 
 ## 4. 后续方向
 
-- 是否把类型展示到主详情弹窗（第二阶段）。
-- 是否在主列表或详情弹窗展示类型（产品决策）。
-- 是否增加按类型筛选（需要时再加 btree 索引）。
+- 观察类型筛选查询量，确有需要时再评估 btree 索引。
 - 如需类型可配置化，再引入 `live_type_list` lookup 表。

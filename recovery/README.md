@@ -10,6 +10,8 @@
 - `restore.py`：Flyway、测试库恢复、主库 `pg_restore` 与权限回灌
 - `core.py`：命令入口解析与主流程编排
 
+恢复流程不固定写死 schema 版本，而是对候选数据库执行当前发布包内的 Flyway migration；当前仓库 migration 已到 V12。恢复旧 dump 时，`flyway info + validate + migrate` 会负责补齐缺失版本。
+
 ## 命令入口
 
 项目根目录下的统一入口仍然是：

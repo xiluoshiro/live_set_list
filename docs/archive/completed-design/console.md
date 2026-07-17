@@ -4,11 +4,11 @@
 
 当前结论：
 
-- 前端控制台已经完成第一轮真实 API 接线：只读候选、venue 新增、Live 新增（含 `live_type` 持久化）、歌曲新增、批量新增歌曲、Setlist 追加和详情弹窗都已接真实接口。
+- 前端控制台已经完成第一轮真实 API 接线：只读候选、venue 新增、Live 新增（含 `live_type` 与 `default_band_ids` 持久化）、歌曲新增、批量新增歌曲、Setlist 追加和详情弹窗都已接真实接口。
 - 后端 `/api/console` 已提供真实写接口、批量写接口和只读查询接口；写接口统一执行 `editor+` 权限、CSRF 校验和审计日志。
 - 新增 Setlist 已支持 Peggy 批量粘贴解析、歌曲查询回填 sid、未匹配歌曲批量新增、确认弹窗和提交后刷新。
 - 控制台下方已有运行日志区，批量新增歌曲成功/失败会记录请求结果；失败时会展示后端返回的 HTTP 状态、错误码和 message。
-- 已修复 `/api/auth/me` 并发刷新 CSRF token 造成写接口 403 的竞态；根因已同步到 [e2e.md](./e2e.md)。
+- 已修复 `/api/auth/me` 并发刷新 CSRF token 造成写接口 403 的竞态；根因已同步到 [E2E 测试设计](../../design/e2e.md)。
 - 当前剩余主线不再是录入链路接线，而是 E2E 回归落地、用户管理能力和更细的字段级错误展示。
 
 ## 0. 本次只读查询 API 设计方案
@@ -91,12 +91,14 @@
 - 前端字段必填校验
 - 提交新增 Live，调用 `POST /api/console/lives`
 - 使用后端返回的数据库自增 `live_id` 更新“已新增 Live 记录”和 live 候选
+- 使用浮动多选下拉设置默认 Band；候选来自 `GET /api/console/bands`，提交为 `default_band_ids`
 - `timezone` 默认值为 `+09:00`
 - `live_date` 仍使用浏览器原生日期控件，并限制最小日期为 `2015-01-01`
 
 当前限制：
 
 - `live_type` 已持久化到 `live_attrs`，前端发送稳定 code，后端枚举校验；详情见 [live-type.md](./live-type.md)。
+- `default_band_ids` 由 Flyway V12 持久化到 `live_attrs`；只在 Live 完全没有 setlist 行时用于列表图标与乐队筛选回退。
 - 新增 Live 成功后当前只追加到前端当前页候选，不会主动刷新 `GET /api/lives` 分页总数。
 - 原生日期控件的月份/年份滚动体验由浏览器控制，前端只能通过 `min` 等标准属性做有限约束。
 
@@ -378,17 +380,19 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 
 - `live_date`
 - `live_title`
-- `type`
+- `live_type`
 - `url`
 - `opening_time`
 - `start_time`
 - `timezone`
 - `venue_id`
+- `default_band_ids`
 
 校验：
 
 - 仅 `editor+`
 - `venue_id` 必须存在
+- `default_band_ids` 最多 100 项，每项必须是已存在的正数 `band_attrs.id`；后端去重并升序保存
 - 时间字段格式合法
 - 必填字段完整
 
@@ -502,6 +506,7 @@ README 已把“管理员创建用户与用户管理能力”列为待办。
 - 只读候选查询 `songs / bands / venues`
 - Venue 快捷新增
 - Live 新增
+- 默认 Band 浮动多选下拉与 `default_band_ids` 提交
 - 单首歌曲新增
 - 未匹配歌曲批量新增
 - Live Setlist 追加
@@ -772,6 +777,7 @@ warning 设计：
 - 已完成 venue 查询结果与“选择 venue”联动
 - 已完成 setlist 详细信息弹窗复用主界面详情结构
 - 已完成新增 Live 默认 `timezone = +09:00`
+- 已完成新增 Live 默认 Band 浮动多选下拉，并接入 V12 `live_attrs.default_band_ids`
 - 已完成 `live_date` 原生日期输入最小值限制为 `2015-01-01`
 - 已完成删除末行时的全局顶部 toast 告警
 - 已完成批量粘贴 Setlist 解析与确认应用
@@ -790,7 +796,7 @@ warning 设计：
 
 ## 8. 总结
 
-当前控制台已经完成了“可进入、可操作、可查询候选、可新增 venue、可新增 Live、可新增歌曲、可批量新增歌曲、可追加 Setlist”的第一轮真实录入阶段，也已经完成第一版“可落库、可审计、可鉴权、可查询候选项”的后端阶段。
+当前控制台已经完成了“可进入、可操作、可查询候选、可新增 venue、可新增 Live、可选择默认 Band、可新增歌曲、可批量新增歌曲、可追加 Setlist”的第一轮真实录入阶段，也已经完成第一版“可落库、可审计、可鉴权、可查询候选项”的后端阶段。
 
 最重要的判断是：
 

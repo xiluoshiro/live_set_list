@@ -6,7 +6,7 @@
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
-- 仓库内也可通过 `python scripts/export_openapi.py` 导出到 [docs/openapi.json](D:/Code/PythonCode/5%20LiveSetList/docs/openapi.json)
+- 仓库内也可通过 `python scripts/export_openapi.py` 导出到 `docs/openapi.json`（该文件是生成物，未生成时不会存在）
 
 本文档只保留自动文档之外更有价值的补充信息，例如：
 
@@ -29,6 +29,8 @@
   - 退出当前登录态并使 session 失效
 - `GET /api/me/favorites/lives`
   - 获取当前登录用户的收藏分页列表
+- `POST /api/me/favorites/lives:batch`
+  - 批量收藏或取消收藏 Live，要求登录态与 CSRF
 - `PUT /api/me/favorites/lives/{live_id}`
   - 收藏指定 live
 - `DELETE /api/me/favorites/lives/{live_id}`
@@ -45,6 +47,8 @@
   - 公共乐队浏览列表，匿名可用
 - `GET /api/catalog/bands/{band_id}/lives`
   - 按乐队浏览相关 Live，匿名可用，登录时会附带收藏状态
+- `GET /api/catalog/stats`
+  - 首页和筛选器使用的 Live / 乐队 / 歌曲 / 场地总数、最新 Live 日期与可用年份
 - `GET /api/console/songs`
   - `editor+` 查询控制台歌曲候选
 - `GET /api/console/bands`
@@ -135,6 +139,16 @@
 - `items[].is_favorite` 恒为 `true`
 - 取消收藏后，该接口会立即反映最新结果
 
+#### 4.1 `POST /api/me/favorites/lives:batch`
+
+- 该接口要求已登录，并校验 `X-CSRF-Token`
+- `action` 只允许 `favorite` 或 `unfavorite`
+- `live_ids` 接受 `1..100` 个正整数；后端去重并保留首次出现顺序
+- 操作幂等：已经处于目标状态的 ID 进入 `noop_live_ids`
+- 实际发生变化的 ID 进入 `applied_live_ids`，不存在的 Live 进入 `not_found_live_ids`
+- `requested_count` 是服务端去重后的请求数量
+- 每次批量操作写入一条汇总审计日志
+
 ### 5. 公共 catalog 接口
 
 `GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/stats` 用于匿名可访问的公共资料库搜索与浏览。
@@ -156,6 +170,7 @@
   - `limit` 范围是 `1..100`，默认 `20`
   - 当前只返回 `band_attrs.id > 0` 的乐队
   - `live_count` 按 `live_setlist.band_member` 中的乐队名匹配统计
+  - 当前公共乐队浏览统计不使用 `live_attrs.default_band_ids` 回退；该字段只影响通用 Live 列表、收藏列表及其 `band_id` 筛选
   - 当前列表按 `band_attrs.id` 排序
 - `GET /api/catalog/bands/{band_id}/lives`
   - `band_id` 必须大于等于 `1`
@@ -199,6 +214,7 @@
   - `live_type` 必填，只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
   - `default_band_ids` 可选，最多 100 项；后端要求每项为已存在的正数 `band_attrs.id`，并去重、升序后写入
   - `default_band_ids` 只在该 Live 尚无任何 setlist 行时作为列表 Band 使用
+  - 成功响应会原样返回后端已经验证并保存的 `default_band_ids`
 - `POST /api/console/lives/{live_id}/setlist`
   - 要求目标 Live 存在
   - 如果目标 Live 已有任何 setlist 行，返回 `409`
