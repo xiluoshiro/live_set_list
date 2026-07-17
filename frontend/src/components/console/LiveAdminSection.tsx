@@ -22,8 +22,12 @@ type LiveAdminSectionProps = {
   liveTypeOptions: { value: string; label: string }[];
   venueOpen: boolean;
   venueMenuPos: Position | null;
+  defaultBandOpen: boolean;
+  defaultBandMenuPos: Position | null;
   venueTriggerRef: RefObject<HTMLButtonElement>;
   venueMenuRef: RefObject<HTMLDivElement>;
+  defaultBandTriggerRef: RefObject<HTMLButtonElement>;
+  defaultBandMenuRef: RefObject<HTMLDivElement>;
   venueQueryInputRef: RefObject<HTMLInputElement>;
   insertedLives: Array<{
     live_id: number;
@@ -47,6 +51,7 @@ type LiveAdminSectionProps = {
   onCycleTimezoneMinute: () => void;
   onVenueQueryTextChange: (value: string) => void;
   onOpenVenueMenu: () => void;
+  onOpenDefaultBandMenu: () => void;
   onSelectVenue: (venueId: number) => void;
   onToggleDefaultBand: (bandId: number) => void;
   onQueryVid: () => void;
@@ -76,8 +81,12 @@ export function LiveAdminSection({
   liveTypeOptions,
   venueOpen,
   venueMenuPos,
+  defaultBandOpen,
+  defaultBandMenuPos,
   venueTriggerRef,
   venueMenuRef,
+  defaultBandTriggerRef,
+  defaultBandMenuRef,
   venueQueryInputRef,
   insertedLives,
   onLiveDateChange,
@@ -90,6 +99,7 @@ export function LiveAdminSection({
   onCycleTimezoneMinute,
   onVenueQueryTextChange,
   onOpenVenueMenu,
+  onOpenDefaultBandMenu,
   onSelectVenue,
   onToggleDefaultBand,
   onQueryVid,
@@ -103,6 +113,12 @@ export function LiveAdminSection({
     const selected = venues.find((venue) => venue.venue_id === selectedVenueId);
     if (!selected) return "请选择 venue";
     return `${selected.venue_id} - ${selected.venue_name}`;
+  })();
+  const selectableBands = bandOptions.filter((band) => band.band_id > 0);
+  const selectedDefaultBandText = (() => {
+    const selected = selectableBands.filter((band) => defaultBandIds.includes(band.band_id));
+    if (selected.length === 0) return "请选择默认 Band";
+    return selected.map((band) => band.band_name).join("、");
   })();
 
   return (
@@ -139,22 +155,17 @@ export function LiveAdminSection({
 
       <div className="live-id-selector live-create-tools live-default-bands-row">
         <span className="live-default-bands-label">默认 Band</span>
-        <div className="live-default-band-options" role="group" aria-label="default_band_ids">
-          {bandOptions.filter((band) => band.band_id > 0).length === 0 ? (
-            <span className="live-default-bands-empty">暂无可选 Band</span>
-          ) : (
-            bandOptions.filter((band) => band.band_id > 0).map((band) => (
-              <label key={band.band_id}>
-                <input
-                  type="checkbox"
-                  checked={defaultBandIds.includes(band.band_id)}
-                  onChange={() => onToggleDefaultBand(band.band_id)}
-                />
-                <span>{band.band_id} - {band.band_name}</span>
-              </label>
-            ))
-          )}
-        </div>
+        <button
+          ref={defaultBandTriggerRef}
+          type="button"
+          className="bands-picker-trigger default-band-picker-trigger"
+          onClick={onOpenDefaultBandMenu}
+          title={selectedDefaultBandText}
+          aria-expanded={defaultBandOpen}
+          disabled={selectableBands.length === 0}
+        >
+          {selectableBands.length === 0 ? "暂无可选 Band" : selectedDefaultBandText}
+        </button>
       </div>
 
       <div className="console-table-wrap">
@@ -260,6 +271,33 @@ export function LiveAdminSection({
               <span>
                 {venue.venue_id} - {venue.venue_name}
               </span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {defaultBandOpen && defaultBandMenuPos && (
+        <div
+          className="bands-floating-menu"
+          ref={defaultBandMenuRef}
+          role="group"
+          aria-label="default_band_ids"
+          onMouseDown={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
+          style={{
+            top: defaultBandMenuPos.top,
+            left: defaultBandMenuPos.left,
+            width: defaultBandMenuPos.width,
+          }}
+        >
+          {selectableBands.map((band) => (
+            <label key={band.band_id}>
+              <input
+                type="checkbox"
+                checked={defaultBandIds.includes(band.band_id)}
+                onChange={() => onToggleDefaultBand(band.band_id)}
+              />
+              <span>{band.band_id} - {band.band_name}</span>
             </label>
           ))}
         </div>

@@ -646,45 +646,21 @@
 }
 
 .live-default-bands-row {
-  align-items: flex-start;
+  align-items: center;
 }
 
 .live-default-bands-label {
-  padding-top: 7px;
   color: var(--text-table-head);
   font-size: 13px;
   font-weight: 600;
 }
 
-.live-default-band-options {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  min-width: 0;
-  padding: 7px 9px;
-  border: 1px solid var(--border-normal);
-  border-radius: 7px;
-  background: var(--surface-input);
-}
-
-.live-default-band-options label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text-main);
-  font-size: 12px;
-  font-weight: 400;
-  cursor: pointer;
-}
-
-.live-default-band-options input {
-  margin: 0;
-}
-
-.live-default-bands-empty {
-  color: var(--text-muted);
-  font-size: 12px;
+.default-band-picker-trigger {
+  width: min(420px, 100%);
+  min-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .live-create-query-row {

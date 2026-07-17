@@ -273,6 +273,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [timezone, setTimezone] = useState(DEFAULT_LIVE_TIMEZONE);
   const [selectedVenueId, setSelectedVenueId] = useState<number>(0);
   const [defaultBandIds, setDefaultBandIds] = useState<number[]>([]);
+  const [defaultBandOpen, setDefaultBandOpen] = useState(false);
+  const [defaultBandMenuPos, setDefaultBandMenuPos] = useState<Position | null>(null);
   const [venueQueryText, setVenueQueryText] = useState("");
   const [venueOpen, setVenueOpen] = useState(false);
   const [venueMenuPos, setVenueMenuPos] = useState<Position | null>(null);
@@ -305,6 +307,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const songBandMenuRef = useRef<HTMLDivElement | null>(null);
   const venueTriggerRef = useRef<HTMLButtonElement | null>(null);
   const venueMenuRef = useRef<HTMLDivElement | null>(null);
+  const defaultBandTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const defaultBandMenuRef = useRef<HTMLDivElement | null>(null);
   const venueQueryInputRef = useRef<HTMLInputElement | null>(null);
   const bandMemberTriggerRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const bandMemberMenuRef = useRef<HTMLDivElement | null>(null);
@@ -527,6 +531,26 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   }, [venueOpen]);
 
   useEffect(() => {
+    if (!defaultBandOpen) return;
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (defaultBandTriggerRef.current?.contains(target)) return;
+      if (defaultBandMenuRef.current?.contains(target)) return;
+      setDefaultBandOpen(false);
+    };
+    const close = () => setDefaultBandOpen(false);
+    const onScroll = () => openDefaultBandMenu();
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [defaultBandOpen]);
+
+  useEffect(() => {
     if (editingBandRowKey === null) return;
     const onDown = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -599,6 +623,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setStartTime(DEFAULT_LIVE_START_TIME);
     setTimezone(DEFAULT_LIVE_TIMEZONE);
     setDefaultBandIds([]);
+    setDefaultBandOpen(false);
+    setDefaultBandMenuPos(null);
   };
 
   const toggleDefaultBand = (bandId: number) => {
@@ -929,7 +955,21 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       left: Math.min(rect.left, window.innerWidth - menuWidth - 12),
       width: menuWidth,
     });
+    setDefaultBandOpen(false);
     setVenueOpen(true);
+  };
+
+  const openDefaultBandMenu = () => {
+    const rect = defaultBandTriggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const menuWidth = Math.max(rect.width, 320);
+    setDefaultBandMenuPos({
+      top: computeMenuTop(rect, Math.min(320, window.innerHeight * 0.6)),
+      left: Math.min(rect.left, window.innerWidth - menuWidth - 12),
+      width: menuWidth,
+    });
+    setVenueOpen(false);
+    setDefaultBandOpen(true);
   };
 
   const openBandMemberMenu = (rowKey: number) => {
@@ -1739,8 +1779,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           liveTypeOptions={LIVE_TYPE_OPTIONS}
           venueOpen={venueOpen}
           venueMenuPos={venueMenuPos}
+          defaultBandOpen={defaultBandOpen}
+          defaultBandMenuPos={defaultBandMenuPos}
           venueTriggerRef={venueTriggerRef}
           venueMenuRef={venueMenuRef}
+          defaultBandTriggerRef={defaultBandTriggerRef}
+          defaultBandMenuRef={defaultBandMenuRef}
           venueQueryInputRef={venueQueryInputRef}
           insertedLives={insertedLives}
           onLiveDateChange={setLiveDate}
@@ -1753,6 +1797,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onCycleTimezoneMinute={cycleTimezoneMinute}
           onVenueQueryTextChange={setVenueQueryText}
           onOpenVenueMenu={openVenueMenu}
+          onOpenDefaultBandMenu={openDefaultBandMenu}
           onSelectVenue={(venueId) => {
             setSelectedVenueId(venueId);
             setVenueOpen(false);
