@@ -24,6 +24,7 @@ import {
 } from "../api";
 import { MemberStatusTable } from "./DetailMemberTable";
 import { LiveAdminSection } from "./console/LiveAdminSection";
+import { PageTitle } from "./PageTitle";
 import { LiveInsertTab } from "./console/LiveInsertTab";
 import { SongAdminSection } from "./console/SongAdminSection";
 import {
@@ -1717,7 +1718,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         </div>
       )}
       <section className="console-admin">
-      <h3>控制台录入</h3>
+      <PageTitle kicker="Console" title="控制台" description="录入和维护 Live、Setlist、歌曲与场地资料。" />
       {message && <p className="console-admin-hint">{message}</p>}
       {consoleLogs.length > 0 && (
         <div className="console-log-panel" role="log" aria-label="控制台日志" aria-live="polite">

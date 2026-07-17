@@ -1,0 +1,24 @@
+.page-title .page-title-kicker {
+  margin: 0 0 6px;
+  color: var(--accent-primary);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.page-title h1 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: 24px;
+}
+
+.page-title-description {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 620px) {
+  .page-title h1 {
+    font-size: 21px;
+  }
+}

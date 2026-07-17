@@ -413,17 +413,6 @@ tbody tr:hover {
   margin: 24px 24px 0;
 }
 
-.list-page-heading h1 {
-  margin: 0;
-  color: var(--text-heading);
-  font-size: 24px;
-}
-
-.list-page-heading p {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
-}
-
 .list-filter-panel {
   display: grid;
   gap: 12px;
@@ -559,10 +548,6 @@ tbody tr:hover {
 @media (max-width: 620px) {
   .list-page-heading {
     margin: 18px 12px 0;
-  }
-
-  .list-page-heading h1 {
-    font-size: 21px;
   }
 
   .list-filter-panel {
