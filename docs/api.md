@@ -154,9 +154,9 @@
 
 ### 5. 公共 catalog 接口
 
-`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/stats` 用于匿名可访问的公共资料库搜索与浏览。
+`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/stats`、`GET /api/catalog/statistics?scope=all` 用于匿名可访问的公共资料库搜索、浏览与统计。
 
-- 三个接口都不要求登录。
+- 上述公共读取默认不要求登录；只有 `GET /api/catalog/statistics?scope=favorites` 要求当前 session 已登录。
 - 登录用户访问搜索结果或乐队 Live 列表时，Live 项的 `is_favorite` 会按当前用户收藏计算；匿名请求统一返回 `false`。
 - `GET /api/catalog/search`
   - `q` 会 trim，空字符串返回 `400`
@@ -184,6 +184,17 @@
 - `GET /api/catalog/stats`
   - `years` 返回数据库实际存在的 Live 年份，按降序排列
   - 前端年份筛选只显示年份本身，不显示命中数量
+- `GET /api/catalog/statistics`
+  - `scope` 只允许 `all` 或 `favorites`，默认 `all`；`favorites` 要求当前 session 已登录，不接受外部 `user_id`
+  - 可选筛选为 `year`、`live_type`、`band_id`；`limit` 范围为 `5..50`，默认 `10`，只限制已选乐队时的歌曲 Top N 和久未演唱列表
+  - 全部 / 收藏只改变候选 Live 集合，概览、年份分布、类型分布和歌曲聚合共用同一查询口径
+  - 有 setlist 时按 `live_setlist.band_member` 判断实际参与乐队；完全没有 setlist 时才回退 `live_attrs.default_band_ids`
+  - `overview.song_count` 按 `(实际演唱乐队, song_id)` 去重；同一歌曲被多支乐队演唱时会形成多个乐队歌曲项
+  - `top_songs.band_id / band_name` 表示该次统计中的实际演唱乐队，不表示 `song_list.band_id` 中的歌曲目录归属
+  - 未指定 `band_id` 时，先在每支乐队内部按出现 Live 数、setlist 条目数、歌名和 `song_id` 排名，只返回每队第 1 名，最终按 `band_id` 升序
+  - 指定 `band_id` 时，返回该乐队 Top N，按出现 Live 数、setlist 条目数、歌名和 `song_id` 排序
+  - `stale_songs` 只在指定乐队时计算；歌曲至少出现于 2 场候选 Live，并返回距该乐队最近候选 Live 的天数及此后缺席场次
+  - `live_types.key` 返回稳定 code；中文名称由前端唯一的 `LIVE_TYPE_LABELS` 字典格式化，其中 `multi_act` 显示为“拼盘”
 
 ### 6. 控制台 lookup 接口
 

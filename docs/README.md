@@ -7,7 +7,7 @@
 - [API 补充规则](api.md)：接口用途、排序、筛选、归一化和错误行为；字段结构以 OpenAPI 为准。
 - [数据库角色](db-roles.md)：运行时、迁移、测试和恢复所用 PostgreSQL 角色。
 - [产品需求与 TODO](product/homepage-community-database.md)：当前产品阶段、已完成能力和下一轮优先项。
-- [公共 Live 与收藏 Live 统计需求](product/public-statistics.md)：全部 / 收藏通用统计、年度歌曲排行、久未演唱和后续歌曲生命周期方向。
+- [公共 Live 与收藏 Live 统计需求](product/public-statistics.md)：当前 S1 口径、全部 / 收藏通用统计、按乐队划分的年度歌曲排行、久未演唱和后续歌曲生命周期方向。
 - [Flyway 落地说明](design/flyway.md)：仓库 migration、角色和日常迁移流程；当前仓库已到 V12。
 - [生产部署设计](design/production-deployment.md)：目标架构、安全边界和未完成的运维项。
 - [生产部署实录](production-deployment-runbook.md)：已执行步骤、发布流程、验收和排障；生产状态以此处的已确认记录为准。
