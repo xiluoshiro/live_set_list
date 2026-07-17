@@ -473,7 +473,9 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(screen.getByRole("tab", { name: "新增Live" }));
     await screen.findByRole("button", { name: "88 - New Venue" });
+    await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
     await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
+    expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
     fireEvent.change(screen.getByLabelText("live_date"), { target: { value: "2026-04-01" } });
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Inserted Live");
@@ -511,6 +513,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
     expect(screen.getByLabelText("timezone")).toHaveValue("+9");
     expect(screen.getByLabelText("timezone minute offset")).toHaveTextContent(":00");
+    expect(screen.getByRole("button", { name: "请选择默认 Band" })).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
     expect(screen.getByRole("checkbox", { name: /MyGO/ })).not.toBeChecked();
     expect(onLiveDataChanged).toHaveBeenCalledTimes(1);
 

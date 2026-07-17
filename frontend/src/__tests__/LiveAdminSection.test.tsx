@@ -30,8 +30,12 @@ function renderSection(onToggleDefaultBand = vi.fn()) {
       liveTypeOptions={[{ value: "other", label: "其他" }]}
       venueOpen={false}
       venueMenuPos={null}
+      defaultBandOpen
+      defaultBandMenuPos={{ top: 0, left: 0, width: 320 }}
       venueTriggerRef={createRef<HTMLButtonElement>()}
       venueMenuRef={createRef<HTMLDivElement>()}
+      defaultBandTriggerRef={createRef<HTMLButtonElement>()}
+      defaultBandMenuRef={createRef<HTMLDivElement>()}
       venueQueryInputRef={createRef<HTMLInputElement>()}
       insertedLives={[]}
       onLiveDateChange={vi.fn()}
@@ -44,6 +48,7 @@ function renderSection(onToggleDefaultBand = vi.fn()) {
       onCycleTimezoneMinute={vi.fn()}
       onVenueQueryTextChange={vi.fn()}
       onOpenVenueMenu={vi.fn()}
+      onOpenDefaultBandMenu={vi.fn()}
       onSelectVenue={vi.fn()}
       onToggleDefaultBand={onToggleDefaultBand}
       onQueryVid={vi.fn()}
@@ -59,11 +64,12 @@ function renderSection(onToggleDefaultBand = vi.fn()) {
 
 
 describe("LiveAdminSection", () => {
-  // 测试点：新增 Live 表单应允许多选正数默认 Band，并排除 band_id=0 占位项。
+  // 测试点：默认 Band 下拉应允许多选正数 Band，并排除 band_id=0 占位项。
   test("renders and toggles default Band choices", () => {
     const onToggleDefaultBand = renderSection();
     const group = screen.getByRole("group", { name: "default_band_ids" });
 
+    expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toHaveAttribute("aria-expanded", "true");
     expect(within(group).queryByText(/Other bands/)).not.toBeInTheDocument();
     expect(within(group).getByRole("checkbox", { name: /MyGO/ })).toBeChecked();
 
