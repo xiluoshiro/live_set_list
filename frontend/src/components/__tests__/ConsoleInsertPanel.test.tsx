@@ -1238,7 +1238,7 @@ describe("ConsoleInsertPanel", () => {
     rectSpy.mockRestore();
   });
 
-  // 测试点：新增巡演成功后清空编辑区，并把后端返回值追加到新增记录表格。
+  // 测试点：确认创建时展示场次名称，成功后清空编辑区并追加新增记录。
   test("巡演管理创建巡演并提交完整关系集合", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -1285,7 +1285,10 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "创建巡演" }));
     expect(screen.getByRole("dialog", { name: "确认创建巡演" })).toHaveClass("compact");
     expect(screen.getByRole("dialog", { name: "确认创建巡演" })).not.toHaveClass("wide");
-    expect(within(screen.getByRole("dialog", { name: "确认创建巡演" })).queryByText("stop_label")).not.toBeInTheDocument();
+    const confirmDialog = within(screen.getByRole("dialog", { name: "确认创建巡演" }));
+    expect(confirmDialog.queryByText("stop_label")).not.toBeInTheDocument();
+    expect(confirmDialog.getByRole("columnheader", { name: "live_name" })).toBeInTheDocument();
+    expect(confirmDialog.getByText("Console Draft Live")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleTour).toHaveBeenCalledWith(

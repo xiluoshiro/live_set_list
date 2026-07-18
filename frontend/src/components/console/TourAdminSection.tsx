@@ -421,8 +421,8 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
               </div>
               <div className="console-table-wrap console-confirm-setlist-wrap">
                 <table className="console-admin-table console-confirm-setlist-table" aria-label="确认场次">
-                  <thead><tr><th>live_date</th><th>live_id</th></tr></thead>
-                  <tbody>{stops.map((stop) => <tr key={stop.live_id}><td>{stop.live_date}</td><td>{stop.live_id}</td></tr>)}</tbody>
+                  <thead><tr><th>live_date</th><th>live_id</th><th>live_name</th></tr></thead>
+                  <tbody>{stops.map((stop) => <tr key={stop.live_id}><td>{stop.live_date}</td><td>{stop.live_id}</td><td>{stop.live_title}</td></tr>)}</tbody>
                 </table>
               </div>
             </div>
