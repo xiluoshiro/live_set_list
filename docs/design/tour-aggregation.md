@@ -337,10 +337,10 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 - “巡演资料”作为独立主导航页签，不在“演出资料”内部增加实体切换。
 - 巡演卡片直接复用演出资料的 `live-card` 结构与样式，点击整卡进入详情；官方来源使用独立 `<a>` 并阻止触发整卡操作。
 - 巡演详情标题外链复用演出详情的 `DetailTitleLink` 与 SVG 图标；场次来源复用现有 `🔗` 链接样式，不另造字符箭头或专用样式。
+- 巡演详情的日期范围、场次和参与乐队复用演出详情的 `detail-meta-line` 与 `detail-inline-item`；场次标题是唯一的 Live 详情入口，不显示 Setlist 状态。
 - 登录用户在 Tour stop 中复用现有 Live 收藏按钮和乐观同步逻辑。
 - Tour stop 打开 `LiveDetailPage` 时，把返回来源记为 `tour_detail`。
 - Live 详情中的 Tour 名称打开 `TourDetailPage`，返回时恢复 Live 详情。
-- `has_setlist=false` 显示“Setlist 待补充”，但仍允许打开 Live 详情。
 
 ## 控制台交互
 

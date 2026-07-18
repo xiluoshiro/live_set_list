@@ -65,10 +65,19 @@ export function TourDetailPage({
       {error && <p className="tour-detail-state tour-list-error">巡演详情加载失败：{error}</p>}
       {detail && (
         <>
-          <div className="tour-detail-summary">
-            <span><strong>已收录日期：</strong>{formatDateRange(detail)}</span>
-            <span><strong>场次：</strong>{detail.collected_live_count}</span>
-            <span><strong>参与乐队：</strong>{detail.bands.map((band) => band.band_name).join(" / ") || "-"}</span>
+          <div className="detail-meta-line">
+            <p className="detail-inline-item detail-inline-item-date">
+              <strong>已收录日期：</strong>
+              <span>{formatDateRange(detail)}</span>
+            </p>
+            <p className="detail-inline-item">
+              <strong>场次：</strong>
+              <span>{detail.collected_live_count}</span>
+            </p>
+            <p className="detail-inline-item">
+              <strong>参与乐队：</strong>
+              <span>{detail.bands.map((band) => band.band_name).join(" / ") || "-"}</span>
+            </p>
           </div>
           <ol className="tour-stop-list">
             {detail.stops.map((stop) => (
@@ -77,7 +86,6 @@ export function TourDetailPage({
                 <button type="button" className="tour-stop-title" onClick={() => onOpenLive(stop)}>{stop.live_title}</button>
                 <div className="tour-stop-meta">
                   <span>场地：{stop.venue ?? "-"}</span>
-                  <span className={stop.has_setlist ? "has-setlist" : ""}>{stop.has_setlist ? "已有 Setlist" : "暂无 Setlist"}</span>
                 </div>
                 <div className="tour-stop-actions">
                   {isAuthenticated && (
@@ -88,7 +96,6 @@ export function TourDetailPage({
                       onClick={() => onToggleFavorite(stop.live_id)}
                     >★</button>
                   )}
-                  <button type="button" onClick={() => onOpenLive(stop)}>查看 Live</button>
                   {stop.url && <a href={stop.url} target="_blank" rel="noreferrer" className="live-card-url">🔗</a>}
                 </div>
               </li>

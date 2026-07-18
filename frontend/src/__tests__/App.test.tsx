@@ -879,7 +879,7 @@ describe("App", () => {
     }));
   });
 
-  // 测试点：巡演详情可进入 Live，且 Live 详情中的所属巡演入口能返回聚合详情。
+  // 测试点：巡演摘要复用演出元数据行，场次仅保留标题跳转且不显示 Setlist 状态。
   test("巡演详情和 Live 详情支持双向进入", async () => {
     getLiveDetailMock.mockResolvedValue({
       ...makeDetailResponse({ liveId: 41 }),
@@ -892,7 +892,10 @@ describe("App", () => {
 
     await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
     expect(screen.getByText("Exitus 東京公演")).toBeInTheDocument();
-    expect(screen.getByText("已有 Setlist")).toBeInTheDocument();
+    expect(screen.getByText("已收录日期：").closest("p")).toHaveClass("detail-inline-item", "detail-inline-item-date");
+    expect(screen.queryByRole("button", { name: "查看 Live" })).not.toBeInTheDocument();
+    expect(screen.queryByText("已有 Setlist")).not.toBeInTheDocument();
+    expect(screen.queryByText("暂无 Setlist")).not.toBeInTheDocument();
     expect(screen.queryByText("stop_label")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Exitus 東京公演" }));
