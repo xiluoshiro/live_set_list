@@ -937,7 +937,7 @@ describe("App", () => {
     expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
   });
 
-  // 测试点：巡演统计按需加载，使用向下箭头，并可从对比场次链接切回对应 Live 详情。
+  // 测试点：巡演统计按需加载时间线差异，并可从歌单变化面板切回对应 Live 详情。
   test("巡演统计按需加载场次变化", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -948,12 +948,13 @@ describe("App", () => {
     expect(getTourStatisticsMock).not.toHaveBeenCalled();
     await user.click(screen.getByRole("tab", { name: "巡演统计" }));
     await waitFor(() => expect(getTourStatisticsMock).toHaveBeenCalledWith(7));
-    const changesTable = await screen.findByRole("table", { name: "场次变化" });
-    expect(within(changesTable).getByRole("columnheader", { name: "类型" })).toBeInTheDocument();
-    const changeRow = within(changesTable).getByRole("row", { name: /東京公演.*FINAL.*更换.*旧曲.*新曲/ });
-    expect(changeRow).toHaveTextContent("東京公演↓FINAL");
-    expect(changeRow).toHaveTextContent("更换旧曲新曲");
-    await user.click(within(changeRow).getByRole("button", { name: "FINAL" }));
+    const progress = await screen.findByRole("navigation", { name: "场次进程" });
+    expect(within(progress).getByRole("button", { name: /对比上一场.*1 项变化/ })).toHaveAttribute("aria-pressed", "true");
+    const changePanel = screen.getByRole("region", { name: "歌单变化" });
+    expect(within(changePanel).getByRole("heading", { name: "同位置更换" })).toBeInTheDocument();
+    expect(changePanel).toHaveTextContent("旧曲→新曲");
+    expect(screen.queryByRole("table", { name: "场次变化" })).not.toBeInTheDocument();
+    await user.click(within(changePanel).getByRole("button", { name: "FINAL" }));
     expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
   });
