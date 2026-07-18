@@ -12,8 +12,7 @@
 .tour-list-pager,
 .tour-stop-actions,
 .tour-stop-date,
-.tour-stop-meta,
-.tour-detail-summary {
+.tour-stop-meta {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -50,14 +49,11 @@
 .tour-list-error { color: var(--accent-danger); }
 
 .tour-detail-page { margin: 24px; padding: 20px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-1); }
-.tour-detail-summary { flex-wrap: wrap; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); color: var(--text-secondary); }
-.tour-detail-summary span + span { padding-left: 10px; border-left: 1px solid var(--border-normal); }
 .tour-stop-list { display: grid; gap: 10px; margin: 16px 0 0; padding: 0; list-style: none; }
 .tour-stop-card { display: grid; grid-template-columns: 180px minmax(240px, 1fr) minmax(210px, .7fr) auto; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--border-table-row); border-radius: 8px; background: var(--surface-1); }
 .tour-stop-date { color: var(--text-secondary); font-size: 13px; }
 .tour-stop-date span:last-child { padding: 3px 7px; border-radius: 999px; background: var(--surface-chip); }
 .tour-stop-meta { flex-wrap: wrap; color: var(--text-muted); font-size: 13px; }
-.tour-stop-meta .has-setlist { color: var(--accent-success); font-weight: 700; }
 .tour-stop-actions { justify-content: flex-end; }
 .tour-detail-state { text-align: center; color: var(--text-muted); padding: 28px; }
 
@@ -87,6 +83,4 @@
   }
   .tour-list-footer { align-items: flex-start; flex-direction: column; }
   .tour-detail-page { margin: 12px; padding: 15px; }
-  .tour-detail-summary { align-items: flex-start; flex-direction: column; }
-  .tour-detail-summary span + span { padding-left: 0; border-left: 0; }
 }
