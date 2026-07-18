@@ -46,7 +46,7 @@
 - `GET /api/catalog/tours/{tour_id}`
   - 公共巡演详情和已收录场次，匿名可用
 - `GET /api/catalog/tours/{tour_id}/statistics`
-  - 公共巡演 Setlist 覆盖与相邻场次变化统计，匿名可用
+  - 公共巡演 Setlist 覆盖与相邻场次变化统计，匿名可用；显式指定参与乐队时仅统计指定乐队
 - `GET /api/catalog/search`
   - 公共资料库搜索，匿名可用，按 Live、乐队 / 艺人、歌曲、场地分组返回结果
 - `GET /api/catalog/bands`

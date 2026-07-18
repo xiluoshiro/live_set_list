@@ -342,7 +342,25 @@ SELECT
     stl.absolute_order
 FROM tour_lives tl
 JOIN live_attrs l ON l.id = tl.live_id
-LEFT JOIN live_setlist stl ON stl.live_id = l.id
+LEFT JOIN live_setlist stl
+    ON stl.live_id = l.id
+   AND (
+        NOT EXISTS (
+            SELECT 1
+            FROM tour_bands explicit_tour_band
+            WHERE explicit_tour_band.tour_id = tl.tour_id
+        )
+        OR (
+            jsonb_typeof(stl.band_member) = 'object'
+            AND EXISTS (
+                SELECT 1
+                FROM tour_bands explicit_tour_band
+                JOIN band_attrs explicit_band ON explicit_band.id = explicit_tour_band.band_id
+                WHERE explicit_tour_band.tour_id = tl.tour_id
+                  AND stl.band_member ? explicit_band.band_name
+            )
+        )
+   )
 LEFT JOIN song_list s ON s.id = stl.song_id
 WHERE tl.tour_id = %s
 ORDER BY l.live_date, l.id, stl.absolute_order
@@ -590,7 +608,7 @@ def get_tours(
     "/{tour_id}/statistics",
     response_model=TourStatisticsResponse,
     summary="获取巡演统计",
-    description="按相邻且均已收录 setlist 的场次比较歌曲替换、新增、移除和顺序变化。",
+    description="按相邻且均已收录 setlist 的场次比较歌曲替换、新增、移除和顺序变化；巡演显式指定乐队时仅统计指定乐队。",
     responses={
         400: {"model": ErrorResponse, "description": "参数错误"},
         404: {"model": ErrorResponse, "description": "指定巡演不存在"},
