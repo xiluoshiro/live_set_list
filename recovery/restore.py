@@ -4,7 +4,15 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .common import FLYWAY_CONFIG, ROOT, SEED_SQL, run_binary_step, run_step, run_step_capture
+from .common import (
+    FLYWAY_CONFIG,
+    OWNERSHIP_CONTRACT_SQL,
+    ROOT,
+    SEED_SQL,
+    run_binary_step,
+    run_step,
+    run_step_capture,
+)
 from .docker_ops import ensure_container_ready
 
 
@@ -48,11 +56,59 @@ def run_flyway_info_capture(environment: str) -> subprocess.CompletedProcess[str
     )
 
 
+def check_database_ownership(
+    env_values: dict[str, str],
+    docker_cmd: str,
+    container_name: str,
+    database_name: str,
+) -> None:
+    postgres_user = env_values.get("POSTGRES_USER", "postgres")
+    app_owner = env_values.get("APP_OWNER", "live_project_owner")
+    flyway_user = env_values.get("FLYWAY_USER", "live_project_flyway")
+    completed = run_step_capture(
+        "ownership-contract",
+        [
+            docker_cmd,
+            "exec",
+            "-i",
+            container_name,
+            "psql",
+            "-X",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            "--field-separator=|",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-v",
+            f"app_owner={app_owner}",
+            "-v",
+            f"flyway_user={flyway_user}",
+            "-U",
+            postgres_user,
+            "-d",
+            database_name,
+        ],
+        input_text=OWNERSHIP_CONTRACT_SQL.read_text(encoding="utf-8"),
+    )
+    if completed.returncode != 0:
+        raise SystemExit(
+            "数据库 owner 契约检查执行失败。\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+    violations = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    if violations:
+        details = "\n".join(f"- {line}" for line in violations)
+        raise SystemExit(f"数据库 owner 契约不满足：\n{details}")
+
+
 def recover_test_database(env_values: dict[str, str], docker_cmd: str, container_name: str) -> int:
     reset_test_database_for_restore(env_values, docker_cmd, container_name)
     run_flyway_for_environment("migrate", "test")
     apply_test_database_permissions(env_values, docker_cmd, container_name)
     test_db_name = env_values.get("TEST_DB_NAME", "live_statistic_test")
+    check_database_ownership(env_values, docker_cmd, container_name, test_db_name)
     test_admin_user = env_values.get("TEST_ADMIN_USER", "live_project_test_admin")
     seed_sql = SEED_SQL.read_text(encoding="utf-8")
     run_step(
@@ -333,26 +389,94 @@ ALTER SCHEMA public OWNER TO {app_owner};
 
 DO $$
 DECLARE
-    table_record record;
-    sequence_record record;
+    object_record record;
 BEGIN
-    FOR table_record IN
-        SELECT tablename
-        FROM pg_tables
-        WHERE schemaname = 'public'
+    FOR object_record IN
+        SELECT
+            c.relname,
+            c.relkind,
+            EXISTS (
+                SELECT 1
+                FROM pg_depend d
+                WHERE d.classid = 'pg_class'::regclass
+                  AND d.objid = c.oid
+                  AND d.deptype IN ('a', 'i')
+            ) AS is_owned_sequence
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+          AND c.relname <> 'flyway_schema_history'
     LOOP
-        EXECUTE format('ALTER TABLE public.%I OWNER TO {app_owner}', table_record.tablename);
+        CASE object_record.relkind
+            WHEN 'r' THEN
+                EXECUTE format('ALTER TABLE public.%I OWNER TO {app_owner}', object_record.relname);
+            WHEN 'p' THEN
+                EXECUTE format('ALTER TABLE public.%I OWNER TO {app_owner}', object_record.relname);
+            WHEN 'v' THEN
+                EXECUTE format('ALTER VIEW public.%I OWNER TO {app_owner}', object_record.relname);
+            WHEN 'm' THEN
+                EXECUTE format('ALTER MATERIALIZED VIEW public.%I OWNER TO {app_owner}', object_record.relname);
+            WHEN 'S' THEN
+                IF NOT object_record.is_owned_sequence THEN
+                    EXECUTE format('ALTER SEQUENCE public.%I OWNER TO {app_owner}', object_record.relname);
+                END IF;
+            WHEN 'f' THEN
+                EXECUTE format('ALTER FOREIGN TABLE public.%I OWNER TO {app_owner}', object_record.relname);
+        END CASE;
     END LOOP;
 
-    FOR sequence_record IN
-        SELECT sequencename
-        FROM pg_sequences
-        WHERE schemaname = 'public'
+    FOR object_record IN
+        SELECT
+            p.proname,
+            pg_get_function_identity_arguments(p.oid) AS identity_args,
+            p.prokind
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
     LOOP
-        EXECUTE format('ALTER SEQUENCE public.%I OWNER TO {app_owner}', sequence_record.sequencename);
+        CASE object_record.prokind
+            WHEN 'p' THEN
+                EXECUTE format(
+                    'ALTER PROCEDURE public.%I(%s) OWNER TO {app_owner}',
+                    object_record.proname,
+                    object_record.identity_args
+                );
+            WHEN 'a' THEN
+                EXECUTE format(
+                    'ALTER AGGREGATE public.%I(%s) OWNER TO {app_owner}',
+                    object_record.proname,
+                    object_record.identity_args
+                );
+            ELSE
+                EXECUTE format(
+                    'ALTER FUNCTION public.%I(%s) OWNER TO {app_owner}',
+                    object_record.proname,
+                    object_record.identity_args
+                );
+        END CASE;
+    END LOOP;
+
+    FOR object_record IN
+        SELECT t.typname, t.typtype
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE n.nspname = 'public'
+          AND t.typrelid = 0
+          AND t.typelem = 0
+          AND t.typtype IN ('d', 'e', 'r')
+    LOOP
+        CASE object_record.typtype
+            WHEN 'd' THEN
+                EXECUTE format('ALTER DOMAIN public.%I OWNER TO {app_owner}', object_record.typname);
+            ELSE
+                EXECUTE format('ALTER TYPE public.%I OWNER TO {app_owner}', object_record.typname);
+        END CASE;
     END LOOP;
 END
 $$;
+
+ALTER TABLE public.flyway_schema_history OWNER TO {flyway_user};
 
 GRANT USAGE ON SCHEMA public TO {readonly_user}, {super_user}, {user_rw_user};
 GRANT USAGE, CREATE ON SCHEMA public TO {flyway_user};
@@ -439,6 +563,7 @@ def restore_app_database_from_backup(
         raise SystemExit(f"主库恢复失败：{backup_path}\n{stderr}")
 
     apply_app_database_permissions(env_values, docker_cmd, container_name)
+    check_database_ownership(env_values, docker_cmd, container_name, app_db_name)
 
     info = run_flyway_info_capture("dev")
     output = info.stdout or ""
@@ -451,6 +576,7 @@ def restore_app_database_from_backup(
     run_flyway_for_environment("validate", "dev")
     if "Pending" in output:
         run_flyway_for_environment("migrate", "dev")
+        check_database_ownership(env_values, docker_cmd, container_name, app_db_name)
 
     print(f"主库已从备份恢复：{backup_path}", flush=True)
     return 0

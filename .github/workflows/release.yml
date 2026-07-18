@@ -95,6 +95,23 @@ jobs:
             redgate/flyway:12.11.0 \
             -configFiles=backend/db/flyway/flyway.toml migrate
 
+      - name: Verify database ownership contract
+        shell: bash
+        run: |
+          violations="$(docker exec -i live-set-list-ci \
+            psql -X --no-psqlrc --tuples-only --no-align --field-separator='|' \
+              -v ON_ERROR_STOP=1 \
+              -v app_owner=live_project_owner \
+              -v flyway_user=live_project_flyway \
+              -U postgres \
+              -d live_statistic \
+            < backend/db/postgres/checks/ownership_contract.sql)"
+          if [ -n "$violations" ]; then
+            printf 'Database ownership contract failed:\n%s\n' "$violations" >&2
+            exit 1
+          fi
+          echo "Database ownership contract passed."
+
       - name: Run functional checks
         run: python scripts/run_checks.py functional
 

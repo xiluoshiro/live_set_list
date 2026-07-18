@@ -13,9 +13,9 @@
 - `livesetlist-backup.timer` 每天 `03:20` 执行自动备份，根目录为 `/var/backups/livesetlist`。
 - GitHub Actions tag 发布已跑通：CI 创建隔离 PostgreSQL、执行 Flyway 和 `functional`、构建发布包并经 `production` Environment 审批后部署到 VM。
 - 首个完整成功的自动发布 tag 为 `v2026-07-14-006`。
-- 首个 migration release 已完成：生产数据库从 V9 升至 V11，新 release 已切换、后端数据库 health 验收成功。
+- migration release 已完成：生产数据库先从 V9 升至 V11，随后 `v2026-07-18-001` 完成 V12/V13 migration、应用切换和 health 验收。
 
-两阶段 migration 发布代码、VM root-owned 入口、deploy-only sudoers 和 GitHub repository secrets/variables/Environments 已完成配置。仓库已有 `v2026-07-17-001` 至 `v2026-07-17-003`；但 tag 存在不等价于生产 migration 已验收。本文当前可确认的生产记录仍是 V11，仓库最新 migration 是 V13；确认 V12/V13 状态时必须同时核对 Actions、VM release state / attestation 与生产 `flyway info`，再补写执行记录。
+两阶段 migration 发布代码、VM root-owned 入口、deploy-only sudoers 和 GitHub repository secrets/variables/Environments 已完成配置。生产当前已确认到 V13；tag 存在仍不等价于生产验收，后续版本必须同时核对 Actions、VM release state / attestation、owner 契约和生产 `flyway info`。
 
 ## 生产拓扑与目录
 
@@ -189,11 +189,12 @@ build-and-verify
 
 1. tag workflow 检测到 `migration-needed` 后停止，并在 Job Summary 写出 version 与 SHA-256。维护人手动运行 `Migration release control`，选择 `phase=migrate` 并输入确认词 `MIGRATE`。这一步本身就是 GitHub Free 私有仓库可用的显式人工门；支持 Environment reviewer 时还可在 `production-migration` 上增加审批。
 2. job 调用 root-owned `livesetlist-release-manager migrate <version> <sha256>`。脚本只接受已经 prepare 且分类为 `migration-needed` 的候选包。
-3. 脚本先执行生产备份并用 `pg_restore -l` 验证可读性，记录备份路径和备份文件 SHA-256；备份失败立即停止。
-4. Flyway 镜像固定为 `redgate/flyway:12.11.0`。生产 env 由 Python 直接读取且不执行插值，再通过子进程环境传给 Docker/Flyway；密码值不会进入命令行参数或发布包。
-5. 执行顺序固定为 `info -> migrate -> validate -> info`，优先使用 Flyway 结构化输出记录迁移前版本、已应用 migration 和最终版本，不解析易变的人类可读文本。
-6. 仅在所有步骤成功后写入 `/var/lib/livesetlist/deploy-attestations/<version>.json`，文件必须为 `root:root`、`0600`。至少记录：version、归档 SHA-256、新旧 SQL 树 SHA-256、迁移前后 Flyway version、已应用 migration、执行时间、备份路径与备份 SHA-256。
-7. 同一 version 重试时，若已有 attestation，只有 version、归档 SHA-256、SQL 树 SHA-256 和数据库最终版本全部一致才可视为幂等成功；任一项不同都必须停止并人工处理。
+3. 脚本先执行 `backend/db/postgres/checks/ownership_contract.sql`；业务对象必须属于 `live_project_owner`，`flyway_schema_history` 必须属于 `live_project_flyway`。owner 漂移在备份和 migration 前直接失败。
+4. owner preflight 通过后执行生产备份并用 `pg_restore -l` 验证可读性，记录备份路径和备份文件 SHA-256；备份失败立即停止。
+5. Flyway 镜像固定为 `redgate/flyway:12.11.0`。生产 env 由 Python直接读取且不执行插值，再通过子进程环境传给 Docker/Flyway；密码值不会进入命令行参数或发布包。
+6. 执行顺序固定为 `info -> owner preflight -> backup -> migrate -> owner postflight -> validate -> info`，优先使用 Flyway 结构化输出记录迁移前版本、已应用 migration 和最终版本，不解析易变的人类可读文本。
+7. 仅在所有步骤成功后写入 `/var/lib/livesetlist/deploy-attestations/<version>.json`，文件必须为 `root:root`、`0600`。至少记录：version、归档 SHA-256、新旧 SQL 树 SHA-256、迁移前后 Flyway version、已应用 migration、执行时间、备份路径与备份 SHA-256。
+8. 同一 version 重试时，若已有 attestation，只有 version、归档 SHA-256、SQL 树 SHA-256、owner 契约和数据库最终版本全部一致才可视为幂等成功；任一项不同都必须停止并人工处理。
 
 阶段 A 完成后仍不更新 `current`。migration 失败时保留 staging、备份和日志，由人工决定修复 migration 还是按恢复 runbook 还原数据库。
 
@@ -202,9 +203,10 @@ build-and-verify
 1. migration 验收后再次手动运行 `Migration release control`，选择 `phase=deploy` 并输入确认词 `DEPLOY`。对 `app-only` release 则由 tag workflow 沿用一次 `production` 审批和原子切换流程。
 2. 对 `migration-needed` release，扩展后的 `livesetlist-deploy` 必须读取 root-only attestation，并验证 version、归档 SHA-256、SQL 树 SHA-256 全部匹配。
 3. 部署脚本再次查询生产 Flyway version，确认不低于 attestation 的最终版本；缺少 attestation、字段不匹配或数据库版本不符时全部 fail closed。
-4. 验证通过后才创建 venv、安装依赖、安装 systemd unit、原子切换 `current`，然后执行后端就绪等待、数据库 health、发布后备份和公网 smoke test。
-5. 应用启动或 smoke 失败时恢复上一版 `current`，但保留已经迁移的 schema。旧版应用能否继续工作由 expand/contract 兼容要求保证。
-6. migration attestation 保持为迁移完成时的不可变证明；发布成功后只把 release state 原子标记为 `deployed`，记录 active release 与切换时间。version 和归档 SHA-256 可用于关联 tag 与 GitHub run。
+4. 应用切换前再次执行 owner 契约，防止 migration 与 deploy 两阶段之间发生数据库权限漂移。
+5. 验证通过后才创建 venv、安装依赖、安装 systemd unit、原子切换 `current`，然后执行后端就绪等待、数据库 health、发布后备份和公网 smoke test。
+6. 应用启动或 smoke 失败时恢复上一版 `current`，但保留已经迁移的 schema。旧版应用能否继续工作由 expand/contract 兼容要求保证。
+7. migration attestation 保持为迁移完成时的不可变证明；发布成功后只把 release state 原子标记为 `deployed`，记录 active release 与切换时间。version 和归档 SHA-256 可用于关联 tag 与 GitHub run。
 
 ### 4. 实施拆分与验收
 
@@ -254,7 +256,7 @@ sudo docker pull redgate/flyway:12.11.0
 ssh livesetlist-deploy@<VM_IP> "rm -f /home/livesetlist-deploy/livesetlist-release-manager.next /home/livesetlist-deploy/livesetlist-deploy.next"
 ```
 
-确认 `python3 --version` 至少为 Python 3.11。release manager 不依赖新版 `tarfile.extractall(filter=...)`，而是只手工写出通过白名单校验的普通文件与目录，因此支持 Debian 12 自带 Python。同时确认 `/etc/livesetlist/postgres.env` 至少包含 `POSTGRES_HOST`、`POSTGRES_PORT`、`APP_DB`、`FLYWAY_USER`、`FLYWAY_PASSWORD`；`/etc/livesetlist/backend.env` 应保持 `LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist`。
+确认 `python3 --version` 至少为 Python 3.11。release manager 不依赖新版 `tarfile.extractall(filter=...)`，而是只手工写出通过白名单校验的普通文件与目录，因此支持 Debian 12 自带 Python。同时确认 `/etc/livesetlist/postgres.env` 至少包含 `POSTGRES_CONTAINER_NAME`、`POSTGRES_USER`、`POSTGRES_HOST`、`POSTGRES_PORT`、`APP_DB`、`APP_OWNER`、`FLYWAY_USER`、`FLYWAY_PASSWORD`；`/etc/livesetlist/backend.env` 应保持 `LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist`。owner 契约通过 `docker exec ... psql` 使用容器内本地连接，不会把数据库密码放入命令行。
 
 ### 2. 更新 deploy-only sudoers
 
@@ -293,10 +295,9 @@ sudo systemctl status livesetlist-backup.service --no-pager
 1. **已完成**：VM 入口安装、sudoers 校验、Flyway 镜像预拉取和备份 service 验证。
 2. **已完成**：合并并推送 workflow 代码。
 3. **已完成**：配置 repository secrets/variables，保留 `production` 并新建 `production-migration` Environment。
-4. **已完成 tag 创建**：仓库已有 `v2026-07-17-001` 至 `v2026-07-17-003`。其中 V12 相对本文已确认的生产 V11 属于 migration 变化，应被 prepare 分类为 `migration-needed`；后续包含 V13 的 release 同样必须走 migration 两阶段流程。
-5. **仍需按外部状态确认并记录**：在 Actions Summary 核对不带 `v` 的 version、归档 SHA-256、prepare 分类和状态文件；不要仅凭本地 tag 判断部署成功。
-6. migration release 手动运行 `Migration release control`：先选 `migrate` / `MIGRATE`；检查备份、Flyway 输出、attestation 和旧应用读写。
-7. 验收通过后再次运行同一 workflow：选 `deploy` / `DEPLOY`；完成应用切换和公网 smoke。两次手工阶段始终使用同一 version 和 SHA-256，不再推送 tag。完成后把生产版本与 Flyway version 写回本节和“已执行记录”。
+4. **已完成 V13 migration release**：`v2026-07-18-001` 已完成 V12/V13 migration、应用切换和 health 验收；迁移前修正了生产业务表误归属 `live_project_flyway` 的历史漂移。
+5. **已增加 owner 契约**：CI fresh DB、生产 migration 前后、deploy 前和恢复流程共用 `backend/db/postgres/checks/ownership_contract.sql`。
+6. 后续 migration release 仍需在 Actions Summary 核对不带 `v` 的 version、归档 SHA-256、prepare 分类和状态文件；不要仅凭本地 tag 判断部署成功。
 
 首次验收或故障排查时可选执行的服务器侧检查（不是日常发布的人工步骤）：
 
@@ -352,6 +353,7 @@ curl.exe -I <PUBLIC_BASE_URL>/openapi.json
 | Setlist 前端测试偶发找不到 textarea | 等待条件在异步检查出现前提前通过 | 等待目标 textarea 实际渲染 |
 | 部署后立即 health check 失败 | systemd 返回时 Uvicorn 尚未监听端口 | 部署脚本最多等待 20 秒 |
 | VM 本机无法 curl 公网地址 | hairpin 路由不可靠 | 使用外部工作站 / GitHub 进行公网验证 |
+| V13 创建外键时报 `permission denied for table band_attrs` | 生产业务表历史 owner 全部漂移为 `live_project_flyway`，`SET ROLE live_project_owner` 后没有 `REFERENCES` 权限 | 在 Flyway 外按 V3 的过滤逻辑收口业务对象 owner、排除 `flyway_schema_history`；CI 和 release manager 增加共享 owner 契约 |
 
 若后端在 20 秒后仍未就绪，读取：
 

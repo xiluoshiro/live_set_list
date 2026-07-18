@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import subprocess
 import tarfile
 
 import pytest
@@ -86,6 +87,20 @@ def test_release_workflow_prepares_candidate_before_app_only_deploy():
     assert "(cd dist-release && sha256sum" in workflow
     assert "redgate/flyway:12.11.0" in workflow
     assert "redgate/flyway:latest" not in workflow
+    assert "Verify database ownership contract" in workflow
+    assert "backend/db/postgres/checks/ownership_contract.sql" in workflow
+
+
+# 测试点：共享 owner 契约必须覆盖业务对象、Flyway 历史表和角色继承三类边界。
+def test_database_ownership_contract_keeps_flyway_history_separate():
+    contract = (
+        ROOT / "backend" / "db" / "postgres" / "checks" / "ownership_contract.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "c.relname <> 'flyway_schema_history'" in contract
+    assert "'public.flyway_schema_history'" in contract
+    assert "pg_has_role" in contract
+    assert "current_database()" in contract
 
 
 # 测试点：migration release 必须通过两次显式 workflow_dispatch 分别执行 migrate 和 deploy。
@@ -127,6 +142,7 @@ def test_release_archive_builds_frontend_before_collecting_release_paths(tmp_pat
 # 测试点：生产发布包白名单不能包含本地状态、依赖缓存或敏感工作区目录。
 def test_release_path_whitelist_excludes_local_state_and_sensitive_directories():
     assert "backend/app" in RELEASE_DIRS
+    assert "backend/db/postgres/checks" in RELEASE_DIRS
     assert "config" in RELEASE_DIRS
     assert "frontend/dist" in RELEASE_DIRS
     assert "infra/production" in RELEASE_DIRS
@@ -296,7 +312,7 @@ def test_release_manager_rejects_current_release_drift(tmp_path, monkeypatch):
         release_manager.verify_deploy(prepared["version"], prepared["archive_sha256"])
 
 
-# 测试点：migration 阶段必须按固定顺序执行 Flyway，并在成功后写入备份绑定的 root-only attestation。
+# 测试点：migration 必须在备份前和迁移后校验 owner 契约，再按固定 Flyway 顺序写入 attestation。
 def test_release_manager_migrates_then_writes_attestation(tmp_path, monkeypatch):
     prepared = _prepare_migration_candidate(tmp_path, monkeypatch)
     calls = []
@@ -313,7 +329,7 @@ def test_release_manager_migrates_then_writes_attestation(tmp_path, monkeypatch)
     )
 
     def fake_run_flyway(command, staged_dir):
-        calls.append((command, staged_dir))
+        calls.append(command)
         return next(responses)
 
     backup = tmp_path / "backups" / "live_statistic_auto.dump"
@@ -322,13 +338,31 @@ def test_release_manager_migrates_then_writes_attestation(tmp_path, monkeypatch)
     monkeypatch.setattr(release_manager, "run_flyway", fake_run_flyway)
     monkeypatch.setattr(
         release_manager,
+        "run_ownership_contract",
+        lambda _staged_dir: calls.append("ownership-contract"),
+    )
+
+    def fake_create_verified_backup():
+        calls.append("backup")
+        return backup, release_manager.sha256_file(backup)
+
+    monkeypatch.setattr(
+        release_manager,
         "create_verified_backup",
-        lambda: (backup, release_manager.sha256_file(backup)),
+        fake_create_verified_backup,
     )
 
     release_manager.migrate_release(prepared["version"], prepared["archive_sha256"])
 
-    assert [command for command, _ in calls] == ["info", "migrate", "validate", "info"]
+    assert calls == [
+        "info",
+        "ownership-contract",
+        "backup",
+        "migrate",
+        "ownership-contract",
+        "validate",
+        "info",
+    ]
     attestation = release_manager.read_json(
         prepared["attestation_root"] / f"{prepared['version']}.json"
     )
@@ -337,6 +371,43 @@ def test_release_manager_migrates_then_writes_attestation(tmp_path, monkeypatch)
     assert attestation["flyway_version_after"] == "2"
     assert attestation["backup_path"] == str(backup)
     assert attestation["backup_sha256"] == release_manager.sha256_file(backup)
+
+
+# 测试点：生产 owner 契约发现漂移时应列出对象并拒绝继续发布。
+def test_release_manager_reports_database_ownership_drift(tmp_path, monkeypatch):
+    staged_dir = tmp_path / "staged"
+    contract_path = staged_dir / release_manager.OWNERSHIP_CONTRACT_RELATIVE_PATH
+    contract_path.parent.mkdir(parents=True)
+    contract_path.write_text("select 1;", encoding="utf-8")
+    env_file = tmp_path / "postgres.env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "POSTGRES_CONTAINER_NAME=production-postgres",
+                "POSTGRES_USER=postgres",
+                "APP_DB=live_statistic",
+                "APP_OWNER=live_project_owner",
+                "FLYWAY_USER=live_project_flyway",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(release_manager, "POSTGRES_ENV_PATH", env_file)
+
+    def fake_run(args, **kwargs):
+        assert args[:4] == ["docker", "exec", "-i", "production-postgres"]
+        assert kwargs["input"] == "select 1;"
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout="table|public.band_attrs|live_project_owner|live_project_flyway\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(release_manager.subprocess, "run", fake_run)
+
+    with pytest.raises(release_manager.ReleaseError, match="public.band_attrs"):
+        release_manager.run_ownership_contract(staged_dir)
 
 
 # 测试点：release manager 必须拒绝归档中的链接，避免 prepare 阶段把候选包解压到预期目录之外。

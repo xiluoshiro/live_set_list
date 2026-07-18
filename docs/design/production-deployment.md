@@ -8,8 +8,8 @@
 
 - 生产 VM、同源入口、私有 PostgreSQL、备份、Nginx 和 HTTPS/公开访问基线已经落地；首次生产数据迁移也已完成。
 - tag 驱动的 GitHub Actions 已验证可完成隔离 CI、白名单出包、`production` 审批、SSH 上传、服务器端备份/切换/回滚和公网 smoke test。
-- 生产数据库已从 V9 手工迁移至 V11，并完成新应用 release 切换与 health 验收；仓库 migration 已继续推进到 V13，生产是否已应用 V12/V13 必须以 Actions、VM attestation 和 `flyway info` 复核后更新 runbook。
-- 两阶段 migration 发布代码、VM root-owned 入口、sudoers 和 GitHub 配置已完成：tag 自动分类，migration 与 deploy 由两个显式人工阶段控制，服务器端使用 root-only attestation 约束应用切换；仓库已有 `v2026-07-17-001` 至 `v2026-07-17-003`，仍需补齐 V12/V13 生产结果记录和 staging 六类场景演练。
+- 生产数据库已通过 `v2026-07-18-001` 完成 V12/V13 migration、应用切换与 health 验收；迁移前已修复历史业务表 owner 漂移。
+- 两阶段 migration 发布代码、VM root-owned 入口、sudoers 和 GitHub 配置已完成：tag 自动分类，migration 与 deploy 由两个显式人工阶段控制，服务器端使用 root-only attestation 和共享 owner 契约约束数据库迁移与应用切换。
 - 剩余重点从“能否上线”转为 staging、监控告警、安全头、Host 限制、备份异地保存和 migration 自动化前的安全设计。
 - 推荐采用同源部署：公网只暴露 `https://<domain>`，静态前端由反向代理托管，`/api/*` 反代到后端，PostgreSQL 只允许后端内网访问。
 - 上线前的最后验收应包含功能检查、浏览器实测、生产环境健康检查、备份恢复演练和回滚演练。
@@ -176,7 +176,7 @@ PostgreSQL: private network only
 - [x] 建立部署验收清单和回滚步骤。
 - [x] GitHub Actions tag 出包、production 审批、SSH 自动部署与公网 smoke test。
 - [x] 完成 V9 -> V11 生产 migration、应用切换和数据库 health 验收。
-- [ ] 核对并记录 V12/V13 对应 release 的 Actions、attestation、生产 Flyway version 与公网 smoke 结果；未核对前不把生产 schema 写成 V12 或 V13。
+- [x] 核对并记录 `v2026-07-18-001` 的 V12/V13 Actions、生产 migration、应用切换与 health 结果。
 
 ### P0 已新增仓库入口
 

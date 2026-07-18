@@ -59,6 +59,7 @@
 - 角色继承不等于“新建对象的 owner 自动变成上层角色”
 - 当前如果由 `live_project_flyway` 执行 `CREATE TABLE`，对象 owner 仍可能是 `live_project_flyway`
 - 所以“数据库 owner 是 `live_project_owner`”和“某张表 owner 是 `live_project_owner`”不是同一件事
+- 当前 CI、生产 release manager 和恢复流程会执行共享 owner 契约；上述默认行为一旦造成业务对象 owner 漂移，发布必须失败
 
 ## 3. 各角色权限范围
 
@@ -126,8 +127,9 @@ schema 级权限：
 
 重要说明：
 
-- 当前新增表如果由 Flyway 直接创建，owner 可能落在 `live_project_flyway`
-- 如果希望对象 owner 严格统一到 `live_project_owner`，迁移里需要显式 `ALTER ... OWNER TO`
+- 新增表如果由 Flyway 直接创建，owner 会落在 `live_project_flyway`
+- migration 必须先 `SET ROLE live_project_owner` 再创建对象，或在不触碰 `flyway_schema_history` 的前提下显式调整 owner
+- `backend/db/postgres/checks/ownership_contract.sql` 会在 CI、生产 migration/deploy 和恢复流程中强制验证这一点
 
 ### 3.4 `live_project_ro`
 
@@ -470,16 +472,16 @@ schema 级权限：
 
 所以如果你手工切到 `live_project_owner` 发现某些新表没有预期权限，这并不等于后端运行时一定会失败。
 
-### 6.2 当前新对象的 owner 可能不是 `live_project_owner`
+### 6.2 新对象必须显式归属 `live_project_owner`
 
 因为 migration 是由 `live_project_flyway` 执行的，而 PostgreSQL 默认把新对象 owner 记为执行 `CREATE` 的角色。
 
-这意味着：
+PostgreSQL 的默认行为意味着：
 
 - 数据库 owner 是 `live_project_owner`
-- 不代表所有表 owner 都已经是 `live_project_owner`
+- 不代表新建表自动属于 `live_project_owner`
 
-这也是之前 `app_users` 权限现象出现的直接原因。
+因此 migration 创建对象时必须 `SET ROLE live_project_owner`；共享 owner 契约会拒绝任何业务对象仍属于 `live_project_flyway` 的数据库，但明确排除并单独检查 `flyway_schema_history`。
 
 ### 6.3 `live_project_super_ro` 这个名字并不等于“只读”
 

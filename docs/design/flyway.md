@@ -265,7 +265,7 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 - 登录账号：`live_project_flyway`
 - 对象 owner：`live_project_owner`
 
-当前本地容器内已经按这个思路工作：
+当前角色初始化和 fresh test DB 按这个思路工作：
 
 - `postgres` 负责容器 bootstrap 与管理入口
 - `live_project_owner` 负责业务数据库拥有权
@@ -274,6 +274,22 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 - `live_project_user_rw` 负责低风险用户侧写入，当前用于收藏增删
 - `live_project_super_ro` 负责查询、插入、更新
 - `live_project_test_admin` 负责测试库重置与 seed，不授予主库访问权限
+
+对象归属不是仅靠文档约定：`backend/db/postgres/checks/ownership_contract.sql` 是 CI、生产 release manager 和恢复流程共用的契约。它要求业务数据库、`public` schema 以及业务表、视图、序列、函数和类型都属于 `live_project_owner`；`public.flyway_schema_history` 单独属于 `live_project_flyway`，并要求 Flyway 角色继承 owner。任何偏差都必须在 migration 或 deploy 前失败。
+
+新增 schema 对象的 migration 应使用以下结构，避免对象默认落到 Flyway 登录角色：
+
+```sql
+SET ROLE live_project_owner;
+
+CREATE TABLE public.example (...);
+
+RESET ROLE;
+
+GRANT SELECT ON TABLE public.example TO live_project_ro;
+```
+
+CI 在 fresh DB 完成 Flyway migrate 后执行 owner 契约；生产 release manager 在备份前、migration 后和应用切换前再次执行同一契约。不要以 fresh DB 通过替代生产漂移检查。
 
 ### 最低建议权限
 
@@ -352,6 +368,7 @@ ALTER ROLE live_project_flyway CREATEDB;
 - baseline 中若使用数据库函数作为默认值，例如 `gen_random_uuid()`，应确认目标 PostgreSQL 环境支持
 - 不要修改已执行过的 `V...sql`
   - 修正应新增下一个版本文件
+- 新增对象必须显式归属 `live_project_owner`，并让 owner 契约检查在 CI 中通过
 - 测试库应通过 Flyway 重建，而不是手工点 pgAdmin 同步
 - 如果 `infra/postgres/.env.pg-migrate` 中的数据库密码变更，而容器已初始化完成，需要同步更新数据库角色密码
   - 否则 Flyway 会出现密码认证失败
