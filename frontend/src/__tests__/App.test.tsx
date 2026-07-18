@@ -21,6 +21,8 @@ import {
   getAuthMe,
   getLives,
   getMyFavoriteLives,
+  getTourDetail,
+  getTours,
   login,
   logout,
   peekMyFavoriteLives,
@@ -30,6 +32,8 @@ import {
   type CatalogSearchResponse,
   type LiveDetailResponse,
   type LivesResponse,
+  type TourDetailResponse,
+  type ToursResponse,
 } from "../api";
 import { logError } from "../logger";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -47,6 +51,8 @@ vi.mock("../api", () => ({
   login: vi.fn(),
   logout: vi.fn(),
   getMyFavoriteLives: vi.fn(),
+  getTours: vi.fn(),
+  getTourDetail: vi.fn(),
   peekMyFavoriteLives: vi.fn(),
   clearLivesCache: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
@@ -87,6 +93,8 @@ const getAuthMeMock = vi.mocked(getAuthMe);
 const loginMock = vi.mocked(login);
 const logoutMock = vi.mocked(logout);
 const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
+const getToursMock = vi.mocked(getTours);
+const getTourDetailMock = vi.mocked(getTourDetail);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
 const clearLivesCacheMock = vi.mocked(clearLivesCache);
 const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
@@ -164,6 +172,57 @@ function makeDetailResponse(params: {
       other_members: [],
       comments: idx % 2 === 0 ? ["短版"] : [],
     })),
+  };
+}
+
+function makeToursResponse(): ToursResponse {
+  return {
+    items: [{
+      tour_id: 7,
+      tour_title: "Ave Mujica LIVE TOUR 2026 Exitus",
+      url: "https://example.com/live/41",
+      description: null,
+      bands: [{ band_id: 2, band_name: "Ave Mujica", band_abbr: "AM" }],
+      start_date: "2026-05-30",
+      end_date: "2026-06-02",
+      collected_live_count: 2,
+      stop_labels: [],
+    }],
+    pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+  };
+}
+
+function makeTourDetailResponse(): TourDetailResponse {
+  return {
+    ...makeToursResponse().items[0],
+    stops: [
+      {
+        stop_order: 1,
+        stop_label: null,
+        live_id: 41,
+        live_date: "2026-05-30",
+        live_title: "Exitus 東京公演",
+        live_type: "oneman",
+        venue: "Zepp Tokyo",
+        bands: [2],
+        url: "https://example.com/live/41",
+        is_favorite: false,
+        has_setlist: true,
+      },
+      {
+        stop_order: 2,
+        stop_label: null,
+        live_id: 42,
+        live_date: "2026-06-02",
+        live_title: "Exitus FINAL",
+        live_type: "oneman",
+        venue: "日本武道館",
+        bands: [2],
+        url: null,
+        is_favorite: false,
+        has_setlist: false,
+      },
+    ],
   };
 }
 
@@ -282,6 +341,8 @@ describe("App", () => {
     loginMock.mockReset();
     logoutMock.mockReset();
     getMyFavoriteLivesMock.mockReset();
+    getToursMock.mockReset();
+    getTourDetailMock.mockReset();
     peekMyFavoriteLivesMock.mockReset();
     clearLivesCacheMock.mockReset();
     clearMyFavoriteLivesCacheMock.mockReset();
@@ -299,6 +360,8 @@ describe("App", () => {
     getMyFavoriteLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2 }),
     );
+    getToursMock.mockResolvedValue(makeToursResponse());
+    getTourDetailMock.mockResolvedValue(makeTourDetailResponse());
     peekMyFavoriteLivesMock.mockReturnValue(undefined);
     favoriteLiveMock.mockResolvedValue();
     favoriteLivesBatchMock.mockResolvedValue({
@@ -782,6 +845,58 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "取消收藏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入收藏" })).not.toBeInTheDocument();
+  });
+
+  // 测试点：独立巡演资料页签展示聚合资料，并将筛选条件提交给巡演列表接口。
+  test("巡演资料页签展示聚合资料并支持独立筛选", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: "巡演资料" }));
+
+    await waitFor(() => expect(getToursMock).toHaveBeenCalledWith(1, 20, {
+      q: undefined,
+      year: undefined,
+      bandId: undefined,
+      sort: "date_desc",
+    }));
+    expect(screen.getByRole("button", { name: "巡演资料" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "演出资料" })).not.toHaveClass("active");
+    expect(screen.queryByRole("button", { name: "仅收藏" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" })).toBeInTheDocument();
+    expect(screen.getByText("已收录 2 场")).toBeInTheDocument();
+    expect(screen.getByText("Ave Mujica")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("关键词"), "Exitus");
+    await user.click(screen.getByRole("button", { name: "搜索" }));
+    await waitFor(() => expect(getToursMock).toHaveBeenLastCalledWith(1, 20, {
+      q: "Exitus",
+      year: undefined,
+      bandId: undefined,
+      sort: "date_desc",
+    }));
+  });
+
+  // 测试点：巡演详情可进入 Live，且 Live 详情中的所属巡演入口能返回聚合详情。
+  test("巡演详情和 Live 详情支持双向进入", async () => {
+    getLiveDetailMock.mockResolvedValue({
+      ...makeDetailResponse({ liveId: 41 }),
+      tour: { tour_id: 7, tour_title: "Ave Mujica LIVE TOUR 2026 Exitus" },
+    });
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: "巡演资料" }));
+    await user.click(await screen.findByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" }));
+
+    await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
+    expect(screen.getByText("Exitus 東京公演")).toBeInTheDocument();
+    expect(screen.getByText("已有 Setlist")).toBeInTheDocument();
+    expect(screen.queryByText("stop_label")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Exitus 東京公演" }));
+    await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(41));
+    await user.click(await screen.findByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" }));
+    await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Exitus FINAL")).toBeInTheDocument();
   });
 
   test("匿名用户点击仅收藏会打开登录弹窗", async () => {

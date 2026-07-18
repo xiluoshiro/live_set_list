@@ -19,6 +19,9 @@ import {
   type CatalogStatisticsResponse,
   type StatisticsScope,
   type LiveItem,
+  type TourRef,
+  type TourStopItem,
+  type TourSummary,
 } from "./api";
 import { useAuth } from "./auth/AuthProvider";
 import { BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
@@ -36,6 +39,9 @@ import { LiveDetailPage } from "./components/LiveDetailPage";
 import { LiveListFiltersToolbar } from "./components/LiveListFilters";
 import { LoginDialog } from "./components/LoginDialog";
 import { StatisticsPanel } from "./components/StatisticsPanel";
+import { TourArchivePage } from "./components/TourArchivePage";
+import { TourDetailPage, type TourDetailFallback } from "./components/TourDetailPage";
+import { DEFAULT_TOUR_FILTERS, type TourFilters } from "./components/TourListFilters";
 import { formatLiveType } from "./components/console/constants";
 import { useFavorites } from "./favorites/FavoriteProvider";
 import {
@@ -68,14 +74,17 @@ type LiveDetailFallback = {
   url: string | null;
 };
 
-type TabKey = "home" | "favorites" | "all" | "statistics" | "console" | "search" | "browse" | "about" | "detail";
+type TabKey = "home" | "favorites" | "all" | "tours" | "tour_detail" | "statistics" | "console" | "search" | "browse" | "about" | "detail";
 type ListTabKey = "favorites" | "all";
+type MainTabKey = Exclude<TabKey, "detail" | "tour_detail">;
 type AppHistoryState = {
   app: "live-set-list";
   tab: TabKey;
   previousTab?: Exclude<TabKey, "detail">;
   detailLiveId?: number;
   detailFallback?: LiveDetailFallback;
+  detailTourId?: number;
+  tourFallback?: TourDetailFallback;
   searchQuery?: string;
   catalogBandId?: number | null;
   listState?: {
@@ -189,6 +198,10 @@ function App() {
   const [detailLiveId, setDetailLiveId] = useState<number | null>(null);
   const [detailFallback, setDetailFallback] = useState<LiveDetailFallback | null>(null);
   const [previousTab, setPreviousTab] = useState<Exclude<TabKey, "detail">>("home");
+  const [detailTourId, setDetailTourId] = useState<number | null>(null);
+  const [tourFallback, setTourFallback] = useState<TourDetailFallback | null>(null);
+  const [tourFilters, setTourFilters] = useState<TourFilters>({ ...DEFAULT_TOUR_FILTERS });
+  const [tourPage, setTourPage] = useState(1);
   const [items, setItems] = useState<LiveRow[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(1);
@@ -233,6 +246,7 @@ function App() {
   const canUseConsoleFeatures = auth.isAuthenticated && canAccessConsole(auth.user?.role);
   const navigationItems: Array<{ key: TabKey; label: string; visible: boolean }> = [
     { key: "all", label: "演出资料", visible: true },
+    { key: "tours", label: "巡演资料", visible: true },
     { key: "statistics", label: "数据统计", visible: true },
     { key: "browse", label: "乐队浏览", visible: true },
     { key: "about", label: "联系我们", visible: true },
@@ -272,9 +286,19 @@ function App() {
       setTab("detail");
       return;
     }
+    if (allowedTab === "tour_detail" && state.detailTourId && state.tourFallback) {
+      setDetailTourId(state.detailTourId);
+      setTourFallback(state.tourFallback);
+      setDetailLiveId(null);
+      setDetailFallback(null);
+      setTab("tour_detail");
+      return;
+    }
     setDetailLiveId(null);
     setDetailFallback(null);
-    const nextTab = allowedTab === "detail" ? "home" : allowedTab;
+    setDetailTourId(null);
+    setTourFallback(null);
+    const nextTab = allowedTab === "detail" || allowedTab === "tour_detail" ? "home" : allowedTab;
     if (nextTab === "all" || nextTab === "favorites") {
       const restoredPage = state.listState?.page ?? 1;
       const restoredCardPage = state.listState?.cardPage ?? 1;
@@ -298,7 +322,7 @@ function App() {
     applyHistoryState(state);
   };
 
-  const navigateToTab = (nextTab: Exclude<TabKey, "detail">, extras: Pick<AppHistoryState, "searchQuery" | "catalogBandId"> = {}) => {
+  const navigateToTab = (nextTab: MainTabKey, extras: Pick<AppHistoryState, "searchQuery" | "catalogBandId"> = {}) => {
     pushHistoryState({ app: "live-set-list", tab: nextTab, ...extras });
   };
 
@@ -310,6 +334,15 @@ function App() {
       previousTab: sourceTab,
       detailLiveId: row.liveId,
       detailFallback: fallback,
+    });
+  };
+
+  const openTourDetail = (tour: TourSummary | TourRef) => {
+    pushHistoryState({
+      app: "live-set-list",
+      tab: "tour_detail",
+      detailTourId: tour.tour_id,
+      tourFallback: { tourTitle: tour.tour_title },
     });
   };
 
@@ -761,6 +794,8 @@ function App() {
   const showConsolePanel = tab === "console" && canUseConsoleFeatures;
   const showHomePanel = tab === "home";
   const showListPanel = tab === "all" || tab === "favorites";
+  const showTourListPanel = tab === "tours";
+  const showTourDetailPanel = tab === "tour_detail";
   const showSearchPanel = tab === "search";
   const showBrowsePanel = tab === "browse";
   const showStatisticsPanel = tab === "statistics";
@@ -813,6 +848,11 @@ function App() {
     pendingScrollRestoreRef.current = null;
   };
 
+  const handleTourFiltersChange = (nextFilters: TourFilters) => {
+    setTourFilters(nextFilters);
+    setTourPage(1);
+  };
+
   const handleConsoleLiveDataChanged = () => {
     listSnapshotsRef.current = {};
     cardSessionsRef.current = {};
@@ -848,10 +888,21 @@ function App() {
     openLiveDetail(row);
   };
 
+  const openTourLive = (stop: TourStopItem) => {
+    openLiveDetail({
+      liveId: stop.live_id,
+      liveDate: stop.live_date,
+      liveTitle: stop.live_title,
+      liveType: stop.live_type,
+      icons: [],
+      url: stop.url,
+    }, "tour_detail");
+  };
+
   // 页签切换统一做权限闸门，防止未登录或低权限用户进入受限页。
   const handleTabChange = (nextTab: TabKey) => {
     setNavDrawerOpen(false);
-    if (nextTab === "detail") return;
+    if (nextTab === "detail" || nextTab === "tour_detail") return;
     if (nextTab === "favorites" && !canUseFavoriteFeatures) {
       setLoginError(null);
       setLoginDialogOpen(true);
@@ -1073,7 +1124,18 @@ function App() {
       window.history.back();
       return;
     }
+    if (previousTab === "tour_detail") {
+      navigateToTab("tours");
+      return;
+    }
     navigateToTab(previousTab);
+  };
+  const handleBackFromTourDetail = () => {
+    if (isAppHistoryState(window.history.state) && window.history.state.tab === "tour_detail") {
+      window.history.back();
+      return;
+    }
+    navigateToTab("tours");
   };
   const toggleTheme = () => {
     setThemeMode(getNextThemeMode(themeMode));
@@ -1115,6 +1177,10 @@ function App() {
     () => buildAvatarSvgDataUrl(getAvatarInitial(userDisplayName), getAvatarColor(userDisplayName)),
     [userDisplayName],
   );
+  const liveArchiveNavigationActive = tab === "all" || tab === "favorites"
+    || (tab === "detail" && (previousTab === "all" || previousTab === "favorites"));
+  const tourArchiveNavigationActive = tab === "tours" || tab === "tour_detail"
+    || (tab === "detail" && (previousTab === "tours" || previousTab === "tour_detail"));
 
   return (
     <main className="page">
@@ -1128,7 +1194,7 @@ function App() {
             {navigationItems.filter((item) => item.visible).map((item) => (
               <button
                 key={item.key}
-                className={`tab-btn ${tab === item.key || (item.key === "all" && tab === "favorites") ? "active" : ""}`}
+                className={`tab-btn ${tab === item.key || (item.key === "all" && liveArchiveNavigationActive) || (item.key === "tours" && tourArchiveNavigationActive) ? "active" : ""}`}
                 onClick={() => handleTabChange(item.key)}
               >
                 {item.label}
@@ -1234,7 +1300,7 @@ function App() {
                   <button
                     key={item.key}
                     type="button"
-                    className={`nav-drawer-item ${tab === item.key || (item.key === "all" && tab === "favorites") ? "active" : ""}`}
+                    className={`nav-drawer-item ${tab === item.key || (item.key === "all" && liveArchiveNavigationActive) || (item.key === "tours" && tourArchiveNavigationActive) ? "active" : ""}`}
                     onClick={() => handleTabChange(item.key)}
                   >
                     {item.label}
@@ -1247,7 +1313,18 @@ function App() {
         {favorites.favoriteSyncWarning && <p className="favorite-sync-warning">{favorites.favoriteSyncWarning}</p>}
 
         {tab === "detail" && detailLiveId !== null && detailFallback !== null ? (
-          <LiveDetailPage liveId={detailLiveId} fallback={detailFallback} onBack={handleBackFromDetail} />
+          <LiveDetailPage liveId={detailLiveId} fallback={detailFallback} onBack={handleBackFromDetail} onOpenTour={openTourDetail} />
+        ) : showTourDetailPanel && detailTourId !== null && tourFallback !== null ? (
+          <TourDetailPage
+            tourId={detailTourId}
+            fallback={tourFallback}
+            isAuthenticated={auth.isAuthenticated}
+            isFavorite={isFavorite}
+            isSyncing={(liveId) => favorites.isFavoriteSyncing(liveId)}
+            onToggleFavorite={(liveId) => void toggleFavorite(liveId)}
+            onOpenLive={openTourLive}
+            onBack={handleBackFromTourDetail}
+          />
         ) : showHomePanel ? (
           <HomeDashboard
             isAuthenticated={auth.isAuthenticated}
@@ -1310,6 +1387,21 @@ function App() {
           />
         ) : showAboutPanel ? (
           <AboutPanel />
+        ) : showTourListPanel ? (
+          <>
+            <header className="list-page-heading">
+              <PageTitle kicker="Tour archive" title="巡演资料" description="浏览已整理的巡演及本站收录场次。" />
+            </header>
+            <TourArchivePage
+              filters={tourFilters}
+              page={tourPage}
+              years={catalogStats?.years ?? []}
+              bands={listFilterBands}
+              onFiltersChange={handleTourFiltersChange}
+              onPageChange={setTourPage}
+              onOpenTour={openTourDetail}
+            />
+          </>
         ) : showListPanel ? (
           <>
             <header className="list-page-heading">
