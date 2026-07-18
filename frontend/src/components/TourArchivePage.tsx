@@ -58,25 +58,19 @@ export function TourArchivePage({
     return () => { canceled = true; };
   }, [filters, onPageChange, page]);
 
-  const hasFilters = filters.q !== "" || filters.year !== null || filters.bandId !== null;
-
   return (
     <>
       <TourListFilters filters={filters} years={years} bands={bands} onChange={onFiltersChange} />
-      {hasFilters && !loading && !error && tours.length === 0 ? (
-        <p className="tour-list-state">没有符合当前条件的巡演</p>
-      ) : (
-        <TourCardGrid
-          tours={tours}
-          loading={loading}
-          error={error}
-          total={total}
-          page={page}
-          totalPages={totalPages}
-          onOpenTour={onOpenTour}
-          onPageChange={onPageChange}
-        />
-      )}
+      <TourCardGrid
+        tours={tours}
+        loading={loading}
+        error={error}
+        total={total}
+        page={page}
+        totalPages={totalPages}
+        onOpenTour={onOpenTour}
+        onPageChange={onPageChange}
+      />
     </>
   );
 }
