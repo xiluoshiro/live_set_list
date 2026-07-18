@@ -926,7 +926,7 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "加入收藏" })).not.toBeInTheDocument();
   });
 
-  // 测试点：巡演资料复用演出卡片格式，整卡进入详情且不提供重复详情按钮。
+  // 测试点：巡演资料复用演出列表的筛选、总计、内容顺序和 pager 间距容器。
   test("巡演资料页签展示聚合资料并支持独立筛选", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -942,7 +942,13 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "演出资料" })).not.toHaveClass("active");
     expect(screen.queryByRole("button", { name: "仅收藏" })).not.toBeInTheDocument();
     const tourTitle = screen.getByText("Ave Mujica LIVE TOUR 2026 Exitus");
-    expect(tourTitle.closest("article")).toHaveClass("live-card");
+    const tourCard = tourTitle.closest("article") as HTMLElement;
+    const filterPanel = screen.getByRole("region", { name: "巡演列表筛选" });
+    const totalText = screen.getByText("总计 1 个巡演");
+    expect(totalText.closest("footer")).toHaveClass("pager");
+    expect(filterPanel.compareDocumentPosition(totalText) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(totalText.compareDocumentPosition(tourCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tourCard).toHaveClass("live-card");
     expect(screen.queryByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看巡演" })).not.toBeInTheDocument();
     expect(screen.getByText("已收录 2 场")).toBeInTheDocument();
