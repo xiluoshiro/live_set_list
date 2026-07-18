@@ -180,7 +180,7 @@ TOUR_RESPONSES: dict[int | str, dict[str, Any]] = {
     "/tours/live-candidates",
     response_model=ConsoleTourLiveCandidatesResponse,
     summary="查询巡演场次候选",
-    description="`editor+` 用户按标题或 ID 搜索 Live，并查看场地和当前巡演归属。",
+    description="`editor+` 用户按标题或 ID 搜索尚未关联任何巡演的 Live。",
 )
 def get_tour_live_candidates(
     q: str | None = Query(default=None, max_length=255),
@@ -189,12 +189,12 @@ def get_tour_live_candidates(
     _: Any = Depends(require_role("editor")),
 ):
     normalized_query = q.strip() if q is not None else ""
-    conditions: list[str] = []
+    conditions = ["NOT EXISTS (SELECT 1 FROM tour_lives occupied WHERE occupied.live_id = l.id)"]
     params: list[Any] = []
     if normalized_query:
         conditions.append("(l.live_title ILIKE %s OR CAST(l.id AS text) = %s)")
         params.extend((f"%{normalized_query}%", normalized_query))
-    where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    where_sql = f"WHERE {' AND '.join(conditions)}"
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -210,8 +210,8 @@ def get_tour_live_candidates(
                         l.live_date,
                         l.live_title,
                         v.venue,
-                        ta.id,
-                        ta.tour_title,
+                        NULL::integer AS tour_id,
+                        NULL::text AS tour_title,
                         CASE
                             WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
                             THEN COALESCE(
@@ -229,8 +229,6 @@ def get_tour_live_candidates(
                         END AS band_ids
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
-                    LEFT JOIN tour_lives tl ON tl.live_id = l.id
-                    LEFT JOIN tour_attrs ta ON ta.id = tl.tour_id
                     {where_sql}
                     ORDER BY l.live_date DESC, l.id DESC
                     LIMIT %s OFFSET %s

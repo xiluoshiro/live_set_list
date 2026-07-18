@@ -72,7 +72,7 @@
 - `POST /api/console/lives/{live_id}/setlist`
   - `editor+` 向指定 Live 追加 setlist 行；当前是 append-only，不修改既有 setlist
 - `GET /api/console/tours/live-candidates`
-  - `editor+` 按 Live 标题或 ID 分页查询巡演场次候选，并返回场地和当前巡演归属
+  - `editor+` 按 Live 标题或 ID 分页查询尚未关联任何巡演的场次候选，并返回场地
 - `POST /api/console/tours`
   - `editor+` 在一个事务中创建巡演及完整乐队、场次关系
 - `PUT /api/console/tours/{tour_id}`
@@ -269,6 +269,8 @@
   - 所有关联 Live 必须存在；Live 已属于其他巡演时返回 `409`，detail 包含冲突的 `live_id / tour_id / tour_title`
   - 创建与完整替换都在单一事务中完成，并写一条 `tour_create` 或 `tour_update` 汇总审计日志
   - 第一版不提供删除巡演接口
+- `GET /api/console/tours/live-candidates`
+  - 只返回尚未出现在 `tour_lives` 中的 Live；已被任意巡演占用的场次在数据库分页前排除
 
 ## 错误处理说明
 

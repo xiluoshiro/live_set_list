@@ -1238,7 +1238,7 @@ describe("ConsoleInsertPanel", () => {
     rectSpy.mockRestore();
   });
 
-  // 测试点：巡演管理隐藏场次标签，并提交按 ID 排序的乐队及场次关系集合。
+  // 测试点：新增巡演成功后清空编辑区，并把后端返回值追加到新增记录表格。
   test("巡演管理创建巡演并提交完整关系集合", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -1250,11 +1250,10 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleTourLiveCandidates.mockResolvedValue({
       items: [
         { live_id: 41, live_date: "2026-05-30", live_title: "Console Draft Live", venue: "Zepp", tour_id: null, tour_title: null, band_ids: [1, 2] },
-        { live_id: 1, live_date: "2026-03-28", live_title: "Occupied Live", venue: "Arena", tour_id: 9, tour_title: "Other Tour", band_ids: [1] },
       ],
       page: 1,
       page_size: 20,
-      total: 2,
+      total: 1,
       total_pages: 1,
     });
     apiMocks.createConsoleTour.mockResolvedValue({
@@ -1281,7 +1280,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("checkbox", { name: "2 - Roselia" }));
     await user.click(screen.getByRole("checkbox", { name: "1 - Poppin'Party" }));
     expect(screen.getByRole("checkbox", { name: "不指定" })).not.toBeChecked();
-    expect(screen.getByRole("button", { name: "已占用" })).toBeDisabled();
+    expect(screen.queryByText("Occupied Live")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "添加" }));
     await user.click(screen.getByRole("button", { name: "创建巡演" }));
     expect(screen.getByRole("dialog", { name: "确认创建巡演" })).toHaveClass("compact");
@@ -1297,20 +1296,95 @@ describe("ConsoleInsertPanel", () => {
       },
       "csrf-token",
     ));
+    await waitFor(() => expect(screen.getByLabelText("巡演名称")).toHaveValue(""));
+    expect(screen.getByRole("button", { name: "创建巡演" })).toBeInTheDocument();
+    expect(within(screen.getByRole("table", { name: "已选场次" })).getByText("至少添加一场 Live 后才能保存巡演。")).toBeInTheDocument();
+    const insertedTourTable = screen.getByRole("table", { name: "新增巡演记录" });
+    expect(within(insertedTourTable).getByText("7")).toBeInTheDocument();
+    expect(within(insertedTourTable).getByText("New Tour")).toBeInTheDocument();
+    expect(within(insertedTourTable).getByText("2")).toBeInTheDocument();
+    expect(within(insertedTourTable).getByText("1")).toBeInTheDocument();
   });
 
-  // 测试点：一键添加会获取完整筛选结果，跳过已占用 Live，并按日期自动排列可用场次。
+  // 测试点：保存已有巡演后退出编辑态并还原空白表单，但不把更新操作计入新增记录。
+  test("巡演管理保存修改后还原表单", async () => {
+    const user = userEvent.setup();
+    apiMocks.getTours.mockResolvedValue({
+      items: [{
+        tour_id: 7,
+        tour_title: "Existing Tour",
+        url: null,
+        description: null,
+        bands: [],
+        start_date: "2026-05-30",
+        end_date: "2026-05-30",
+        collected_live_count: 1,
+        stop_labels: [],
+      }],
+      pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+    });
+    apiMocks.getConsoleTour.mockResolvedValue({
+      tour_id: 7,
+      tour_title: "Existing Tour",
+      band_ids: [],
+      stops: [{
+        live_id: 41,
+        live_date: "2026-05-30",
+        live_title: "Existing Live",
+        venue: "Zepp",
+        band_ids: [1],
+        stop_label: "Legacy label",
+      }],
+    });
+    apiMocks.getConsoleTourLiveCandidates.mockResolvedValue({
+      items: [],
+      page: 1,
+      page_size: 20,
+      total: 0,
+      total_pages: 1,
+    });
+    apiMocks.updateConsoleTour.mockResolvedValue({
+      ok: true,
+      item: { tour_id: 7, tour_title: "Updated Tour", band_count: 0, stop_count: 1 },
+    });
+
+    render(<ConsoleInsertPanel initialMode="tour" />);
+    await screen.findByRole("option", { name: "#7 Existing Tour" });
+    await user.selectOptions(screen.getByLabelText("已有巡演"), "7");
+    await waitFor(() => expect(screen.getByLabelText("巡演名称")).toHaveValue("Existing Tour"));
+    await user.clear(screen.getByLabelText("巡演名称"));
+    await user.type(screen.getByLabelText("巡演名称"), "Updated Tour");
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "Tokyo");
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await waitFor(() => expect(apiMocks.updateConsoleTour).toHaveBeenCalledWith(
+      7,
+      {
+        tour_title: "Updated Tour",
+        band_ids: [],
+        stops: [{ live_id: 41, stop_label: "Legacy label" }],
+      },
+      "csrf-token",
+    ));
+    await waitFor(() => expect(screen.getByLabelText("巡演名称")).toHaveValue(""));
+    expect(screen.getByLabelText("已有巡演")).toHaveValue("");
+    expect(screen.getByPlaceholderText("输入 Live ID 或标题")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "创建巡演" })).toBeInTheDocument();
+    expect(within(screen.getByRole("table", { name: "新增巡演记录" })).getByText("暂无新增巡演记录")).toBeInTheDocument();
+  });
+
+  // 测试点：一键添加接收后端已排除占用场次的结果，并按日期自动排列全部候选。
   test("巡演管理一键添加全部筛选结果", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleTourLiveCandidates.mockImplementation((_query, _page, pageSize) => Promise.resolve({
       items: pageSize === 500 ? [
         { live_id: 42, live_date: "2026-06-02", live_title: "Later", venue: "B", tour_id: null, tour_title: null, band_ids: [2] },
         { live_id: 41, live_date: "2026-05-30", live_title: "Earlier", venue: "A", tour_id: null, tour_title: null, band_ids: [1] },
-        { live_id: 1, live_date: "2026-03-28", live_title: "Occupied", venue: "C", tour_id: 9, tour_title: "Other Tour", band_ids: [1] },
       ] : [],
       page: 1,
       page_size: pageSize,
-      total: pageSize === 500 ? 3 : 0,
+      total: pageSize === 500 ? 2 : 0,
       total_pages: 1,
     }));
 
@@ -1325,6 +1399,6 @@ describe("ConsoleInsertPanel", () => {
       expect.stringContaining("#41 Earlier"),
       expect.stringContaining("#42 Later"),
     ]);
-    expect(screen.getByRole("status")).toHaveTextContent("已添加 2 场，跳过 1 场");
+    expect(screen.getByRole("status")).toHaveTextContent("已添加 2 场");
   });
 });

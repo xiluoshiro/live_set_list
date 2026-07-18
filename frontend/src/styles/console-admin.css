@@ -234,10 +234,6 @@
   margin: 0 0 12px;
 }
 
-.tour-candidate-conflict {
-  opacity: .62;
-}
-
 .tour-band-validation {
   color: var(--accent-danger);
 }

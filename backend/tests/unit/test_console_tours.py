@@ -1,5 +1,5 @@
 import hashlib
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -48,6 +48,47 @@ def _payload(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+# 测试点：巡演场次候选必须在计数和分页查询中排除已存在于 tour_lives 的 Live。
+def test_tour_live_candidates_filter_occupied_before_pagination():
+    _authenticate_editor()
+    conn, cursor = _connection_mock()
+    cursor.fetchone.return_value = (1,)
+    cursor.fetchall.return_value = [
+        (41, date(2026, 5, 30), "Available Live", "Zepp", None, None, [1]),
+    ]
+
+    with patch("app.routers.console_tours.get_db_connection", return_value=conn):
+        response = TestClient(app).get(
+            "/api/console/tours/live-candidates?q=Available&page=1&page_size=20"
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "live_id": 41,
+                "live_date": "2026-05-30",
+                "live_title": "Available Live",
+                "venue": "Zepp",
+                "tour_id": None,
+                "tour_title": None,
+                "band_ids": [1],
+            }
+        ],
+        "total": 1,
+        "page": 1,
+        "page_size": 20,
+        "total_pages": 1,
+    }
+    executed_sql = [str(call.args[0]) for call in cursor.execute.call_args_list]
+    assert len(executed_sql) == 2
+    assert all(
+        "NOT EXISTS (SELECT 1 FROM tour_lives occupied" in sql
+        for sql in executed_sql
+    )
+    assert "LEFT JOIN tour_lives" not in executed_sql[1]
 
 
 # 测试点：创建巡演应规范化文本、按请求顺序写入关系，并生成一条汇总审计日志。
