@@ -32,7 +32,6 @@
 
 .tour-stop-title:hover { text-decoration: underline; }
 .tour-stop-actions button:not(.star-btn),
-.tour-stop-actions a,
 .tour-list-pager button {
   border: 1px solid var(--border-normal);
   border-radius: 7px;

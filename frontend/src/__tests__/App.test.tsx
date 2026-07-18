@@ -902,6 +902,20 @@ describe("App", () => {
     expect(screen.getByText("Exitus FINAL")).toBeInTheDocument();
   });
 
+  // 测试点：巡演详情复用演出详情的 SVG 外链图标，场次来源复用现有链接符号。
+  test("巡演详情复用既有外链样式", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: "巡演资料" }));
+    await user.click(await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus"));
+
+    await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
+    const titleLink = screen.getByRole("link", { name: "Ave Mujica LIVE TOUR 2026 Exitus" });
+    expect(titleLink.querySelector(".detail-title-link-icon svg")).not.toBeNull();
+    expect(screen.queryByText("↗")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "🔗" })).toHaveLength(1);
+  });
+
   test("匿名用户点击仅收藏会打开登录弹窗", async () => {
     // 测试点：仅收藏切换始终可发现，但匿名用户使用时必须先通过登录闸门。
     getLivesMock.mockResolvedValue(
