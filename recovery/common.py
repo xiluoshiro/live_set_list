@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / "infra" / "postgres" / ".env.pg-migrate"
 COMPOSE_FILE = ROOT / "infra" / "postgres" / "docker-compose.pg-migrate.yml"
 FLYWAY_CONFIG = ROOT / "backend" / "db" / "flyway" / "flyway.toml"
+OWNERSHIP_CONTRACT_SQL = ROOT / "backend" / "db" / "postgres" / "checks" / "ownership_contract.sql"
 SEED_SQL = ROOT / "backend" / "db" / "postgres" / "seed" / "base_seed.sql"
 DEFAULT_BACKUP_ROOT = Path(r"C:\Users\xiluo\OneDrive - stu.jiangnan.edu.cn\Backup\live-set-list-docker")
 BACKUP_ROOT = Path(os.getenv("LIVESETLIST_BACKUP_ROOT", str(DEFAULT_BACKUP_ROOT))).expanduser()
@@ -56,6 +57,7 @@ def run_step_capture(
     label: str,
     args: list[str],
     *,
+    input_text: str | None = None,
     env_overrides: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     print(f"[{label}] {' '.join(args)}", flush=True)
@@ -66,6 +68,7 @@ def run_step_capture(
         args,
         cwd=ROOT,
         text=True,
+        input=input_text,
         capture_output=True,
         env=env,
     )

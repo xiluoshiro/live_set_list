@@ -14,6 +14,8 @@
 - `live_project_super_ro`：高权限业务账号，可查询/插入/更新，当前用于认证与控制台写接口
 - `live_project_test_admin`：测试库专用管理账号，用于 integration 的重置与 seed
 
+数据库 owner 契约由 `postgres/checks/ownership_contract.sql` 统一定义并被 CI、生产 release manager 和恢复流程复用：业务数据库、`public` schema 和业务对象属于 `live_project_owner`，`flyway_schema_history` 属于 `live_project_flyway`。检查输出任意一行都表示存在漂移，发布或恢复必须停止。
+
 ## 修改表结构时怎么做
 
 1. 先在 pgAdmin 中试验 SQL

@@ -2,7 +2,7 @@
 
 This directory contains the production templates and server-side deployment entry for the live Google Cloud Compute Engine VM. Tag-based GitHub Actions deployment is verified; the operational procedure is in [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md).
 
-Repository migrations currently end at V13, while the latest production Flyway version explicitly confirmed in the runbook is V11. Verify Actions, the root-only attestation, and production `flyway info` before documenting V12 or V13 as deployed.
+Repository migrations and the production database currently end at V13. Release `v2026-07-18-001` completed the V12/V13 migration and application switch after correcting historical business-table owner drift. Future releases must still verify Actions, the root-only attestation, the ownership contract, and production `flyway info`.
 
 Target baseline:
 
@@ -93,6 +93,8 @@ livesetlist-deploy ALL=(root) NOPASSWD: LIVESETLIST_PREPARE, LIVESETLIST_MIGRATE
 Configure `DEPLOY_SSH_PRIVATE_KEY` and `DEPLOY_KNOWN_HOSTS` as repository secrets because the prepare job intentionally runs before any Environment gate. Configure `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, and `PUBLIC_BASE_URL` as repository variables. Keep the `production` Environment and add `production-migration`; required reviewers are optional extra protection where the GitHub plan supports them. Keep database and application env files only under `/etc/livesetlist` on the VM.
 
 The repository now contains a protected two-stage migration workflow. `release_manager.py prepare` classifies the exact archive against the VM's active Flyway SQL. App-only releases continue through the tag workflow; migration releases stop until two separate `workflow_dispatch` runs perform `migrate` and then `deploy`. Migration uses pinned `redgate/flyway:12.11.0`, creates a verified backup, writes a root-only attestation, and never automatically restores the database. `livesetlist-deploy` accepts a migration release only when the attestation, archive SHA-256, SQL tree hashes, and live Flyway version match.
+
+The release archive also contains `backend/db/postgres/checks/ownership_contract.sql`. CI runs it after a fresh Flyway migration; the VM release manager runs it before backup, after migration, and before application switching. Business objects must belong to `live_project_owner`, while `flyway_schema_history` remains owned by `live_project_flyway`.
 
 The production VM entrypoints, state directories, sudoers rules, and GitHub configuration were installed for the initial two-stage rollout on 2026-07-17. The commands below are bootstrap/upgrade commands, not per-release steps; repeat them only when an administrator intentionally updates the root-owned entrypoints:
 

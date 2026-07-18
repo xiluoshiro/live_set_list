@@ -29,6 +29,7 @@ BACKEND_ENV_PATH = Path("/etc/livesetlist/backend.env")
 POSTGRES_ENV_PATH = Path("/etc/livesetlist/postgres.env")
 BACKUP_SERVICE = "livesetlist-backup.service"
 FLYWAY_IMAGE = "redgate/flyway:12.11.0"
+OWNERSHIP_CONTRACT_RELATIVE_PATH = Path("backend/db/postgres/checks/ownership_contract.sql")
 MAX_ARCHIVE_MEMBER_COUNT = 10_000
 MAX_ARCHIVE_EXPANDED_BYTES = 512 * 1024 * 1024
 VERSION_PATTERN = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{3}$")
@@ -370,6 +371,54 @@ def run_flyway(command: str, staged_dir: Path) -> dict[str, Any]:
     return payload
 
 
+def run_ownership_contract(staged_dir: Path) -> None:
+    contract_path = staged_dir / OWNERSHIP_CONTRACT_RELATIVE_PATH
+    if not contract_path.is_file():
+        raise ReleaseError(f"database ownership contract is missing: {contract_path}")
+
+    values = load_env_file(POSTGRES_ENV_PATH)
+    app_db = values.get("APP_DB", "live_statistic")
+    app_owner = values.get("APP_OWNER", "live_project_owner")
+    flyway_user = values.get("FLYWAY_USER", "live_project_flyway")
+    postgres_user = values.get("POSTGRES_USER", "postgres")
+    container_name = values.get("POSTGRES_CONTAINER_NAME", "live-set-list-postgres")
+    args = [
+        "docker",
+        "exec",
+        "-i",
+        container_name,
+        "psql",
+        "-X",
+        "--no-psqlrc",
+        "--tuples-only",
+        "--no-align",
+        "--field-separator=|",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-v",
+        f"app_owner={app_owner}",
+        "-v",
+        f"flyway_user={flyway_user}",
+        "-U",
+        postgres_user,
+        "-d",
+        app_db,
+    ]
+    completed = subprocess.run(
+        args,
+        text=True,
+        input=contract_path.read_text(encoding="utf-8"),
+        capture_output=True,
+    )
+    if completed.returncode != 0:
+        output = completed.stderr.strip() or completed.stdout.strip() or "no psql output"
+        raise ReleaseError(f"database ownership contract check failed: {output}")
+    violations = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    if violations:
+        details = "\n".join(f"- {line}" for line in violations)
+        raise ReleaseError(f"database ownership contract failed:\n{details}")
+
+
 def assert_flyway_info_ready(payload: dict[str, Any]) -> str | None:
     migrations = payload.get("migrations", [])
     if not isinstance(migrations, list):
@@ -453,6 +502,7 @@ def migrate_release(version: str, expected_sha256: str) -> None:
         final_version = assert_flyway_info_ready(final_info)
         if final_version != attestation.get("flyway_version_after"):
             raise ReleaseError("database version does not match existing migration attestation")
+        run_ownership_contract(stage)
         state["status"] = "migrated"
         state["attestation"] = str(existing_attestation_path)
         write_json(state_path(version), state)
@@ -460,8 +510,10 @@ def migrate_release(version: str, expected_sha256: str) -> None:
 
     info_before = run_flyway("info", stage)
     version_before = None if info_before.get("schemaVersion") is None else str(info_before["schemaVersion"])
+    run_ownership_contract(stage)
     backup, backup_sha256 = create_verified_backup()
     migrate_result = run_flyway("migrate", stage)
+    run_ownership_contract(stage)
     run_flyway("validate", stage)
     info_after = run_flyway("info", stage)
     version_after = assert_flyway_info_ready(info_after)
@@ -499,6 +551,7 @@ def verify_deploy(version: str, expected_sha256: str) -> str:
     if release_type == "app-only":
         if state.get("status") != "prepared":
             raise ReleaseError("app-only release is not in prepared state")
+        run_ownership_contract(stage)
         return release_type
 
     if state.get("status") != "migrated":
@@ -517,6 +570,7 @@ def verify_deploy(version: str, expected_sha256: str) -> str:
     current_db_version = assert_flyway_info_ready(info)
     if current_db_version != attestation.get("flyway_version_after"):
         raise ReleaseError("database version does not match migration attestation")
+    run_ownership_contract(stage)
     return release_type
 
 

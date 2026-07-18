@@ -12,6 +12,7 @@ FRONTEND_DIR = ROOT / "frontend"
 RELEASE_DIRS = [
     "backend/app",
     "backend/db/flyway",
+    "backend/db/postgres/checks",
     "backend/db/postgres/init",
     "config",
     "frontend/dist",

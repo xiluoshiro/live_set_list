@@ -3,6 +3,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from recovery import core
 from recovery import docker_ops, restore
 
@@ -54,7 +56,7 @@ def test_prepare_candidate_database_creates_external_volume_before_compose_up(mo
 
 
 def test_restore_app_database_applies_permissions_and_migrates_only_when_pending(monkeypatch, tmp_path) -> None:
-    # 测试点：主库恢复后要先回灌权限，再 validate；只有存在 Pending 才追加 migrate。
+    # 测试点：主库恢复后要在迁移前后校验 owner 契约，且只有存在 Pending 才追加 migrate。
     steps: list[str] = []
     backup_path = tmp_path / "backup.dump"
     backup_path.write_bytes(b"dump")
@@ -66,6 +68,11 @@ def test_restore_app_database_applies_permissions_and_migrates_only_when_pending
         lambda *_args, **_kwargs: subprocess.CompletedProcess(args=[], returncode=0, stdout=b"", stderr=b""),
     )
     monkeypatch.setattr(restore, "apply_app_database_permissions", lambda *_args: steps.append("permissions"))
+    monkeypatch.setattr(
+        restore,
+        "check_database_ownership",
+        lambda *_args: steps.append("ownership-contract"),
+    )
     monkeypatch.setattr(
         restore,
         "run_flyway_info_capture",
@@ -84,13 +91,15 @@ def test_restore_app_database_applies_permissions_and_migrates_only_when_pending
     assert steps == [
         "reset-db",
         "permissions",
+        "ownership-contract",
         "flyway:dev:validate",
         "flyway:dev:migrate",
+        "ownership-contract",
     ]
 
 
 def test_recover_test_database_recreates_test_db_before_migrate_and_seed(monkeypatch, tmp_path) -> None:
-    # 测试点：test 恢复应先 fresh rebuild 测试库，再 migrate、补权限、导入 seed。
+    # 测试点：test 恢复应 fresh rebuild，并在 migrate/权限回灌后校验 owner 再导入 seed。
     steps: list[str] = []
     seed_file = tmp_path / "seed.sql"
     seed_file.write_text("select 1;", encoding="utf-8")
@@ -99,6 +108,11 @@ def test_recover_test_database_recreates_test_db_before_migrate_and_seed(monkeyp
     monkeypatch.setattr(restore, "reset_test_database_for_restore", lambda *_args: steps.append("reset-test-db"))
     monkeypatch.setattr(restore, "run_flyway_for_environment", lambda command, environment: steps.append(f"flyway:{environment}:{command}"))
     monkeypatch.setattr(restore, "apply_test_database_permissions", lambda *_args: steps.append("test-permissions"))
+    monkeypatch.setattr(
+        restore,
+        "check_database_ownership",
+        lambda *_args: steps.append("ownership-contract"),
+    )
 
     def fake_run_step(label: str, args: list[str], **kwargs) -> None:
         if label == "seed":
@@ -115,8 +129,59 @@ def test_recover_test_database_recreates_test_db_before_migrate_and_seed(monkeyp
         "reset-test-db",
         "flyway:test:migrate",
         "test-permissions",
+        "ownership-contract",
         "seed",
     ]
+
+
+# 测试点：恢复流程检测到业务表 owner 漂移时必须输出对象并中止。
+def test_database_ownership_contract_rejects_drift(monkeypatch, tmp_path) -> None:
+    contract_file = tmp_path / "ownership_contract.sql"
+    contract_file.write_text("select 1;", encoding="utf-8")
+    monkeypatch.setattr(restore, "OWNERSHIP_CONTRACT_SQL", contract_file)
+    monkeypatch.setattr(
+        restore,
+        "run_step_capture",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="table|public.live_attrs|live_project_owner|live_project_flyway\n",
+            stderr="",
+        ),
+    )
+
+    with pytest.raises(SystemExit, match="public.live_attrs"):
+        restore.check_database_ownership(
+            _env_values(),
+            "docker",
+            "candidate-container",
+            "live_statistic",
+        )
+
+
+# 测试点：主库恢复权限收口必须把业务表交给 app owner，同时保留 Flyway 历史表的独立 owner。
+def test_apply_app_permissions_preserves_flyway_history_owner(monkeypatch) -> None:
+    captured_sql: list[str] = []
+
+    def fake_run_step(_label: str, _args: list[str], **kwargs) -> None:
+        if kwargs.get("input_text"):
+            captured_sql.append(kwargs["input_text"])
+
+    monkeypatch.setattr(restore, "run_step", fake_run_step)
+
+    restore.apply_app_database_permissions(
+        _env_values(),
+        "docker",
+        "candidate-container",
+    )
+
+    assert len(captured_sql) == 1
+    permission_sql = captured_sql[0]
+    assert "c.relname <> 'flyway_schema_history'" in permission_sql
+    assert (
+        "ALTER TABLE public.flyway_schema_history OWNER TO live_project_flyway;"
+        in permission_sql
+    )
 
 
 def test_recover_main_database_uses_snapshot_backup_and_rolls_back_on_check_failure(monkeypatch, tmp_path) -> None:

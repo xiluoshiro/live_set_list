@@ -10,7 +10,7 @@
 - `restore.py`：Flyway、测试库恢复、主库 `pg_restore` 与权限回灌
 - `core.py`：命令入口解析与主流程编排
 
-恢复流程不固定写死 schema 版本，而是对候选数据库执行当前发布包内的 Flyway migration；当前仓库 migration 已到 V12。恢复旧 dump 时，`flyway info + validate + migrate` 会负责补齐缺失版本。
+恢复流程不固定写死 schema 版本，而是对候选数据库执行当前发布包内的 Flyway migration；当前仓库 migration 已到 V13。恢复旧 dump 时，`flyway info + validate + migrate` 会负责补齐缺失版本。
 
 ## 命令入口
 
@@ -69,14 +69,15 @@ LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist
 3. 对当前主库生成一份恢复流程专用临时快照
 4. 将当前正式容器重命名为备份容器，并用候选 volume 拉起新容器
 5. 在候选容器中用 `pg_restore` 恢复主库
-6. 对主库执行 `flyway info + validate`，如果存在 `Pending` 再执行 `migrate`
-7. 在候选容器中 drop/create 测试库，重新执行 Flyway migrate，并重新导入 seed
-8. 跑 `python scripts/run_checks.py functional`
-9. 如果检查通过：
+6. 回灌权限并执行共享 owner 契约：业务对象属于 `live_project_owner`，`flyway_schema_history` 属于 `live_project_flyway`
+7. 对主库执行 `flyway info + validate`，如果存在 `Pending` 再执行 `migrate`，并在 migrate 后再次校验 owner
+8. 在候选容器中 drop/create 测试库，重新执行 Flyway migrate、owner 校验并重新导入 seed
+9. 跑 `python scripts/run_checks.py functional`
+10. 如果检查通过：
    - 脚本会暂停，等待人工确认候选容器状态
-10. 人工确认后：
+11. 人工确认后：
    - 将候选 volume 的数据复制回固定正式 volume 名并重新拉起正式容器
-11. 如果检查失败，或人工确认阶段取消：
+12. 如果检查失败，或人工确认阶段取消：
    - 删除候选容器和候选 volume
    - 将旧容器改名并启动回来
    - 删除这次恢复生成的临时快照
@@ -91,7 +92,7 @@ LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist
    - 看护候选容器流程、external volume 创建、回滚分支、快照清理等命令编排
 3. Docker 沙箱集成测试
    - 使用独立容器、独立 volume 和独立备份目录
-   - 看护 `pg_dump`、`pg_restore`、候选容器启动、`flyway info + validate` 等真实行为
+   - 看护 `pg_dump`、`pg_restore`、候选容器启动、owner 契约、`flyway info + validate` 等真实行为
 
 相关测试位于：
 
