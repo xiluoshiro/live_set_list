@@ -17,6 +17,7 @@
 
 - [公共统计 S1 实现设计](design/public-statistics-s1.md)
 - [巡演聚合实现设计](design/tour-aggregation.md)
+- [演出活动组聚合实现设计](design/performance-group-aggregation.md)：统一支持多日 Live、单日午场 / 晚场、演出资料列表聚合和完整收藏聚合。
 - [公共端 UI 精修](design/public-ui-refresh.md)
 - [E2E 测试设计](design/e2e.md)
 - [首页阶段 1 开发设计](design/homepage-community-database-phase1.md)：历史阶段设计，当前状态以产品需求文档为准。
