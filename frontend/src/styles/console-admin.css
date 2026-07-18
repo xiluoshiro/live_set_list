@@ -378,6 +378,10 @@
   color: var(--text-main);
 }
 
+.live-id-selector option.live-id-option-muted {
+  background: var(--surface-muted);
+}
+
 .live-page-status {
   color: var(--text-muted);
   font-size: 12px;

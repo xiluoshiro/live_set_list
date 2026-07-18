@@ -167,6 +167,8 @@ function sortById<T>(items: T[], getId: (item: T) => number): T[] {
 
 function sortLivesForConsole(items: LiveInsertRow[]): LiveInsertRow[] {
   return [...items].sort((left, right) => {
+    const eventPriorityOrder = Number(left.live_type === "event") - Number(right.live_type === "event");
+    if (eventPriorityOrder !== 0) return eventPriorityOrder;
     const dateOrder = right.live_date.localeCompare(left.live_date);
     return dateOrder !== 0 ? dateOrder : right.live_id - left.live_id;
   });

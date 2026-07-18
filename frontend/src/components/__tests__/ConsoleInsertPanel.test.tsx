@@ -190,6 +190,42 @@ describe("ConsoleInsertPanel", () => {
     expect(minuteButton).toBeDisabled();
   });
 
+  // 测试点：新增 Setlist 候选会把活动 Live 排到普通 Live 之后，并用弱化底色标识活动项。
+  test("活动 Live 在候选下拉框中降级并弱化显示", async () => {
+    apiMocks.getLives.mockResolvedValue({
+      items: [
+        {
+          live_id: 102,
+          live_date: "2026-04-01",
+          live_title: "近期活动",
+          live_type: "event",
+          bands: [],
+          url: null,
+          is_favorite: false,
+        },
+        {
+          live_id: 101,
+          live_date: "2026-03-30",
+          live_title: "专场 Live",
+          live_type: "oneman",
+          bands: [1],
+          url: null,
+          is_favorite: false,
+        },
+      ],
+      pagination: { page: 1, page_size: 20, total: 2, total_pages: 1 },
+    });
+
+    render(<ConsoleInsertPanel />);
+
+    const liveSelect = await screen.findByLabelText("选择 live_id");
+    await waitFor(() => expect(liveSelect).toHaveValue("101"));
+    const liveOptions = within(liveSelect).getAllByRole("option");
+    expect(liveOptions.map((option) => option.getAttribute("value"))).toEqual(["101", "102"]);
+    expect(liveOptions[0]).not.toHaveClass("live-id-option-muted");
+    expect(liveOptions[1]).toHaveClass("live-id-option-muted");
+  });
+
   test("提交新增Setlist会调用真实追加接口并出现插入记录", async () => {
     // 测试点：新增 Setlist 成功后传递正确数据、更新预览，并从无 setlist 候选中移除该 Live。
     const user = userEvent.setup();
