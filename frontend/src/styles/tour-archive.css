@@ -8,27 +8,6 @@
   gap: 12px;
 }
 
-.tour-card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
-  gap: 14px;
-  margin: 0 24px;
-}
-
-.tour-card {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 13px;
-  padding: 17px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--surface-1);
-  box-shadow: 0 5px 16px rgba(30, 47, 90, 0.07);
-}
-
-.tour-card-head,
-.tour-card-actions,
 .tour-list-footer,
 .tour-list-pager,
 .tour-stop-actions,
@@ -40,10 +19,6 @@
   gap: 10px;
 }
 
-.tour-card-head { justify-content: space-between; color: var(--text-muted); font-size: 13px; }
-.tour-card-count { white-space: nowrap; }
-
-.tour-card-title,
 .tour-stop-title {
   border: 0;
   background: transparent;
@@ -55,22 +30,7 @@
   cursor: pointer;
 }
 
-.tour-card-title { font-size: 17px; line-height: 1.45; }
-.tour-card-title:hover,
 .tour-stop-title:hover { text-decoration: underline; }
-
-.tour-band-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.tour-band-list span {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: var(--surface-chip-soft);
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.tour-card-actions { margin-top: auto; justify-content: flex-end; }
-.tour-card-actions button,
-.tour-card-actions a,
 .tour-stop-actions button:not(.star-btn),
 .tour-stop-actions a,
 .tour-list-pager button {
@@ -109,10 +69,8 @@
 }
 
 @media (max-width: 620px) {
-  .tour-card-grid,
   .tour-list-footer,
   .tour-list-state { margin-left: 12px; margin-right: 12px; }
-  .tour-card-grid { grid-template-columns: 1fr; }
   .list-filter-form.tour-filter-form { grid-template-columns: 1fr; }
   .list-filter-secondary.tour-filter-secondary,
   .list-filter-secondary.tour-filter-secondary[data-open="false"] {

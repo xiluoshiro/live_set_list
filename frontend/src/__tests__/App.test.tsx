@@ -847,7 +847,7 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "加入收藏" })).not.toBeInTheDocument();
   });
 
-  // 测试点：独立巡演资料页签展示聚合资料，并将筛选条件提交给巡演列表接口。
+  // 测试点：巡演资料复用演出卡片格式，整卡进入详情且不提供重复详情按钮。
   test("巡演资料页签展示聚合资料并支持独立筛选", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -862,9 +862,12 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "巡演资料" })).toHaveClass("active");
     expect(screen.getByRole("button", { name: "演出资料" })).not.toHaveClass("active");
     expect(screen.queryByRole("button", { name: "仅收藏" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" })).toBeInTheDocument();
+    const tourTitle = screen.getByText("Ave Mujica LIVE TOUR 2026 Exitus");
+    expect(tourTitle.closest("article")).toHaveClass("live-card");
+    expect(screen.queryByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看巡演" })).not.toBeInTheDocument();
     expect(screen.getByText("已收录 2 场")).toBeInTheDocument();
-    expect(screen.getByText("Ave Mujica")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Band 2" })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("关键词"), "Exitus");
     await user.click(screen.getByRole("button", { name: "搜索" }));
@@ -885,7 +888,7 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
     await user.click(await screen.findByRole("button", { name: "巡演资料" }));
-    await user.click(await screen.findByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" }));
+    await user.click(await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus"));
 
     await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
     expect(screen.getByText("Exitus 東京公演")).toBeInTheDocument();

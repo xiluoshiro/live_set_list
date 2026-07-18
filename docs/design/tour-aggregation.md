@@ -335,7 +335,7 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 ### 列表与详情交互
 
 - “巡演资料”作为独立主导航页签，不在“演出资料”内部增加实体切换。
-- 巡演卡片主要详情操作使用真实 `<button>`；官方来源使用独立 `<a>`。
+- 巡演卡片直接复用演出资料的 `live-card` 结构与样式，点击整卡进入详情；官方来源使用独立 `<a>` 并阻止触发整卡操作。
 - 登录用户在 Tour stop 中复用现有 Live 收藏按钮和乐观同步逻辑。
 - Tour stop 打开 `LiveDetailPage` 时，把返回来源记为 `tour_detail`。
 - Live 详情中的 Tour 名称打开 `TourDetailPage`，返回时恢复 Live 详情。
