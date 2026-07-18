@@ -112,13 +112,8 @@ VALUES
         ARRAY[3]
     );
 
-INSERT INTO public.tour_attrs (id, tour_title, url, description)
-VALUES (
-    1,
-    'BanG Dream! Spring Tour 2026',
-    'https://example.com/tours/spring-2026',
-    'Integration fixture for public tour aggregation.'
-);
+INSERT INTO public.tour_attrs (id, tour_title)
+VALUES (1, 'BanG Dream! Spring Tour 2026');
 
 INSERT INTO public.tour_bands (tour_id, band_id, display_order)
 VALUES

@@ -74,8 +74,8 @@ def test_tours_list_returns_seeded_summary_and_filters(integration_test_client):
             {
                 "tour_id": 1,
                 "tour_title": "BanG Dream! Spring Tour 2026",
-                "url": "https://example.com/tours/spring-2026",
-                "description": "Integration fixture for public tour aggregation.",
+                "url": "https://example.com/lives/1",
+                "description": None,
                 "bands": [
                     {"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "ppp"},
                     {"band_id": 2, "band_name": "Roselia", "band_abbr": "rsl"},
@@ -90,7 +90,7 @@ def test_tours_list_returns_seeded_summary_and_filters(integration_test_client):
     }
 
 
-# 测试点：巡演详情按 stop_order 返回场次，并从真实 Live 数据计算乐队和 setlist 状态。
+# 测试点：巡演详情按日期和 Live ID 返回场次，并从真实 Live 数据计算乐队和 setlist 状态。
 def test_tour_detail_returns_seeded_stops(integration_test_client):
     response = integration_test_client.get("/api/catalog/tours/1")
 
@@ -103,6 +103,24 @@ def test_tour_detail_returns_seeded_stops(integration_test_client):
     assert payload["stops"][1]["bands"] == [1, 3]
     assert all(stop["has_setlist"] is True for stop in payload["stops"])
     assert all(stop["is_favorite"] is False for stop in payload["stops"])
+
+
+# 测试点：未显式设置参与乐队时，巡演列表、详情和乐队筛选都应聚合全部场次的有效乐队。
+def test_tour_without_explicit_bands_aggregates_stop_bands(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("DELETE FROM tour_bands WHERE tour_id = 1")
+
+    detail = integration_test_client.get("/api/catalog/tours/1")
+    filtered = integration_test_client.get("/api/catalog/tours", params={"band_id": 3, "page_size": 20})
+
+    assert detail.status_code == 200
+    assert [band["band_id"] for band in detail.json()["bands"]] == [1, 2, 3]
+    assert filtered.status_code == 200
+    assert [tour["tour_id"] for tour in filtered.json()["items"]] == [1]
 
 
 # 测试点：所有现有 Live 公共读取路径都返回一致的巡演反向引用。
@@ -156,17 +174,15 @@ def test_editor_can_create_console_tour_with_audit(
         headers={"X-CSRF-Token": csrf_token},
         json={
             "tour_title": "Console Integration Tour",
-            "url": "https://example.com/console-tour",
-            "description": "Created through console API.",
-            "band_ids": [3, 1],
-            "stops": [{"live_id": 41, "stop_order": 1, "stop_label": "Final"}],
+            "band_ids": [3],
+            "stops": [{"live_id": 41, "stop_label": "Final"}],
         },
     )
 
     assert response.status_code == 201
     tour_id = response.json()["item"]["tour_id"]
     detail = integration_test_client.get(f"/api/catalog/tours/{tour_id}").json()
-    assert [band["band_id"] for band in detail["bands"]] == [3, 1]
+    assert [band["band_id"] for band in detail["bands"]] == [3]
     assert [(stop["live_id"], stop["stop_label"]) for stop in detail["stops"]] == [(41, "Final")]
     user_id = _get_user_id(integration_admin_connection, TEST_DEFAULT_ADMIN_USERNAME)
     audit = _get_latest_audit_row(integration_admin_connection, user_id=user_id)
@@ -190,20 +206,18 @@ def test_editor_can_replace_console_tour_relations(
         headers={"X-CSRF-Token": csrf_token},
         json={
             "tour_title": "Updated Spring Tour",
-            "url": None,
-            "description": None,
-            "band_ids": [2],
+            "band_ids": [1],
             "stops": [
-                {"live_id": 41, "stop_order": 1, "stop_label": "Preview"},
-                {"live_id": 1, "stop_order": 2, "stop_label": "Opening"},
+                {"live_id": 41, "stop_label": "Preview"},
+                {"live_id": 1, "stop_label": "Opening"},
             ],
         },
     )
 
     assert response.status_code == 200
     detail = integration_test_client.get("/api/catalog/tours/1").json()
-    assert [band["band_id"] for band in detail["bands"]] == [2]
-    assert [stop["live_id"] for stop in detail["stops"]] == [41, 1]
+    assert [band["band_id"] for band in detail["bands"]] == [1]
+    assert [stop["live_id"] for stop in detail["stops"]] == [1, 41]
     assert detail["tour_title"] == "Updated Spring Tour"
 
 
@@ -214,10 +228,8 @@ def test_console_tour_write_requires_editor_and_csrf(
 ):
     payload = {
         "tour_title": "Unauthorized Tour",
-        "url": None,
-        "description": None,
         "band_ids": [1],
-        "stops": [{"live_id": 41, "stop_order": 1, "stop_label": None}],
+        "stops": [{"live_id": 41, "stop_label": None}],
     }
     anonymous = integration_test_client.post("/api/console/tours", json=payload)
     viewer_csrf = _login_and_get_csrf_for(

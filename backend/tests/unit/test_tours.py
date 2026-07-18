@@ -86,7 +86,7 @@ def test_get_tours_binds_keyword_year_and_band_filters():
     assert count_params[:3] == (r"%100\%\_Tour\\\\%",) * 3
     assert str(count_params[3]) == "2026-01-01"
     assert str(count_params[4]) == "2027-01-01"
-    assert count_params[5] == 9
+    assert count_params[5:] == (9, 9, 9)
 
 
 # 测试点：巡演详情应按人工顺序返回场次，并保留单场 setlist 与收藏语义。
@@ -120,7 +120,7 @@ def test_get_tour_detail_returns_ordered_stops():
     assert payload["stops"][0]["has_setlist"] is True
     assert cursor.execute.call_args_list == [
         call(TOUR_DETAIL_HEADER_QUERY, (7,)),
-        call(TOUR_DETAIL_BANDS_QUERY, (7,)),
+        call(TOUR_DETAIL_BANDS_QUERY, (7, 7, 7, 7)),
         call(TOUR_DETAIL_STOPS_QUERY, (7,)),
     ]
 

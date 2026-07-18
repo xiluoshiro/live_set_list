@@ -200,7 +200,9 @@
   - 默认按已收录场次的最晚日期倒序；升序按最早日期排序
   - 只返回至少关联一场 Live 的巡演，日期范围和 `collected_live_count` 均由当前关联实时聚合
 - `GET /api/catalog/tours/{tour_id}`
-  - 场次按 `tour_lives.stop_order` 返回
+  - 场次按 `live_date ASC, live_id ASC` 返回；`stop_order` 是服务端按该顺序生成的连续值
+  - `url` 取日期最早场次的 Live URL，`description` 当前固定为 `null`
+  - `tour_bands` 为空时，`bands` 从全部场次的有效 Live 乐队动态聚合并按 Band ID 排序
   - `has_setlist` 只表示是否至少存在一行 setlist，不加载 setlist 明细
   - 登录用户的场次带当前用户 `is_favorite`；匿名统一为 `false`
   - 页面文案应使用“已收录 N 场”，不能把当前关联数描述成官方总场数
@@ -260,8 +262,10 @@
   - `band_member` 至少需要包含一个非空乐队和成员列表
   - 后端按 `absolute_order` 升序写入
 - `POST /api/console/tours`、`PUT /api/console/tours/{tour_id}`
-  - `band_ids` 要求 1~100 个已存在且不重复的正数 ID，请求顺序即展示顺序
-  - `stops` 要求 1~500 项，`live_id` 与 `stop_order` 分别不得重复
+  - `band_ids` 可为空，最多 100 个已存在且不重复的正数 ID；后端按 Band ID 排序
+  - `band_ids` 非空时，每个 Band 必须至少出现在一场所选 Live 中；为空时数据库关系保持空集合
+  - `stops` 要求 1~500 项且 `live_id` 不得重复；不接收人工 `stop_order`
+  - 服务端按关联 Live 的 `live_date ASC, live_id ASC` 生成连续 `stop_order`
   - 所有关联 Live 必须存在；Live 已属于其他巡演时返回 `409`，detail 包含冲突的 `live_id / tour_id / tour_title`
   - 创建与完整替换都在单一事务中完成，并写一条 `tour_create` 或 `tour_update` 汇总审计日志
   - 第一版不提供删除巡演接口

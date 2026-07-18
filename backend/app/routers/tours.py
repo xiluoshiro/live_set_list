@@ -71,15 +71,44 @@ def _build_tour_filters(
     if band_id is not None:
         conditions.append(
             """
-            EXISTS (
-                SELECT 1
-                FROM tour_bands selected_band
-                WHERE selected_band.tour_id = t.id
-                  AND selected_band.band_id = %s
+            (
+                EXISTS (
+                    SELECT 1
+                    FROM tour_bands selected_band
+                    WHERE selected_band.tour_id = t.id
+                      AND selected_band.band_id = %s
+                )
+                OR (
+                    NOT EXISTS (SELECT 1 FROM tour_bands explicit_band WHERE explicit_band.tour_id = t.id)
+                    AND EXISTS (
+                        SELECT 1
+                        FROM tour_lives fallback_stop
+                        JOIN live_attrs fallback_live ON fallback_live.id = fallback_stop.live_id
+                        WHERE fallback_stop.tour_id = t.id
+                          AND (
+                              (
+                                  NOT EXISTS (
+                                      SELECT 1 FROM live_setlist any_setlist
+                                      WHERE any_setlist.live_id = fallback_live.id
+                                  )
+                                  AND %s = ANY(fallback_live.default_band_ids)
+                              )
+                              OR EXISTS (
+                                  SELECT 1
+                                  FROM live_setlist fallback_setlist
+                                  JOIN LATERAL jsonb_object_keys(fallback_setlist.band_member) k(band_name)
+                                      ON jsonb_typeof(fallback_setlist.band_member) = 'object'
+                                  JOIN band_attrs fallback_band ON fallback_band.band_name = k.band_name
+                                  WHERE fallback_setlist.live_id = fallback_live.id
+                                    AND fallback_band.id = %s
+                              )
+                          )
+                    )
+                )
             )
             """
         )
-        params.append(band_id)
+        params.extend([band_id, band_id, band_id])
 
     where_sql = " AND ".join(f"({condition.strip()})" for condition in conditions)
     return where_sql, tuple(params)
@@ -117,8 +146,15 @@ def _build_tour_list_queries(
             SELECT
                 t.id AS tour_id,
                 t.tour_title,
-                t.url,
-                t.description,
+                (
+                    SELECT first_live.url
+                    FROM tour_lives first_stop
+                    JOIN live_attrs first_live ON first_live.id = first_stop.live_id
+                    WHERE first_stop.tour_id = t.id
+                    ORDER BY first_live.live_date, first_live.id
+                    LIMIT 1
+                ) AS url,
+                NULL::text AS description,
                 MIN(l.live_date) AS start_date,
                 MAX(l.live_date) AS end_date,
                 COUNT(*)::int AS collected_live_count,
@@ -130,16 +166,45 @@ def _build_tour_list_queries(
                                 'band_name', b.band_name,
                                 'band_abbr', b.band_abbr
                             )
-                            ORDER BY tb.display_order
+                            ORDER BY b.id
                         )
                         FROM tour_bands tb
                         JOIN band_attrs b ON b.id = tb.band_id
                         WHERE tb.tour_id = t.id
                     ),
+                    (
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'band_id', fallback_band.id,
+                                'band_name', fallback_band.band_name,
+                                'band_abbr', fallback_band.band_abbr
+                            )
+                            ORDER BY fallback_band.id
+                        )
+                        FROM (
+                            SELECT DISTINCT setlist_band.id
+                            FROM tour_lives fallback_stop
+                            JOIN live_setlist fallback_setlist ON fallback_setlist.live_id = fallback_stop.live_id
+                            JOIN LATERAL jsonb_object_keys(fallback_setlist.band_member) k(band_name)
+                                ON jsonb_typeof(fallback_setlist.band_member) = 'object'
+                            JOIN band_attrs setlist_band ON setlist_band.band_name = k.band_name
+                            WHERE fallback_stop.tour_id = t.id
+                            UNION
+                            SELECT DISTINCT unnest(fallback_live.default_band_ids) AS id
+                            FROM tour_lives fallback_stop
+                            JOIN live_attrs fallback_live ON fallback_live.id = fallback_stop.live_id
+                            WHERE fallback_stop.tour_id = t.id
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM live_setlist any_setlist
+                                  WHERE any_setlist.live_id = fallback_live.id
+                              )
+                        ) fallback_ids
+                        JOIN band_attrs fallback_band ON fallback_band.id = fallback_ids.id
+                    ),
                     '[]'::jsonb
                 ) AS bands,
                 COALESCE(
-                    array_agg(tl.stop_label ORDER BY tl.stop_order)
+                    array_agg(tl.stop_label ORDER BY l.live_date, l.id)
                         FILTER (WHERE tl.stop_label IS NOT NULL),
                     ARRAY[]::text[]
                 ) AS stop_labels
@@ -147,7 +212,7 @@ def _build_tour_list_queries(
             JOIN tour_attrs t ON t.id = matched.id
             JOIN tour_lives tl ON tl.tour_id = t.id
             JOIN live_attrs l ON l.id = tl.live_id
-            GROUP BY t.id, t.tour_title, t.url, t.description
+            GROUP BY t.id, t.tour_title
         )
         SELECT
             summary.tour_id,
@@ -169,13 +234,20 @@ TOUR_DETAIL_HEADER_QUERY = """
 SELECT
     t.id,
     t.tour_title,
-    t.url,
-    t.description,
+    (
+        SELECT first_live.url
+        FROM tour_lives first_stop
+        JOIN live_attrs first_live ON first_live.id = first_stop.live_id
+        WHERE first_stop.tour_id = t.id
+        ORDER BY first_live.live_date, first_live.id
+        LIMIT 1
+    ) AS url,
+    NULL::text AS description,
     MIN(l.live_date) AS start_date,
     MAX(l.live_date) AS end_date,
     COUNT(*)::int AS collected_live_count,
     COALESCE(
-        array_agg(tl.stop_label ORDER BY tl.stop_order)
+        array_agg(tl.stop_label ORDER BY l.live_date, l.id)
             FILTER (WHERE tl.stop_label IS NOT NULL),
         ARRAY[]::text[]
     ) AS stop_labels
@@ -183,20 +255,45 @@ FROM tour_attrs t
 JOIN tour_lives tl ON tl.tour_id = t.id
 JOIN live_attrs l ON l.id = tl.live_id
 WHERE t.id = %s
-GROUP BY t.id, t.tour_title, t.url, t.description
+GROUP BY t.id, t.tour_title
 """
 
 TOUR_DETAIL_BANDS_QUERY = """
-SELECT b.id, b.band_name, b.band_abbr
-FROM tour_bands tb
-JOIN band_attrs b ON b.id = tb.band_id
-WHERE tb.tour_id = %s
-ORDER BY tb.display_order, b.id
+SELECT selected.id, selected.band_name, selected.band_abbr
+FROM (
+    SELECT b.id, b.band_name, b.band_abbr
+    FROM tour_bands tb
+    JOIN band_attrs b ON b.id = tb.band_id
+    WHERE tb.tour_id = %s
+    UNION ALL
+    SELECT fallback_band.id, fallback_band.band_name, fallback_band.band_abbr
+    FROM (
+        SELECT DISTINCT setlist_band.id
+        FROM tour_lives fallback_stop
+        JOIN live_setlist fallback_setlist ON fallback_setlist.live_id = fallback_stop.live_id
+        JOIN LATERAL jsonb_object_keys(fallback_setlist.band_member) k(band_name)
+            ON jsonb_typeof(fallback_setlist.band_member) = 'object'
+        JOIN band_attrs setlist_band ON setlist_band.band_name = k.band_name
+        WHERE fallback_stop.tour_id = %s
+        UNION
+        SELECT DISTINCT unnest(fallback_live.default_band_ids) AS id
+        FROM tour_lives fallback_stop
+        JOIN live_attrs fallback_live ON fallback_live.id = fallback_stop.live_id
+        WHERE fallback_stop.tour_id = %s
+          AND NOT EXISTS (
+              SELECT 1 FROM live_setlist any_setlist
+              WHERE any_setlist.live_id = fallback_live.id
+          )
+    ) fallback_ids
+    JOIN band_attrs fallback_band ON fallback_band.id = fallback_ids.id
+    WHERE NOT EXISTS (SELECT 1 FROM tour_bands explicit_band WHERE explicit_band.tour_id = %s)
+) selected
+ORDER BY selected.id
 """
 
 TOUR_DETAIL_STOPS_QUERY = """
 SELECT
-    tl.stop_order,
+    ROW_NUMBER() OVER (ORDER BY l.live_date, l.id)::int AS stop_order,
     tl.stop_label,
     l.id,
     l.live_date,
@@ -224,7 +321,7 @@ FROM tour_lives tl
 JOIN live_attrs l ON l.id = tl.live_id
 LEFT JOIN venue_list v ON v.id = l.venue_id
 WHERE tl.tour_id = %s
-ORDER BY tl.stop_order, l.id
+ORDER BY l.live_date, l.id
 """
 
 
@@ -334,7 +431,7 @@ def get_tour_detail(
                 if header_row is None:
                     raise HTTPException(status_code=404, detail=f"Tour id {tour_id} not found")
 
-                cur.execute(TOUR_DETAIL_BANDS_QUERY, (tour_id,))
+                cur.execute(TOUR_DETAIL_BANDS_QUERY, (tour_id, tour_id, tour_id, tour_id))
                 band_rows = cur.fetchall()
                 cur.execute(TOUR_DETAIL_STOPS_QUERY, (tour_id,))
                 stop_rows = cur.fetchall()

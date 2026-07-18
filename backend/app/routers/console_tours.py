@@ -11,6 +11,7 @@ from app.routers.console_write import _write_console_audit_log
 from app.schemas import ErrorResponse, ValidationErrorResponse
 from app.schemas.auth import AuthErrorResponse
 from app.schemas.console import (
+    ConsoleTourEditResponse,
     ConsoleTourLiveCandidatesResponse,
     ConsoleTourMutationResponse,
     ConsoleTourUpsertRequest,
@@ -36,8 +37,12 @@ def _raise_missing(resource: str, missing_ids: list[int]) -> None:
         raise HTTPException(status_code=404, detail=f"{resource} ids not found: {missing_text}")
 
 
-def _validate_tour_relations(cur: Any, payload: ConsoleTourUpsertRequest, current_tour_id: int | None) -> None:
-    """Validate target bands, lives, and single-tour ownership inside the write transaction."""
+def _validate_tour_relations(
+    cur: Any,
+    payload: ConsoleTourUpsertRequest,
+    current_tour_id: int | None,
+) -> list[int]:
+    """Validate relations and return Live IDs in canonical date/ID order."""
     live_ids = [stop.live_id for stop in payload.stops]
     _raise_missing("Band", _not_found_ids(cur, table="band_attrs", ids=payload.band_ids))
     _raise_missing("Live", _not_found_ids(cur, table="live_attrs", ids=live_ids))
@@ -69,18 +74,65 @@ def _validate_tour_relations(cur: Any, payload: ConsoleTourUpsertRequest, curren
             },
         )
 
+    cur.execute(
+        """
+        SELECT
+            l.id,
+            CASE
+                WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
+                THEN COALESCE(
+                    (
+                        SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
+                        FROM live_setlist stop_setlist
+                        JOIN LATERAL jsonb_object_keys(stop_setlist.band_member) k(band_name)
+                            ON jsonb_typeof(stop_setlist.band_member) = 'object'
+                        JOIN band_attrs ba ON ba.band_name = k.band_name
+                        WHERE stop_setlist.live_id = l.id
+                    ),
+                    ARRAY[]::int[]
+                )
+                ELSE l.default_band_ids
+            END AS band_ids
+        FROM live_attrs l
+        WHERE l.id = ANY(%s)
+        ORDER BY l.live_date, l.id
+        """,
+        (live_ids,),
+    )
+    ordered_rows = cur.fetchall()
+    if payload.band_ids:
+        effective_band_ids = {
+            int(band_id)
+            for row in ordered_rows
+            for band_id in list(row[1] or [])
+        }
+        missing_performer_ids = [band_id for band_id in payload.band_ids if band_id not in effective_band_ids]
+        if missing_performer_ids:
+            missing_text = ", ".join(str(band_id) for band_id in missing_performer_ids)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Tour band ids are not present in any selected Live: {missing_text}",
+            )
+    return [int(row[0]) for row in ordered_rows]
 
-def _insert_tour_relations(cur: Any, tour_id: int, payload: ConsoleTourUpsertRequest) -> None:
-    """Insert the complete ordered band and stop collections for one tour."""
+
+def _insert_tour_relations(
+    cur: Any,
+    tour_id: int,
+    payload: ConsoleTourUpsertRequest,
+    ordered_live_ids: list[int],
+) -> None:
+    """Insert bands by ID and stops by canonical Live date/ID order."""
     for display_order, band_id in enumerate(payload.band_ids, start=1):
         cur.execute(
             "INSERT INTO tour_bands (tour_id, band_id, display_order) VALUES (%s, %s, %s)",
             (tour_id, band_id, display_order),
         )
-    for stop in payload.stops:
+    labels_by_live_id = {stop.live_id: stop.stop_label for stop in payload.stops}
+    for stop_order, live_id in enumerate(ordered_live_ids, start=1):
         cur.execute(
             "INSERT INTO tour_lives (tour_id, live_id, stop_order, stop_label) VALUES (%s, %s, %s, %s)",
-            (tour_id, stop.live_id, stop.stop_order, stop.stop_label),
+            (tour_id, live_id, stop_order, labels_by_live_id[live_id]),
         )
 
 
@@ -133,7 +185,7 @@ TOUR_RESPONSES: dict[int | str, dict[str, Any]] = {
 def get_tour_live_candidates(
     q: str | None = Query(default=None, max_length=255),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=50),
+    page_size: int = Query(default=20, ge=1, le=500),
     _: Any = Depends(require_role("editor")),
 ):
     normalized_query = q.strip() if q is not None else ""
@@ -153,7 +205,28 @@ def get_tour_live_candidates(
                 safe_page = min(page, total_pages)
                 cur.execute(
                     f"""
-                    SELECT l.id, l.live_date, l.live_title, v.venue, ta.id, ta.tour_title
+                    SELECT
+                        l.id,
+                        l.live_date,
+                        l.live_title,
+                        v.venue,
+                        ta.id,
+                        ta.tour_title,
+                        CASE
+                            WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
+                            THEN COALESCE(
+                                (
+                                    SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
+                                    FROM live_setlist candidate_setlist
+                                    JOIN LATERAL jsonb_object_keys(candidate_setlist.band_member) k(band_name)
+                                        ON jsonb_typeof(candidate_setlist.band_member) = 'object'
+                                    JOIN band_attrs ba ON ba.band_name = k.band_name
+                                    WHERE candidate_setlist.live_id = l.id
+                                ),
+                                ARRAY[]::int[]
+                            )
+                            ELSE l.default_band_ids
+                        END AS band_ids
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     LEFT JOIN tour_lives tl ON tl.live_id = l.id
@@ -182,6 +255,7 @@ def get_tour_live_candidates(
                 "venue": row[3],
                 "tour_id": int(row[4]) if row[4] is not None else None,
                 "tour_title": str(row[5]) if row[5] is not None else None,
+                "band_ids": list(row[6] or []),
             }
             for row in rows
         ],
@@ -189,6 +263,85 @@ def get_tour_live_candidates(
         "page_size": page_size,
         "total": total,
         "total_pages": total_pages,
+    }
+
+
+@router.get(
+    "/tours/{tour_id}",
+    response_model=ConsoleTourEditResponse,
+    summary="获取巡演编辑数据",
+    description="返回显式乐队选择和按日期排序的完整场次，供 `editor+` 控制台编辑。",
+)
+def get_console_tour(
+    tour_id: int = Path(..., ge=1),
+    _: Any = Depends(require_role("editor")),
+):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT tour_title FROM tour_attrs WHERE id = %s", (tour_id,))
+                header = cur.fetchone()
+                if header is None:
+                    raise HTTPException(status_code=404, detail=f"Tour id {tour_id} not found")
+                cur.execute("SELECT band_id FROM tour_bands WHERE tour_id = %s ORDER BY band_id", (tour_id,))
+                explicit_band_ids = [int(row[0]) for row in cur.fetchall()]
+                cur.execute(
+                    """
+                    SELECT
+                        l.id,
+                        l.live_date,
+                        l.live_title,
+                        v.venue,
+                        tl.stop_label,
+                        CASE
+                            WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
+                            THEN COALESCE(
+                                (
+                                    SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
+                                    FROM live_setlist edit_setlist
+                                    JOIN LATERAL jsonb_object_keys(edit_setlist.band_member) k(band_name)
+                                        ON jsonb_typeof(edit_setlist.band_member) = 'object'
+                                    JOIN band_attrs ba ON ba.band_name = k.band_name
+                                    WHERE edit_setlist.live_id = l.id
+                                ),
+                                ARRAY[]::int[]
+                            )
+                            ELSE l.default_band_ids
+                        END AS band_ids
+                    FROM tour_lives tl
+                    JOIN live_attrs l ON l.id = tl.live_id
+                    LEFT JOIN venue_list v ON v.id = l.venue_id
+                    WHERE tl.tour_id = %s
+                    ORDER BY l.live_date, l.id
+                    """,
+                    (tour_id,),
+                )
+                stop_rows = cur.fetchall()
+    except HTTPException:
+        raise
+    except QueryCanceled as exc:
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    return {
+        "tour_id": tour_id,
+        "tour_title": str(header[0]),
+        "band_ids": explicit_band_ids,
+        "stops": [
+            {
+                "live_id": int(row[0]),
+                "live_date": row[1],
+                "live_title": str(row[2]),
+                "venue": row[3],
+                "stop_label": row[4],
+                "band_ids": list(row[5] or []),
+            }
+            for row in stop_rows
+        ],
     }
 
 
@@ -210,19 +363,19 @@ def create_tour(
     try:
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
-                _validate_tour_relations(cur, payload, None)
+                ordered_live_ids = _validate_tour_relations(cur, payload, None)
                 cur.execute(
                     """
-                    INSERT INTO tour_attrs (tour_title, url, description)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO tour_attrs (tour_title)
+                    VALUES (%s)
                     RETURNING id
                     """,
-                    (payload.tour_title, payload.url, payload.description),
+                    (payload.tour_title,),
                 )
                 created_row = cur.fetchone()
                 assert created_row is not None
                 tour_id = int(created_row[0])
-                _insert_tour_relations(cur, tour_id, payload)
+                _insert_tour_relations(cur, tour_id, payload, ordered_live_ids)
                 _write_console_audit_log(
                     cur,
                     user_id=context.user.id,
@@ -276,14 +429,14 @@ def update_tour(
                 count_row = cur.fetchone()
                 assert count_row is not None
                 previous_band_count, previous_stop_count = int(count_row[0]), int(count_row[1])
-                _validate_tour_relations(cur, payload, tour_id)
+                ordered_live_ids = _validate_tour_relations(cur, payload, tour_id)
                 cur.execute(
-                    "UPDATE tour_attrs SET tour_title = %s, url = %s, description = %s WHERE id = %s",
-                    (payload.tour_title, payload.url, payload.description, tour_id),
+                    "UPDATE tour_attrs SET tour_title = %s, url = NULL, description = NULL WHERE id = %s",
+                    (payload.tour_title, tour_id),
                 )
                 cur.execute("DELETE FROM tour_bands WHERE tour_id = %s", (tour_id,))
                 cur.execute("DELETE FROM tour_lives WHERE tour_id = %s", (tour_id,))
-                _insert_tour_relations(cur, tour_id, payload)
+                _insert_tour_relations(cur, tour_id, payload, ordered_live_ids)
                 _write_console_audit_log(
                     cur,
                     user_id=context.user.id,
