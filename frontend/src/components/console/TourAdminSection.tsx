@@ -7,6 +7,7 @@ import {
   getTours,
   updateConsoleTour,
   type ConsoleTourLiveCandidate,
+  type ConsoleTourMutationResponse,
   type ConsoleTourUpsertPayload,
   type TourSummary,
 } from "../../api";
@@ -73,6 +74,7 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
   const [submitting, setSubmitting] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState("");
+  const [insertedTours, setInsertedTours] = useState<ConsoleTourMutationResponse["item"][]>([]);
 
   const resetForm = () => {
     setSelectedTourId(null);
@@ -82,15 +84,16 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
     setBandMenuOpen(false);
     setBandMenuPos(null);
     setStops([]);
+    setCandidateQuery("");
+    setCandidatePage(1);
+    setCandidateTotalPages(1);
+    setCandidates([]);
     setMessage("");
   };
 
-  const loadTourList = async (preferredTourId?: number) => {
+  const loadTourList = async () => {
     const response = await getTours(1, 20);
     setTours(response.items);
-    if (preferredTourId !== undefined && response.items.some((tour) => tour.tour_id === preferredTourId)) {
-      setSelectedTourId(preferredTourId);
-    }
   };
 
   useEffect(() => {
@@ -175,11 +178,11 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
     }
   };
 
-  const queryCandidates = async () => {
+  const queryCandidates = async (query = candidateQuery) => {
     setCandidateLoading(true);
     setCandidatePage(1);
     try {
-      const response = await getConsoleTourLiveCandidates(candidateQuery, 1, 20);
+      const response = await getConsoleTourLiveCandidates(query, 1, 20);
       setCandidates(response.items);
       setCandidateTotalPages(response.total_pages);
     } catch (error) {
@@ -204,12 +207,10 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
         return;
       }
       const existingIds = new Set(stops.map((stop) => stop.live_id));
-      const eligible = response.items.filter((candidate) =>
-        (candidate.tour_id === null || candidate.tour_id === selectedTourId)
-        && !existingIds.has(candidate.live_id));
+      const eligible = response.items.filter((candidate) => !existingIds.has(candidate.live_id));
       const skippedCount = response.items.length - eligible.length;
       setStops((current) => sortStops([...current, ...eligible.map(candidateToDraft)]));
-      setMessage(`已添加 ${eligible.length} 场${skippedCount > 0 ? `，跳过 ${skippedCount} 场已关联或已选 Live` : ""}。`);
+      setMessage(`已添加 ${eligible.length} 场${skippedCount > 0 ? `，跳过 ${skippedCount} 场已选 Live` : ""}。`);
     } catch (error) {
       setMessage(`一键添加失败：${errorMessage(error)}`);
     } finally {
@@ -251,14 +252,17 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
     setSubmitting(true);
     setMessage("");
     try {
-      const response = isNew
+      const wasNew = isNew;
+      const response = wasNew
         ? await createConsoleTour(payload, auth.csrfToken)
         : await updateConsoleTour(selectedTourId as number, payload, auth.csrfToken);
       setConfirming(false);
-      setMessage(`${isNew ? "创建" : "更新"}巡演成功：#${response.item.tour_id} ${response.item.tour_title}`);
-      await loadTourList(response.item.tour_id);
-      await loadSelectedTour(response.item.tour_id);
-      await queryCandidates();
+      if (wasNew) {
+        setInsertedTours((current) => [response.item, ...current]);
+      }
+      resetForm();
+      await Promise.all([loadTourList(), queryCandidates("")]);
+      setMessage(`${wasNew ? "创建" : "更新"}巡演成功：#${response.item.tour_id} ${response.item.tour_title}`);
       onTourDataChanged?.();
     } catch (error) {
       setConfirming(false);
@@ -285,7 +289,7 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
           <option value="">选择要编辑的巡演</option>
           {tours.map((tour) => <option key={tour.tour_id} value={tour.tour_id}>#{tour.tour_id} {tour.tour_title}</option>)}
         </select>
-        <button type="button" className="console-ghost-btn" onClick={resetForm}>新建巡演</button>
+        <button type="button" className="console-ghost-btn" onClick={() => { resetForm(); void queryCandidates(""); }}>新建巡演</button>
       </div>
 
       <div className="tour-admin-fields">
@@ -351,20 +355,18 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
         </div>
         <div className="console-table-wrap">
           <table className="console-admin-table tour-candidate-table">
-            <thead><tr><th>日期</th><th>Live</th><th>场地</th><th>当前巡演</th><th>操作</th></tr></thead>
+            <thead><tr><th>日期</th><th>Live</th><th>场地</th><th>操作</th></tr></thead>
             <tbody>
               {candidates.map((candidate) => {
-                const belongsElsewhere = candidate.tour_id !== null && candidate.tour_id !== selectedTourId;
                 const alreadyAdded = stops.some((stop) => stop.live_id === candidate.live_id);
                 return (
-                  <tr key={candidate.live_id} className={belongsElsewhere ? "tour-candidate-conflict" : ""}>
+                  <tr key={candidate.live_id}>
                     <td>{candidate.live_date}</td><td>#{candidate.live_id} {candidate.live_title}</td><td>{candidate.venue ?? "-"}</td>
-                    <td>{candidate.tour_title ?? "未关联"}</td>
-                    <td><button type="button" className="console-submit-btn" disabled={belongsElsewhere || alreadyAdded} onClick={() => addCandidate(candidate)}>{belongsElsewhere ? "已占用" : alreadyAdded ? "已添加" : "添加"}</button></td>
+                    <td><button type="button" className="console-submit-btn" disabled={alreadyAdded} onClick={() => addCandidate(candidate)}>{alreadyAdded ? "已添加" : "添加"}</button></td>
                   </tr>
                 );
               })}
-              {!candidateLoading && candidates.length === 0 && <tr><td colSpan={5}>没有符合条件的 Live</td></tr>}
+              {!candidateLoading && candidates.length === 0 && <tr><td colSpan={4}>没有符合条件的 Live</td></tr>}
             </tbody>
           </table>
         </div>
@@ -394,7 +396,7 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
       </div>
 
       <div className="console-submit-row">
-        <button type="button" className="console-ghost-btn" onClick={resetForm}>清空</button>
+        <button type="button" className="console-ghost-btn" onClick={() => { resetForm(); void queryCandidates(""); }}>清空</button>
         <button type="button" className="console-submit-btn" disabled={!canSubmit || loading} onClick={() => setConfirming(true)}>{isNew ? "创建巡演" : "保存修改"}</button>
       </div>
 
@@ -431,6 +433,24 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
           </div>
         </div>
       )}
+
+      <div className="console-table-wrap live-history-wrap">
+        <table className="console-admin-table live-history-table tour-history-table" aria-label="新增巡演记录">
+          <thead><tr><th>tour_id</th><th>tour_title</th><th>band_count</th><th>stop_count</th></tr></thead>
+          <tbody>
+            {insertedTours.length === 0 ? (
+              <tr><td colSpan={4} className="empty-cell">暂无新增巡演记录</td></tr>
+            ) : insertedTours.map((tour) => (
+              <tr key={tour.tour_id}>
+                <td>{tour.tour_id}</td>
+                <td>{tour.tour_title}</td>
+                <td>{tour.band_count}</td>
+                <td>{tour.stop_count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
