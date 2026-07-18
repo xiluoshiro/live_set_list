@@ -1258,6 +1258,7 @@ function App() {
     [userDisplayName],
   );
   const liveArchiveNavigationActive = tab === "all" || tab === "favorites"
+    || tab === "performance_group_detail"
     || (tab === "detail" && (previousTab === "all" || previousTab === "favorites"));
   const tourArchiveNavigationActive = tab === "tours" || tab === "tour_detail"
     || (tab === "detail" && (previousTab === "tours" || previousTab === "tour_detail"));
