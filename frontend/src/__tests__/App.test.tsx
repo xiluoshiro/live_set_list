@@ -22,6 +22,7 @@ import {
   getLives,
   getMyFavoriteLives,
   getPerformances,
+  getPerformanceGroupDetail,
   getTourDetail,
   getTourStatistics,
   getTours,
@@ -35,6 +36,7 @@ import {
   type LiveDetailResponse,
   type LivesResponse,
   type PerformancesResponse,
+  type PerformanceGroupDetailResponse,
   type TourDetailResponse,
   type TourStatisticsResponse,
   type ToursResponse,
@@ -56,6 +58,7 @@ vi.mock("../api", () => ({
   logout: vi.fn(),
   getMyFavoriteLives: vi.fn(),
   getPerformances: vi.fn(),
+  getPerformanceGroupDetail: vi.fn(),
   getTours: vi.fn(),
   getTourDetail: vi.fn(),
   getTourStatistics: vi.fn(),
@@ -89,6 +92,7 @@ vi.mock("../logger", () => ({
 
 const getLivesMock = vi.mocked(getLives);
 const getPerformancesMock = vi.mocked(getPerformances);
+const getPerformanceGroupDetailMock = vi.mocked(getPerformanceGroupDetail);
 const searchCatalogMock = vi.mocked(searchCatalog);
 const getCatalogBandsMock = vi.mocked(getCatalogBands);
 const getCatalogBandLivesMock = vi.mocked(getCatalogBandLives);
@@ -159,6 +163,46 @@ function makePerformancesResponse(params: {
   return {
     items: livesResp.items.map((live) => ({ kind: "live" as const, live })),
     pagination: livesResp.pagination,
+  };
+}
+
+function makePerformanceGroupDetailResponse(): PerformanceGroupDetailResponse {
+  return {
+    group_id: 88,
+    group_title: "示例多日 Live",
+    start_date: "2026-08-01",
+    end_date: "2026-08-02",
+    day_count: 2,
+    live_count: 2,
+    display_type: "multi_day",
+    bands: [{ band_id: 1, band_name: "Band 1", band_abbr: "B1" }],
+    venues: ["测试场地"],
+    lives: [
+      {
+        live_id: 801,
+        live_date: "2026-08-01",
+        live_title: "示例多日 Live DAY 1",
+        live_type: "oneman",
+        start_time: "18:00:00+09:00",
+        venue: "测试场地",
+        bands: [1],
+        url: null,
+        is_favorite: false,
+        has_setlist: true,
+      },
+      {
+        live_id: 802,
+        live_date: "2026-08-02",
+        live_title: "示例多日 Live DAY 2",
+        live_type: "oneman",
+        start_time: "18:00:00+09:00",
+        venue: "测试场地",
+        bands: [1],
+        url: null,
+        is_favorite: false,
+        has_setlist: true,
+      },
+    ],
   };
 }
 
@@ -378,6 +422,7 @@ describe("App", () => {
     Reflect.deleteProperty(window, "cancelIdleCallback");
     getLivesMock.mockReset();
     getPerformancesMock.mockReset();
+    getPerformanceGroupDetailMock.mockReset();
     searchCatalogMock.mockReset();
     getCatalogBandsMock.mockReset();
     getCatalogBandLivesMock.mockReset();
@@ -418,6 +463,7 @@ describe("App", () => {
       ),
     );
     getToursMock.mockResolvedValue(makeToursResponse());
+    getPerformanceGroupDetailMock.mockResolvedValue(makePerformanceGroupDetailResponse());
     getTourDetailMock.mockResolvedValue(makeTourDetailResponse());
     getTourStatisticsMock.mockResolvedValue(makeTourStatisticsResponse());
     peekMyFavoriteLivesMock.mockReturnValue(undefined);
@@ -924,6 +970,37 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "取消收藏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入收藏" })).not.toBeInTheDocument();
+  });
+
+  // 测试点：从演出资料打开多日活动组详情后，主导航仍应把它归入演出资料。
+  test("多日 Live 详情保持演出资料导航高亮", async () => {
+    getPerformancesMock.mockResolvedValue({
+      items: [{
+        kind: "performance_group",
+        performance_group: {
+          kind: "performance_group",
+          group_id: 88,
+          group_title: "示例多日 Live",
+          start_date: "2026-08-01",
+          end_date: "2026-08-02",
+          day_count: 2,
+          live_count: 2,
+          display_type: "multi_day",
+          bands: [{ band_id: 1, band_name: "Band 1", band_abbr: "B1" }],
+          venues: ["测试场地"],
+        },
+      }],
+      pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+    });
+    const user = userEvent.setup();
+    renderApp();
+
+    await openAllContent(user);
+    await user.click(await screen.findByRole("button", { name: "示例多日 Live" }));
+
+    await waitFor(() => expect(getPerformanceGroupDetailMock).toHaveBeenCalledWith(88));
+    expect(screen.getByRole("navigation", { name: "活动组场次" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
   });
 
   // 测试点：巡演资料复用演出列表的筛选、总计、内容顺序和 pager 间距容器。
