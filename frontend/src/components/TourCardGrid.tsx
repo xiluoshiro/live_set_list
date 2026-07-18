@@ -1,4 +1,5 @@
 import type { TourSummary } from "../api";
+import { BandIconsCell } from "./BandIconsCell";
 
 type TourCardGridProps = {
   tours: TourSummary[];
@@ -34,24 +35,27 @@ export function TourCardGrid({
 
   return (
     <>
-      <div className="tour-card-grid">
+      <div className="live-card-grid">
         {tours.map((tour) => (
-          <article className="tour-card" key={tour.tour_id}>
-            <div className="tour-card-head">
-              <span className="tour-card-date">{formatDateRange(tour)}</span>
-              <span className="tour-card-count">已收录 {tour.collected_live_count} 场</span>
+          <article className="live-card" key={tour.tour_id} onClick={() => onOpenTour(tour)}>
+            <div className="live-card-head">
+              <span className="live-card-date">{formatDateRange(tour)}</span>
+              <span className="live-card-type">已收录 {tour.collected_live_count} 场</span>
             </div>
-            <button type="button" className="tour-card-title" onClick={() => onOpenTour(tour)}>
-              {tour.tour_title}
-            </button>
-            <div className="tour-band-list" aria-label="参与乐队">
-              {tour.bands.length > 0
-                ? tour.bands.map((band) => <span key={band.band_id}>{band.band_name}</span>)
-                : <span>暂无乐队资料</span>}
-            </div>
-            <div className="tour-card-actions">
-              <button type="button" onClick={() => onOpenTour(tour)}>查看巡演</button>
-              {tour.url && <a href={tour.url} target="_blank" rel="noreferrer">来源 ↗</a>}
+            <span className="live-card-title">{tour.tour_title}</span>
+            <div className="live-card-footer">
+              <BandIconsCell icons={tour.bands.map((band) => band.band_id)} rowId={tour.tour_id} />
+              {tour.url ? (
+                <a
+                  href={tour.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="live-card-url"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  🔗
+                </a>
+              ) : null}
             </div>
           </article>
         ))}
