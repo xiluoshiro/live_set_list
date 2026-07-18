@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { LiveDetailResponse, TourRef } from "../api";
+import type { LiveDetailResponse, PerformanceGroupRef, TourRef } from "../api";
 import { MemberStatusTable } from "./DetailMemberTable";
 import { DetailTitleLink } from "./DetailTitleLink";
 import { formatLiveType } from "./console/constants";
@@ -18,6 +18,7 @@ type LiveDetailContentProps = {
   fallback: LiveDetailFallback;
   headerAction?: ReactNode;
   onOpenTour?: (tour: TourRef) => void;
+  onOpenPerformanceGroup?: (group: PerformanceGroupRef, sourceLiveId: number) => void;
   showTourReference?: boolean;
 };
 
@@ -43,6 +44,7 @@ export function LiveDetailContent({
   fallback,
   headerAction,
   onOpenTour,
+  onOpenPerformanceGroup,
   showTourReference = true,
 }: LiveDetailContentProps) {
   const bandNamesText = detailData
@@ -68,6 +70,12 @@ export function LiveDetailContent({
         <p className="detail-inline-item detail-inline-item-type"><strong>类型：</strong><span>{formatLiveType(detailData?.live_type ?? "")}</span></p>
       </div>
       <p className="detail-row"><strong>乐队：</strong><span>{bandNamesText}</span></p>
+      {detailData?.performance_group && onOpenPerformanceGroup && (
+        <p className="detail-row">
+          <strong>活动组：</strong>
+          <button type="button" className="detail-tour-link" onClick={() => onOpenPerformanceGroup(detailData.performance_group as PerformanceGroupRef, detailData.live_id)}>查看活动组: {detailData.performance_group.group_title}</button>
+        </p>
+      )}
       {showTourReference && detailData?.tour && onOpenTour && (
         <p className="detail-row">
           <strong>巡演：</strong>

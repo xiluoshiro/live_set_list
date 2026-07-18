@@ -201,6 +201,22 @@ describe("console lookup api", () => {
     }));
   });
 
+  // 测试点：聚合管理使用专用控制台接口读取全部活动组，不依赖公共演出分页。
+  test("getConsolePerformanceGroups 请求专用活动组列表", async () => {
+    fetchMock.mockResolvedValueOnce(makeJsonResponse({
+      items: [
+        { group_id: 1, group_title: "Group A" },
+        { group_id: 2, group_title: "Group B" },
+      ],
+    }));
+    const { getConsolePerformanceGroups } = await import("../api");
+
+    const payload = await getConsolePerformanceGroups();
+
+    expect(payload.items).toHaveLength(2);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/performance-groups");
+  });
+
   test("console lookup 错误响应会转换为 ApiError", async () => {
     // 测试点：只读查询遇到后端结构化认证错误时，应沿用统一 ApiError 解析。
     fetchMock.mockResolvedValueOnce(

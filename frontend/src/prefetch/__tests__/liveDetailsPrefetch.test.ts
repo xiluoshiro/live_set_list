@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { getLiveDetailsBatch, getLives, getMyFavoriteLives, type LiveItem } from "../../api";
+import { getLiveDetailsBatch, getPerformances, type LiveItem } from "../../api";
 import {
   prefetchCurrentPageDetails,
   scheduleIdleFavoritePagePrefetch,
@@ -8,13 +8,11 @@ import {
 } from "../liveDetailsPrefetch";
 
 vi.mock("../../api", () => ({
-  getLives: vi.fn(),
-  getMyFavoriteLives: vi.fn(),
+  getPerformances: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
 }));
 
-const getLivesMock = vi.mocked(getLives);
-const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
+const getPerformancesMock = vi.mocked(getPerformances);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
 
 function makeLiveItem(id: number): LiveItem {
@@ -31,11 +29,10 @@ function makeLiveItem(id: number): LiveItem {
 
 describe("liveDetailsPrefetch", () => {
   beforeEach(() => {
-    getLivesMock.mockReset();
-    getMyFavoriteLivesMock.mockReset();
+    getPerformancesMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
     getLiveDetailsBatchMock.mockResolvedValue({ items: [], missing_live_ids: [] });
-    getMyFavoriteLivesMock.mockResolvedValue({
+    getPerformancesMock.mockResolvedValue({
       items: [],
       pagination: { page: 1, page_size: 20, total: 0, total_pages: 1 },
     });
@@ -74,7 +71,7 @@ describe("liveDetailsPrefetch", () => {
 
     scheduleIdleNextPagePrefetch({ page: 2, pageSize: 20, totalPages: 2 });
     expect(requestIdleCallback).not.toHaveBeenCalled();
-    expect(getLivesMock).not.toHaveBeenCalled();
+    expect(getPerformancesMock).not.toHaveBeenCalled();
   });
 
   test("scheduleIdleNextPagePrefetch 取消后不会触发下一页请求", async () => {
@@ -99,7 +96,7 @@ describe("liveDetailsPrefetch", () => {
     await Promise.resolve();
 
     expect(cancelIdleCallback).toHaveBeenCalledWith(7);
-    expect(getLivesMock).not.toHaveBeenCalled();
+    expect(getPerformancesMock).not.toHaveBeenCalled();
     expect(getLiveDetailsBatchMock).not.toHaveBeenCalled();
   });
 
@@ -107,11 +104,32 @@ describe("liveDetailsPrefetch", () => {
     // 测试点：浏览器不支持 idle API 时应直接返回 noop，不抛错。
     const cancel = scheduleIdleNextPagePrefetch({ page: 1, pageSize: 20, totalPages: 3 });
     expect(() => cancel()).not.toThrow();
-    expect(getLivesMock).not.toHaveBeenCalled();
+    expect(getPerformancesMock).not.toHaveBeenCalled();
   });
 
-  test("scheduleIdleFavoritePagePrefetch 会在空闲时预读收藏第一页", async () => {
-    // 测试点：已登录场景下，空闲预读会提前拉取收藏页第一页数据。
+  test("scheduleIdleFavoritePagePrefetch 只预读收藏投影中的单场详情", async () => {
+    // 测试点：收藏统一投影中的活动组 ID 不会被误当作 live_id 预读。
+    getPerformancesMock.mockResolvedValue({
+      items: [
+        { kind: "live", live: makeLiveItem(8) },
+        {
+          kind: "performance_group",
+          performance_group: {
+            kind: "performance_group",
+            group_id: 8,
+            group_title: "Group 8",
+            start_date: "2026-03-28",
+            end_date: "2026-03-29",
+            day_count: 2,
+            live_count: 2,
+            display_type: "multi_day",
+            bands: [],
+            venues: [],
+          },
+        },
+      ],
+      pagination: { page: 1, page_size: 20, total: 2, total_pages: 1 },
+    });
     const requestIdleCallback = vi.fn((callback: (deadline: IdleDeadline) => void) => {
       callback({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
       return 1;
@@ -119,8 +137,8 @@ describe("liveDetailsPrefetch", () => {
     (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = requestIdleCallback;
 
     scheduleIdleFavoritePagePrefetch(20);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([8]));
 
-    expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20);
+    expect(getPerformancesMock).toHaveBeenCalledWith(1, 20, "favorites");
   });
 });

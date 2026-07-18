@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getLiveDetail, type LiveDetailResponse, type TourRef } from "../api";
+import { getLiveDetail, type LiveDetailResponse, type PerformanceGroupRef, type TourRef } from "../api";
 import { logError } from "../logger";
 import { LiveDetailContent, type LiveDetailFallback } from "./LiveDetailContent";
 
@@ -8,9 +8,10 @@ interface LiveDetailPageProps {
   fallback: LiveDetailFallback;
   onBack: () => void;
   onOpenTour: (tour: TourRef) => void;
+  onOpenPerformanceGroup?: (group: PerformanceGroupRef, sourceLiveId: number) => void;
 }
 
-export function LiveDetailPage({ liveId, fallback, onBack, onOpenTour }: LiveDetailPageProps) {
+export function LiveDetailPage({ liveId, fallback, onBack, onOpenTour, onOpenPerformanceGroup }: LiveDetailPageProps) {
   const [detailData, setDetailData] = useState<LiveDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -56,6 +57,7 @@ export function LiveDetailPage({ liveId, fallback, onBack, onOpenTour }: LiveDet
         detailError={detailError}
         fallback={fallback}
         onOpenTour={onOpenTour}
+        onOpenPerformanceGroup={onOpenPerformanceGroup}
         headerAction={<button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回"><span className="modal-action-glyph close">✕</span></button>}
       />
     </div>

@@ -92,6 +92,7 @@ function Probe() {
       <p data-testid="favorite-1">{String(favorites.favoriteLiveIdSet.has(1))}</p>
       <p data-testid="favorite-3">{String(favorites.favoriteLiveIdSet.has(3))}</p>
       <p data-testid="warning">{favorites.favoriteSyncWarning ?? ""}</p>
+      <p data-testid="projection-version">{favorites.projectionVersion}</p>
       <button type="button" onClick={() => void favorites.toggleFavorite(1)}>
         toggle-1
       </button>
@@ -143,11 +144,13 @@ describe("FavoriteProvider", () => {
   });
 
   test("同条目快速连点时保持单飞，并在首轮完成后补发第二轮同步", async () => {
-    // 测试点：in-flight 期间第二次点击不并发；首轮完成后应按最新意图补发下一轮请求。
+    // 测试点：快速连点串行收敛后才递增服务端投影版本，避免收藏列表过早回源。
     const firstCall = deferred<void>();
     unfavoriteLiveMock.mockImplementationOnce(() => firstCall.promise);
     const user = userEvent.setup();
     renderProvider();
+    await waitFor(() => expect(Number(screen.getByTestId("projection-version").textContent)).toBeGreaterThan(0));
+    const initialProjectionVersion = Number(screen.getByTestId("projection-version").textContent);
 
     expect(screen.getByTestId("favorite-1")).toHaveTextContent("true");
     await user.click(screen.getByRole("button", { name: "toggle-1" }));
@@ -165,6 +168,7 @@ describe("FavoriteProvider", () => {
     await waitFor(() => expect(screen.getByTestId("sync-1")).toHaveTextContent("false"));
     expect(screen.getByTestId("favorite-1")).toHaveTextContent("true");
     expect(favoriteLiveMock).toHaveBeenCalledTimes(1);
+    expect(Number(screen.getByTestId("projection-version").textContent)).toBeGreaterThan(initialProjectionVersion);
   });
 
   test("单次失败保留乐观态，连续三次失败后展示统一提示，成功后清零", async () => {

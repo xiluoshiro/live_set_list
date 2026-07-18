@@ -28,6 +28,7 @@ import { PageTitle } from "./PageTitle";
 import { SectionTabs } from "./SectionTabs";
 import { LiveInsertTab } from "./console/LiveInsertTab";
 import { SongAdminSection } from "./console/SongAdminSection";
+import { PerformanceGroupAdminSection } from "./console/PerformanceGroupAdminSection";
 import { TourAdminSection } from "./console/TourAdminSection";
 import {
   INITIAL_SETLIST_ROWS,
@@ -1742,6 +1743,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           { value: "setlist", label: "新增Setlist" },
           { value: "song", label: "新增歌曲" },
           { value: "tour", label: "巡演管理" },
+          { value: "performance_group", label: "活动组管理" },
         ]}
         onChange={setMode}
       />
@@ -1873,6 +1875,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
       {mode === "tour" && (
         <TourAdminSection bands={bands} onTourDataChanged={onLiveDataChanged} />
+      )}
+
+      {mode === "performance_group" && (
+        <PerformanceGroupAdminSection csrfToken={auth.csrfToken ?? ""} onGroupDataChanged={onLiveDataChanged} />
       )}
 
       {pendingConfirmation && (

@@ -1,4 +1,4 @@
-import { getLiveDetailsBatch, getLives, getMyFavoriteLives, type LiveItem } from "../api";
+import { getLiveDetailsBatch, getPerformances, type LiveItem, type PerformanceItem } from "../api";
 
 type IdleWindow = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback) => number;
@@ -29,6 +29,10 @@ export async function prefetchCurrentPageDetails(items: LiveItem[]): Promise<voi
   await getLiveDetailsBatch(liveIds);
 }
 
+function performanceLiveItems(items: PerformanceItem[]): LiveItem[] {
+  return items.flatMap((item) => item.kind === "live" ? [item.live] : []);
+}
+
 export function scheduleIdleNextPagePrefetch(params: IdlePrefetchParams): () => void {
   const { page, pageSize, totalPages } = params;
   if (page >= totalPages) return () => undefined;
@@ -41,9 +45,9 @@ export function scheduleIdleNextPagePrefetch(params: IdlePrefetchParams): () => 
     if (canceled) return;
     void (async () => {
       try {
-        const nextPageData = await getLives(page + 1, pageSize);
+        const nextPageData = await getPerformances(page + 1, pageSize, "all");
         if (canceled) return;
-        await prefetchCurrentPageDetails(nextPageData.items);
+        await prefetchCurrentPageDetails(performanceLiveItems(nextPageData.items));
       } catch {
         // 预读失败不影响主流程。
       }
@@ -65,7 +69,9 @@ export function scheduleIdleFavoritePagePrefetch(pageSize: 15 | 20): () => void 
   let canceled = false;
   const handle = win.requestIdleCallback(() => {
     if (canceled) return;
-    void getMyFavoriteLives(1, pageSize).catch(() => undefined);
+    void getPerformances(1, pageSize, "favorites")
+      .then((data) => prefetchCurrentPageDetails(performanceLiveItems(data.items)))
+      .catch(() => undefined);
   });
 
   return () => {
