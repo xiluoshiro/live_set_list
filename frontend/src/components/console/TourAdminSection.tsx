@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   createConsoleTour,
+  getConsoleTour,
   getConsoleTourLiveCandidates,
-  getTourDetail,
   getTours,
   updateConsoleTour,
   type ConsoleTourLiveCandidate,
@@ -11,7 +11,7 @@ import {
   type TourSummary,
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
-import type { BandOption } from "./types";
+import type { BandOption, Position } from "./types";
 
 type DraftStop = {
   live_id: number;
@@ -19,6 +19,7 @@ type DraftStop = {
   live_title: string;
   venue: string | null;
   stop_label: string;
+  band_ids: number[];
 };
 
 type TourAdminSectionProps = {
@@ -26,27 +27,42 @@ type TourAdminSectionProps = {
   onTourDataChanged?: () => void;
 };
 
-function moveItem<T>(items: T[], index: number, direction: -1 | 1): T[] {
-  const target = index + direction;
-  if (target < 0 || target >= items.length) return items;
-  const next = [...items];
-  [next[index], next[target]] = [next[target], next[index]];
-  return next;
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function sortStops(stops: DraftStop[]): DraftStop[] {
+  return [...stops].sort(
+    (left, right) => left.live_date.localeCompare(right.live_date) || left.live_id - right.live_id,
+  );
+}
+
+function candidateToDraft(candidate: ConsoleTourLiveCandidate): DraftStop {
+  return {
+    live_id: candidate.live_id,
+    live_date: candidate.live_date,
+    live_title: candidate.live_title,
+    venue: candidate.venue,
+    stop_label: "",
+    band_ids: candidate.band_ids,
+  };
+}
+
 export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionProps) {
   const auth = useAuth();
+  const sortedBands = useMemo(
+    () => bands.filter((band) => band.band_id > 0).sort((left, right) => left.band_id - right.band_id),
+    [bands],
+  );
   const [tours, setTours] = useState<TourSummary[]>([]);
   const [selectedTourId, setSelectedTourId] = useState<number | null>(null);
   const [isNew, setIsNew] = useState(true);
   const [tourTitle, setTourTitle] = useState("");
-  const [url, setUrl] = useState("");
-  const [description, setDescription] = useState("");
-  const [bandIds, setBandIds] = useState<number[]>([]);
+  const [selectedBandIds, setSelectedBandIds] = useState<number[]>([]);
+  const [bandMenuOpen, setBandMenuOpen] = useState(false);
+  const [bandMenuPos, setBandMenuPos] = useState<Position | null>(null);
+  const bandTriggerRef = useRef<HTMLButtonElement>(null);
+  const bandMenuRef = useRef<HTMLDivElement>(null);
   const [stops, setStops] = useState<DraftStop[]>([]);
   const [candidateQuery, setCandidateQuery] = useState("");
   const [candidatePage, setCandidatePage] = useState(1);
@@ -62,9 +78,9 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
     setSelectedTourId(null);
     setIsNew(true);
     setTourTitle("");
-    setUrl("");
-    setDescription("");
-    setBandIds([]);
+    setSelectedBandIds([]);
+    setBandMenuOpen(false);
+    setBandMenuPos(null);
     setStops([]);
     setMessage("");
   };
@@ -100,24 +116,58 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
     return () => { canceled = true; };
   }, [candidatePage]);
 
+  const positionBandMenu = () => {
+    const rect = bandTriggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const menuWidth = Math.max(rect.width, 320);
+    const estimatedHeight = Math.min(320, window.innerHeight * 0.6);
+    const below = rect.bottom + 6;
+    const top = below + estimatedHeight <= window.innerHeight
+      ? below
+      : Math.max(rect.top - estimatedHeight - 6, 4);
+    setBandMenuPos({
+      top,
+      left: Math.min(rect.left, window.innerWidth - menuWidth - 12),
+      width: menuWidth,
+    });
+  };
+
+  useEffect(() => {
+    if (!bandMenuOpen) return;
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (bandTriggerRef.current?.contains(target)) return;
+      if (bandMenuRef.current?.contains(target)) return;
+      setBandMenuOpen(false);
+    };
+    const close = () => setBandMenuOpen(false);
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", positionBandMenu, { passive: true });
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", positionBandMenu);
+    };
+  }, [bandMenuOpen]);
+
   const loadSelectedTour = async (tourId: number) => {
     setLoading(true);
     setMessage("");
     try {
-      const detail = await getTourDetail(tourId);
+      const detail = await getConsoleTour(tourId);
       setSelectedTourId(tourId);
       setIsNew(false);
       setTourTitle(detail.tour_title);
-      setUrl(detail.url ?? "");
-      setDescription(detail.description ?? "");
-      setBandIds(detail.bands.map((band) => band.band_id));
-      setStops(detail.stops.map((stop) => ({
+      setSelectedBandIds([...detail.band_ids].sort((left, right) => left - right));
+      setStops(sortStops(detail.stops.map((stop) => ({
         live_id: stop.live_id,
         live_date: stop.live_date,
         live_title: stop.live_title,
         venue: stop.venue,
         stop_label: stop.stop_label ?? "",
-      })));
+        band_ids: stop.band_ids,
+      }))));
     } catch (error) {
       setMessage(`加载巡演详情失败：${errorMessage(error)}`);
     } finally {
@@ -141,35 +191,60 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
 
   const addCandidate = (candidate: ConsoleTourLiveCandidate) => {
     if (stops.some((stop) => stop.live_id === candidate.live_id)) return;
-    const next = [...stops, {
-      live_id: candidate.live_id,
-      live_date: candidate.live_date,
-      live_title: candidate.live_title,
-      venue: candidate.venue,
-      stop_label: "",
-    }].sort((left, right) => left.live_date.localeCompare(right.live_date) || left.live_id - right.live_id);
-    setStops(next);
+    setStops((current) => sortStops([...current, candidateToDraft(candidate)]));
   };
 
-  const toggleBand = (bandId: number) => {
-    setBandIds((current) => current.includes(bandId)
-      ? current.filter((item) => item !== bandId)
-      : [...current, bandId]);
+  const addAllFilteredCandidates = async () => {
+    setCandidateLoading(true);
+    setMessage("");
+    try {
+      const response = await getConsoleTourLiveCandidates(candidateQuery, 1, 500);
+      if (response.total > 500) {
+        setMessage("筛选结果超过 500 场，请缩小查询范围后再一键添加。");
+        return;
+      }
+      const existingIds = new Set(stops.map((stop) => stop.live_id));
+      const eligible = response.items.filter((candidate) =>
+        (candidate.tour_id === null || candidate.tour_id === selectedTourId)
+        && !existingIds.has(candidate.live_id));
+      const skippedCount = response.items.length - eligible.length;
+      setStops((current) => sortStops([...current, ...eligible.map(candidateToDraft)]));
+      setMessage(`已添加 ${eligible.length} 场${skippedCount > 0 ? `，跳过 ${skippedCount} 场已关联或已选 Live` : ""}。`);
+    } catch (error) {
+      setMessage(`一键添加失败：${errorMessage(error)}`);
+    } finally {
+      setCandidateLoading(false);
+    }
+  };
+
+  const selectedBandsAppear = selectedBandIds.every((bandId) =>
+    stops.some((stop) => stop.band_ids.includes(bandId))
+  );
+  const selectedBandNames = selectedBandIds.length === 0
+    ? "不指定"
+    : selectedBandIds.map((bandId) =>
+      sortedBands.find((band) => band.band_id === bandId)?.band_name ?? `Band #${bandId}`
+    ).join("、");
+
+  const toggleBandMenu = () => {
+    if (bandMenuOpen) {
+      setBandMenuOpen(false);
+      return;
+    }
+    positionBandMenu();
+    setBandMenuOpen(true);
   };
 
   const payload = useMemo<ConsoleTourUpsertPayload>(() => ({
     tour_title: tourTitle.trim(),
-    url: url.trim() || null,
-    description: description.trim() || null,
-    band_ids: bandIds,
-    stops: stops.map((stop, index) => ({
+    band_ids: selectedBandIds,
+    stops: sortStops(stops).map((stop) => ({
       live_id: stop.live_id,
-      stop_order: index + 1,
       stop_label: stop.stop_label.trim() || null,
     })),
-  }), [bandIds, description, stops, tourTitle, url]);
+  }), [selectedBandIds, stops, tourTitle]);
 
-  const canSubmit = payload.tour_title !== "" && payload.band_ids.length > 0 && payload.stops.length > 0;
+  const canSubmit = payload.tour_title !== "" && payload.stops.length > 0 && selectedBandsAppear;
 
   const submit = async () => {
     if (!auth.csrfToken || !canSubmit) return;
@@ -215,38 +290,64 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
 
       <div className="tour-admin-fields">
         <label>巡演名称<input value={tourTitle} maxLength={255} onChange={(event) => setTourTitle(event.target.value)} /></label>
-        <label>官方来源<input value={url} maxLength={2048} placeholder="https://...（可选）" onChange={(event) => setUrl(event.target.value)} /></label>
-        <label className="tour-description-field">简短说明<textarea value={description} maxLength={4000} rows={3} onChange={(event) => setDescription(event.target.value)} /></label>
+        <fieldset className="tour-band-field">
+          <legend>参与乐队</legend>
+          <button
+            ref={bandTriggerRef}
+            type="button"
+            className="bands-picker-trigger tour-band-trigger"
+            onClick={toggleBandMenu}
+            title={selectedBandNames}
+            aria-expanded={bandMenuOpen}
+          >
+            {selectedBandNames}
+          </button>
+        </fieldset>
       </div>
-
-      <div className="tour-admin-block">
-        <h3>参与乐队</h3>
-        <div className="tour-band-picker">
-          {bands.filter((band) => band.band_id > 0).map((band) => (
+      {bandMenuOpen && bandMenuPos && (
+        <div
+          ref={bandMenuRef}
+          className="bands-floating-menu"
+          role="group"
+          aria-label="参与乐队"
+          onMouseDown={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
+          style={{ top: bandMenuPos.top, left: bandMenuPos.left, width: bandMenuPos.width }}
+        >
+          <label>
+            <input
+              type="checkbox"
+              checked={selectedBandIds.length === 0}
+              onChange={() => setSelectedBandIds([])}
+            />
+            <span>不指定</span>
+          </label>
+          {sortedBands.map((band) => (
             <label key={band.band_id}>
-              <input type="checkbox" checked={bandIds.includes(band.band_id)} onChange={() => toggleBand(band.band_id)} />
-              {band.band_name}
+              <input
+                type="checkbox"
+                checked={selectedBandIds.includes(band.band_id)}
+                onChange={() => setSelectedBandIds((current) => current.includes(band.band_id)
+                  ? current.filter((bandId) => bandId !== band.band_id)
+                  : [...current, band.band_id].sort((left, right) => left - right))}
+              />
+              <span>{band.band_id} - {band.band_name}</span>
             </label>
           ))}
         </div>
-        {bandIds.length > 0 && (
-          <ol className="tour-order-list">
-            {bandIds.map((bandId, index) => (
-              <li key={bandId}>
-                <span>{bands.find((band) => band.band_id === bandId)?.band_name ?? `Band #${bandId}`}</span>
-                <button type="button" onClick={() => setBandIds(moveItem(bandIds, index, -1))} disabled={index === 0}>上移</button>
-                <button type="button" onClick={() => setBandIds(moveItem(bandIds, index, 1))} disabled={index === bandIds.length - 1}>下移</button>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
+      )}
+      {!selectedBandsAppear && (
+        <p className="console-admin-hint tour-band-validation" role="alert">
+          每个参与乐队都必须至少出现在一场已选 Live 中。
+        </p>
+      )}
 
       <div className="tour-admin-block">
         <h3>搜索并添加场次</h3>
         <div className="tour-candidate-search">
           <input value={candidateQuery} placeholder="输入 Live ID 或标题" onChange={(event) => setCandidateQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void queryCandidates(); }} />
           <button type="button" className="console-ghost-btn" onClick={() => void queryCandidates()}>查询</button>
+          <button type="button" className="console-ghost-btn" disabled={candidateLoading} onClick={() => void addAllFilteredCandidates()}>一键添加筛选结果</button>
         </div>
         <div className="console-table-wrap">
           <table className="console-admin-table tour-candidate-table">
@@ -268,9 +369,9 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
           </table>
         </div>
         <div className="tour-candidate-pager">
-          <button type="button" onClick={() => setCandidatePage((page) => Math.max(1, page - 1))} disabled={candidateLoading || candidatePage <= 1}>上一页</button>
+          <button type="button" className="console-ghost-btn" onClick={() => setCandidatePage((page) => Math.max(1, page - 1))} disabled={candidateLoading || candidatePage <= 1}>上一页</button>
           <span>第 {candidatePage} / {candidateTotalPages} 页</span>
-          <button type="button" onClick={() => setCandidatePage((page) => Math.min(candidateTotalPages, page + 1))} disabled={candidateLoading || candidatePage >= candidateTotalPages}>下一页</button>
+          <button type="button" className="console-ghost-btn" onClick={() => setCandidatePage((page) => Math.min(candidateTotalPages, page + 1))} disabled={candidateLoading || candidatePage >= candidateTotalPages}>下一页</button>
         </div>
       </div>
 
@@ -278,17 +379,13 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
         <h3>已选场次（{stops.length}）</h3>
         <div className="console-table-wrap">
           <table className="console-admin-table tour-stop-table">
-            <thead><tr><th>顺序</th><th>日期</th><th>Live</th><th>场次标签</th><th>操作</th></tr></thead>
+            <thead><tr><th>日期</th><th>Live</th><th>场地</th><th>场次标签</th><th>操作</th></tr></thead>
             <tbody>
-              {stops.map((stop, index) => (
+              {stops.map((stop) => (
                 <tr key={stop.live_id}>
-                  <td>{index + 1}</td><td>{stop.live_date}</td><td>#{stop.live_id} {stop.live_title}</td>
+                  <td>{stop.live_date}</td><td>#{stop.live_id} {stop.live_title}</td><td>{stop.venue ?? "-"}</td>
                   <td><input aria-label={`场次标签 ${stop.live_id}`} value={stop.stop_label} maxLength={255} onChange={(event) => setStops((current) => current.map((item) => item.live_id === stop.live_id ? { ...item, stop_label: event.target.value } : item))} /></td>
-                  <td className="tour-stop-actions">
-                    <button type="button" onClick={() => setStops(moveItem(stops, index, -1))} disabled={index === 0}>上移</button>
-                    <button type="button" onClick={() => setStops(moveItem(stops, index, 1))} disabled={index === stops.length - 1}>下移</button>
-                    <button type="button" onClick={() => setStops((current) => current.filter((item) => item.live_id !== stop.live_id))}>移除</button>
-                  </td>
+                  <td><button type="button" className="console-ghost-btn" onClick={() => setStops((current) => current.filter((item) => item.live_id !== stop.live_id))}>移除</button></td>
                 </tr>
               ))}
               {stops.length === 0 && <tr><td colSpan={5}>至少添加一场 Live 后才能保存巡演。</td></tr>}
@@ -304,16 +401,32 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
 
       {confirming && (
         <div className="modal-mask" onClick={() => !submitting && setConfirming(false)}>
-          <div className="modal console-confirm-modal wide tour-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="tour-confirm-title" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head"><h2 id="tour-confirm-title">确认{isNew ? "创建" : "更新"}巡演</h2></div>
+          <div className="modal console-confirm-modal compact tour" role="dialog" aria-modal="true" aria-labelledby="tour-confirm-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <h2 id="tour-confirm-title">确认{isNew ? "创建" : "更新"}巡演</h2>
+              <div className="modal-actions">
+                <button type="button" className="modal-action-btn close" aria-label="关闭" disabled={submitting} onClick={() => setConfirming(false)}><span className="modal-action-glyph close">✕</span></button>
+              </div>
+            </div>
             <div className="console-confirm-body">
-              <p><strong>{payload.tour_title}</strong></p>
-              <p>参与乐队：{bandIds.map((bandId) => bands.find((band) => band.band_id === bandId)?.band_name ?? bandId).join("、")}</p>
-              <p>场次数：{stops.length}</p>
-              <ol>{stops.map((stop) => <li key={stop.live_id}>{stop.live_date} · {stop.stop_label || stop.live_title}（Live #{stop.live_id}）</li>)}</ol>
+              <div className="console-confirm-table-wrap">
+                <table className="console-admin-table console-confirm-table">
+                  <tbody>
+                    <tr><th>tour_title</th><td>{payload.tour_title}</td></tr>
+                    <tr><th>band</th><td>{selectedBandNames}</td></tr>
+                    <tr><th>live_count</th><td>{stops.length}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="console-table-wrap console-confirm-setlist-wrap">
+                <table className="console-admin-table console-confirm-setlist-table">
+                  <thead><tr><th>live_date</th><th>live_id</th><th>stop_label</th></tr></thead>
+                  <tbody>{stops.map((stop) => <tr key={stop.live_id}><td>{stop.live_date}</td><td>{stop.live_id}</td><td>{stop.stop_label || "-"}</td></tr>)}</tbody>
+                </table>
+              </div>
             </div>
             <div className="console-confirm-actions">
-              <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirming(false)}>返回编辑</button>
+              <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirming(false)}>取消</button>
               <button type="button" className="console-submit-btn" disabled={submitting} onClick={() => void submit()}>{submitting ? "提交中..." : "确认提交"}</button>
             </div>
           </div>

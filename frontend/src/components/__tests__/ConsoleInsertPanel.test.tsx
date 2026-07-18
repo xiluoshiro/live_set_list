@@ -13,6 +13,7 @@ const apiMocks = vi.hoisted(() => ({
   createConsoleTour: vi.fn(),
   updateConsoleTour: vi.fn(),
   getConsoleTourLiveCandidates: vi.fn(),
+  getConsoleTour: vi.fn(),
   getTours: vi.fn(),
   getTourDetail: vi.fn(),
   getConsoleSongs: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock("../../api", () => ({
   createConsoleTour: apiMocks.createConsoleTour,
   updateConsoleTour: apiMocks.updateConsoleTour,
   getConsoleTourLiveCandidates: apiMocks.getConsoleTourLiveCandidates,
+  getConsoleTour: apiMocks.getConsoleTour,
   getTours: apiMocks.getTours,
   getTourDetail: apiMocks.getTourDetail,
   getConsoleSongs: apiMocks.getConsoleSongs,
@@ -65,6 +67,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.createConsoleTour.mockReset();
     apiMocks.updateConsoleTour.mockReset();
     apiMocks.getConsoleTourLiveCandidates.mockReset();
+    apiMocks.getConsoleTour.mockReset();
     apiMocks.getTours.mockReset();
     apiMocks.getTourDetail.mockReset();
     apiMocks.getConsoleSongs.mockReset();
@@ -1235,16 +1238,19 @@ describe("ConsoleInsertPanel", () => {
     rectSpy.mockRestore();
   });
 
-  // 测试点：巡演管理会前置拦截已占用 Live，并在确认后提交有序乐队与场次完整集合。
+  // 测试点：巡演管理保留可空、多选的乐队复选框，并提交按 ID 排序的完整关系集合。
   test("巡演管理创建巡演并提交完整关系集合", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
-      items: [{ band_id: 1, band_name: "Poppin'Party", band_abbr: "ppp", band_members: [] }],
+      items: [
+        { band_id: 2, band_name: "Roselia", band_abbr: "r", band_members: [] },
+        { band_id: 1, band_name: "Poppin'Party", band_abbr: "ppp", band_members: [] },
+      ],
     });
     apiMocks.getConsoleTourLiveCandidates.mockResolvedValue({
       items: [
-        { live_id: 41, live_date: "2026-05-30", live_title: "Console Draft Live", venue: "Zepp", tour_id: null, tour_title: null },
-        { live_id: 1, live_date: "2026-03-28", live_title: "Occupied Live", venue: "Arena", tour_id: 9, tour_title: "Other Tour" },
+        { live_id: 41, live_date: "2026-05-30", live_title: "Console Draft Live", venue: "Zepp", tour_id: null, tour_title: null, band_ids: [1, 2] },
+        { live_id: 1, live_date: "2026-03-28", live_title: "Occupied Live", venue: "Arena", tour_id: 9, tour_title: "Other Tour", band_ids: [1] },
       ],
       page: 1,
       page_size: 20,
@@ -1253,40 +1259,67 @@ describe("ConsoleInsertPanel", () => {
     });
     apiMocks.createConsoleTour.mockResolvedValue({
       ok: true,
-      item: { tour_id: 7, tour_title: "New Tour", band_count: 1, stop_count: 1 },
+      item: { tour_id: 7, tour_title: "New Tour", band_count: 2, stop_count: 1 },
     });
-    apiMocks.getTourDetail.mockResolvedValue({
+    apiMocks.getConsoleTour.mockResolvedValue({
       tour_id: 7,
       tour_title: "New Tour",
-      url: null,
-      description: null,
-      bands: [{ band_id: 1, band_name: "Poppin'Party", band_abbr: "ppp" }],
-      start_date: "2026-05-30",
-      end_date: "2026-05-30",
-      collected_live_count: 1,
-      stop_labels: ["Final"],
-      stops: [{ live_id: 41, live_date: "2026-05-30", live_title: "Console Draft Live", live_type: "other", venue: "Zepp", bands: [1], url: null, is_favorite: false, has_setlist: false, stop_order: 1, stop_label: "Final" }],
+      band_ids: [1, 2],
+      stops: [{ live_id: 41, live_date: "2026-05-30", live_title: "Console Draft Live", venue: "Zepp", band_ids: [1, 2], stop_label: "Final" }],
     });
 
     render(<ConsoleInsertPanel initialMode="tour" />);
     await waitFor(() => expect(apiMocks.getConsoleTourLiveCandidates).toHaveBeenCalled());
+    expect(screen.queryByText("官方来源")).not.toBeInTheDocument();
+    expect(screen.queryByText("简短说明")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "上移" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "下移" })).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("巡演名称"), "New Tour");
-    await user.click(screen.getByRole("checkbox", { name: "Poppin'Party" }));
+    await user.click(screen.getByRole("button", { name: "不指定" }));
+    expect(screen.getByRole("checkbox", { name: "不指定" })).toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: "2 - Roselia" }));
+    await user.click(screen.getByRole("checkbox", { name: "1 - Poppin'Party" }));
+    expect(screen.getByRole("checkbox", { name: "不指定" })).not.toBeChecked();
     expect(screen.getByRole("button", { name: "已占用" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "添加" }));
     await user.type(screen.getByLabelText("场次标签 41"), "Final");
     await user.click(screen.getByRole("button", { name: "创建巡演" }));
+    expect(screen.getByRole("dialog", { name: "确认创建巡演" })).toHaveClass("compact");
+    expect(screen.getByRole("dialog", { name: "确认创建巡演" })).not.toHaveClass("wide");
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleTour).toHaveBeenCalledWith(
       {
         tour_title: "New Tour",
-        url: null,
-        description: null,
-        band_ids: [1],
-        stops: [{ live_id: 41, stop_order: 1, stop_label: "Final" }],
+        band_ids: [1, 2],
+        stops: [{ live_id: 41, stop_label: "Final" }],
       },
       "csrf-token",
     ));
+  });
+
+  // 测试点：一键添加会获取完整筛选结果，跳过已占用 Live，并按日期自动排列可用场次。
+  test("巡演管理一键添加全部筛选结果", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleTourLiveCandidates.mockImplementation((_query, _page, pageSize) => Promise.resolve({
+      items: pageSize === 500 ? [
+        { live_id: 42, live_date: "2026-06-02", live_title: "Later", venue: "B", tour_id: null, tour_title: null, band_ids: [2] },
+        { live_id: 41, live_date: "2026-05-30", live_title: "Earlier", venue: "A", tour_id: null, tour_title: null, band_ids: [1] },
+        { live_id: 1, live_date: "2026-03-28", live_title: "Occupied", venue: "C", tour_id: 9, tour_title: "Other Tour", band_ids: [1] },
+      ] : [],
+      page: 1,
+      page_size: pageSize,
+      total: pageSize === 500 ? 3 : 0,
+      total_pages: 1,
+    }));
+
+    render(<ConsoleInsertPanel initialMode="tour" />);
+    await waitFor(() => expect(apiMocks.getConsoleTourLiveCandidates).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "一键添加筛选结果" }));
+
+    await waitFor(() => expect(apiMocks.getConsoleTourLiveCandidates).toHaveBeenCalledWith("", 1, 500));
+    const labels = screen.getAllByLabelText(/场次标签/).map((input) => input.getAttribute("aria-label"));
+    expect(labels).toEqual(["场次标签 41", "场次标签 42"]);
+    expect(screen.getByRole("status")).toHaveTextContent("已添加 2 场，跳过 1 场");
   });
 });

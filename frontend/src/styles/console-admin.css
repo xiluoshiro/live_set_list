@@ -187,8 +187,31 @@
   font-weight: 600;
 }
 
-.tour-admin-fields input,
+.tour-band-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tour-band-field legend {
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.tour-band-trigger {
+  display: block;
+  width: 100%;
+  min-height: 39px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tour-admin-fields input:not([type="checkbox"]),
 .tour-admin-fields textarea,
+.tour-admin-fields select,
 .tour-candidate-search input,
 .tour-stop-table input,
 .tour-admin-toolbar select {
@@ -198,10 +221,6 @@
   background: var(--surface-input);
   color: var(--text-main);
   font: inherit;
-}
-
-.tour-description-field {
-  grid-column: 1 / -1;
 }
 
 .tour-admin-block {
@@ -215,42 +234,12 @@
   margin: 0 0 12px;
 }
 
-.tour-band-picker {
-  display: flex;
-  gap: 10px 16px;
-  flex-wrap: wrap;
-}
-
-.tour-band-picker label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.tour-order-list {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 0;
-}
-
-.tour-order-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tour-order-list li span {
-  min-width: 180px;
-}
-
 .tour-candidate-conflict {
   opacity: .62;
 }
 
-.tour-stop-actions {
-  display: flex;
-  gap: 6px;
-  white-space: nowrap;
+.tour-band-validation {
+  color: var(--accent-danger);
 }
 
 .tour-candidate-pager {
@@ -258,9 +247,9 @@
   margin-top: 10px;
 }
 
-.tour-confirm-modal ol {
-  max-height: 42vh;
-  overflow: auto;
+.console-confirm-modal.tour .console-confirm-setlist-table {
+  width: 100%;
+  min-width: 0;
 }
 
 @media (max-width: 720px) {
@@ -268,9 +257,6 @@
     grid-template-columns: 1fr;
   }
 
-  .tour-description-field {
-    grid-column: auto;
-  }
 }
 
 .modal.console-confirm-modal {

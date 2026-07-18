@@ -37,14 +37,14 @@ live_attrs 1 ── N live_setlist N ── 1 song_list
 
 使用关联表而不是直接在 `live_attrs` 增加 `tour_id`，原因是：
 
-- 场次顺序属于关系本身。
+- `stop_order` 保留为关系字段，但控制台保存时始终按 Live 日期和 ID 重建，不接受人工排序。
 - 场次标签属于关系本身。
 - 删除巡演时只需删除关系，不改变 Live 主数据。
 - 将来若确认存在多归属需求，可以移除 `live_id` 唯一约束而不重构 Live 表。
 
 ### 巡演乐队显式维护
 
-新增 `tour_bands`，不从 setlist 自动持久化巡演参与乐队。setlist 可能未录入，也可能包含嘉宾或联合出演，不能替代巡演级资料。
+新增 `tour_bands` 保存可选的显式参与乐队。空集合表示未指定，此时公共读取动态聚合全部场次的有效乐队；非空集合中的每个乐队必须至少出现在一场所选 Live 中。
 
 ### 聚合字段查询时计算
 
@@ -210,7 +210,7 @@ tour: TourRef | None = None
 
 - Tour 不存在返回 `404`。
 - 返回 Tour 摘要和完整 `stops`。
-- `stops` 按 `stop_order ASC`，再以 `live_id ASC` 防御性稳定排序。
+- `stops` 按 `live_date ASC, live_id ASC` 返回；写入时同步生成连续 `stop_order`。
 - `has_setlist` 使用 `EXISTS`，不加载 setlist 明细。
 - 登录用户批量查询 stops 对应的收藏状态；匿名统一为 `false`。
 - Tour 意外没有关联 Live 时视为数据异常，返回 `500` 并记录日志，不伪装成正常空详情。
@@ -250,11 +250,9 @@ tours: list[TourSummary]
 ```json
 {
   "tour_title": "Ave Mujica LIVE TOUR 2026「Exitus」",
-  "url": "https://example.com/tours/exitus",
-  "description": null,
   "band_ids": [9],
   "stops": [
-    {"live_id": 45, "stop_order": 1, "stop_label": "福冈公演"}
+    {"live_id": 45, "stop_label": "福冈公演"}
   ]
 }
 ```
@@ -263,10 +261,10 @@ tours: list[TourSummary]
 
 - 要求 `editor+` 和有效 CSRF。
 - `tour_title` trim 后非空，最长 255。
-- `url` trim 后为空规范化为 `null`，非空最长 2048。
-- `description` 可空，非空最长 4000。
-- `band_ids` 至少一项、最多 100 项，必须全部存在；按请求顺序保存并拒绝重复。
-- `stops` 至少一项、最多 500 项；`live_id`、`stop_order` 均不得重复。
+- `tour_attrs.url / description` 作为 V13 兼容列保留，但控制台不再录入；读取来源改为日期最早场次的 Live URL，说明固定返回 `null`。
+- `band_ids` 可以为空，最多 100 项，必须全部存在；后端去重校验并按 ID 排序。
+- `band_ids` 非空时，每个 Band 都必须出现在至少一场所选 Live 的有效乐队中。
+- `stops` 至少一项、最多 500 项；`live_id` 不得重复，顺序由服务端按日期和 ID 生成。
 - 所有 Live 必须存在且尚未属于其他 Tour。
 - 在一个事务中写入 Tour、乐队和场次；任一步失败全部回滚。
 - 写一条汇总审计日志，不为每个 stop 单独写日志。
@@ -348,12 +346,12 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 
 控制台新增“巡演管理”模式：
 
-1. 输入巡演标题、来源和说明。
-2. 使用现有 band lookup 选择参与乐队并调整显示顺序。
+1. 输入巡演标题。
+2. 使用按 Band ID 排列的下拉式复选框选择零个或多个参与乐队；空选择显示“不指定”。
 3. 使用分页 Live lookup 搜索场次；候选显示日期、标题、场地和当前 Tour 状态。
 4. 已属于其他 Tour 的 Live 在选择前置灰并显示所属 Tour，不等提交后才告知。
-5. 新加入场次默认按 `live_date ASC, live_id ASC` 重排。
-6. editor 可以修改 stop label、拖动/按钮调整顺序和移除关联。
+5. 支持一次添加当前筛选命中的全部未占用 Live；超过 500 条时要求缩小范围。
+6. 所有场次始终按 `live_date ASC, live_id ASC` 排列；editor 可以修改 stop label 和移除关联。
 7. 提交前显示完整确认页；创建和更新复用现有控制台确认交互。
 
 写接口仍保留服务端 `409` 作为并发和绕过 UI 的最终保护。
@@ -372,7 +370,7 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 - 控制台写入统一要求 `require_role("editor")` 和 `assert_valid_csrf`。
 - SQL 值全部参数化；排序只从固定枚举映射到 SQL。
 - 关联替换必须在单一事务完成。
-- 审计日志记录 Tour ID、标题、band 数、stop 数、受影响 Live ID 和操作类型；避免把完整 description 重复写入日志。
+- 审计日志记录 Tour ID、标题、band 数、stop 数、受影响 Live ID 和操作类型。
 - API 错误日志记录 ID 和数量，不记录 session cookie、CSRF token 或凭据。
 
 ## 测试设计

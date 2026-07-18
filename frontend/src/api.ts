@@ -353,14 +353,11 @@ export type ConsoleLiveSetlistAppendResponse = {
 
 export type ConsoleTourStopPayload = {
   live_id: number;
-  stop_order: number;
   stop_label: string | null;
 };
 
 export type ConsoleTourUpsertPayload = {
   tour_title: string;
-  url: string | null;
-  description: string | null;
   band_ids: number[];
   stops: ConsoleTourStopPayload[];
 };
@@ -382,6 +379,7 @@ export type ConsoleTourLiveCandidate = {
   venue: string | null;
   tour_id: number | null;
   tour_title: string | null;
+  band_ids: number[];
 };
 
 export type ConsoleTourLiveCandidatesResponse = {
@@ -390,6 +388,20 @@ export type ConsoleTourLiveCandidatesResponse = {
   page_size: number;
   total: number;
   total_pages: number;
+};
+
+export type ConsoleTourEditResponse = {
+  tour_id: number;
+  tour_title: string;
+  band_ids: number[];
+  stops: Array<{
+    live_id: number;
+    live_date: string;
+    live_title: string;
+    venue: string | null;
+    stop_label: string | null;
+    band_ids: number[];
+  }>;
 };
 
 type AuthErrorPayload = {
@@ -417,6 +429,7 @@ type RequestKind =
   | "console_song_batch_create"
   | "console_live_setlist_append"
   | "console_tour_live_candidates"
+  | "console_tour_detail"
   | "console_tour_create"
   | "console_tour_update"
   | "catalog_search"
@@ -849,6 +862,13 @@ export async function getConsoleTourLiveCandidates(
     { requestKind: "console_tour_live_candidates" },
   );
   return expectJsonResponse<ConsoleTourLiveCandidatesResponse>(response);
+}
+
+export async function getConsoleTour(tourId: number): Promise<ConsoleTourEditResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/tours/${tourId}`, undefined, {
+    requestKind: "console_tour_detail",
+  });
+  return expectJsonResponse<ConsoleTourEditResponse>(response);
 }
 
 export async function getTours(
