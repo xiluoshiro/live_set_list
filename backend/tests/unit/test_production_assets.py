@@ -69,7 +69,7 @@ def test_production_deploy_script_has_release_safety_guards():
     assert "wait_for_backend" in deploy_script
 
 
-# 测试点：tag 发布工作流必须先让服务器分类候选包，且只自动部署 app-only release。
+# 测试点：tag workflow 必须显式迁移并校验同一个 CI test DB，再只自动部署 app-only release。
 def test_release_workflow_prepares_candidate_before_app_only_deploy():
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
@@ -87,8 +87,10 @@ def test_release_workflow_prepares_candidate_before_app_only_deploy():
     assert "(cd dist-release && sha256sum" in workflow
     assert "redgate/flyway:12.11.0" in workflow
     assert "redgate/flyway:latest" not in workflow
+    assert "-environment=test migrate" in workflow
     assert "Verify database ownership contract" in workflow
     assert "backend/db/postgres/checks/ownership_contract.sql" in workflow
+    assert "-d live_statistic_test" in workflow
 
 
 # 测试点：共享 owner 契约必须覆盖业务对象、Flyway 历史表和角色继承三类边界。
