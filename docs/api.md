@@ -41,6 +41,10 @@
   - 单条 Live 详情查询
 - `POST /api/lives/details:batch`
   - 批量详情预读接口
+- `GET /api/catalog/tours`
+  - 公共巡演聚合列表，匿名可用
+- `GET /api/catalog/tours/{tour_id}`
+  - 公共巡演详情和已收录场次，匿名可用
 - `GET /api/catalog/search`
   - 公共资料库搜索，匿名可用，按 Live、乐队 / 艺人、歌曲、场地分组返回结果
 - `GET /api/catalog/bands`
@@ -94,6 +98,7 @@
 - `q` 会 trim；空字符串等同于未传，最大长度为 `255`，匹配 Live 标题、场地、歌曲、乐队名和乐队缩写
 - `year` 范围为 `1900..2100`
 - `live_type` 只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
+- Live 列表项、收藏列表项、乐队 Live、catalog 搜索 Live、单详情和批量详情都会返回 `tour`；未归入巡演时为 `null`，已归入时为 `{tour_id, tour_title}`
 - `band_id` 必须大于等于 `1`；有 setlist 时按 `live_setlist.band_member` 判断，无 setlist 时按 `live_attrs.default_band_ids` 判断
 - `sort` 只允许 `date_desc` 或 `date_asc`，默认 `date_desc`
 - 多个筛选条件按 AND 组合；文本值使用参数绑定并转义 `%`、`_`、`\`
@@ -154,7 +159,7 @@
 
 ### 5. 公共 catalog 接口
 
-`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/stats`、`GET /api/catalog/statistics?scope=all` 用于匿名可访问的公共资料库搜索、浏览与统计。
+`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/tours`、`GET /api/catalog/tours/{tour_id}`、`GET /api/catalog/stats`、`GET /api/catalog/statistics?scope=all` 用于匿名可访问的公共资料库搜索、浏览与统计。
 
 - 上述公共读取默认不要求登录；只有 `GET /api/catalog/statistics?scope=favorites` 要求当前 session 已登录。
 - 登录用户访问搜索结果或乐队 Live 列表时，Live 项的 `is_favorite` 会按当前用户收藏计算；匿名请求统一返回 `false`。
@@ -181,6 +186,18 @@
   - 页码超过最后一页时会自动钳制到最后一页
   - 未找到乐队时返回 `404`
   - Live 结果按 `live_date DESC, id DESC` 排序
+- `GET /api/catalog/tours`
+  - `page_size` 当前只允许 `15` 或 `20`，超过最后一页会钳制到最后一页
+  - `q` 匹配巡演名称、场次标签和关联 Live 标题，并转义 `%`、`_`、`\`
+  - `year` 表示至少一场已收录 Live 位于该年份；跨年巡演可以命中多个年份
+  - `band_id` 只匹配 `tour_bands` 中显式维护的巡演乐队，不从 setlist 推断
+  - 默认按已收录场次的最晚日期倒序；升序按最早日期排序
+  - 只返回至少关联一场 Live 的巡演，日期范围和 `collected_live_count` 均由当前关联实时聚合
+- `GET /api/catalog/tours/{tour_id}`
+  - 场次按 `tour_lives.stop_order` 返回
+  - `has_setlist` 只表示是否至少存在一行 setlist，不加载 setlist 明细
+  - 登录用户的场次带当前用户 `is_favorite`；匿名统一为 `false`
+  - 页面文案应使用“已收录 N 场”，不能把当前关联数描述成官方总场数
 - `GET /api/catalog/stats`
   - `years` 返回数据库实际存在的 Live 年份，按降序排列
   - 前端年份筛选只显示年份本身，不显示命中数量

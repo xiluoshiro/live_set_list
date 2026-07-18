@@ -7,6 +7,9 @@ TRUNCATE TABLE
     public.auth_sessions,
     public.user_live_favorites,
     public.app_users,
+    public.tour_lives,
+    public.tour_bands,
+    public.tour_attrs,
     public.live_setlist,
     public.live_attrs,
     public.song_list,
@@ -108,6 +111,24 @@ VALUES
         'other',
         ARRAY[3]
     );
+
+INSERT INTO public.tour_attrs (id, tour_title, url, description)
+VALUES (
+    1,
+    'BanG Dream! Spring Tour 2026',
+    'https://example.com/tours/spring-2026',
+    'Integration fixture for public tour aggregation.'
+);
+
+INSERT INTO public.tour_bands (tour_id, band_id, display_order)
+VALUES
+    (1, 1, 1),
+    (1, 2, 2);
+
+INSERT INTO public.tour_lives (tour_id, live_id, stop_order, stop_label)
+VALUES
+    (1, 1, 1, 'Tokyo Opening'),
+    (1, 2, 2, 'Tokyo Finale');
 
 INSERT INTO public.live_setlist (
     live_id,
@@ -439,5 +460,6 @@ VALUES
 SELECT setval('public.live_attrs_id_seq', (SELECT MAX(id) FROM public.live_attrs), true);
 SELECT setval('public.song_list_id_seq', (SELECT MAX(id) FROM public.song_list), true);
 SELECT setval('public.venue_list_id_seq', (SELECT MAX(id) FROM public.venue_list), true);
+SELECT setval('public.tour_attrs_id_seq', (SELECT MAX(id) FROM public.tour_attrs), true);
 
 COMMIT;

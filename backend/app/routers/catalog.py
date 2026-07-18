@@ -18,6 +18,7 @@ from app.schemas import (
     ErrorResponse,
     ValidationErrorResponse,
 )
+from app.tour_refs import build_tour_ref_from_row
 
 router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 logger = get_logger(__name__)
@@ -53,6 +54,7 @@ def _live_item_from_row(row: tuple[Any, ...], favorite_live_ids: set[int]) -> di
         "url": row[4],
         "live_type": row[5],
         "is_favorite": live_id in favorite_live_ids,
+        "tour": build_tour_ref_from_row(row, tour_id_index=6, tour_title_index=7),
     }
 
 
@@ -89,10 +91,16 @@ live_rows AS (
             ARRAY[]::int[]
         ) AS band_ids,
         l.url,
-        l.live_type
+        l.live_type,
+        tour.id AS tour_id,
+        tour.tour_title
     FROM live_attrs l
     JOIN matched_live_ids m
         ON m.id = l.id
+    LEFT JOIN tour_lives tour_live
+        ON tour_live.live_id = l.id
+    LEFT JOIN tour_attrs tour
+        ON tour.id = tour_live.tour_id
     LEFT JOIN live_setlist ls
         ON l.id = ls.live_id
     LEFT JOIN LATERAL (
@@ -101,9 +109,9 @@ live_rows AS (
     ) bm ON true
     LEFT JOIN band_attrs b
         ON b.band_name = bm.band_name
-    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type
+    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, tour.id, tour.tour_title
 )
-SELECT id, live_date, live_title, band_ids, url, live_type
+SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title
 FROM live_rows
 ORDER BY live_date DESC, id DESC
 LIMIT %s
@@ -224,10 +232,16 @@ live_rows AS (
             ARRAY[]::int[]
         ) AS band_ids,
         l.url,
-        l.live_type
+        l.live_type,
+        tour.id AS tour_id,
+        tour.tour_title
     FROM live_attrs l
     JOIN matched_live_ids m
         ON m.id = l.id
+    LEFT JOIN tour_lives tour_live
+        ON tour_live.live_id = l.id
+    LEFT JOIN tour_attrs tour
+        ON tour.id = tour_live.tour_id
     LEFT JOIN live_setlist ls
         ON l.id = ls.live_id
     LEFT JOIN LATERAL (
@@ -236,9 +250,9 @@ live_rows AS (
     ) bm ON true
     LEFT JOIN band_attrs b
         ON b.band_name = bm.band_name
-    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type
+    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, tour.id, tour.tour_title
 )
-SELECT id, live_date, live_title, band_ids, url, live_type
+SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title
 FROM live_rows
 ORDER BY live_date DESC, id DESC
 LIMIT %s OFFSET %s

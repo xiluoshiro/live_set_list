@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, Field
 
+from app.schemas.tours import TourRef
+
 MAX_BATCH_LIVE_IDS = 100
 
 
@@ -16,6 +18,7 @@ class LiveItem(BaseModel):
     bands: list[int] = Field(..., description='Deduplicated band IDs sorted ascending')
     url: str | None = Field(default=None, description='Live URL from live_attrs.url')
     is_favorite: bool = Field(..., description='Whether the current user has favorited this live')
+    tour: TourRef | None = Field(default=None, description='Tour reference when this live belongs to a tour')
 
 
 class LivesPagination(BaseModel):
@@ -67,6 +70,7 @@ class LiveDetailResponse(BaseModel):
     band_names: list[str] = Field(..., description='Band names ordered by display rules')
     url: str | None = Field(default=None, description='Live URL from live_attrs.url')
     is_favorite: bool = Field(..., description='Whether the current user has favorited this live')
+    tour: TourRef | None = Field(default=None, description='Tour reference when this live belongs to a tour')
     detail_rows: list[LiveDetailRow] = Field(..., description='Detailed song rows for the live')
 
 

@@ -198,9 +198,15 @@ def build_filtered_live_queries(
                 l.live_title,
                 l.url,
                 l.live_type,
-                l.default_band_ids
+                l.default_band_ids,
+                tour.id AS tour_id,
+                tour.tour_title
             FROM live_attrs l
             {favorite_join}
+            LEFT JOIN tour_lives tour_live
+                ON tour_live.live_id = l.id
+            LEFT JOIN tour_attrs tour
+                ON tour.id = tour_live.tour_id
             WHERE {where_sql}
             ORDER BY {order_sql}
             LIMIT %s OFFSET %s
@@ -211,7 +217,9 @@ def build_filtered_live_queries(
             matched.live_title,
             {band_ids_sql} AS band_ids,
             matched.url,
-            matched.live_type
+            matched.live_type,
+            matched.tour_id,
+            matched.tour_title
         FROM matched_lives matched
         LEFT JOIN live_setlist setlist
             ON setlist.live_id = matched.id
@@ -227,7 +235,9 @@ def build_filtered_live_queries(
             matched.live_title,
             matched.url,
             matched.live_type,
-            matched.default_band_ids
+            matched.default_band_ids,
+            matched.tour_id,
+            matched.tour_title
         ORDER BY {result_order_sql}
     """
     return count_query, matched_params, page_query, matched_params

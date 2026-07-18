@@ -53,6 +53,7 @@ def test_get_lives_includes_seeded_live_without_setlist(integration_test_client)
         "bands": [3],
         "url": "https://example.com/lives/console-draft",
         "is_favorite": False,
+        "tour": None,
     }
 
 

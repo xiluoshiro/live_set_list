@@ -14,6 +14,7 @@ from app.routers.console import router as console_router
 from app.routers.health import router as health_router
 from app.routers.lives import router as lives_router
 from app.routers.me import router as me_router
+from app.routers.tours import router as tours_router
 from app.schemas import RootResponse
 
 setup_logging()
@@ -114,6 +115,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(lives_router)
     app.include_router(catalog_router)
+    app.include_router(tours_router)
     app.include_router(auth_router)
     app.include_router(me_router)
     app.include_router(console_router)

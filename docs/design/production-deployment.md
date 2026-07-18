@@ -8,8 +8,8 @@
 
 - 生产 VM、同源入口、私有 PostgreSQL、备份、Nginx 和 HTTPS/公开访问基线已经落地；首次生产数据迁移也已完成。
 - tag 驱动的 GitHub Actions 已验证可完成隔离 CI、白名单出包、`production` 审批、SSH 上传、服务器端备份/切换/回滚和公网 smoke test。
-- 生产数据库已从 V9 手工迁移至 V11，并完成新应用 release 切换与 health 验收；仓库 migration 已继续推进到 V12，生产是否已应用 V12 必须以 Actions、VM attestation 和 `flyway info` 复核后更新 runbook。
-- 两阶段 migration 发布代码、VM root-owned 入口、sudoers 和 GitHub 配置已完成：tag 自动分类，migration 与 deploy 由两个显式人工阶段控制，服务器端使用 root-only attestation 约束应用切换；仓库已有 `v2026-07-17-001` 至 `v2026-07-17-003`，仍需补齐 V12 生产结果记录和 staging 六类场景演练。
+- 生产数据库已从 V9 手工迁移至 V11，并完成新应用 release 切换与 health 验收；仓库 migration 已继续推进到 V13，生产是否已应用 V12/V13 必须以 Actions、VM attestation 和 `flyway info` 复核后更新 runbook。
+- 两阶段 migration 发布代码、VM root-owned 入口、sudoers 和 GitHub 配置已完成：tag 自动分类，migration 与 deploy 由两个显式人工阶段控制，服务器端使用 root-only attestation 约束应用切换；仓库已有 `v2026-07-17-001` 至 `v2026-07-17-003`，仍需补齐 V12/V13 生产结果记录和 staging 六类场景演练。
 - 剩余重点从“能否上线”转为 staging、监控告警、安全头、Host 限制、备份异地保存和 migration 自动化前的安全设计。
 - 推荐采用同源部署：公网只暴露 `https://<domain>`，静态前端由反向代理托管，`/api/*` 反代到后端，PostgreSQL 只允许后端内网访问。
 - 上线前的最后验收应包含功能检查、浏览器实测、生产环境健康检查、备份恢复演练和回滚演练。
@@ -176,7 +176,7 @@ PostgreSQL: private network only
 - [x] 建立部署验收清单和回滚步骤。
 - [x] GitHub Actions tag 出包、production 审批、SSH 自动部署与公网 smoke test。
 - [x] 完成 V9 -> V11 生产 migration、应用切换和数据库 health 验收。
-- [ ] 核对并记录 V12 对应 tag 的 Actions、attestation、生产 Flyway version 与公网 smoke 结果；未核对前不把生产 schema 写成 V12。
+- [ ] 核对并记录 V12/V13 对应 release 的 Actions、attestation、生产 Flyway version 与公网 smoke 结果；未核对前不把生产 schema 写成 V12 或 V13。
 
 ### P0 已新增仓库入口
 
@@ -200,7 +200,7 @@ PostgreSQL: private network only
 - [ ] 为后端、前端静态服务、数据库、磁盘空间、证书过期设置监控。
 - [ ] 增加 staging 环境，先在 staging 完成真实域名、HTTPS、迁移、备份演练。
 - [x] 在生产 VM 安装两阶段 migration 入口，完成 sudoers 和 GitHub repository secrets/variables/Environments 配置。
-- [ ] 核对 `v2026-07-17-*` 中 V12 migration release 的 prepare、attestation、应用切换和公网 smoke，并把生产结果写回 runbook。
+- [ ] 核对 `v2026-07-17-*` 中 V12 migration release 及后续 V13 release 的 prepare、attestation、应用切换和公网 smoke，并把生产结果写回 runbook。
 - [ ] 在 staging 完成 app-only、migration 成功、migration 失败、attestation 篡改、重复执行、应用切换失败六类场景演练。
 - [ ] 对公共搜索、列表、详情批量接口增加流量保护策略。
 - [x] 补充生产部署 runbook、`infra/production/README.md` 和 GitHub Actions 配置说明。

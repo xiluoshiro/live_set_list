@@ -15,7 +15,7 @@
 - 首个完整成功的自动发布 tag 为 `v2026-07-14-006`。
 - 首个 migration release 已完成：生产数据库从 V9 升至 V11，新 release 已切换、后端数据库 health 验收成功。
 
-两阶段 migration 发布代码、VM root-owned 入口、deploy-only sudoers 和 GitHub repository secrets/variables/Environments 已完成配置。仓库已有 `v2026-07-17-001` 至 `v2026-07-17-003`；但 tag 存在不等价于生产 migration 已验收。本文当前可确认的生产记录仍是 V11，仓库最新 migration 是 V12；确认 V12 状态时必须同时核对 Actions、VM release state / attestation 与生产 `flyway info`，再补写执行记录。
+两阶段 migration 发布代码、VM root-owned 入口、deploy-only sudoers 和 GitHub repository secrets/variables/Environments 已完成配置。仓库已有 `v2026-07-17-001` 至 `v2026-07-17-003`；但 tag 存在不等价于生产 migration 已验收。本文当前可确认的生产记录仍是 V11，仓库最新 migration 是 V13；确认 V12/V13 状态时必须同时核对 Actions、VM release state / attestation 与生产 `flyway info`，再补写执行记录。
 
 ## 生产拓扑与目录
 
@@ -293,7 +293,7 @@ sudo systemctl status livesetlist-backup.service --no-pager
 1. **已完成**：VM 入口安装、sudoers 校验、Flyway 镜像预拉取和备份 service 验证。
 2. **已完成**：合并并推送 workflow 代码。
 3. **已完成**：配置 repository secrets/variables，保留 `production` 并新建 `production-migration` Environment。
-4. **已完成 tag 创建**：仓库已有 `v2026-07-17-001` 至 `v2026-07-17-003`。其中 V12 相对本文已确认的生产 V11 属于 migration 变化，应被 prepare 分类为 `migration-needed`。
+4. **已完成 tag 创建**：仓库已有 `v2026-07-17-001` 至 `v2026-07-17-003`。其中 V12 相对本文已确认的生产 V11 属于 migration 变化，应被 prepare 分类为 `migration-needed`；后续包含 V13 的 release 同样必须走 migration 两阶段流程。
 5. **仍需按外部状态确认并记录**：在 Actions Summary 核对不带 `v` 的 version、归档 SHA-256、prepare 分类和状态文件；不要仅凭本地 tag 判断部署成功。
 6. migration release 手动运行 `Migration release control`：先选 `migrate` / `MIGRATE`；检查备份、Flyway 输出、attestation 和旧应用读写。
 7. 验收通过后再次运行同一 workflow：选 `deploy` / `DEPLOY`；完成应用切换和公网 smoke。两次手工阶段始终使用同一 version 和 SHA-256，不再推送 tag。完成后把生产版本与 Flyway version 写回本节和“已执行记录”。
