@@ -1274,7 +1274,7 @@ describe("ConsoleInsertPanel", () => {
     rectSpy.mockRestore();
   });
 
-  // 测试点：确认创建时展示场次名称，成功后清空编辑区并追加新增记录。
+  // 测试点：确认创建时以巡演名称计算 short_title，提交仍使用原始 Live 关系。
   test("巡演管理创建巡演并提交完整关系集合", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -1285,7 +1285,7 @@ describe("ConsoleInsertPanel", () => {
     });
     apiMocks.getConsoleTourLiveCandidates.mockResolvedValue({
       items: [
-        { live_id: 41, live_date: "2026-05-30", live_title: "Console Draft Live", venue: "Zepp", tour_id: null, tour_title: null, band_ids: [1, 2] },
+        { live_id: 41, live_date: "2026-05-30", live_title: "New Tour 福岡公演", venue: "Zepp", tour_id: null, tour_title: null, band_ids: [1, 2] },
       ],
       page: 1,
       page_size: 20,
@@ -1300,7 +1300,7 @@ describe("ConsoleInsertPanel", () => {
       tour_id: 7,
       tour_title: "New Tour",
       band_ids: [1, 2],
-      stops: [{ live_id: 41, live_date: "2026-05-30", live_title: "Console Draft Live", venue: "Zepp", band_ids: [1, 2], stop_label: "Final" }],
+      stops: [{ live_id: 41, live_date: "2026-05-30", live_title: "New Tour 福岡公演", venue: "Zepp", band_ids: [1, 2], stop_label: "Final" }],
     });
 
     render(<ConsoleInsertPanel initialMode="tour" />);
@@ -1323,8 +1323,9 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("dialog", { name: "确认创建巡演" })).not.toHaveClass("wide");
     const confirmDialog = within(screen.getByRole("dialog", { name: "确认创建巡演" }));
     expect(confirmDialog.queryByText("stop_label")).not.toBeInTheDocument();
-    expect(confirmDialog.getByRole("columnheader", { name: "live_name" })).toBeInTheDocument();
-    expect(confirmDialog.getByText("Console Draft Live")).toBeInTheDocument();
+    expect(confirmDialog.getByRole("columnheader", { name: "short_title" })).toBeInTheDocument();
+    expect(confirmDialog.getByText("福岡公演")).toBeInTheDocument();
+    expect(confirmDialog.queryByText("New Tour 福岡公演")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleTour).toHaveBeenCalledWith(

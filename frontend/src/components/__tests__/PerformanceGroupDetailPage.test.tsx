@@ -140,8 +140,8 @@ describe("PerformanceGroupDetailPage", () => {
     });
   });
 
-  // 测试点：显示日期范围（start_date - end_date）
-  test("displays date range with start_date — end_date", async () => {
+  // 测试点：活动组概览不重复显示日期范围，日期只保留在选中 Live 自身详情中。
+  test("omits the aggregate date range", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(
       makeDetailResponse({ start_date: "2025-04-26", end_date: "2025-04-27" }),
     );
@@ -149,7 +149,8 @@ describe("PerformanceGroupDetailPage", () => {
     render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText("2025-04-26 — 2025-04-27")).toBeInTheDocument();
+      expect(screen.queryByText("已收录日期：")).not.toBeInTheDocument();
+      expect(screen.queryByText("2025-04-26 — 2025-04-27")).not.toBeInTheDocument();
     });
   });
 
@@ -215,20 +216,19 @@ describe("PerformanceGroupDetailPage", () => {
     });
   });
 
-  // 测试点：活动组场次按日期分段，同一天的场次保留在同一日期区块。
-  test("groups live navigation by date", async () => {
+  // 测试点：活动组场次复用巡演的单行短标题导航，不显示日期分组或开演时间。
+  test("renders a flat short-title navigation like tour stops", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
-    const { container } = render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
 
     await waitFor(() => {
-      const firstDate = container.querySelector('time[datetime="2025-04-26"]')?.closest("section");
-      const secondDate = container.querySelector('time[datetime="2025-04-27"]')?.closest("section");
-      expect(firstDate).not.toBeNull();
-      expect(secondDate).not.toBeNull();
-      expect(within(firstDate as HTMLElement).getByRole("button", { name: /DAY 1/ })).toBeInTheDocument();
-      expect(within(secondDate as HTMLElement).getByRole("button", { name: /DAY 2: Roselia/ })).toBeInTheDocument();
-      expect(within(secondDate as HTMLElement).getByRole("button", { name: /After Party/ })).toBeInTheDocument();
+      const nav = screen.getByRole("navigation", { name: "活动组场次" });
+      expect(within(nav).getAllByRole("button")).toHaveLength(3);
+      expect(nav.querySelector("time")).toBeNull();
+      expect(nav.querySelectorAll(".tour-stop-separator")).toHaveLength(2);
+      expect(nav).not.toHaveTextContent("2025-04-26");
+      expect(nav).not.toHaveTextContent("18:00");
     });
   });
 
@@ -267,8 +267,8 @@ describe("PerformanceGroupDetailPage", () => {
     });
   });
 
-  // 测试点：详情按后端规范顺序展示日期区块及同日开演时间，不把场次重新排乱。
-  test("preserves canonical date and start-time order", async () => {
+  // 测试点：隐藏日期和时间后仍严格保留后端给出的日期、开演时间规范顺序。
+  test("preserves canonical live order without time suffixes", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
     render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
@@ -279,10 +279,27 @@ describe("PerformanceGroupDetailPage", () => {
       const texts = buttons.map((b) => b.textContent ?? "");
       expect(texts[0]).toContain("DAY 1: Poppin'Party");
       expect(texts[1]).toContain("DAY 2: Roselia");
-      expect(texts[1]).toContain("17:30");
       expect(texts[2]).toContain("After Party");
-      expect(texts[2]).toContain("20:00");
+      expect(texts.join(" ")).not.toContain("17:30");
+      expect(texts.join(" ")).not.toContain("20:00");
     });
+  });
+
+  // 测试点：活动组内选中 Live 若属于巡演，应显示并可点击巡演反向入口。
+  test("opens tour information from the selected grouped live", async () => {
+    getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
+    getLiveDetailMock.mockResolvedValue({
+      ...makeLiveDetailResponse(101),
+      tour: { tour_id: 9, tour_title: "MyGO!!!!! ZEPP TOUR 2025" },
+    });
+    const onOpenTour = vi.fn();
+    const user = userEvent.setup();
+
+    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} onOpenTour={onOpenTour} />);
+
+    const tourLink = await screen.findByRole("button", { name: "MyGO!!!!! ZEPP TOUR 2025" });
+    await user.click(tourLink);
+    expect(onOpenTour).toHaveBeenCalledWith({ tour_id: 9, tour_title: "MyGO!!!!! ZEPP TOUR 2025" });
   });
 
   // 测试点：从普通 Live 的反向入口进入活动组时默认选中来源 Live。

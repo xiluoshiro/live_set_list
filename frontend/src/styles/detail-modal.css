@@ -169,6 +169,7 @@
   display: flex;
   align-items: flex-start;
   gap: 6px;
+  margin: 8px 0 0;
 }
 
 .detail-meta-line {
@@ -176,7 +177,7 @@
   align-items: baseline;
   gap: 24px;
   flex-wrap: wrap;
-  margin: 8px 0;
+  margin: 8px 0 0;
 }
 
 .detail-inline-item {
