@@ -223,6 +223,13 @@ export type TourDetailResponse = TourSummary & {
   stops: TourStopItem[];
 };
 
+export type TourListFilters = {
+  q?: string;
+  year?: number;
+  bandId?: number;
+  sort?: "date_desc" | "date_asc";
+};
+
 export type LiveDetailsBatchResponse = {
   items: LiveDetailResponse[];
   missing_live_ids: number[];
@@ -344,6 +351,47 @@ export type ConsoleLiveSetlistAppendResponse = {
   };
 };
 
+export type ConsoleTourStopPayload = {
+  live_id: number;
+  stop_order: number;
+  stop_label: string | null;
+};
+
+export type ConsoleTourUpsertPayload = {
+  tour_title: string;
+  url: string | null;
+  description: string | null;
+  band_ids: number[];
+  stops: ConsoleTourStopPayload[];
+};
+
+export type ConsoleTourMutationResponse = {
+  ok: boolean;
+  item: {
+    tour_id: number;
+    tour_title: string;
+    band_count: number;
+    stop_count: number;
+  };
+};
+
+export type ConsoleTourLiveCandidate = {
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  venue: string | null;
+  tour_id: number | null;
+  tour_title: string | null;
+};
+
+export type ConsoleTourLiveCandidatesResponse = {
+  items: ConsoleTourLiveCandidate[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+};
+
 type AuthErrorPayload = {
   detail?: string | { code?: string; message?: string };
 };
@@ -368,7 +416,12 @@ type RequestKind =
   | "console_song_create"
   | "console_song_batch_create"
   | "console_live_setlist_append"
+  | "console_tour_live_candidates"
+  | "console_tour_create"
+  | "console_tour_update"
   | "catalog_search"
+  | "catalog_tours"
+  | "catalog_tour_detail"
   | "catalog_bands"
   | "catalog_band_lives"
   | "catalog_stats"
@@ -783,6 +836,44 @@ export async function getConsoleVenues(q?: string, limit = 20): Promise<ConsoleV
   return expectJsonResponse<ConsoleVenueListResponse>(response);
 }
 
+export async function getConsoleTourLiveCandidates(
+  q?: string,
+  page = 1,
+  pageSize = 20,
+): Promise<ConsoleTourLiveCandidatesResponse> {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (q?.trim()) query.set("q", q.trim());
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/tours/live-candidates?${query.toString()}`,
+    undefined,
+    { requestKind: "console_tour_live_candidates" },
+  );
+  return expectJsonResponse<ConsoleTourLiveCandidatesResponse>(response);
+}
+
+export async function getTours(
+  page = 1,
+  pageSize: 15 | 20 = 20,
+  filters: TourListFilters = {},
+): Promise<ToursResponse> {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (filters.q?.trim()) query.set("q", filters.q.trim());
+  if (filters.year !== undefined) query.set("year", String(filters.year));
+  if (filters.bandId !== undefined) query.set("band_id", String(filters.bandId));
+  if (filters.sort) query.set("sort", filters.sort);
+  const response = await fetchWithTimeout(`${BASE_URL}/api/catalog/tours?${query.toString()}`, undefined, {
+    requestKind: "catalog_tours",
+  });
+  return expectJsonResponse<ToursResponse>(response);
+}
+
+export async function getTourDetail(tourId: number): Promise<TourDetailResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/catalog/tours/${tourId}`, undefined, {
+    requestKind: "catalog_tour_detail",
+  });
+  return expectJsonResponse<TourDetailResponse>(response);
+}
+
 export async function searchCatalog(q: string, limit = 8): Promise<CatalogSearchResponse> {
   const query = new URLSearchParams({
     q,
@@ -940,6 +1031,45 @@ export async function appendConsoleLiveSetlist(
   clearLiveCollectionCaches();
   detailCache.delete(detailCacheKey(liveId));
   return responsePayload;
+}
+
+export async function createConsoleTour(
+  payload: ConsoleTourUpsertPayload,
+  csrfToken: string,
+): Promise<ConsoleTourMutationResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/tours`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_tour_create", method: "POST" },
+  );
+  const result = await expectJsonResponse<ConsoleTourMutationResponse>(response);
+  clearLiveCollectionCaches();
+  detailCache.clear();
+  return result;
+}
+
+export async function updateConsoleTour(
+  tourId: number,
+  payload: ConsoleTourUpsertPayload,
+  csrfToken: string,
+): Promise<ConsoleTourMutationResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/tours/${tourId}`,
+    {
+      method: "PUT",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_tour_update", method: "PUT" },
+  );
+  const result = await expectJsonResponse<ConsoleTourMutationResponse>(response);
+  clearLiveCollectionCaches();
+  detailCache.clear();
+  return result;
 }
 
 export async function getLives(

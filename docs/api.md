@@ -71,6 +71,12 @@
   - `editor+` 新增 Live；`live_type` 必填，值为稳定 code
 - `POST /api/console/lives/{live_id}/setlist`
   - `editor+` 向指定 Live 追加 setlist 行；当前是 append-only，不修改既有 setlist
+- `GET /api/console/tours/live-candidates`
+  - `editor+` 按 Live 标题或 ID 分页查询巡演场次候选，并返回场地和当前巡演归属
+- `POST /api/console/tours`
+  - `editor+` 在一个事务中创建巡演及完整乐队、场次关系
+- `PUT /api/console/tours/{tour_id}`
+  - `editor+` 更新巡演，并以请求中的乐队和场次作为完整目标集合替换现有关系
 
 说明：
 - 全量路径、请求参数、响应 schema 请直接查看自动文档
@@ -253,6 +259,12 @@
   - 所有 `song_id` 都必须存在
   - `band_member` 至少需要包含一个非空乐队和成员列表
   - 后端按 `absolute_order` 升序写入
+- `POST /api/console/tours`、`PUT /api/console/tours/{tour_id}`
+  - `band_ids` 要求 1~100 个已存在且不重复的正数 ID，请求顺序即展示顺序
+  - `stops` 要求 1~500 项，`live_id` 与 `stop_order` 分别不得重复
+  - 所有关联 Live 必须存在；Live 已属于其他巡演时返回 `409`，detail 包含冲突的 `live_id / tour_id / tour_title`
+  - 创建与完整替换都在单一事务中完成，并写一条 `tour_create` 或 `tour_update` 汇总审计日志
+  - 第一版不提供删除巡演接口
 
 ## 错误处理说明
 
