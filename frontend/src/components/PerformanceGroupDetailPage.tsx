@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   getLiveDetail,
   getPerformanceGroupDetail,
   type LiveDetailResponse,
   type PerformanceGroupDetailResponse,
+  type TourRef,
 } from "../api";
 import { logError } from "../logger";
 import { DetailTitleLink } from "./DetailTitleLink";
@@ -15,17 +16,12 @@ type PerformanceGroupDetailPageProps = {
   groupId: number;
   initialLiveId?: number | null;
   onBack: () => void;
+  onOpenTour?: (tour: TourRef) => void;
   canFavorite?: boolean;
   isFavorite?: (liveId: number) => boolean;
   isSyncing?: (liveId: number) => boolean;
   onToggleFavorite?: (liveId: number) => void;
 };
-
-function formatDateRange(detail: PerformanceGroupDetailResponse): string {
-  return detail.start_date === detail.end_date
-    ? detail.start_date
-    : `${detail.start_date} — ${detail.end_date}`;
-}
 
 function getDisplayTypeLabel(
   displayType: PerformanceGroupDetailResponse["display_type"],
@@ -40,10 +36,6 @@ function getCountText(detail: PerformanceGroupDetailResponse): string {
   return `已收录 ${detail.day_count} 日 · ${detail.live_count} 场`;
 }
 
-function formatStartTime(startTime: string): string {
-  return startTime.slice(0, 5);
-}
-
 function normalizeError(caught: unknown): string {
   const message = caught instanceof Error ? caught.message : "未知错误";
   return message === "Request timeout" ? "请求超时，请稍后重试" : message;
@@ -53,6 +45,7 @@ export function PerformanceGroupDetailPage({
   groupId,
   initialLiveId = null,
   onBack,
+  onOpenTour,
   canFavorite = false,
   isFavorite = () => false,
   isSyncing = () => false,
@@ -127,20 +120,6 @@ export function PerformanceGroupDetailPage({
   ) ?? null;
 
   const groupUrl = detail?.lives[0]?.url ?? null;
-  const liveDateGroups = useMemo(() => {
-    if (!detail) return [];
-    const groups: Array<{ liveDate: string; lives: PerformanceGroupDetailResponse["lives"] }> = [];
-    detail.lives.forEach((live) => {
-      const current = groups[groups.length - 1];
-      if (!current || current.liveDate !== live.live_date) {
-        groups.push({ liveDate: live.live_date, lives: [live] });
-      } else {
-        current.lives.push(live);
-      }
-    });
-    return groups;
-  }, [detail]);
-
   return (
     <div className="tour-detail-page">
       <div className="detail-page-head tour-detail-head">
@@ -156,7 +135,6 @@ export function PerformanceGroupDetailPage({
       {detail && (
         <>
           <div className="detail-meta-line">
-            <p className="detail-inline-item detail-inline-item-date"><strong>已收录日期：</strong><span>{formatDateRange(detail)}</span></p>
             <p className="detail-inline-item"><strong>类型：</strong><span>{getDisplayTypeLabel(detail.display_type)}</span></p>
             <p className="detail-inline-item"><strong>场次：</strong><span>{getCountText(detail)}</span></p>
             <p className="detail-inline-item"><strong>参与乐队：</strong><span>{detail.bands.map((b) => b.band_name).join(" / ") || "-"}</span></p>
@@ -165,41 +143,33 @@ export function PerformanceGroupDetailPage({
             className="tour-stop-shortcuts"
             aria-label="活动组场次"
           >
-            {liveDateGroups.map((dateGroup) => (
-              <section key={dateGroup.liveDate} className="performance-group-date-section">
-                <time className="performance-group-date-label" dateTime={dateGroup.liveDate}>{dateGroup.liveDate}</time>
-                <div className="performance-group-date-lives">
-                  {dateGroup.lives.map((live, index) => {
-                    const shortTitle = getGroupedLiveShortTitle(live.live_title, detail.group_title);
-                    const favorite = isFavorite(live.live_id);
-                    return (
-                      <span key={live.live_id} className="tour-stop-shortcut-item">
-                        {index > 0 && <span className="tour-stop-separator" aria-hidden="true" />}
-                        <button
-                          type="button"
-                          className="detail-tour-link tour-stop-shortcut"
-                          title={`${live.live_date} ${live.live_title}`}
-                          aria-pressed={live.live_id === selectedLiveId}
-                          onClick={() => setSelectedLiveId(live.live_id)}
-                        >
-                          {shortTitle}
-                          <span className="performance-group-start-time"> · {formatStartTime(live.start_time)}</span>
-                        </button>
-                        {canFavorite && onToggleFavorite && (
-                          <button
-                            type="button"
-                            className={`star-btn performance-group-live-star ${favorite ? "is-fav" : ""} ${isSyncing(live.live_id) ? "is-syncing" : ""}`}
-                            aria-label={`${favorite ? "取消收藏" : "加入收藏"} ${shortTitle}`}
-                            aria-busy={isSyncing(live.live_id)}
-                            onClick={() => onToggleFavorite(live.live_id)}
-                          >★</button>
-                        )}
-                      </span>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
+            {detail.lives.map((live, index) => {
+              const shortTitle = getGroupedLiveShortTitle(live.live_title, detail.group_title);
+              const favorite = isFavorite(live.live_id);
+              return (
+                <span key={live.live_id} className="tour-stop-shortcut-item">
+                  {index > 0 && <span className="tour-stop-separator" aria-hidden="true" />}
+                  <button
+                    type="button"
+                    className="detail-tour-link tour-stop-shortcut"
+                    title={live.live_title}
+                    aria-pressed={live.live_id === selectedLiveId}
+                    onClick={() => setSelectedLiveId(live.live_id)}
+                  >
+                    {shortTitle}
+                  </button>
+                  {canFavorite && onToggleFavorite && (
+                    <button
+                      type="button"
+                      className={`star-btn performance-group-live-star ${favorite ? "is-fav" : ""} ${isSyncing(live.live_id) ? "is-syncing" : ""}`}
+                      aria-label={`${favorite ? "取消收藏" : "加入收藏"} ${shortTitle}`}
+                      aria-busy={isSyncing(live.live_id)}
+                      onClick={() => onToggleFavorite(live.live_id)}
+                    >★</button>
+                  )}
+                </span>
+              );
+            })}
           </nav>
           {selectedLive && (
             <div className="detail-page tour-inline-live-detail">
@@ -212,7 +182,7 @@ export function PerformanceGroupDetailPage({
                   liveDate: selectedLive.live_date,
                   url: selectedLive.url,
                 }}
-                showTourReference={false}
+                onOpenTour={onOpenTour}
               />
             </div>
           )}

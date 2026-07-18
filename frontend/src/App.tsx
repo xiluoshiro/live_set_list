@@ -1405,6 +1405,7 @@ function App() {
             groupId={detailGroupId}
             initialLiveId={detailGroupLiveId}
             onBack={handleBackFromPerformanceGroupDetail}
+            onOpenTour={openTourDetail}
             canFavorite={canUseFavoriteFeatures}
             isFavorite={isFavorite}
             isSyncing={favorites.isFavoriteSyncing}
