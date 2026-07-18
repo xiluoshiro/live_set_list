@@ -196,7 +196,11 @@ export function LiveInsertTab({
             <option value={0}>暂无 live 候选</option>
           ) : (
             lives.map((live) => (
-              <option key={live.live_id} value={live.live_id}>
+              <option
+                key={live.live_id}
+                value={live.live_id}
+                className={live.live_type === "event" ? "live-id-option-muted" : undefined}
+              >
                 {live.live_id} - {live.live_title} ({live.live_date})
               </option>
             ))
