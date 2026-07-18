@@ -58,6 +58,19 @@
   min-height: 0;
 }
 
+.detail-tour-link {
+  border: 0;
+  background: transparent;
+  color: var(--text-link);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.detail-tour-link:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 720px) {
   .detail-page {
     margin: 12px 12px 0;

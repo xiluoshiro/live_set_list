@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getLiveDetail, type LiveDetailResponse } from "../api";
+import { getLiveDetail, type LiveDetailResponse, type TourRef } from "../api";
 import { logError } from "../logger";
 import { MemberStatusTable } from "./DetailMemberTable";
 import { formatLiveType } from "./console/constants";
@@ -14,6 +14,7 @@ interface LiveDetailPageProps {
   liveId: number;
   fallback: LiveDetailFallback;
   onBack: () => void;
+  onOpenTour: (tour: TourRef) => void;
 }
 
 function formatTimedLabel(value: string | null | undefined): string {
@@ -35,7 +36,7 @@ function formatTimedLabel(value: string | null | undefined): string {
   return `${timePart}(${timezoneLabel})`;
 }
 
-export function LiveDetailPage({ liveId, fallback, onBack }: LiveDetailPageProps) {
+export function LiveDetailPage({ liveId, fallback, onBack, onOpenTour }: LiveDetailPageProps) {
   const [detailData, setDetailData] = useState<LiveDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -153,6 +154,14 @@ export function LiveDetailPage({ liveId, fallback, onBack }: LiveDetailPageProps
         <strong>乐队：</strong>
         <span>{bandNamesText}</span>
       </p>
+      {detailData?.tour && (
+        <p className="detail-row">
+          <strong>巡演：</strong>
+          <button type="button" className="detail-tour-link" onClick={() => onOpenTour(detailData.tour as TourRef)}>
+            {detailData.tour.tour_title}
+          </button>
+        </p>
+      )}
 
       <div className="detail-table-wrap">
         <MemberStatusTable

@@ -4,7 +4,7 @@
 
 本设计落实 [巡演聚合产品需求](../product/tour-aggregation.md)。产品目标、用户范围、文案口径和验收标准以需求文档为准；本文只定义技术实现。
 
-当前状态：`T1、T2 已实施；公共页面与巡演搜索分组仍待后续阶段实施`。
+当前状态：`T1、T2、T3 已实施；巡演搜索分组和初始数据整理仍待后续阶段实施`。
 
 ## 现有实现边界
 
@@ -313,7 +313,7 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 ```
 
 - 全局导航仍只显示一个“演出资料”。
-- 当 tab 为 `all / favorites / tours` 时，“演出资料”保持选中。
+- 当 tab 为 `all / favorites` 时，“演出资料”保持选中；当 tab 为 `tours / tour_detail` 时，“巡演资料”保持选中。
 - `all / favorites` 继续承载场次与收藏范围。
 - `tours` 承载巡演列表，不复用 favorites 语义。
 - `tour_detail` 保存 `tourId`、来源 tab、巡演列表页码和滚动位置。
@@ -325,7 +325,6 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 
 建议新增：
 
-- `TourArchiveSwitch.tsx`：场次/巡演实体切换。
 - `TourListFilters.tsx`：巡演关键词、年份、乐队和排序。
 - `TourCardGrid.tsx`：巡演卡片与分页/连续加载状态。
 - `TourDetailPage.tsx`：巡演头部和场次列表。
@@ -335,7 +334,7 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 
 ### 列表与详情交互
 
-- “场次 / 巡演”放在 PageTitle 下、业务筛选上方。
+- “巡演资料”作为独立主导航页签，不在“演出资料”内部增加实体切换。
 - 巡演卡片主要详情操作使用真实 `<button>`；官方来源使用独立 `<a>`。
 - 登录用户在 Tour stop 中复用现有 Live 收藏按钮和乐观同步逻辑。
 - Tour stop 打开 `LiveDetailPage` 时，把返回来源记为 `tour_detail`。
@@ -397,7 +396,7 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 
 ### 前端行为测试
 
-- 场次/巡演切换和导航选中态。
+- 独立巡演资料页签和导航选中态。
 - 巡演筛选参数、分页、加载、错误和空状态。
 - “全部 / 仅收藏”不出现在巡演视图。
 - 巡演详情进入 Live、Live 反向进入巡演、浏览器返回恢复来源。
@@ -430,7 +429,7 @@ python scripts/run_checks.py functional
 3. `DONE`：增加 Tour schema、公共列表/详情和 Live `TourRef`。
 4. `DONE`：增加控制台创建/更新接口、Live 候选查询和审计。
 5. `DONE`：增加控制台巡演管理 UI，可维护乐队顺序、场次标签与顺序，并前置提示归属冲突。
-6. 增加演出资料实体切换、巡演列表和巡演详情。
+6. `DONE`：增加独立巡演资料页签、巡演列表、巡演详情和 Live 反向入口。
 7. 扩展公共搜索和所有 Live 消费路径。
 8. 更新 `docs/api.md`、Flyway/数据库 README 和产品状态。
 9. 运行 functional，并完成桌面与 390px 浏览器验收。
