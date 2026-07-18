@@ -11,6 +11,7 @@
 .tour-list-error { color: var(--accent-danger); }
 
 .tour-detail-page { margin: 24px; padding: 20px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-1); }
+.tour-detail-page > .section-tabs { margin-top: 14px; }
 .tour-stop-shortcuts { display: flex; flex-wrap: wrap; margin-top: 14px; line-height: 1.8; }
 .tour-stop-shortcut-item { display: inline-flex; align-items: center; white-space: nowrap; }
 .tour-stop-separator { width: 2px; height: 1.1em; margin: 0 10px; border-radius: 999px; background: var(--border-strong); }
