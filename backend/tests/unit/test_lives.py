@@ -83,6 +83,7 @@ def test_get_lives_success_returns_items_and_pagination():
             "bands": [1, 2],
             "url": "https://example.com/live/1",
             "is_favorite": False,
+            "tour": None,
         },
         {
             "live_id": 2,
@@ -92,6 +93,7 @@ def test_get_lives_success_returns_items_and_pagination():
             "bands": [],
             "url": None,
             "is_favorite": False,
+            "tour": None,
         },
     ]
     assert cursor.execute.call_count == 2

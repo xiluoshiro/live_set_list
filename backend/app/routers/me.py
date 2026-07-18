@@ -20,6 +20,7 @@ from app.routers.lives import ALLOWED_PAGE_SIZE
 from app.schemas import ErrorResponse, LivesResponse
 from app.schemas.auth import AuthErrorResponse
 from app.schemas.favorites import FavoriteBatchRequest, FavoriteBatchResponse
+from app.tour_refs import build_tour_ref_from_row
 
 
 router = APIRouter(prefix="/api/me", tags=["me"])
@@ -34,10 +35,16 @@ SELECT
     l.live_title,
     {FAVORITE_BAND_IDS_SQL} AS band_ids,
     l.url AS url,
-    l.live_type
+    l.live_type,
+    tour.id AS tour_id,
+    tour.tour_title
 FROM user_live_favorites f
 JOIN live_attrs l
     ON l.id = f.live_id
+LEFT JOIN tour_lives tour_live
+    ON tour_live.live_id = l.id
+LEFT JOIN tour_attrs tour
+    ON tour.id = tour_live.tour_id
 LEFT JOIN live_setlist ls
     ON l.id = ls.live_id
 LEFT JOIN LATERAL (
@@ -47,7 +54,7 @@ LEFT JOIN LATERAL (
 LEFT JOIN band_attrs b
     ON b.band_name = t.key
 WHERE f.user_id = %s
-GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids
+GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids, tour.id, tour.tour_title
 """
 
 FAVORITE_LIVES_COUNT_QUERY = f"""
@@ -215,6 +222,7 @@ def get_my_favorite_lives(
             "bands": row[3] or [],
             "url": row[4],
             "is_favorite": True,
+            "tour": build_tour_ref_from_row(row, tour_id_index=6, tour_title_index=7),
         }
         for row in rows
     ]

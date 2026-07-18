@@ -40,6 +40,11 @@ export type AuthMeResponse =
       favorite_live_ids: number[];
     };
 
+export type TourRef = {
+  tour_id: number;
+  tour_title: string;
+};
+
 export type LiveItem = {
   live_id: number;
   live_date: string;
@@ -48,6 +53,7 @@ export type LiveItem = {
   bands: Array<number | string>;
   url: string | null;
   is_favorite: boolean;
+  tour?: TourRef | null;
 };
 
 export type LivesResponse = {
@@ -172,7 +178,49 @@ export type LiveDetailResponse = {
   band_names: string[];
   url: string | null;
   is_favorite: boolean;
+  tour?: TourRef | null;
   detail_rows: LiveDetailRow[];
+};
+
+export type TourBandItem = {
+  band_id: number;
+  band_name: string;
+  band_abbr: string;
+};
+
+export type TourSummary = {
+  tour_id: number;
+  tour_title: string;
+  url: string | null;
+  description: string | null;
+  bands: TourBandItem[];
+  start_date: string;
+  end_date: string;
+  collected_live_count: number;
+  stop_labels: string[];
+};
+
+export type TourStopItem = {
+  stop_order: number;
+  stop_label: string | null;
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  live_type: string;
+  venue: string | null;
+  bands: number[];
+  url: string | null;
+  is_favorite: boolean;
+  has_setlist: boolean;
+};
+
+export type ToursResponse = {
+  items: TourSummary[];
+  pagination: LivesResponse["pagination"];
+};
+
+export type TourDetailResponse = TourSummary & {
+  stops: TourStopItem[];
 };
 
 export type LiveDetailsBatchResponse = {

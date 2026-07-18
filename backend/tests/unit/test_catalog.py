@@ -48,6 +48,7 @@ def test_search_catalog_returns_grouped_public_results():
         "bands": [1],
         "url": "https://example.com/live/1",
         "is_favorite": False,
+        "tour": None,
     }
     assert payload["bands"] == [{"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "live_count": 12}]
     assert payload["songs"] == [

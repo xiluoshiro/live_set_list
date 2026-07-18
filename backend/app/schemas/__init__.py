@@ -31,6 +31,15 @@ from app.schemas.catalog import (
 )
 from app.schemas.favorites import FavoriteBatchRequest, FavoriteBatchResponse
 from app.schemas.health import HealthResponse
+from app.schemas.tours import (
+    TourBandItem,
+    TourDetailResponse,
+    TourRef,
+    TourStopItem,
+    TourSummary,
+    ToursPagination,
+    ToursResponse,
+)
 from app.schemas.lives import (
     LiveDetailBandMember,
     LiveDetailBatchRequest,
@@ -49,6 +58,13 @@ __all__ = [
     'ValidationErrorItem',
     'ValidationErrorResponse',
     'HealthResponse',
+    'TourRef',
+    'TourBandItem',
+    'TourSummary',
+    'ToursPagination',
+    'ToursResponse',
+    'TourStopItem',
+    'TourDetailResponse',
     'FavoriteBatchRequest',
     'FavoriteBatchResponse',
     'CatalogBandItem',

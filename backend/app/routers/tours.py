@@ -1,0 +1,394 @@
+from datetime import date
+from math import ceil
+from typing import Any, Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from psycopg2 import Error, OperationalError
+from psycopg2.errors import QueryCanceled
+
+from app.auth import AuthUser, get_current_user_optional
+from app.db import get_db_connection
+from app.favorites import get_favorite_live_id_set
+from app.logging_config import get_logger
+from app.schemas import ErrorResponse, TourDetailResponse, ToursResponse, ValidationErrorResponse
+
+router = APIRouter(prefix="/api/catalog/tours", tags=["catalog"])
+logger = get_logger(__name__)
+
+ALLOWED_PAGE_SIZE = {15, 20}
+
+
+def _lookup_pattern(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _build_tour_filters(
+    *,
+    query: str | None,
+    year: int | None,
+    band_id: int | None,
+) -> tuple[str, tuple[object, ...]]:
+    conditions = ["EXISTS (SELECT 1 FROM tour_lives required_stop WHERE required_stop.tour_id = t.id)"]
+    params: list[object] = []
+
+    if query is not None:
+        pattern = _lookup_pattern(query)
+        conditions.append(
+            """
+            (
+                t.tour_title ILIKE %s ESCAPE '\\'
+                OR EXISTS (
+                    SELECT 1
+                    FROM tour_lives query_stop
+                    JOIN live_attrs query_live ON query_live.id = query_stop.live_id
+                    WHERE query_stop.tour_id = t.id
+                      AND (
+                          query_stop.stop_label ILIKE %s ESCAPE '\\'
+                          OR query_live.live_title ILIKE %s ESCAPE '\\'
+                      )
+                )
+            )
+            """
+        )
+        params.extend([pattern, pattern, pattern])
+
+    if year is not None:
+        conditions.append(
+            """
+            EXISTS (
+                SELECT 1
+                FROM tour_lives year_stop
+                JOIN live_attrs year_live ON year_live.id = year_stop.live_id
+                WHERE year_stop.tour_id = t.id
+                  AND year_live.live_date >= %s
+                  AND year_live.live_date < %s
+            )
+            """
+        )
+        params.extend([date(year, 1, 1), date(year + 1, 1, 1)])
+
+    if band_id is not None:
+        conditions.append(
+            """
+            EXISTS (
+                SELECT 1
+                FROM tour_bands selected_band
+                WHERE selected_band.tour_id = t.id
+                  AND selected_band.band_id = %s
+            )
+            """
+        )
+        params.append(band_id)
+
+    where_sql = " AND ".join(f"({condition.strip()})" for condition in conditions)
+    return where_sql, tuple(params)
+
+
+def _build_tour_list_queries(
+    *,
+    query: str | None,
+    year: int | None,
+    band_id: int | None,
+    sort: Literal["date_desc", "date_asc"],
+) -> tuple[str, tuple[object, ...], str, tuple[object, ...]]:
+    where_sql, params = _build_tour_filters(query=query, year=year, band_id=band_id)
+    matched_order = (
+        "(SELECT MIN(order_live.live_date) FROM tour_lives order_stop "
+        "JOIN live_attrs order_live ON order_live.id = order_stop.live_id "
+        "WHERE order_stop.tour_id = t.id) ASC, t.id ASC"
+        if sort == "date_asc"
+        else "(SELECT MAX(order_live.live_date) FROM tour_lives order_stop "
+        "JOIN live_attrs order_live ON order_live.id = order_stop.live_id "
+        "WHERE order_stop.tour_id = t.id) DESC, t.id DESC"
+    )
+    result_order = "summary.start_date ASC, summary.tour_id ASC" if sort == "date_asc" else "summary.end_date DESC, summary.tour_id DESC"
+
+    count_query = f"SELECT COUNT(*) FROM tour_attrs t WHERE {where_sql}"
+    page_query = f"""
+        WITH matched_tours AS (
+            SELECT t.id
+            FROM tour_attrs t
+            WHERE {where_sql}
+            ORDER BY {matched_order}
+            LIMIT %s OFFSET %s
+        ),
+        summary AS (
+            SELECT
+                t.id AS tour_id,
+                t.tour_title,
+                t.url,
+                t.description,
+                MIN(l.live_date) AS start_date,
+                MAX(l.live_date) AS end_date,
+                COUNT(*)::int AS collected_live_count,
+                COALESCE(
+                    (
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'band_id', b.id,
+                                'band_name', b.band_name,
+                                'band_abbr', b.band_abbr
+                            )
+                            ORDER BY tb.display_order
+                        )
+                        FROM tour_bands tb
+                        JOIN band_attrs b ON b.id = tb.band_id
+                        WHERE tb.tour_id = t.id
+                    ),
+                    '[]'::jsonb
+                ) AS bands,
+                COALESCE(
+                    array_agg(tl.stop_label ORDER BY tl.stop_order)
+                        FILTER (WHERE tl.stop_label IS NOT NULL),
+                    ARRAY[]::text[]
+                ) AS stop_labels
+            FROM matched_tours matched
+            JOIN tour_attrs t ON t.id = matched.id
+            JOIN tour_lives tl ON tl.tour_id = t.id
+            JOIN live_attrs l ON l.id = tl.live_id
+            GROUP BY t.id, t.tour_title, t.url, t.description
+        )
+        SELECT
+            summary.tour_id,
+            summary.tour_title,
+            summary.url,
+            summary.description,
+            summary.bands,
+            summary.start_date,
+            summary.end_date,
+            summary.collected_live_count,
+            summary.stop_labels
+        FROM summary
+        ORDER BY {result_order}
+    """
+    return count_query, params, page_query, params
+
+
+TOUR_DETAIL_HEADER_QUERY = """
+SELECT
+    t.id,
+    t.tour_title,
+    t.url,
+    t.description,
+    MIN(l.live_date) AS start_date,
+    MAX(l.live_date) AS end_date,
+    COUNT(*)::int AS collected_live_count,
+    COALESCE(
+        array_agg(tl.stop_label ORDER BY tl.stop_order)
+            FILTER (WHERE tl.stop_label IS NOT NULL),
+        ARRAY[]::text[]
+    ) AS stop_labels
+FROM tour_attrs t
+JOIN tour_lives tl ON tl.tour_id = t.id
+JOIN live_attrs l ON l.id = tl.live_id
+WHERE t.id = %s
+GROUP BY t.id, t.tour_title, t.url, t.description
+"""
+
+TOUR_DETAIL_BANDS_QUERY = """
+SELECT b.id, b.band_name, b.band_abbr
+FROM tour_bands tb
+JOIN band_attrs b ON b.id = tb.band_id
+WHERE tb.tour_id = %s
+ORDER BY tb.display_order, b.id
+"""
+
+TOUR_DETAIL_STOPS_QUERY = """
+SELECT
+    tl.stop_order,
+    tl.stop_label,
+    l.id,
+    l.live_date,
+    l.live_title,
+    l.live_type,
+    COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
+    CASE
+        WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
+        THEN COALESCE(
+            (
+                SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
+                FROM live_setlist stop_setlist
+                JOIN LATERAL jsonb_object_keys(stop_setlist.band_member) k(band_name)
+                    ON jsonb_typeof(stop_setlist.band_member) = 'object'
+                JOIN band_attrs ba ON ba.band_name = k.band_name
+                WHERE stop_setlist.live_id = l.id
+            ),
+            ARRAY[]::int[]
+        )
+        ELSE l.default_band_ids
+    END AS bands,
+    l.url,
+    EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id) AS has_setlist
+FROM tour_lives tl
+JOIN live_attrs l ON l.id = tl.live_id
+LEFT JOIN venue_list v ON v.id = l.venue_id
+WHERE tl.tour_id = %s
+ORDER BY tl.stop_order, l.id
+"""
+
+
+def _tour_summary_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
+    return {
+        "tour_id": int(row[0]),
+        "tour_title": str(row[1]),
+        "url": row[2],
+        "description": row[3],
+        "bands": list(row[4] or []),
+        "start_date": row[5],
+        "end_date": row[6],
+        "collected_live_count": int(row[7]),
+        "stop_labels": list(row[8] or []),
+    }
+
+
+@router.get(
+    "",
+    response_model=ToursResponse,
+    summary="获取巡演列表",
+    description="返回本站已整理且至少关联一场 Live 的巡演聚合列表。",
+    responses={
+        400: {"model": ErrorResponse, "description": "参数错误"},
+        422: {"model": ValidationErrorResponse, "description": "查询参数验证失败"},
+        500: {"model": ErrorResponse, "description": "数据库一般错误"},
+        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
+    },
+)
+def get_tours(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20),
+    q: str | None = Query(default=None, max_length=255),
+    year: int | None = Query(default=None, ge=1900, le=2100),
+    band_id: int | None = Query(default=None, ge=1),
+    sort: Literal["date_desc", "date_asc"] = Query(default="date_desc"),
+):
+    if page_size not in ALLOWED_PAGE_SIZE:
+        raise HTTPException(status_code=400, detail="page_size must be 15 or 20")
+    query = q.strip() if q is not None else None
+    query = query or None
+    count_query, count_params, page_query, page_params = _build_tour_list_queries(
+        query=query,
+        year=year,
+        band_id=band_id,
+        sort=sort,
+    )
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(count_query, count_params)
+                count_row = cur.fetchone()
+                total = int(count_row[0]) if count_row else 0
+                total_pages = ceil(total / page_size) if total > 0 else 1
+                safe_page = min(page, total_pages)
+                offset = (safe_page - 1) * page_size
+                cur.execute(page_query, (*page_params, page_size, offset))
+                rows = cur.fetchall()
+    except QueryCanceled as exc:
+        logger.exception("get_tours timeout page=%s page_size=%s", page, page_size)
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        logger.exception("get_tours operational error page=%s page_size=%s", page, page_size)
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        logger.exception("get_tours failed page=%s page_size=%s", page, page_size)
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+    return {
+        "items": [_tour_summary_from_row(row) for row in rows],
+        "pagination": {
+            "page": safe_page,
+            "page_size": page_size,
+            "total": total,
+            "total_pages": total_pages,
+        },
+    }
+
+
+@router.get(
+    "/{tour_id}",
+    response_model=TourDetailResponse,
+    summary="获取巡演详情",
+    description="返回巡演摘要及按人工维护顺序排列的已收录 Live。",
+    responses={
+        400: {"model": ErrorResponse, "description": "参数错误"},
+        404: {"model": ErrorResponse, "description": "指定巡演不存在"},
+        500: {"model": ErrorResponse, "description": "数据库一般错误"},
+        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
+    },
+)
+def get_tour_detail(
+    tour_id: int,
+    current_user: AuthUser | None = Depends(get_current_user_optional),
+):
+    if tour_id < 1:
+        raise HTTPException(status_code=400, detail="tour_id must be >= 1")
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(TOUR_DETAIL_HEADER_QUERY, (tour_id,))
+                header_row = cur.fetchone()
+                if header_row is None:
+                    raise HTTPException(status_code=404, detail=f"Tour id {tour_id} not found")
+
+                cur.execute(TOUR_DETAIL_BANDS_QUERY, (tour_id,))
+                band_rows = cur.fetchall()
+                cur.execute(TOUR_DETAIL_STOPS_QUERY, (tour_id,))
+                stop_rows = cur.fetchall()
+                if not stop_rows:
+                    logger.error("tour has no stops tour_id=%s", tour_id)
+                    raise HTTPException(status_code=500, detail="Tour data has no collected lives")
+
+                live_ids = [int(row[2]) for row in stop_rows]
+                favorite_live_ids = (
+                    get_favorite_live_id_set(cur, current_user.id, live_ids)
+                    if current_user is not None
+                    else set()
+                )
+    except HTTPException:
+        raise
+    except QueryCanceled as exc:
+        logger.exception("get_tour_detail timeout tour_id=%s", tour_id)
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        logger.exception("get_tour_detail operational error tour_id=%s", tour_id)
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        logger.exception("get_tour_detail failed tour_id=%s", tour_id)
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+    return {
+        "tour_id": int(header_row[0]),
+        "tour_title": str(header_row[1]),
+        "url": header_row[2],
+        "description": header_row[3],
+        "bands": [
+            {"band_id": int(row[0]), "band_name": str(row[1]), "band_abbr": str(row[2])}
+            for row in band_rows
+        ],
+        "start_date": header_row[4],
+        "end_date": header_row[5],
+        "collected_live_count": int(header_row[6]),
+        "stop_labels": list(header_row[7] or []),
+        "stops": [
+            {
+                "stop_order": int(row[0]),
+                "stop_label": row[1],
+                "live_id": int(row[2]),
+                "live_date": row[3],
+                "live_title": str(row[4]),
+                "live_type": str(row[5]),
+                "venue": row[6],
+                "bands": list(row[7] or []),
+                "url": row[8],
+                "is_favorite": int(row[2]) in favorite_live_ids,
+                "has_setlist": bool(row[9]),
+            }
+            for row in stop_rows
+        ],
+    }

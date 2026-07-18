@@ -88,7 +88,7 @@ python scripts/build_release.py --version 2026-07-10-001
 
 常规生产发布不需要在本机手工上传 `.tar.gz`。推送格式为 `vYYYY-MM-DD-NNN` 的 tag 会触发 `.github/workflows/release.yml`：隔离 PostgreSQL CI、`functional`、前端构建、白名单归档、SHA-256，并在 VM 按当前 SQL 分类。app-only release 继续进入 `production` 部署；migration release 停止并等待 `.github/workflows/migration-release.yml` 的两次手工阶段。
 
-当前仓库 migration 已到 V12；runbook 中最后明确记录的生产 Flyway version 为 V11。包含 V12 的 tag 必须按 migration release 验收，不能因为 tag 已存在就假定生产数据库已经升级。
+当前仓库 migration 已到 V13；runbook 中最后明确记录的生产 Flyway version 为 V11。包含 V12 或 V13 的 tag 必须按 migration release 验收，不能因为 tag 已存在或测试库已经迁移就假定生产数据库已经升级。
 
 `build_release.py` 仍用于首次 VM bootstrap、离线交付或手工排障。包含 `backend/db/flyway/sql` 变化的版本必须先运行 `phase=migrate` 生成服务器端 attestation，验收后再运行 `phase=deploy`；部署入口会拒绝缺少或不匹配 attestation 的 migration release。
 

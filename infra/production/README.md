@@ -2,7 +2,7 @@
 
 This directory contains the production templates and server-side deployment entry for the live Google Cloud Compute Engine VM. Tag-based GitHub Actions deployment is verified; the operational procedure is in [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md).
 
-Repository migrations currently end at V12, while the latest production Flyway version explicitly confirmed in the runbook is V11. Verify Actions, the root-only attestation, and production `flyway info` before documenting V12 as deployed.
+Repository migrations currently end at V13, while the latest production Flyway version explicitly confirmed in the runbook is V11. Verify Actions, the root-only attestation, and production `flyway info` before documenting V12 or V13 as deployed.
 
 Target baseline:
 

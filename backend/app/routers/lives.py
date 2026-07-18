@@ -25,6 +25,7 @@ from app.schemas import (
     LivesResponse,
     ValidationErrorResponse,
 )
+from app.tour_refs import build_tour_ref_from_row
 
 router = APIRouter(prefix="/api/lives", tags=["lives"])
 logger = get_logger(__name__)
@@ -48,8 +49,14 @@ SELECT
     l.live_title,
     {LIVES_BAND_IDS_SQL} AS band_ids,
     l.url AS url,
-    l.live_type
+    l.live_type,
+    tour.id AS tour_id,
+    tour.tour_title
 FROM live_attrs l
+LEFT JOIN tour_lives tour_live
+    ON tour_live.live_id = l.id
+LEFT JOIN tour_attrs tour
+    ON tour.id = tour_live.tour_id
 LEFT JOIN live_setlist ls
     ON l.id = ls.live_id
 LEFT JOIN LATERAL (
@@ -58,7 +65,7 @@ LEFT JOIN LATERAL (
 ) t ON true
 LEFT JOIN band_attrs b
     ON b.band_name = t.key
-GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids
+GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids, tour.id, tour.tour_title
 """
 
 LIVES_COUNT_QUERY = f"""
@@ -80,8 +87,14 @@ SELECT
     l.live_title,
     l.default_band_ids AS band_ids,
     l.url AS url,
-    l.live_type
+    l.live_type,
+    tour.id AS tour_id,
+    tour.tour_title
 FROM live_attrs l
+LEFT JOIN tour_lives tour_live
+    ON tour_live.live_id = l.id
+LEFT JOIN tour_attrs tour
+    ON tour.id = tour_live.tour_id
 WHERE NOT EXISTS (
     SELECT 1
     FROM live_setlist ls
@@ -142,10 +155,16 @@ SELECT
         ARRAY[]::text[]
     ) AS band_names,
     to_jsonb(l) ->> 'url' AS url,
-    l.live_type
+    l.live_type,
+    tour.id AS tour_id,
+    tour.tour_title
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
+LEFT JOIN tour_lives tour_live
+    ON tour_live.live_id = l.id
+LEFT JOIN tour_attrs tour
+    ON tour.id = tour_live.tour_id
 WHERE l.id = %s
 """
 
@@ -205,10 +224,16 @@ SELECT
         ARRAY[]::text[]
     ) AS band_names,
     to_jsonb(l) ->> 'url' AS url,
-    l.live_type
+    l.live_type,
+    tour.id AS tour_id,
+    tour.tour_title
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
+LEFT JOIN tour_lives tour_live
+    ON tour_live.live_id = l.id
+LEFT JOIN tour_attrs tour
+    ON tour.id = tour_live.tour_id
 WHERE l.id = ANY(%s)
 """
 
@@ -487,6 +512,7 @@ def _build_live_detail_payload(
         "bands": bands,
         "band_names": _order_band_names_by_bands(bands, header_row[7], band_name_to_id),
         "url": header_row[8],
+        "tour": build_tour_ref_from_row(header_row, tour_id_index=10, tour_title_index=11),
         "detail_rows": detail_rows,
     }
 
@@ -660,6 +686,7 @@ def get_lives(
             "bands": row[3] or [],
             "url": row[4],
             "is_favorite": int(row[0]) in favorite_live_ids if current_user is not None else False,
+            "tour": build_tour_ref_from_row(row, tour_id_index=6, tour_title_index=7),
         }
         for row in rows
     ]
@@ -821,6 +848,7 @@ def get_live_details_batch(
                         ),
                         "url": header_row[8],
                         "is_favorite": live_id in favorite_live_ids if current_user is not None else False,
+                        "tour": build_tour_ref_from_row(header_row, tour_id_index=10, tour_title_index=11),
                         "detail_rows": detail_rows,
                     }
                     items.append(detail)
