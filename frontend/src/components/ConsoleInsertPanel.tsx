@@ -27,6 +27,7 @@ import { LiveAdminSection } from "./console/LiveAdminSection";
 import { PageTitle } from "./PageTitle";
 import { LiveInsertTab } from "./console/LiveInsertTab";
 import { SongAdminSection } from "./console/SongAdminSection";
+import { TourAdminSection } from "./console/TourAdminSection";
 import {
   INITIAL_SETLIST_ROWS,
   LIVE_TYPE_OPTIONS,
@@ -1718,7 +1719,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         </div>
       )}
       <section className="console-admin">
-      <PageTitle kicker="Console" title="控制台" description="录入和维护 Live、Setlist、歌曲与场地资料。" />
+      <PageTitle kicker="Console" title="控制台" description="录入和维护 Live、Setlist、歌曲、场地与巡演资料。" />
       {message && <p className="console-admin-hint">{message}</p>}
       {consoleLogs.length > 0 && (
         <div className="console-log-panel" role="log" aria-label="控制台日志" aria-live="polite">
@@ -1757,6 +1758,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onClick={() => setMode("song")}
         >
           新增歌曲
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "tour"}
+          className={`console-mode-btn ${mode === "tour" ? "active" : ""}`}
+          onClick={() => setMode("tour")}
+        >
+          巡演管理
         </button>
       </div>
 
@@ -1883,6 +1893,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
       {mode === "song" && (
         renderSongAdminSection()
+      )}
+
+      {mode === "tour" && (
+        <TourAdminSection bands={bands} onTourDataChanged={onLiveDataChanged} />
       )}
 
       {pendingConfirmation && (

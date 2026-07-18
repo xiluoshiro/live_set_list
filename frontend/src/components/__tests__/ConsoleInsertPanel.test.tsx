@@ -10,6 +10,11 @@ const apiMocks = vi.hoisted(() => ({
   createConsoleSong: vi.fn(),
   createConsoleSongsBatch: vi.fn(),
   createConsoleVenue: vi.fn(),
+  createConsoleTour: vi.fn(),
+  updateConsoleTour: vi.fn(),
+  getConsoleTourLiveCandidates: vi.fn(),
+  getTours: vi.fn(),
+  getTourDetail: vi.fn(),
   getConsoleSongs: vi.fn(),
   getConsoleBands: vi.fn(),
   getConsoleVenues: vi.fn(),
@@ -30,6 +35,11 @@ vi.mock("../../api", () => ({
   createConsoleSong: apiMocks.createConsoleSong,
   createConsoleSongsBatch: apiMocks.createConsoleSongsBatch,
   createConsoleVenue: apiMocks.createConsoleVenue,
+  createConsoleTour: apiMocks.createConsoleTour,
+  updateConsoleTour: apiMocks.updateConsoleTour,
+  getConsoleTourLiveCandidates: apiMocks.getConsoleTourLiveCandidates,
+  getTours: apiMocks.getTours,
+  getTourDetail: apiMocks.getTourDetail,
   getConsoleSongs: apiMocks.getConsoleSongs,
   getConsoleBands: apiMocks.getConsoleBands,
   getConsoleVenues: apiMocks.getConsoleVenues,
@@ -52,6 +62,11 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.createConsoleSong.mockReset();
     apiMocks.createConsoleSongsBatch.mockReset();
     apiMocks.createConsoleVenue.mockReset();
+    apiMocks.createConsoleTour.mockReset();
+    apiMocks.updateConsoleTour.mockReset();
+    apiMocks.getConsoleTourLiveCandidates.mockReset();
+    apiMocks.getTours.mockReset();
+    apiMocks.getTourDetail.mockReset();
     apiMocks.getConsoleSongs.mockReset();
     apiMocks.getConsoleBands.mockReset();
     apiMocks.getConsoleVenues.mockReset();
@@ -60,6 +75,8 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs.mockResolvedValue({ items: [] });
     apiMocks.getConsoleBands.mockResolvedValue({ items: [] });
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [] });
+    apiMocks.getTours.mockResolvedValue({ items: [], pagination: { page: 1, page_size: 20, total: 0, total_pages: 1 } });
+    apiMocks.getConsoleTourLiveCandidates.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 });
     apiMocks.appendConsoleLiveSetlist.mockResolvedValue({
       ok: true,
       item: { live_id: 101, inserted_row_count: 1, total_setlist_row_count: 12 },
@@ -1216,5 +1233,60 @@ describe("ConsoleInsertPanel", () => {
     expect(menuTop).toBeLessThan(750 - estimatedHeight + 10);
 
     rectSpy.mockRestore();
+  });
+
+  // 测试点：巡演管理会前置拦截已占用 Live，并在确认后提交有序乐队与场次完整集合。
+  test("巡演管理创建巡演并提交完整关系集合", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 1, band_name: "Poppin'Party", band_abbr: "ppp", band_members: [] }],
+    });
+    apiMocks.getConsoleTourLiveCandidates.mockResolvedValue({
+      items: [
+        { live_id: 41, live_date: "2026-05-30", live_title: "Console Draft Live", venue: "Zepp", tour_id: null, tour_title: null },
+        { live_id: 1, live_date: "2026-03-28", live_title: "Occupied Live", venue: "Arena", tour_id: 9, tour_title: "Other Tour" },
+      ],
+      page: 1,
+      page_size: 20,
+      total: 2,
+      total_pages: 1,
+    });
+    apiMocks.createConsoleTour.mockResolvedValue({
+      ok: true,
+      item: { tour_id: 7, tour_title: "New Tour", band_count: 1, stop_count: 1 },
+    });
+    apiMocks.getTourDetail.mockResolvedValue({
+      tour_id: 7,
+      tour_title: "New Tour",
+      url: null,
+      description: null,
+      bands: [{ band_id: 1, band_name: "Poppin'Party", band_abbr: "ppp" }],
+      start_date: "2026-05-30",
+      end_date: "2026-05-30",
+      collected_live_count: 1,
+      stop_labels: ["Final"],
+      stops: [{ live_id: 41, live_date: "2026-05-30", live_title: "Console Draft Live", live_type: "other", venue: "Zepp", bands: [1], url: null, is_favorite: false, has_setlist: false, stop_order: 1, stop_label: "Final" }],
+    });
+
+    render(<ConsoleInsertPanel initialMode="tour" />);
+    await waitFor(() => expect(apiMocks.getConsoleTourLiveCandidates).toHaveBeenCalled());
+    await user.type(screen.getByLabelText("巡演名称"), "New Tour");
+    await user.click(screen.getByRole("checkbox", { name: "Poppin'Party" }));
+    expect(screen.getByRole("button", { name: "已占用" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "添加" }));
+    await user.type(screen.getByLabelText("场次标签 41"), "Final");
+    await user.click(screen.getByRole("button", { name: "创建巡演" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await waitFor(() => expect(apiMocks.createConsoleTour).toHaveBeenCalledWith(
+      {
+        tour_title: "New Tour",
+        url: null,
+        description: null,
+        band_ids: [1],
+        stops: [{ live_id: 41, stop_order: 1, stop_label: "Final" }],
+      },
+      "csrf-token",
+    ));
   });
 });

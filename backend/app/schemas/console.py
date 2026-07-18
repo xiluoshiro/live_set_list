@@ -210,3 +210,97 @@ class ConsoleLiveSetlistAppendItem(BaseModel):
 class ConsoleLiveSetlistAppendResponse(BaseModel):
     ok: bool = Field(..., description="Whether the write succeeded")
     item: ConsoleLiveSetlistAppendItem = Field(..., description="Append result payload")
+
+
+class ConsoleTourStopRequest(BaseModel):
+    live_id: int = Field(..., ge=1, description="Associated live_attrs.id")
+    stop_order: int = Field(..., ge=1, description="Display order within the tour")
+    stop_label: str | None = Field(default=None, max_length=255, description="Optional stop label")
+
+    @field_validator("stop_label")
+    @classmethod
+    def validate_stop_label(cls, value: str | None) -> str | None:
+        """Trim optional stop labels and normalize blank input to None."""
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+
+class ConsoleTourUpsertRequest(BaseModel):
+    tour_title: str = Field(..., min_length=1, max_length=255, description="Official or common tour title")
+    url: str | None = Field(default=None, max_length=2048, description="Optional official source URL")
+    description: str | None = Field(default=None, max_length=4000, description="Optional short description")
+    band_ids: list[int] = Field(..., min_length=1, max_length=100, description="Tour bands in display order")
+    stops: list[ConsoleTourStopRequest] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Complete target stop collection",
+    )
+
+    @field_validator("tour_title")
+    @classmethod
+    def validate_tour_title(cls, value: str) -> str:
+        """Normalize the required title before persistence."""
+        return _strip_required_text(value)
+
+    @field_validator("url", "description")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        """Normalize blank optional text fields to None."""
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @field_validator("band_ids")
+    @classmethod
+    def validate_band_ids(cls, value: list[int]) -> list[int]:
+        """Require positive, unique band IDs while preserving display order."""
+        if any(band_id <= 0 for band_id in value):
+            raise ValueError("band_ids must contain only positive IDs")
+        if len(set(value)) != len(value):
+            raise ValueError("band_ids must not contain duplicates")
+        return value
+
+    @field_validator("stops")
+    @classmethod
+    def validate_stops(cls, value: list[ConsoleTourStopRequest]) -> list[ConsoleTourStopRequest]:
+        """Reject duplicate Live IDs and stop orders before opening a write transaction."""
+        live_ids = [stop.live_id for stop in value]
+        stop_orders = [stop.stop_order for stop in value]
+        if len(set(live_ids)) != len(live_ids):
+            raise ValueError("stops must not contain duplicate live_id values")
+        if len(set(stop_orders)) != len(stop_orders):
+            raise ValueError("stops must not contain duplicate stop_order values")
+        return value
+
+
+class ConsoleTourMutationItem(BaseModel):
+    tour_id: int = Field(..., description="Created or updated tour ID")
+    tour_title: str = Field(..., description="Normalized tour title")
+    band_count: int = Field(..., ge=1, description="Persisted tour band count")
+    stop_count: int = Field(..., ge=1, description="Persisted tour stop count")
+
+
+class ConsoleTourMutationResponse(BaseModel):
+    ok: bool = Field(..., description="Whether the transaction succeeded")
+    item: ConsoleTourMutationItem = Field(..., description="Mutation summary")
+
+
+class ConsoleTourLiveCandidate(BaseModel):
+    live_id: int = Field(..., description="live_attrs.id")
+    live_date: date = Field(..., description="Live date")
+    live_title: str = Field(..., description="Live title")
+    venue: str | None = Field(default=None, description="Venue display name")
+    tour_id: int | None = Field(default=None, description="Current tour ID, if assigned")
+    tour_title: str | None = Field(default=None, description="Current tour title, if assigned")
+
+
+class ConsoleTourLiveCandidatesResponse(BaseModel):
+    items: list[ConsoleTourLiveCandidate] = Field(..., description="Live candidates for tour maintenance")
+    page: int = Field(..., ge=1)
+    page_size: int = Field(..., ge=1)
+    total: int = Field(..., ge=0)
+    total_pages: int = Field(..., ge=1)
