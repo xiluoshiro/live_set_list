@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { getTourDetail, type TourDetailResponse, type TourStopItem } from "../api";
 import { logError } from "../logger";
 import { formatLiveType } from "./console/constants";
+import { DetailTitleLink } from "./DetailTitleLink";
 
 export type TourDetailFallback = { tourTitle: string };
 
@@ -56,7 +57,7 @@ export function TourDetailPage({
     <div className="tour-detail-page">
       <div className="detail-page-head tour-detail-head">
         <h2>
-          {detail?.url ? <a href={detail.url} target="_blank" rel="noreferrer" className="detail-title-link">{detail.tour_title}<span aria-hidden="true"> ↗</span></a> : detail?.tour_title ?? fallback.tourTitle}
+          {detail?.url ? <DetailTitleLink href={detail.url}>{detail.tour_title}</DetailTitleLink> : detail?.tour_title ?? fallback.tourTitle}
         </h2>
         <button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回"><span className="modal-action-glyph close">✕</span></button>
       </div>
@@ -88,7 +89,7 @@ export function TourDetailPage({
                     >★</button>
                   )}
                   <button type="button" onClick={() => onOpenLive(stop)}>查看 Live</button>
-                  {stop.url && <a href={stop.url} target="_blank" rel="noreferrer">来源 ↗</a>}
+                  {stop.url && <a href={stop.url} target="_blank" rel="noreferrer" className="live-card-url">🔗</a>}
                 </div>
               </li>
             ))}
