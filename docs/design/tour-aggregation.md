@@ -351,7 +351,7 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 3. 使用分页 Live lookup 搜索场次；候选显示日期、标题、场地和当前 Tour 状态。
 4. 已属于其他 Tour 的 Live 在选择前置灰并显示所属 Tour，不等提交后才告知。
 5. 支持一次添加当前筛选命中的全部未占用 Live；超过 500 条时要求缩小范围。
-6. 所有场次始终按 `live_date ASC, live_id ASC` 排列；editor 可以修改 stop label 和移除关联。
+6. 所有场次始终按 `live_date ASC, live_id ASC` 排列；editor 可以移除关联。`stop_label` 作为兼容字段保留，但暂不在前端展示或编辑。
 7. 提交前显示完整确认页；创建和更新复用现有控制台确认交互。
 
 写接口仍保留服务端 `409` 作为并发和绕过 UI 的最终保护。
