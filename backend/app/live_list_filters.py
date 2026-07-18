@@ -49,17 +49,17 @@ def normalize_list_query(value: str | None) -> str | None:
     return normalized or None
 
 
-def _lookup_pattern(value: str) -> str:
+def build_lookup_pattern(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"
 
 
-def _build_where(filters: LiveListFilters) -> tuple[str, list[object]]:
+def build_live_where(filters: LiveListFilters) -> tuple[str, list[object]]:
     conditions: list[str] = []
     params: list[object] = []
 
     if filters.q is not None:
-        pattern = _lookup_pattern(filters.q)
+        pattern = build_lookup_pattern(filters.q)
         conditions.append(
             """
             (
@@ -165,7 +165,7 @@ def build_filtered_live_queries(
     *,
     favorite_user_id: int | None = None,
 ) -> tuple[str, tuple[object, ...], str, tuple[object, ...]]:
-    where_sql, filter_params = _build_where(filters)
+    where_sql, filter_params = build_live_where(filters)
     favorite_join = ""
     leading_params: list[object] = []
     if favorite_user_id is not None:
@@ -200,13 +200,19 @@ def build_filtered_live_queries(
                 l.live_type,
                 l.default_band_ids,
                 tour.id AS tour_id,
-                tour.tour_title
+                tour.tour_title,
+                pg.id AS performance_group_id,
+                pg.group_title
             FROM live_attrs l
             {favorite_join}
             LEFT JOIN tour_lives tour_live
                 ON tour_live.live_id = l.id
             LEFT JOIN tour_attrs tour
                 ON tour.id = tour_live.tour_id
+            LEFT JOIN performance_group_lives pgl
+                ON pgl.live_id = l.id
+            LEFT JOIN performance_group_attrs pg
+                ON pg.id = pgl.group_id
             WHERE {where_sql}
             ORDER BY {order_sql}
             LIMIT %s OFFSET %s
@@ -219,7 +225,9 @@ def build_filtered_live_queries(
             matched.url,
             matched.live_type,
             matched.tour_id,
-            matched.tour_title
+            matched.tour_title,
+            matched.performance_group_id,
+            matched.group_title
         FROM matched_lives matched
         LEFT JOIN live_setlist setlist
             ON setlist.live_id = matched.id
@@ -237,7 +245,9 @@ def build_filtered_live_queries(
             matched.live_type,
             matched.default_band_ids,
             matched.tour_id,
-            matched.tour_title
+            matched.tour_title,
+            matched.performance_group_id,
+            matched.group_title
         ORDER BY {result_order_sql}
     """
     return count_query, matched_params, page_query, matched_params

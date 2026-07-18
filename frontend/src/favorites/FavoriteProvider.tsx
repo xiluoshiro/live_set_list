@@ -24,6 +24,7 @@ type FavoritesContextValue = {
   favoriteLiveIds: number[];
   favoriteLiveIdSet: ReadonlySet<number>;
   favoriteSyncWarning: string | null;
+  projectionVersion: number;
   isFavoriteSyncing: (liveId: number) => boolean;
   toggleFavorite: (liveId: number) => Promise<void>;
   setFavoritesBatch: (liveIds: number[], desired: boolean) => Promise<void>;
@@ -35,6 +36,7 @@ const FavoritesContext = createContext<FavoritesContextValue | null>(null);
 export function FavoriteProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const [state, setState] = useState<FavoritesState>(anonymousFavoritesState);
+  const [projectionVersion, setProjectionVersion] = useState(0);
   const stateRef = useRef(state);
   const authRef = useRef(auth);
   const hasPendingFavoriteChangesRef = useRef(false);
@@ -50,6 +52,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!auth.isAuthenticated) {
       setState(anonymousFavoritesState);
+      setProjectionVersion((version) => version + 1);
       return;
     }
     // 登录恢复或重新登录后，用当前会话载荷重建服务端真值并清理旧同步状态。
@@ -60,6 +63,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       favoriteConsecutiveFailureCount: 0,
       favoriteSyncWarning: null,
     });
+    setProjectionVersion((version) => version + 1);
     hasPendingFavoriteChangesRef.current = false;
     logInfo("favorite_sync_reconcile", {
       source: "auth_snapshot",
@@ -147,6 +151,9 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         };
       });
       hasPendingFavoriteChangesRef.current = shouldFlushAgain;
+      if (!shouldFlushAgain) {
+        setProjectionVersion((version) => version + 1);
+      }
 
       if (shouldFlushAgain && latestDesiredIntent !== undefined) {
         // 补发链路允许绕过旧快照里的 inFlight 窗口：
@@ -207,6 +214,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       favoriteLiveIds,
       favoriteLiveIdSet,
       favoriteSyncWarning: state.favoriteSyncWarning,
+      projectionVersion,
       isFavoriteSyncing: (liveId: number) => Boolean(state.favoriteSyncById[liveId]?.inFlight),
       toggleFavorite: async (liveId: number) => {
         // 点击时先切换乐观展示，再在后台按当前最终意图发起单飞同步。
@@ -322,6 +330,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
             };
           });
           hasPendingFavoriteChangesRef.current = false;
+          setProjectionVersion((version) => version + 1);
         } catch (error) {
           const isAuthError = isAuthSessionError(error);
           let warningShown = false;
@@ -372,7 +381,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         await authRef.current.refreshSession();
       },
     };
-  }, [state]);
+  }, [projectionVersion, state]);
 
   return <FavoritesContext.Provider value={value}>{children}</FavoritesContext.Provider>;
 }
@@ -381,6 +390,7 @@ const fallbackContext: FavoritesContextValue = {
   favoriteLiveIds: [],
   favoriteLiveIdSet: new Set<number>(),
   favoriteSyncWarning: null,
+  projectionVersion: 0,
   isFavoriteSyncing: () => false,
   toggleFavorite: async () => undefined,
   setFavoritesBatch: async () => undefined,

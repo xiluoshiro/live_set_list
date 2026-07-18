@@ -45,6 +45,11 @@ export type TourRef = {
   tour_title: string;
 };
 
+export type PerformanceGroupRef = {
+  group_id: number;
+  group_title: string;
+};
+
 export type LiveItem = {
   live_id: number;
   live_date: string;
@@ -54,6 +59,7 @@ export type LiveItem = {
   url: string | null;
   is_favorite: boolean;
   tour?: TourRef | null;
+  performance_group?: PerformanceGroupRef | null;
 };
 
 export type LivesResponse = {
@@ -179,6 +185,7 @@ export type LiveDetailResponse = {
   url: string | null;
   is_favorite: boolean;
   tour?: TourRef | null;
+  performance_group?: PerformanceGroupRef | null;
   detail_rows: LiveDetailRow[];
 };
 
@@ -221,6 +228,65 @@ export type ToursResponse = {
 
 export type TourDetailResponse = TourSummary & {
   stops: TourStopItem[];
+};
+
+export type PerformanceGroupBandItem = {
+  band_id: number;
+  band_name: string;
+  band_abbr: string;
+};
+
+export type PerformanceGroupLiveItem = {
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  live_type: string;
+  start_time: string;
+  venue: string | null;
+  bands: number[];
+  url: string | null;
+  is_favorite: boolean;
+  has_setlist: boolean;
+};
+
+export type PerformanceGroupDetailResponse = {
+  group_id: number;
+  group_title: string;
+  start_date: string;
+  end_date: string;
+  day_count: number;
+  live_count: number;
+  display_type: "single_day_multi_show" | "multi_day";
+  bands: PerformanceGroupBandItem[];
+  venues: string[];
+  lives: PerformanceGroupLiveItem[];
+};
+
+export type PerformanceGroupSummary = {
+  kind: "performance_group";
+  group_id: number;
+  group_title: string;
+  start_date: string;
+  end_date: string;
+  day_count: number;
+  live_count: number;
+  display_type: "single_day_multi_show" | "multi_day";
+  bands: PerformanceGroupBandItem[];
+  venues: string[];
+};
+
+export type PerformanceItem =
+  | { kind: "live"; live: LiveItem }
+  | { kind: "performance_group"; performance_group: PerformanceGroupSummary };
+
+export type PerformancesResponse = {
+  items: PerformanceItem[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+  };
 };
 
 export type TourStatisticsSongStatus = "common" | "single" | "added" | "removed" | "intermittent";
@@ -444,6 +510,59 @@ export type ConsoleTourEditResponse = {
   }>;
 };
 
+export type ConsolePerformanceGroupLiveCandidate = {
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  start_time: string;
+  venue: string | null;
+  band_ids: number[];
+};
+
+export type ConsolePerformanceGroupListResponse = {
+  items: Array<{
+    group_id: number;
+    group_title: string;
+  }>;
+};
+
+export type ConsolePerformanceGroupLiveCandidatesResponse = {
+  items: ConsolePerformanceGroupLiveCandidate[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+};
+
+export type ConsolePerformanceGroupEditStop = {
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  start_time: string;
+  venue: string | null;
+  band_ids: number[];
+};
+
+export type ConsolePerformanceGroupEditResponse = {
+  group_id: number;
+  group_title: string;
+  lives: ConsolePerformanceGroupEditStop[];
+};
+
+export type ConsolePerformanceGroupUpsertPayload = {
+  group_title: string;
+  live_ids: number[];
+};
+
+export type ConsolePerformanceGroupMutationResponse = {
+  ok: boolean;
+  item: {
+    group_id: number;
+    group_title: string;
+    live_count: number;
+  };
+};
+
 type AuthErrorPayload = {
   detail?: string | { code?: string; message?: string };
 };
@@ -479,7 +598,14 @@ type RequestKind =
   | "catalog_bands"
   | "catalog_band_lives"
   | "catalog_stats"
-  | "catalog_statistics";
+  | "catalog_statistics"
+  | "catalog_performance_group_detail"
+  | "catalog_performances"
+  | "console_performance_group_live_candidates"
+  | "console_performance_group_list"
+  | "console_performance_group_detail"
+  | "console_performance_group_create"
+  | "console_performance_group_update";
 
 type RequestLogMeta = {
   requestKind: RequestKind;
@@ -1135,6 +1261,140 @@ export async function updateConsoleTour(
     { requestKind: "console_tour_update", method: "PUT" },
   );
   const result = await expectJsonResponse<ConsoleTourMutationResponse>(response);
+  clearLiveCollectionCaches();
+  detailCache.clear();
+  return result;
+}
+
+export async function getPerformanceGroupDetail(groupId: number): Promise<PerformanceGroupDetailResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/catalog/performance-groups/${groupId}`,
+    undefined,
+    { requestKind: "catalog_performance_group_detail" },
+  );
+  if (!response.ok) {
+    if (response.status === 404) throw new Error(`Group ${groupId} not found`);
+    throw new Error(`Failed to fetch group detail: ${response.status}`);
+  }
+  return expectJsonResponse<PerformanceGroupDetailResponse>(response);
+}
+
+export async function getPerformances(
+  page: number,
+  pageSize: number,
+  scope: "all" | "favorites" = "all",
+  filters?: Record<string, string | number | undefined>,
+): Promise<PerformancesResponse> {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+    scope,
+  });
+  if (filters) {
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined) params.set(key, String(value));
+    }
+  }
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/catalog/performances?${params.toString()}`,
+    undefined,
+    { requestKind: "catalog_performances" },
+  );
+  if (!response.ok) {
+    if (response.status === 401) throw new Error("Authentication required");
+    throw new Error(`Failed to fetch performances: ${response.status}`);
+  }
+  return expectJsonResponse<PerformancesResponse>(response);
+}
+
+export async function getConsolePerformanceGroupLiveCandidates(
+  q: string,
+  page: number,
+  pageSize: number,
+): Promise<ConsolePerformanceGroupLiveCandidatesResponse> {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (q) params.set("q", q);
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/performance-groups/live-candidates?${params.toString()}`,
+    undefined,
+    { requestKind: "console_performance_group_live_candidates" },
+  );
+  if (!response.ok) throw new Error(`Failed to fetch candidates: ${response.status}`);
+  return expectJsonResponse<ConsolePerformanceGroupLiveCandidatesResponse>(response);
+}
+
+export async function getConsolePerformanceGroups(): Promise<ConsolePerformanceGroupListResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/performance-groups`,
+    undefined,
+    { requestKind: "console_performance_group_list" },
+  );
+  if (!response.ok) throw new Error(`Failed to fetch performance groups: ${response.status}`);
+  return expectJsonResponse<ConsolePerformanceGroupListResponse>(response);
+}
+
+export async function getConsolePerformanceGroup(groupId: number): Promise<ConsolePerformanceGroupEditResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/performance-groups/${groupId}`,
+    undefined,
+    { requestKind: "console_performance_group_detail" },
+  );
+  if (!response.ok) {
+    if (response.status === 404) throw new Error(`Group ${groupId} not found`);
+    throw new Error(`Failed to fetch group: ${response.status}`);
+  }
+  return expectJsonResponse<ConsolePerformanceGroupEditResponse>(response);
+}
+
+export async function createConsolePerformanceGroup(
+  payload: ConsolePerformanceGroupUpsertPayload,
+  csrfToken: string,
+): Promise<ConsolePerformanceGroupMutationResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/performance-groups`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_performance_group_create", method: "POST" },
+  );
+  if (!response.ok) {
+    if (response.status === 409) {
+      const detail = await readJsonSafely(response);
+      throw Object.assign(new Error("Live already belongs to another group"), { detail, status: 409 });
+    }
+    throw new Error(`Failed to create group: ${response.status}`);
+  }
+  const result = await expectJsonResponse<ConsolePerformanceGroupMutationResponse>(response);
+  clearLiveCollectionCaches();
+  detailCache.clear();
+  return result;
+}
+
+export async function updateConsolePerformanceGroup(
+  groupId: number,
+  payload: ConsolePerformanceGroupUpsertPayload,
+  csrfToken: string,
+): Promise<ConsolePerformanceGroupMutationResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/performance-groups/${groupId}`,
+    {
+      method: "PUT",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_performance_group_update", method: "PUT" },
+  );
+  if (!response.ok) {
+    if (response.status === 404) throw new Error(`Group ${groupId} not found`);
+    if (response.status === 409) {
+      const detail = await readJsonSafely(response);
+      throw Object.assign(new Error("Live already belongs to another group"), { detail, status: 409 });
+    }
+    throw new Error(`Failed to update group: ${response.status}`);
+  }
+  const result = await expectJsonResponse<ConsolePerformanceGroupMutationResponse>(response);
   clearLiveCollectionCaches();
   detailCache.clear();
   return result;

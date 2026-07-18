@@ -310,3 +310,79 @@ class ConsoleTourEditResponse(BaseModel):
     tour_title: str = Field(..., description="Tour title")
     band_ids: list[int] = Field(default_factory=list, description="Explicit tour band IDs; empty enables fallback")
     stops: list[ConsoleTourEditStop] = Field(..., min_length=1, description="Stops sorted by date and Live ID")
+
+
+class ConsolePerformanceGroupUpsertRequest(BaseModel):
+    group_title: str = Field(..., min_length=1, max_length=255, description="Activity group display title")
+    live_ids: list[int] = Field(
+        ...,
+        min_length=2,
+        max_length=500,
+        description="Complete target live ID collection",
+    )
+
+    @field_validator("group_title")
+    @classmethod
+    def validate_group_title(cls, value: str) -> str:
+        return _strip_required_text(value)
+
+    @field_validator("live_ids")
+    @classmethod
+    def validate_live_ids(cls, value: list[int]) -> list[int]:
+        if any(live_id <= 0 for live_id in value):
+            raise ValueError("live_ids must contain only positive IDs")
+        if len(set(value)) != len(value):
+            raise ValueError("live_ids must not contain duplicates")
+        return value
+
+
+class ConsolePerformanceGroupMutationItem(BaseModel):
+    group_id: int = Field(..., description="Created or updated group ID")
+    group_title: str = Field(..., description="Normalized group title")
+    live_count: int = Field(..., ge=2, description="Persisted group live count")
+
+
+class ConsolePerformanceGroupMutationResponse(BaseModel):
+    ok: bool = Field(..., description="Whether the transaction succeeded")
+    item: ConsolePerformanceGroupMutationItem = Field(..., description="Mutation summary")
+
+
+class ConsolePerformanceGroupLiveCandidate(BaseModel):
+    live_id: int = Field(..., description="live_attrs.id")
+    live_date: date = Field(..., description="Live date")
+    live_title: str = Field(..., description="Live title")
+    start_time: str = Field(..., description="Live start time")
+    venue: str | None = Field(default=None, description="Venue display name")
+    band_ids: list[int] = Field(default_factory=list, description="Effective Live band IDs")
+
+
+class ConsolePerformanceGroupLiveCandidatesResponse(BaseModel):
+    items: list[ConsolePerformanceGroupLiveCandidate] = Field(..., description="Live candidates for group maintenance")
+    page: int = Field(..., ge=1)
+    page_size: int = Field(..., ge=1)
+    total: int = Field(..., ge=0)
+    total_pages: int = Field(..., ge=1)
+
+
+class ConsolePerformanceGroupListItem(BaseModel):
+    group_id: int = Field(..., description="Performance group ID")
+    group_title: str = Field(..., description="Performance group title")
+
+
+class ConsolePerformanceGroupListResponse(BaseModel):
+    items: list[ConsolePerformanceGroupListItem] = Field(..., description="All editable performance groups")
+
+
+class ConsolePerformanceGroupEditStop(BaseModel):
+    live_id: int = Field(..., description="Associated Live ID")
+    live_date: date = Field(..., description="Live date")
+    live_title: str = Field(..., description="Live title")
+    start_time: str = Field(..., description="Start time")
+    venue: str | None = Field(default=None, description="Venue display name")
+    band_ids: list[int] = Field(default_factory=list, description="Effective Live band IDs")
+
+
+class ConsolePerformanceGroupEditResponse(BaseModel):
+    group_id: int = Field(..., description="Group ID")
+    group_title: str = Field(..., description="Group title")
+    lives: list[ConsolePerformanceGroupEditStop] = Field(..., min_length=1, description="Group lives sorted by date/start_time/id")

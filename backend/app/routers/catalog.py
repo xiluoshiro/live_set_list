@@ -19,6 +19,7 @@ from app.schemas import (
     ValidationErrorResponse,
 )
 from app.tour_refs import build_tour_ref_from_row
+from app.performance_group_refs import build_performance_group_ref_from_row
 
 router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 logger = get_logger(__name__)
@@ -55,6 +56,7 @@ def _live_item_from_row(row: tuple[Any, ...], favorite_live_ids: set[int]) -> di
         "live_type": row[5],
         "is_favorite": live_id in favorite_live_ids,
         "tour": build_tour_ref_from_row(row, tour_id_index=6, tour_title_index=7),
+        "performance_group": build_performance_group_ref_from_row(row, group_id_index=8, group_title_index=9),
     }
 
 
@@ -93,7 +95,9 @@ live_rows AS (
         l.url,
         l.live_type,
         tour.id AS tour_id,
-        tour.tour_title
+        tour.tour_title,
+        pg.id AS performance_group_id,
+        pg.group_title
     FROM live_attrs l
     JOIN matched_live_ids m
         ON m.id = l.id
@@ -101,6 +105,10 @@ live_rows AS (
         ON tour_live.live_id = l.id
     LEFT JOIN tour_attrs tour
         ON tour.id = tour_live.tour_id
+    LEFT JOIN performance_group_lives pgl
+        ON pgl.live_id = l.id
+    LEFT JOIN performance_group_attrs pg
+        ON pg.id = pgl.group_id
     LEFT JOIN live_setlist ls
         ON l.id = ls.live_id
     LEFT JOIN LATERAL (
@@ -109,9 +117,9 @@ live_rows AS (
     ) bm ON true
     LEFT JOIN band_attrs b
         ON b.band_name = bm.band_name
-    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, tour.id, tour.tour_title
+    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, tour.id, tour.tour_title, pg.id, pg.group_title
 )
-SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title
+SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title, performance_group_id, group_title
 FROM live_rows
 ORDER BY live_date DESC, id DESC
 LIMIT %s
@@ -234,7 +242,9 @@ live_rows AS (
         l.url,
         l.live_type,
         tour.id AS tour_id,
-        tour.tour_title
+        tour.tour_title,
+        pg.id AS performance_group_id,
+        pg.group_title
     FROM live_attrs l
     JOIN matched_live_ids m
         ON m.id = l.id
@@ -242,6 +252,10 @@ live_rows AS (
         ON tour_live.live_id = l.id
     LEFT JOIN tour_attrs tour
         ON tour.id = tour_live.tour_id
+    LEFT JOIN performance_group_lives pgl
+        ON pgl.live_id = l.id
+    LEFT JOIN performance_group_attrs pg
+        ON pg.id = pgl.group_id
     LEFT JOIN live_setlist ls
         ON l.id = ls.live_id
     LEFT JOIN LATERAL (
@@ -250,9 +264,9 @@ live_rows AS (
     ) bm ON true
     LEFT JOIN band_attrs b
         ON b.band_name = bm.band_name
-    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, tour.id, tour.tour_title
+    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, tour.id, tour.tour_title, pg.id, pg.group_title
 )
-SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title
+SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title, performance_group_id, group_title
 FROM live_rows
 ORDER BY live_date DESC, id DESC
 LIMIT %s OFFSET %s

@@ -27,7 +27,7 @@ def test_search_catalog_returns_grouped_public_results():
     # 测试点：公共搜索应按 Live、乐队、歌曲和场地分组返回，且匿名访问不查收藏表。
     conn, cursor = _build_connection_mock()
     cursor.fetchall.side_effect = [
-        [(1, "2026-03-28", "Poppin'Party Live", [1], "https://example.com/live/1", "oneman")],
+        [(1, "2026-03-28", "Poppin'Party Live", [1], "https://example.com/live/1", "oneman", None, None, 5, "Party Weekend")],
         [(1, "Poppin'Party", "PoPiPa", 12)],
         [(7, "STAR BEAT!", 1, "Poppin'Party", 5)],
         [(3, "有明アリーナ", 4)],
@@ -49,6 +49,7 @@ def test_search_catalog_returns_grouped_public_results():
         "url": "https://example.com/live/1",
         "is_favorite": False,
         "tour": None,
+        "performance_group": {"group_id": 5, "group_title": "Party Weekend"},
     }
     assert payload["bands"] == [{"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "live_count": 12}]
     assert payload["songs"] == [
@@ -99,7 +100,7 @@ def test_get_catalog_band_lives_returns_band_and_paginated_lives():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.side_effect = [(1, "Poppin'Party", "PoPiPa", 22), (22,)]
     cursor.fetchall.return_value = [
-        (9, "2026-06-01", "Band Live 9", [1, 2], "https://example.com/live/9", "multi_act"),
+        (9, "2026-06-01", "Band Live 9", [1, 2], "https://example.com/live/9", "multi_act", None, None, 5, "Party Weekend"),
     ]
 
     with patch("app.routers.catalog.get_db_connection", return_value=conn):
@@ -112,6 +113,7 @@ def test_get_catalog_band_lives_returns_band_and_paginated_lives():
     assert payload["pagination"] == {"page": 2, "page_size": 20, "total": 22, "total_pages": 2}
     assert payload["items"][0]["live_id"] == 9
     assert payload["items"][0]["bands"] == [1, 2]
+    assert payload["items"][0]["performance_group"] == {"group_id": 5, "group_title": "Party Weekend"}
     assert cursor.execute.call_args_list == [
         call(BAND_META_QUERY, (1,)),
         call(BAND_LIVES_COUNT_QUERY, (1,)),

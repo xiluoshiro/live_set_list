@@ -167,6 +167,7 @@ def test_favorite_live_adds_server_side_state_and_marks_lives_responses(
                 "tour_id": 1,
                 "tour_title": "BanG Dream! Spring Tour 2026",
             },
+            "performance_group": None,
         }
     ]
 

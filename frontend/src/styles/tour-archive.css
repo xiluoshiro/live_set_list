@@ -37,6 +37,11 @@
 .tour-stop-shortcut-item { display: inline-flex; align-items: center; white-space: nowrap; }
 .tour-stop-separator { width: 2px; height: 1.1em; margin: 0 10px; border-radius: 999px; background: var(--border-strong); }
 .tour-stop-shortcut[aria-pressed="true"] { color: var(--text-heading); font-weight: 700; text-decoration: underline; }
+.performance-group-start-time { font-size: 0.85em; color: var(--text-muted); }
+.performance-group-date-section { display: grid; width: 100%; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border-table-row); }
+.performance-group-date-label { color: var(--text-secondary); font-weight: 700; }
+.performance-group-date-lives { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; }
+.performance-group-live-star { margin-left: 5px; }
 .tour-detail-state { text-align: center; color: var(--text-muted); padding: 28px; }
 .tour-inline-live-detail { margin: 18px 0 0; }
 .tour-statistics { display: flex; flex-direction: column; gap: 14px; }
@@ -120,6 +125,10 @@
   }
   .tour-list-footer { align-items: flex-start; flex-direction: column; }
   .tour-detail-page { margin: 12px; padding: 15px; }
+  .performance-group-date-section { grid-template-columns: 1fr; gap: 4px; }
+  .performance-group-date-lives { align-items: flex-start; flex-direction: column; }
+  .performance-group-date-lives .tour-stop-shortcut-item { max-width: 100%; white-space: normal; }
+  .performance-group-date-lives .tour-stop-separator { display: none; }
   .tour-transition-detail-head { align-items: flex-start; flex-direction: column; }
   .tour-transition-groups { grid-template-columns: 1fr; }
   .tour-transition-detail { min-height: 0; padding: 13px; }

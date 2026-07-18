@@ -15,6 +15,7 @@ import {
   getLiveDetailsBatch,
   getLives,
   getMyFavoriteLives,
+  getPerformances,
   login,
   logout,
   peekMyFavoriteLives,
@@ -22,6 +23,7 @@ import {
   unfavoriteLive,
   type LiveDetailResponse,
   type LivesResponse,
+  type PerformancesResponse,
 } from "../api";
 
 vi.mock("../api", () => ({
@@ -41,6 +43,7 @@ vi.mock("../api", () => ({
   login: vi.fn(),
   logout: vi.fn(),
   getMyFavoriteLives: vi.fn(),
+  getPerformances: vi.fn(),
   peekMyFavoriteLives: vi.fn(),
   clearLivesCache: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
@@ -77,6 +80,7 @@ const getAuthMeMock = vi.mocked(getAuthMe);
 const loginMock = vi.mocked(login);
 const logoutMock = vi.mocked(logout);
 const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
+const getPerformancesSyncMock = vi.mocked(getPerformances);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
 const clearLivesCacheMock = vi.mocked(clearLivesCache);
 const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
@@ -116,6 +120,22 @@ function makeResponse(params: {
       total: params.total,
       total_pages: params.totalPages,
     },
+  };
+}
+
+function makePerformancesResponse(params: {
+  page: number;
+  pageSize: 15 | 20;
+  total: number;
+  totalPages: number;
+  itemCount: number;
+  startId?: number;
+  withUrl?: boolean;
+}): PerformancesResponse {
+  const livesResp = makeResponse(params);
+  return {
+    items: livesResp.items.map((live) => ({ kind: "live" as const, live })),
+    pagination: livesResp.pagination,
   };
 }
 
@@ -198,6 +218,7 @@ describe("App optimistic favorite sync", () => {
     loginMock.mockReset();
     logoutMock.mockReset();
     getMyFavoriteLivesMock.mockReset();
+    getPerformancesSyncMock.mockReset();
     peekMyFavoriteLivesMock.mockReset();
     clearLivesCacheMock.mockReset();
     clearMyFavoriteLivesCacheMock.mockReset();
@@ -218,7 +239,14 @@ describe("App optimistic favorite sync", () => {
     });
     logoutMock.mockResolvedValue();
     getMyFavoriteLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2 }),
+      makeResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2, startId: 101 }),
+    );
+    getPerformancesSyncMock.mockImplementation((_p, _s, scope, _f) =>
+      Promise.resolve(
+        scope === "favorites"
+          ? makePerformancesResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2, startId: 101 })
+          : makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+      ),
     );
     peekMyFavoriteLivesMock.mockReturnValue(undefined);
     favoriteLiveMock.mockResolvedValue();
@@ -238,8 +266,8 @@ describe("App optimistic favorite sync", () => {
 
   test("点击收藏后会立即乐观切换星标，且按钮不会进入禁用态", async () => {
     // 测试点：收藏同步未返回时，星标先按用户意图切换，按钮保持可继续交互。
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    getPerformancesSyncMock.mockResolvedValue(
+      makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     const deferredUnfavorite = deferred<void>();
     unfavoriteLiveMock.mockImplementationOnce(() => deferredUnfavorite.promise);
@@ -262,8 +290,8 @@ describe("App optimistic favorite sync", () => {
 
   test("连续失败三次后会显示统一的收藏同步提示", async () => {
     // 测试点：收藏同步连续失败达到阈值后，页面会显示固定提示文案。
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    getPerformancesSyncMock.mockResolvedValue(
+      makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     favoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
     unfavoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
@@ -297,11 +325,12 @@ describe("App optimistic favorite sync", () => {
         csrf_token: "csrf-token",
         favorite_live_ids: [1, 2],
       });
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-    );
-    getMyFavoriteLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2, startId: 101 }),
+    getPerformancesSyncMock.mockImplementation((_p, _s, scope, _f) =>
+      Promise.resolve(
+        scope === "favorites"
+          ? makePerformancesResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2, startId: 101 })
+          : makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+      ),
     );
     favoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
     const user = userEvent.setup();
@@ -313,7 +342,7 @@ describe("App optimistic favorite sync", () => {
     expect(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "取消收藏" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "仅收藏" }));
-    await waitFor(() => expect(getMyFavoriteLivesMock).toHaveBeenCalledWith(1, 20));
+    await waitFor(() => expect(getPerformancesSyncMock).toHaveBeenCalledWith(1, 20, "favorites"));
     await waitFor(() => expect(getAuthMeMock).toHaveBeenCalledTimes(2));
 
     await user.click(screen.getByRole("button", { name: "演出资料" }));
@@ -322,8 +351,8 @@ describe("App optimistic favorite sync", () => {
 
   test("同条目快速连点会在首轮完成后补发第二轮同步请求", async () => {
     // 测试点：第一次请求 in-flight 时再次点击不并发；首轮完成后按最终意图补发第二轮。
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    getPerformancesSyncMock.mockResolvedValue(
+      makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     const firstUnfavorite = deferred<void>();
     unfavoriteLiveMock.mockImplementationOnce(() => firstUnfavorite.promise);
@@ -347,8 +376,8 @@ describe("App optimistic favorite sync", () => {
 
   test("连续失败达到阈值后，后续一次成功会清除同步告警", async () => {
     // 测试点：warning 出现后只要成功一次，应立即清空会话失败告警。
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    getPerformancesSyncMock.mockResolvedValue(
+      makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     favoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
     unfavoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
@@ -381,8 +410,8 @@ describe("App optimistic favorite sync", () => {
         favorite_live_ids: [1, 2],
       })
       .mockRejectedValueOnce(new ApiError("session expired", 401, "AUTH_SESSION_EXPIRED"));
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    getPerformancesSyncMock.mockResolvedValue(
+      makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     favoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
     const user = userEvent.setup();

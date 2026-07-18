@@ -8,8 +8,7 @@ import {
   getCatalogStats,
   getCatalogStatistics,
   getLives,
-  getMyFavoriteLives,
-  peekMyFavoriteLives,
+  getPerformances,
   searchCatalog,
   type CatalogBandItem,
   type CatalogBandLivesResponse,
@@ -19,6 +18,9 @@ import {
   type CatalogStatisticsResponse,
   type StatisticsScope,
   type LiveItem,
+  type PerformanceGroupRef,
+  type PerformanceGroupSummary,
+  type PerformanceItem,
   type TourRef,
   type TourSummary,
 } from "./api";
@@ -40,6 +42,7 @@ import { LoginDialog } from "./components/LoginDialog";
 import { StatisticsPanel } from "./components/StatisticsPanel";
 import { TourArchivePage } from "./components/TourArchivePage";
 import { TourDetailPage, type TourDetailFallback } from "./components/TourDetailPage";
+import { PerformanceGroupDetailPage } from "./components/PerformanceGroupDetailPage";
 import { DEFAULT_TOUR_FILTERS, type TourFilters } from "./components/TourListFilters";
 import { formatLiveType } from "./components/console/constants";
 import { useFavorites } from "./favorites/FavoriteProvider";
@@ -58,13 +61,23 @@ import {
 import { useTheme, type ThemeMode } from "./theme/ThemeProvider";
 import "./styles/index.css";
 
-type LiveRow = {
+type DisplayRow = {
+  kind: "live" | "performance_group";
   liveId: number;
   liveDate: string;
   liveTitle: string;
   liveType: string;
   icons: BandIconInput[];
   url: string | null;
+  groupId: number | null;
+  groupTitle: string | null;
+  groupStartDate: string | null;
+  groupEndDate: string | null;
+  groupDayCount: number | null;
+  groupLiveCount: number | null;
+  groupDisplayType: "single_day_multi_show" | "multi_day" | null;
+  groupIcons: BandIconInput[];
+  groupVenues: string[];
 };
 
 type LiveDetailFallback = {
@@ -73,9 +86,9 @@ type LiveDetailFallback = {
   url: string | null;
 };
 
-type TabKey = "home" | "favorites" | "all" | "tours" | "tour_detail" | "statistics" | "console" | "search" | "browse" | "about" | "detail";
+type TabKey = "home" | "favorites" | "all" | "tours" | "tour_detail" | "performance_group_detail" | "statistics" | "console" | "search" | "browse" | "about" | "detail";
 type ListTabKey = "favorites" | "all";
-type MainTabKey = Exclude<TabKey, "detail" | "tour_detail">;
+type MainTabKey = Exclude<TabKey, "detail" | "tour_detail" | "performance_group_detail">;
 type AppHistoryState = {
   app: "live-set-list";
   tab: TabKey;
@@ -84,6 +97,9 @@ type AppHistoryState = {
   detailFallback?: LiveDetailFallback;
   detailTourId?: number;
   tourFallback?: TourDetailFallback;
+  detailGroupId?: number;
+  detailGroupLiveId?: number;
+  groupFallback?: { groupTitle: string };
   searchQuery?: string;
   catalogBandId?: number | null;
   listState?: {
@@ -93,7 +109,7 @@ type AppHistoryState = {
   };
 };
 type ListSnapshot = {
-  items: LiveRow[];
+  items: DisplayRow[];
   total: number;
   totalPages: number;
 };
@@ -133,6 +149,20 @@ function buildListSnapshotKey(
   filtersKey = "",
 ): string {
   return `${tab}:${filtersKey}:${page}:${pageSize}`;
+}
+
+function toPerformanceFilters(filters: LiveListFilters): Record<string, string | number | undefined> {
+  return {
+    q: filters.q || undefined,
+    year: filters.year ?? undefined,
+    live_type: filters.liveType ?? undefined,
+    band_id: filters.bandId ?? undefined,
+    sort: filters.sort,
+  };
+}
+
+function displayRowKey(row: DisplayRow): string {
+  return row.kind === "performance_group" ? `performance_group:${row.groupId}` : `live:${row.liveId}`;
 }
 
 function isAppHistoryState(value: unknown): value is AppHistoryState {
@@ -199,14 +229,17 @@ function App() {
   const [previousTab, setPreviousTab] = useState<Exclude<TabKey, "detail">>("home");
   const [detailTourId, setDetailTourId] = useState<number | null>(null);
   const [tourFallback, setTourFallback] = useState<TourDetailFallback | null>(null);
+  const [detailGroupId, setDetailGroupId] = useState<number | null>(null);
+  const [detailGroupLiveId, setDetailGroupLiveId] = useState<number | null>(null);
+  const [groupFallback, setGroupFallback] = useState<{ groupTitle: string } | null>(null);
   const [tourFilters, setTourFilters] = useState<TourFilters>({ ...DEFAULT_TOUR_FILTERS });
   const [tourPage, setTourPage] = useState(1);
-  const [items, setItems] = useState<LiveRow[]>([]);
+  const [items, setItems] = useState<DisplayRow[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [homeRecentRows, setHomeRecentRows] = useState<LiveRow[]>([]);
+  const [homeRecentRows, setHomeRecentRows] = useState<DisplayRow[]>([]);
   const [homeLiveTotal, setHomeLiveTotal] = useState(0);
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeError, setHomeError] = useState<string | null>(null);
@@ -290,14 +323,31 @@ function App() {
       setTourFallback(state.tourFallback);
       setDetailLiveId(null);
       setDetailFallback(null);
+      setDetailGroupId(null);
+      setDetailGroupLiveId(null);
+      setGroupFallback(null);
       setTab("tour_detail");
+      return;
+    }
+    if (allowedTab === "performance_group_detail" && state.detailGroupId && state.groupFallback) {
+      setDetailGroupId(state.detailGroupId);
+      setDetailGroupLiveId(state.detailGroupLiveId ?? null);
+      setGroupFallback(state.groupFallback);
+      setDetailLiveId(null);
+      setDetailFallback(null);
+      setDetailTourId(null);
+      setTourFallback(null);
+      setTab("performance_group_detail");
       return;
     }
     setDetailLiveId(null);
     setDetailFallback(null);
     setDetailTourId(null);
     setTourFallback(null);
-    const nextTab = allowedTab === "detail" || allowedTab === "tour_detail" ? "home" : allowedTab;
+    setDetailGroupId(null);
+    setDetailGroupLiveId(null);
+    setGroupFallback(null);
+    const nextTab = allowedTab === "detail" || allowedTab === "tour_detail" || allowedTab === "performance_group_detail" ? "home" : allowedTab;
     if (nextTab === "all" || nextTab === "favorites") {
       const restoredPage = state.listState?.page ?? 1;
       const restoredCardPage = state.listState?.cardPage ?? 1;
@@ -325,7 +375,7 @@ function App() {
     pushHistoryState({ app: "live-set-list", tab: nextTab, ...extras });
   };
 
-  const openLiveDetail = (row: LiveRow | CatalogLiveRow | HomeLiveRow, sourceTab: Exclude<TabKey, "detail"> = tab as Exclude<TabKey, "detail">) => {
+  const openLiveDetail = (row: DisplayRow | CatalogLiveRow | HomeLiveRow, sourceTab: Exclude<TabKey, "detail"> = tab as Exclude<TabKey, "detail">) => {
     const fallback = { liveTitle: row.liveTitle, liveDate: row.liveDate, url: "url" in row ? row.url : null };
     pushHistoryState({
       app: "live-set-list",
@@ -345,6 +395,19 @@ function App() {
     });
   };
 
+  const openPerformanceGroupDetail = (
+    group: PerformanceGroupRef | PerformanceGroupSummary,
+    sourceLiveId?: number,
+  ) => {
+    pushHistoryState({
+      app: "live-set-list",
+      tab: "performance_group_detail",
+      detailGroupId: group.group_id,
+      detailGroupLiveId: sourceLiveId,
+      groupFallback: { groupTitle: group.group_title },
+    });
+  };
+
   useEffect(() => {
     if (!isAppHistoryState(window.history.state)) {
       window.history.replaceState({ app: "live-set-list", tab: "home" } satisfies AppHistoryState, "", window.location.href);
@@ -358,14 +421,68 @@ function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, [canUseConsoleFeatures, canUseFavoriteFeatures]);
 
-  const toLiveRow = (item: LiveItem): LiveRow => ({
+  const toLiveRow = (item: LiveItem): DisplayRow => ({
+    kind: "live",
     liveId: item.live_id,
     liveDate: item.live_date,
     liveTitle: item.live_title,
     liveType: item.live_type,
     icons: item.bands ?? [],
     url: item.url,
+    groupId: item.performance_group?.group_id ?? null,
+    groupTitle: item.performance_group?.group_title ?? null,
+    groupStartDate: null,
+    groupEndDate: null,
+    groupDayCount: null,
+    groupLiveCount: null,
+    groupDisplayType: null,
+    groupIcons: [],
+    groupVenues: [],
   });
+
+  const performancesToDisplayRows = (pageItems: PerformanceItem[]): DisplayRow[] =>
+    pageItems.map((item): DisplayRow => {
+      if (item.kind === "live") {
+        const live = item.live;
+        return {
+          kind: "live",
+          liveId: live.live_id,
+          liveDate: live.live_date,
+          liveTitle: live.live_title,
+          liveType: live.live_type,
+          icons: live.bands ?? [],
+          url: live.url,
+          groupId: live.performance_group?.group_id ?? null,
+          groupTitle: live.performance_group?.group_title ?? null,
+          groupStartDate: null,
+          groupEndDate: null,
+          groupDayCount: null,
+          groupLiveCount: null,
+          groupDisplayType: null,
+          groupIcons: [],
+          groupVenues: [],
+        };
+      }
+      const pg = item.performance_group;
+      return {
+        kind: "performance_group",
+        liveId: pg.group_id,
+        liveDate: pg.start_date,
+        liveTitle: pg.group_title,
+        liveType: pg.display_type === "single_day_multi_show" ? "单日多场" : "多日活动",
+        icons: [],
+        url: null,
+        groupId: pg.group_id,
+        groupTitle: pg.group_title,
+        groupStartDate: pg.start_date,
+        groupEndDate: pg.end_date,
+        groupDayCount: pg.day_count,
+        groupLiveCount: pg.live_count,
+        groupDisplayType: pg.display_type,
+        groupIcons: pg.bands.map((b) => b.band_id),
+        groupVenues: pg.venues,
+      };
+    });
 
   useEffect(() => {
     if (canUseFavoriteFeatures || tab !== "favorites") return;
@@ -416,7 +533,7 @@ function App() {
       }
     });
     clearMyFavoriteLivesCache();
-  }, [favorites.favoriteLiveIds]);
+  }, [favorites.projectionVersion]);
 
   useEffect(() => {
     if (auth.isLoading) return;
@@ -645,53 +762,19 @@ function App() {
         }
         return;
       }
-      const cachedFavoritePage =
-        tab === "favorites"
-          ? peekMyFavoriteLives(page, pageSize, listFiltersActive ? listFilters : undefined)
-          : undefined;
-      if (cachedFavoritePage) {
-        const mappedItems = cachedFavoritePage.items.map(toLiveRow);
-        setItems(mappedItems);
-        setServerTotal(cachedFavoritePage.pagination.total);
-        setServerTotalPages(cachedFavoritePage.pagination.total_pages);
-        setLoadError(null);
-        setLoading(false);
-        listSnapshotsRef.current[requestedSnapshotKey] = {
-          items: mappedItems,
-          total: cachedFavoritePage.pagination.total,
-          totalPages: cachedFavoritePage.pagination.total_pages,
-        };
-        if (viewMode === "cards") {
-          cardSessionsRef.current[cardSessionKey] = {
-            items: mappedItems,
-            total: cachedFavoritePage.pagination.total,
-            totalPages: cachedFavoritePage.pagination.total_pages,
-            cardPage: cachedFavoritePage.pagination.page,
-          };
-          setCardPage(cachedFavoritePage.pagination.page);
-        }
-        if (cachedFavoritePage.pagination.page !== page) {
-          setPage(cachedFavoritePage.pagination.page);
-        }
-        return;
-      }
-
       setLoading(true);
       setLoadError(null);
-      // 首次进入未缓存的页签/分页时，先清空上一轮列表，避免残留旧 tab 数据。
       setItems([]);
       setServerTotal(0);
       setServerTotalPages(1);
       try {
-        const data = tab === "favorites"
-          ? listFiltersActive
-            ? await getMyFavoriteLives(page, pageSize, listFilters)
-            : await getMyFavoriteLives(page, pageSize)
-          : listFiltersActive
-            ? await getLives(page, pageSize, listFilters)
-            : await getLives(page, pageSize);
+        const scope = tab === "favorites" ? "favorites" as const : "all" as const;
+        const performFilters = toPerformanceFilters(listFilters);
+        const data = listFiltersActive
+          ? await getPerformances(page, pageSize, scope, performFilters)
+          : await getPerformances(page, pageSize, scope);
         if (canceled) return;
-        const mappedItems = data.items.map(toLiveRow);
+        const mappedItems = performancesToDisplayRows(data.items);
         const canonicalPage = data.pagination.page;
         const canonicalSnapshotKey = buildListSnapshotKey(tab, canonicalPage, pageSize, currentListFiltersKey);
         listSnapshotsRef.current[canonicalSnapshotKey] = {
@@ -754,6 +837,7 @@ function App() {
     pageSize,
     tab,
     viewMode,
+    tab === "favorites" ? favorites.projectionVersion : 0,
   ]);
 
   useEffect(() => {
@@ -762,7 +846,7 @@ function App() {
     const currentPage = Math.min(page, serverTotalPages);
     // 标签切换或分页后，先预读当前页详情，再空闲预读下一页。
     void prefetchCurrentPageDetails(
-      items.map((row) => ({
+      items.filter((row) => row.kind === "live").map((row) => ({
         live_id: row.liveId,
         live_date: row.liveDate,
         live_title: row.liveTitle,
@@ -795,6 +879,7 @@ function App() {
   const showListPanel = tab === "all" || tab === "favorites";
   const showTourListPanel = tab === "tours";
   const showTourDetailPanel = tab === "tour_detail";
+  const showPerformanceGroupDetailPanel = tab === "performance_group_detail";
   const showSearchPanel = tab === "search";
   const showBrowsePanel = tab === "browse";
   const showStatisticsPanel = tab === "statistics";
@@ -805,7 +890,7 @@ function App() {
   const totalPages = serverTotalPages;
   const safePage = Math.min(page, totalPages);
   const pagedRows = rows;
-  const pageLiveIds = tab === "all" ? pagedRows.map((row) => row.liveId) : [];
+  const pageLiveIds = tab === "all" ? pagedRows.filter((row) => row.kind === "live").map((row) => row.liveId) : [];
   const canBatchFavorite = canUseFavoriteFeatures && tab === "all" && pageLiveIds.length > 0;
   const pageAllFavorited =
     canBatchFavorite && pageLiveIds.every((liveId) => favorites.favoriteLiveIdSet.has(liveId));
@@ -890,7 +975,7 @@ function App() {
   // 页签切换统一做权限闸门，防止未登录或低权限用户进入受限页。
   const handleTabChange = (nextTab: TabKey) => {
     setNavDrawerOpen(false);
-    if (nextTab === "detail" || nextTab === "tour_detail") return;
+    if (nextTab === "detail" || nextTab === "tour_detail" || nextTab === "performance_group_detail") return;
     if (nextTab === "favorites" && !canUseFavoriteFeatures) {
       setLoginError(null);
       setLoginDialogOpen(true);
@@ -929,14 +1014,12 @@ function App() {
       setLoading(true);
       setLoadError(null);
       try {
-        const data = tab === "favorites"
-          ? listFiltersActive
-            ? await getMyFavoriteLives(1, pageSize, listFilters)
-            : await getMyFavoriteLives(1, pageSize)
-          : listFiltersActive
-            ? await getLives(1, pageSize, listFilters)
-            : await getLives(1, pageSize);
-        setItems(data.items.map(toLiveRow));
+        const scope = tab === "favorites" ? "favorites" as const : "all" as const;
+        const performFilters = toPerformanceFilters(listFilters);
+        const data = listFiltersActive
+          ? await getPerformances(1, pageSize, scope, performFilters)
+          : await getPerformances(1, pageSize, scope);
+        setItems(performancesToDisplayRows(data.items));
         setServerTotal(data.pagination.total);
         setServerTotalPages(data.pagination.total_pages);
         setPage(data.pagination.page);
@@ -997,19 +1080,17 @@ function App() {
     cardLoadInFlightRef.current = true;
     setCardLoadingMore(true);
     try {
-      const data = tab === "favorites"
-        ? listFiltersActive
-          ? await getMyFavoriteLives(nextPage, pageSize, listFilters)
-          : await getMyFavoriteLives(nextPage, pageSize)
-        : listFiltersActive
-          ? await getLives(nextPage, pageSize, listFilters)
-          : await getLives(nextPage, pageSize);
-      const mappedItems = data.items.map(toLiveRow);
+      const scope = tab === "favorites" ? "favorites" as const : "all" as const;
+      const performFilters = toPerformanceFilters(listFilters);
+      const data = listFiltersActive
+        ? await getPerformances(nextPage, pageSize, scope, performFilters)
+        : await getPerformances(nextPage, pageSize, scope);
+      const mappedItems = performancesToDisplayRows(data.items);
       const currentSession = cardSessionsRef.current[sessionKey];
       if (currentSession && currentSession.cardPage >= data.pagination.page) return;
       const baseItems = currentSession?.items ?? items;
-      const existingIds = new Set(baseItems.map((item) => item.liveId));
-      const mergedItems = [...baseItems, ...mappedItems.filter((item) => !existingIds.has(item.liveId))];
+      const existingIds = new Set(baseItems.map(displayRowKey));
+      const mergedItems = [...baseItems, ...mappedItems.filter((item) => !existingIds.has(displayRowKey(item)))];
       const nextSession: CardListSession = {
         items: mergedItems,
         total: data.pagination.total,
@@ -1116,6 +1197,10 @@ function App() {
       navigateToTab("tours");
       return;
     }
+    if (previousTab === "performance_group_detail") {
+      navigateToTab("all");
+      return;
+    }
     navigateToTab(previousTab);
   };
   const handleBackFromTourDetail = () => {
@@ -1124,6 +1209,13 @@ function App() {
       return;
     }
     navigateToTab("tours");
+  };
+  const handleBackFromPerformanceGroupDetail = () => {
+    if (isAppHistoryState(window.history.state) && window.history.state.tab === "performance_group_detail") {
+      window.history.back();
+      return;
+    }
+    navigateToTab("all");
   };
   const toggleTheme = () => {
     setThemeMode(getNextThemeMode(themeMode));
@@ -1301,12 +1393,22 @@ function App() {
         {favorites.favoriteSyncWarning && <p className="favorite-sync-warning">{favorites.favoriteSyncWarning}</p>}
 
         {tab === "detail" && detailLiveId !== null && detailFallback !== null ? (
-          <LiveDetailPage liveId={detailLiveId} fallback={detailFallback} onBack={handleBackFromDetail} onOpenTour={openTourDetail} />
+          <LiveDetailPage liveId={detailLiveId} fallback={detailFallback} onBack={handleBackFromDetail} onOpenTour={openTourDetail} onOpenPerformanceGroup={openPerformanceGroupDetail} />
         ) : showTourDetailPanel && detailTourId !== null && tourFallback !== null ? (
           <TourDetailPage
             tourId={detailTourId}
             fallback={tourFallback}
             onBack={handleBackFromTourDetail}
+          />
+        ) : showPerformanceGroupDetailPanel && detailGroupId !== null && groupFallback !== null ? (
+          <PerformanceGroupDetailPage
+            groupId={detailGroupId}
+            initialLiveId={detailGroupLiveId}
+            onBack={handleBackFromPerformanceGroupDetail}
+            canFavorite={canUseFavoriteFeatures}
+            isFavorite={isFavorite}
+            isSyncing={favorites.isFavoriteSyncing}
+            onToggleFavorite={(liveId) => void toggleFavorite(liveId)}
           />
         ) : showHomePanel ? (
           <HomeDashboard
@@ -1473,6 +1575,7 @@ function App() {
                 isSyncing={(id) => favorites.isFavoriteSyncing(id)}
                 onToggleStar={(id) => void toggleFavorite(id)}
                 onOpenLive={openLiveDetail}
+                onOpenGroup={(groupId, groupTitle) => openPerformanceGroupDetail({ group_id: groupId, group_title: groupTitle })}
                 loading={loading}
                 loadError={loadError}
                 sentinelRef={sentinelRef}
@@ -1513,6 +1616,26 @@ function App() {
                 </thead>
                 <tbody>
                   {pagedRows.map((row) => (
+                    row.kind === "performance_group" ? (
+                      <tr key={`group-${row.groupId}`}>
+                        {showFavoriteColumn && <td className="fav-col-cell"></td>}
+                        <td>{row.groupStartDate ? `${row.groupStartDate} ~ ${row.groupEndDate}` : row.liveDate}</td>
+                        <td>
+                          <button
+                            className="name-btn"
+                            onClick={() => row.groupId !== null && openPerformanceGroupDetail({ group_id: row.groupId, group_title: row.groupTitle ?? "" })}
+                            title={row.liveTitle}
+                          >
+                            {row.liveTitle}
+                          </button>
+                        </td>
+                        <td>{row.groupDisplayType === "single_day_multi_show" ? "单日多场" : "多日活动"}</td>
+                        <td className="band-cell" title={`${row.groupIcons.length} 支乐队`}>
+                          <BandIconsCell icons={row.groupIcons} rowId={row.groupId ?? 0} />
+                        </td>
+                        <td><span>{row.groupLiveCount !== null ? `${row.groupDayCount} 日 · ${row.groupLiveCount} 场` : "-"}</span></td>
+                      </tr>
+                    ) : (
                     <tr key={row.liveId}>
                       {showFavoriteColumn && (
                         <td className="fav-col-cell">
@@ -1556,6 +1679,7 @@ function App() {
                         )}
                       </td>
                     </tr>
+                    )
                   ))}
                   {loadError && (
                     <tr>

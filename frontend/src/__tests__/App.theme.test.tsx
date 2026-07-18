@@ -9,9 +9,11 @@ import {
   getLiveDetail,
   getLiveDetailsBatch,
   getLives,
+  getPerformances,
   peekMyFavoriteLives,
   type LiveDetailResponse,
   type LivesResponse,
+  type PerformancesResponse,
 } from "../api";
 import { ThemeProvider } from "../theme/ThemeProvider";
 
@@ -28,6 +30,7 @@ vi.mock("../api", () => ({
   }),
   getLiveDetail: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
+  getPerformances: vi.fn(),
   peekMyFavoriteLives: vi.fn(),
   clearLivesCache: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
@@ -38,6 +41,7 @@ vi.mock("../api", () => ({
 }));
 
 const getLivesMock = vi.mocked(getLives);
+const getPerformancesThemeMock = vi.mocked(getPerformances);
 const getLiveDetailMock = vi.mocked(getLiveDetail);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
@@ -122,6 +126,14 @@ function makeResponse(): LivesResponse {
   };
 }
 
+function makePerformancesResponse(): PerformancesResponse {
+  const livesResp = makeResponse();
+  return {
+    items: livesResp.items.map((live) => ({ kind: "live" as const, live })),
+    pagination: livesResp.pagination,
+  };
+}
+
 function makeDetailResponse(liveId: number): LiveDetailResponse {
   return {
     live_id: liveId,
@@ -155,6 +167,7 @@ describe("App dark mode", () => {
     document.documentElement.style.colorScheme = "";
 
     getLivesMock.mockReset();
+    getPerformancesThemeMock.mockReset();
     getLiveDetailMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
     peekMyFavoriteLivesMock.mockReset();
@@ -162,6 +175,7 @@ describe("App dark mode", () => {
     clearMyFavoriteLivesCacheMock.mockReset();
 
     getLivesMock.mockResolvedValue(makeResponse());
+    getPerformancesThemeMock.mockResolvedValue(makePerformancesResponse());
     getLiveDetailMock.mockImplementation(async (liveId: number) => makeDetailResponse(liveId));
     getLiveDetailsBatchMock.mockResolvedValue({ items: [], missing_live_ids: [] });
     peekMyFavoriteLivesMock.mockReturnValue(undefined);
