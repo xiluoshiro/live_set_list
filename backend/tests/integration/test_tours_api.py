@@ -105,6 +105,25 @@ def test_tour_detail_returns_seeded_stops(integration_test_client):
     assert all(stop["is_favorite"] is False for stop in payload["stops"])
 
 
+# 测试点：seed 巡演统计应把同一段落位置的换歌与其他新增、移除歌曲分别返回。
+def test_tour_statistics_returns_seeded_setlist_changes(integration_test_client):
+    response = integration_test_client.get("/api/catalog/tours/1/statistics")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["coverage"] == {
+        "stop_count": 2,
+        "setlist_stop_count": 2,
+        "comparable_transition_count": 1,
+    }
+    assert payload["overview"] == {"distinct_song_count": 4, "common_song_count": 0}
+    transition = payload["transitions"][0]
+    assert transition["replacements"][0]["from_song"]["song_id"] == 1
+    assert transition["replacements"][0]["to_song"]["song_id"] == 3
+    assert [song["song_id"] for song in transition["removed_songs"]] == [2]
+    assert [song["song_id"] for song in transition["added_songs"]] == [4]
+
+
 # 测试点：未显式设置参与乐队时，巡演列表、详情和乐队筛选都应聚合全部场次的有效乐队。
 def test_tour_without_explicit_bands_aggregates_stop_bands(
     integration_test_client,

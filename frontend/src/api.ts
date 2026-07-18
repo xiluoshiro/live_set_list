@@ -223,6 +223,46 @@ export type TourDetailResponse = TourSummary & {
   stops: TourStopItem[];
 };
 
+export type TourStatisticsSongStatus = "common" | "single" | "added" | "removed" | "intermittent";
+
+export type TourStatisticsSongRef = { song_id: number; song_name: string };
+
+export type TourStatisticsResponse = {
+  tour_id: number;
+  coverage: {
+    stop_count: number;
+    setlist_stop_count: number;
+    comparable_transition_count: number;
+  };
+  overview: {
+    distinct_song_count: number;
+    common_song_count: number;
+  };
+  songs: Array<TourStatisticsSongRef & {
+    appearance_count: number;
+    first_live_id: number;
+    last_live_id: number;
+    status: TourStatisticsSongStatus;
+  }>;
+  transitions: Array<{
+    from_live_id: number;
+    from_live_date: string;
+    from_live_title: string;
+    to_live_id: number;
+    to_live_date: string;
+    to_live_title: string;
+    replacements: Array<{
+      segment_type: string;
+      sub_order: number;
+      from_song: TourStatisticsSongRef;
+      to_song: TourStatisticsSongRef;
+    }>;
+    added_songs: TourStatisticsSongRef[];
+    removed_songs: TourStatisticsSongRef[];
+    moved_songs: Array<TourStatisticsSongRef & { from_order: number; to_order: number }>;
+  }>;
+};
+
 export type TourListFilters = {
   q?: string;
   year?: number;
@@ -435,6 +475,7 @@ type RequestKind =
   | "catalog_search"
   | "catalog_tours"
   | "catalog_tour_detail"
+  | "catalog_tour_statistics"
   | "catalog_bands"
   | "catalog_band_lives"
   | "catalog_stats"
@@ -892,6 +933,13 @@ export async function getTourDetail(tourId: number): Promise<TourDetailResponse>
     requestKind: "catalog_tour_detail",
   });
   return expectJsonResponse<TourDetailResponse>(response);
+}
+
+export async function getTourStatistics(tourId: number): Promise<TourStatisticsResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/catalog/tours/${tourId}/statistics`, undefined, {
+    requestKind: "catalog_tour_statistics",
+  });
+  return expectJsonResponse<TourStatisticsResponse>(response);
 }
 
 export async function searchCatalog(q: string, limit = 8): Promise<CatalogSearchResponse> {

@@ -327,6 +327,27 @@
   font-size: 14px;
 }
 
+.section-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.section-tab-btn {
+  border: 1px solid var(--border-normal);
+  background: var(--surface-chip-soft);
+  color: var(--text-tab);
+  border-radius: 10px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.section-tab-btn.active {
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
+  border-color: var(--accent-primary);
+}
+
 @media (max-width: 800px) {
   .site-topbar {
     gap: 10px;

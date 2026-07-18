@@ -10,7 +10,13 @@ from app.auth import AuthUser, get_current_user_optional
 from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set
 from app.logging_config import get_logger
-from app.schemas import ErrorResponse, TourDetailResponse, ToursResponse, ValidationErrorResponse
+from app.schemas import (
+    ErrorResponse,
+    TourDetailResponse,
+    ToursResponse,
+    TourStatisticsResponse,
+    ValidationErrorResponse,
+)
 
 router = APIRouter(prefix="/api/catalog/tours", tags=["catalog"])
 logger = get_logger(__name__)
@@ -324,6 +330,182 @@ WHERE tl.tour_id = %s
 ORDER BY l.live_date, l.id
 """
 
+TOUR_STATISTICS_QUERY = """
+SELECT
+    l.id,
+    l.live_date,
+    l.live_title,
+    stl.song_id,
+    s.song_name,
+    stl.segment_type,
+    stl.sub_order,
+    stl.absolute_order
+FROM tour_lives tl
+JOIN live_attrs l ON l.id = tl.live_id
+LEFT JOIN live_setlist stl ON stl.live_id = l.id
+LEFT JOIN song_list s ON s.id = stl.song_id
+WHERE tl.tour_id = %s
+ORDER BY l.live_date, l.id, stl.absolute_order
+"""
+
+
+def _song_ref(song: dict[str, Any]) -> dict[str, Any]:
+    return {"song_id": song["song_id"], "song_name": song["song_name"]}
+
+
+def _build_tour_statistics(tour_id: int, rows: list[tuple[Any, ...]]) -> dict[str, Any]:
+    stops: list[dict[str, Any]] = []
+    stop_by_id: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        live_id = int(row[0])
+        stop = stop_by_id.get(live_id)
+        if stop is None:
+            stop = {
+                "live_id": live_id,
+                "live_date": row[1],
+                "live_title": str(row[2]),
+                "songs": [],
+            }
+            stop_by_id[live_id] = stop
+            stops.append(stop)
+        if row[3] is not None:
+            stop["songs"].append(
+                {
+                    "song_id": int(row[3]),
+                    "song_name": str(row[4]),
+                    "segment_type": str(row[5]),
+                    "sub_order": int(row[6]),
+                    "absolute_order": int(row[7]),
+                }
+            )
+
+    setlist_stops = [stop for stop in stops if stop["songs"]]
+    song_names: dict[int, str] = {}
+    song_live_ids: dict[int, list[int]] = {}
+    for stop in setlist_stops:
+        seen_in_stop: set[int] = set()
+        for song in stop["songs"]:
+            song_id = song["song_id"]
+            song_names[song_id] = song["song_name"]
+            if song_id not in seen_in_stop:
+                song_live_ids.setdefault(song_id, []).append(stop["live_id"])
+                seen_in_stop.add(song_id)
+
+    setlist_live_ids = [stop["live_id"] for stop in setlist_stops]
+    song_items: list[dict[str, Any]] = []
+    for song_id, live_ids in song_live_ids.items():
+        positions = [setlist_live_ids.index(live_id) for live_id in live_ids]
+        if len(live_ids) == len(setlist_stops):
+            status = "common"
+        elif len(live_ids) == 1:
+            status = "single"
+        elif positions == list(range(positions[0], len(setlist_stops))):
+            status = "added"
+        elif positions == list(range(0, positions[-1] + 1)):
+            status = "removed"
+        else:
+            status = "intermittent"
+        song_items.append(
+            {
+                "song_id": song_id,
+                "song_name": song_names[song_id],
+                "appearance_count": len(live_ids),
+                "first_live_id": live_ids[0],
+                "last_live_id": live_ids[-1],
+                "status": status,
+            }
+        )
+    song_items.sort(key=lambda item: (-item["appearance_count"], item["song_id"]))
+
+    transitions: list[dict[str, Any]] = []
+    for from_stop, to_stop in zip(stops, stops[1:]):
+        if not from_stop["songs"] or not to_stop["songs"]:
+            continue
+        from_slots = {
+            (song["segment_type"], song["sub_order"]): song
+            for song in from_stop["songs"]
+        }
+        to_slots = {
+            (song["segment_type"], song["sub_order"]): song
+            for song in to_stop["songs"]
+        }
+        from_by_song = {song["song_id"]: song for song in from_stop["songs"]}
+        to_by_song = {song["song_id"]: song for song in to_stop["songs"]}
+        moved_song_ids = {
+            song_id
+            for song_id in from_by_song.keys() & to_by_song.keys()
+            if from_by_song[song_id]["absolute_order"] != to_by_song[song_id]["absolute_order"]
+        }
+        moved_songs = [
+            {
+                **_song_ref(from_by_song[song_id]),
+                "from_order": from_by_song[song_id]["absolute_order"],
+                "to_order": to_by_song[song_id]["absolute_order"],
+            }
+            for song_id in sorted(moved_song_ids)
+        ]
+        replacements: list[dict[str, Any]] = []
+        replaced_from_ids: set[int] = set()
+        replaced_to_ids: set[int] = set()
+        for slot in sorted(from_slots.keys() & to_slots.keys()):
+            from_song = from_slots[slot]
+            to_song = to_slots[slot]
+            if from_song["song_id"] == to_song["song_id"]:
+                continue
+            if from_song["song_id"] in moved_song_ids or to_song["song_id"] in moved_song_ids:
+                continue
+            replacements.append(
+                {
+                    "segment_type": slot[0],
+                    "sub_order": slot[1],
+                    "from_song": _song_ref(from_song),
+                    "to_song": _song_ref(to_song),
+                }
+            )
+            replaced_from_ids.add(from_song["song_id"])
+            replaced_to_ids.add(to_song["song_id"])
+
+        added_songs = [
+            _song_ref(song)
+            for song in to_stop["songs"]
+            if song["song_id"] not in from_by_song and song["song_id"] not in replaced_to_ids
+        ]
+        removed_songs = [
+            _song_ref(song)
+            for song in from_stop["songs"]
+            if song["song_id"] not in to_by_song and song["song_id"] not in replaced_from_ids
+        ]
+        transitions.append(
+            {
+                "from_live_id": from_stop["live_id"],
+                "from_live_date": from_stop["live_date"],
+                "from_live_title": from_stop["live_title"],
+                "to_live_id": to_stop["live_id"],
+                "to_live_date": to_stop["live_date"],
+                "to_live_title": to_stop["live_title"],
+                "replacements": replacements,
+                "added_songs": added_songs,
+                "removed_songs": removed_songs,
+                "moved_songs": moved_songs,
+            }
+        )
+
+    common_song_count = sum(1 for item in song_items if item["status"] == "common")
+    return {
+        "tour_id": tour_id,
+        "coverage": {
+            "stop_count": len(stops),
+            "setlist_stop_count": len(setlist_stops),
+            "comparable_transition_count": len(transitions),
+        },
+        "overview": {
+            "distinct_song_count": len(song_items),
+            "common_song_count": common_song_count,
+        },
+        "songs": song_items,
+        "transitions": transitions,
+    }
+
 
 def _tour_summary_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
     return {
@@ -402,6 +584,44 @@ def get_tours(
             "total_pages": total_pages,
         },
     }
+
+
+@router.get(
+    "/{tour_id}/statistics",
+    response_model=TourStatisticsResponse,
+    summary="获取巡演统计",
+    description="按相邻且均已收录 setlist 的场次比较歌曲替换、新增、移除和顺序变化。",
+    responses={
+        400: {"model": ErrorResponse, "description": "参数错误"},
+        404: {"model": ErrorResponse, "description": "指定巡演不存在"},
+        500: {"model": ErrorResponse, "description": "数据库一般错误"},
+        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
+    },
+)
+def get_tour_statistics(tour_id: int):
+    if tour_id < 1:
+        raise HTTPException(status_code=400, detail="tour_id must be >= 1")
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(TOUR_STATISTICS_QUERY, (tour_id,))
+                rows = cur.fetchall()
+    except QueryCanceled as exc:
+        logger.exception("get_tour_statistics timeout tour_id=%s", tour_id)
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        logger.exception("get_tour_statistics operational error tour_id=%s", tour_id)
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        logger.exception("get_tour_statistics failed tour_id=%s", tour_id)
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"Tour id {tour_id} not found")
+    return _build_tour_statistics(tour_id, rows)
 
 
 @router.get(

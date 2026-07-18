@@ -22,6 +22,7 @@ import {
   getLives,
   getMyFavoriteLives,
   getTourDetail,
+  getTourStatistics,
   getTours,
   login,
   logout,
@@ -33,6 +34,7 @@ import {
   type LiveDetailResponse,
   type LivesResponse,
   type TourDetailResponse,
+  type TourStatisticsResponse,
   type ToursResponse,
 } from "../api";
 import { logError } from "../logger";
@@ -53,6 +55,7 @@ vi.mock("../api", () => ({
   getMyFavoriteLives: vi.fn(),
   getTours: vi.fn(),
   getTourDetail: vi.fn(),
+  getTourStatistics: vi.fn(),
   peekMyFavoriteLives: vi.fn(),
   clearLivesCache: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
@@ -95,6 +98,7 @@ const logoutMock = vi.mocked(logout);
 const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
 const getToursMock = vi.mocked(getTours);
 const getTourDetailMock = vi.mocked(getTourDetail);
+const getTourStatisticsMock = vi.mocked(getTourStatistics);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
 const clearLivesCacheMock = vi.mocked(clearLivesCache);
 const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
@@ -201,7 +205,7 @@ function makeTourDetailResponse(): TourDetailResponse {
         stop_label: null,
         live_id: 41,
         live_date: "2026-05-30",
-        live_title: "Exitus 東京公演",
+        live_title: "Ave Mujica LIVE TOUR 2026 Exitus 東京公演",
         live_type: "oneman",
         venue: "Zepp Tokyo",
         bands: [2],
@@ -214,7 +218,7 @@ function makeTourDetailResponse(): TourDetailResponse {
         stop_label: null,
         live_id: 42,
         live_date: "2026-06-02",
-        live_title: "Exitus FINAL",
+        live_title: "Ave Mujica LIVE TOUR 2026 Exitus FINAL",
         live_type: "oneman",
         venue: "日本武道館",
         bands: [2],
@@ -223,6 +227,29 @@ function makeTourDetailResponse(): TourDetailResponse {
         has_setlist: false,
       },
     ],
+  };
+}
+
+function makeTourStatisticsResponse(): TourStatisticsResponse {
+  return {
+    tour_id: 7,
+    coverage: { stop_count: 2, setlist_stop_count: 2, comparable_transition_count: 1 },
+    overview: { distinct_song_count: 3, common_song_count: 1 },
+    songs: [
+      { song_id: 1, song_name: "KiLLKiSS", appearance_count: 2, first_live_id: 41, last_live_id: 42, status: "common" },
+    ],
+    transitions: [{
+      from_live_id: 41,
+      from_live_date: "2026-05-30",
+      from_live_title: "Ave Mujica LIVE TOUR 2026 Exitus 東京公演",
+      to_live_id: 42,
+      to_live_date: "2026-06-02",
+      to_live_title: "Ave Mujica LIVE TOUR 2026 Exitus FINAL",
+      replacements: [{ segment_type: "main", sub_order: 1, from_song: { song_id: 2, song_name: "旧曲" }, to_song: { song_id: 3, song_name: "新曲" } }],
+      added_songs: [],
+      removed_songs: [],
+      moved_songs: [],
+    }],
   };
 }
 
@@ -343,6 +370,7 @@ describe("App", () => {
     getMyFavoriteLivesMock.mockReset();
     getToursMock.mockReset();
     getTourDetailMock.mockReset();
+    getTourStatisticsMock.mockReset();
     peekMyFavoriteLivesMock.mockReset();
     clearLivesCacheMock.mockReset();
     clearMyFavoriteLivesCacheMock.mockReset();
@@ -362,6 +390,7 @@ describe("App", () => {
     );
     getToursMock.mockResolvedValue(makeToursResponse());
     getTourDetailMock.mockResolvedValue(makeTourDetailResponse());
+    getTourStatisticsMock.mockResolvedValue(makeTourStatisticsResponse());
     peekMyFavoriteLivesMock.mockReturnValue(undefined);
     favoriteLiveMock.mockResolvedValue();
     favoriteLivesBatchMock.mockResolvedValue({
@@ -879,33 +908,57 @@ describe("App", () => {
     }));
   });
 
-  // 测试点：巡演摘要复用演出元数据行，场次仅保留标题跳转且不显示 Setlist 状态。
-  test("巡演详情和 Live 详情支持双向进入", async () => {
-    getLiveDetailMock.mockResolvedValue({
-      ...makeDetailResponse({ liveId: 41 }),
-      tour: { tour_id: 7, tour_title: "Ave Mujica LIVE TOUR 2026 Exitus" },
-    });
+  // 测试点：巡演场次导航只保留用竖向分隔条分开的缩写，点击后在当前页内切换 Live 详情。
+  test("巡演详情在页内切换缩写后的 Live 场次", async () => {
     const user = userEvent.setup();
     renderApp();
     await user.click(await screen.findByRole("button", { name: "巡演资料" }));
     await user.click(await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus"));
 
     await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
-    expect(screen.getByText("Exitus 東京公演")).toBeInTheDocument();
+    const stopNavigation = screen.getByRole("navigation", { name: "巡演场次" });
+    expect(within(stopNavigation).getAllByRole("button").map((button) => button.textContent)).toEqual(["東京公演", "FINAL"]);
+    expect(stopNavigation).toHaveTextContent("東京公演FINAL");
+    expect(stopNavigation.querySelectorAll(".tour-stop-separator")).toHaveLength(1);
+    expect(within(stopNavigation).queryByText("/")).not.toBeInTheDocument();
+    expect(within(stopNavigation).queryByText("2026-05-30")).not.toBeInTheDocument();
+    expect(within(stopNavigation).queryByText("Zepp Tokyo")).not.toBeInTheDocument();
     expect(screen.getByText("已收录日期：").closest("p")).toHaveClass("detail-inline-item", "detail-inline-item-date");
     expect(screen.queryByRole("button", { name: "查看 Live" })).not.toBeInTheDocument();
     expect(screen.queryByText("已有 Setlist")).not.toBeInTheDocument();
     expect(screen.queryByText("暂无 Setlist")).not.toBeInTheDocument();
     expect(screen.queryByText("stop_label")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Exitus 東京公演" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(41));
-    await user.click(await screen.findByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" }));
-    await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledTimes(2));
-    expect(screen.getByText("Exitus FINAL")).toBeInTheDocument();
+    expect(screen.getByText("曲目名称")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "FINAL" }));
+    await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
+    expect(getTourDetailMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
   });
 
-  // 测试点：巡演详情复用演出详情的 SVG 外链图标，场次来源复用现有链接符号。
+  // 测试点：巡演统计按需加载，使用向下箭头，并可从对比场次链接切回对应 Live 详情。
+  test("巡演统计按需加载场次变化", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: "巡演资料" }));
+    await user.click(await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus"));
+    await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
+
+    expect(getTourStatisticsMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("tab", { name: "巡演统计" }));
+    await waitFor(() => expect(getTourStatisticsMock).toHaveBeenCalledWith(7));
+    const changesTable = await screen.findByRole("table", { name: "场次变化" });
+    expect(within(changesTable).getByRole("columnheader", { name: "类型" })).toBeInTheDocument();
+    const changeRow = within(changesTable).getByRole("row", { name: /東京公演.*FINAL.*更换.*旧曲.*新曲/ });
+    expect(changeRow).toHaveTextContent("東京公演↓FINAL");
+    expect(changeRow).toHaveTextContent("更换旧曲新曲");
+    await user.click(within(changeRow).getByRole("button", { name: "FINAL" }));
+    expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
+  });
+
+  // 测试点：巡演及页内 Live 详情继续复用既有 SVG 外链图标，精简场次导航不再重复来源链接。
   test("巡演详情复用既有外链样式", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -916,7 +969,7 @@ describe("App", () => {
     const titleLink = screen.getByRole("link", { name: "Ave Mujica LIVE TOUR 2026 Exitus" });
     expect(titleLink.querySelector(".detail-title-link-icon svg")).not.toBeNull();
     expect(screen.queryByText("↗")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "🔗" })).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: "🔗" })).not.toBeInTheDocument();
   });
 
   test("匿名用户点击仅收藏会打开登录弹窗", async () => {
