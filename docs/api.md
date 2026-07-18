@@ -45,6 +45,8 @@
   - 公共巡演聚合列表，匿名可用
 - `GET /api/catalog/tours/{tour_id}`
   - 公共巡演详情和已收录场次，匿名可用
+- `GET /api/catalog/tours/{tour_id}/statistics`
+  - 公共巡演 Setlist 覆盖与相邻场次变化统计，匿名可用
 - `GET /api/catalog/search`
   - 公共资料库搜索，匿名可用，按 Live、乐队 / 艺人、歌曲、场地分组返回结果
 - `GET /api/catalog/bands`
@@ -165,7 +167,7 @@
 
 ### 5. 公共 catalog 接口
 
-`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/tours`、`GET /api/catalog/tours/{tour_id}`、`GET /api/catalog/stats`、`GET /api/catalog/statistics?scope=all` 用于匿名可访问的公共资料库搜索、浏览与统计。
+`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/tours`、`GET /api/catalog/tours/{tour_id}`、`GET /api/catalog/tours/{tour_id}/statistics`、`GET /api/catalog/stats`、`GET /api/catalog/statistics?scope=all` 用于匿名可访问的公共资料库搜索、浏览与统计。
 
 - 上述公共读取默认不要求登录；只有 `GET /api/catalog/statistics?scope=favorites` 要求当前 session 已登录。
 - 登录用户访问搜索结果或乐队 Live 列表时，Live 项的 `is_favorite` 会按当前用户收藏计算；匿名请求统一返回 `false`。

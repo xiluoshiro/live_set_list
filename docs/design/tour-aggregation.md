@@ -327,19 +327,22 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 
 - `TourListFilters.tsx`：巡演关键词、年份、乐队和排序。
 - `TourCardGrid.tsx`：巡演卡片与分页/连续加载状态。
-- `TourDetailPage.tsx`：巡演头部和场次列表。
+- `TourDetailPage.tsx`：巡演头部、场次列表、页内 Live 详情和统计子页签。
+- `LiveDetailContent.tsx`：供独立 Live 详情和巡演页内详情共同复用的内容组件。
+- `TourStatisticsPanel.tsx`：复用现有统计卡片与表格样式展示巡演覆盖和相邻场次变化。
 - `TourAdminSection.tsx`：创建、查询和编辑巡演。
 
-现有 `LiveDetailPage` 只增加 `tour` 元数据入口，不把巡演详情逻辑塞入其中。
+现有 `LiveDetailPage` 保留数据加载与 `tour` 元数据入口，具体详情内容抽取为共享组件，不把巡演逻辑塞入其中。
 
 ### 列表与详情交互
 
 - “巡演资料”作为独立主导航页签，不在“演出资料”内部增加实体切换。
 - 巡演卡片直接复用演出资料的 `live-card` 结构与样式，点击整卡进入详情；官方来源使用独立 `<a>` 并阻止触发整卡操作。
 - 巡演详情标题外链复用演出详情的 `DetailTitleLink` 与 SVG 图标；场次来源复用现有 `🔗` 链接样式，不另造字符箭头或专用样式。
-- 巡演详情的日期范围、场次和参与乐队复用演出详情的 `detail-meta-line` 与 `detail-inline-item`；场次标题是唯一的 Live 详情入口，不显示 Setlist 状态。
+- 巡演详情的日期范围、场次和参与乐队复用演出详情的 `detail-meta-line` 与 `detail-inline-item`；场次导航只保留由主题边框色竖条分隔的短标题，并复用 `detail-tour-link` 交互，不重复日期、场地、类型、收藏或来源链接。
 - 登录用户在 Tour stop 中复用现有 Live 收藏按钮和乐观同步逻辑。
-- Tour stop 打开 `LiveDetailPage` 时，把返回来源记为 `tour_detail`。
+- Tour stop 通过现有 `GET /api/lives/{live_id}` 缓存接口加载，并在 `TourDetailPage` 内复用 `LiveDetailContent` 渲染，不改变主导航状态。
+- “场次详情 / 巡演统计”复用控制台既有页签样式；统计通过 `GET /api/catalog/tours/{tour_id}/statistics` 首次打开时按需加载，场次变化复用 `console-table`，按一项变化一行展示对比场次、类型、原内容和新内容。相同歌曲的顺序变化先于位置更换计算；对比场次单元格使用居中的上下标题与 `↓`，标题复用 `detail-tour-link`，点击后设置对应 `live_id` 并切回场次详情。
 - Live 详情中的 Tour 名称打开 `TourDetailPage`，返回时恢复 Live 详情。
 
 ## 控制台交互
@@ -401,7 +404,7 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 - 独立巡演资料页签和导航选中态。
 - 巡演筛选参数、分页、加载、错误和空状态。
 - “全部 / 仅收藏”不出现在巡演视图。
-- 巡演详情进入 Live、Live 反向进入巡演、浏览器返回恢复来源。
+- 巡演详情页内切换 Live、Live 反向进入巡演、浏览器返回恢复来源。
 - 登录用户可在 stop 上切换 Live 收藏；匿名点击时打开登录框。
 - 搜索结果巡演分组和空分组隐藏。
 - 控制台候选冲突前置提示、确认页和更新后缓存清理。

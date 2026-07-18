@@ -7,6 +7,7 @@ from app.routers.tours import (
     TOUR_DETAIL_BANDS_QUERY,
     TOUR_DETAIL_HEADER_QUERY,
     TOUR_DETAIL_STOPS_QUERY,
+    TOUR_STATISTICS_QUERY,
     _build_tour_list_queries,
 )
 
@@ -135,3 +136,53 @@ def test_get_tour_detail_not_found_returns_404():
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Tour id 999 not found"
+
+
+# 测试点：巡演统计按相邻场次的相同段落位置识别替换，并区分未配对的新增和移除歌曲。
+def test_get_tour_statistics_compares_adjacent_setlists():
+    conn, cursor = _build_connection_mock()
+    cursor.fetchall.return_value = [
+        (45, "2026-04-17", "Exitus 福冈", 1, "Song A", "main", 1, 1),
+        (45, "2026-04-17", "Exitus 福冈", 2, "Song B", "main", 2, 2),
+        (53, "2026-06-20", "Exitus FINAL", 3, "Song C", "main", 1, 1),
+        (53, "2026-06-20", "Exitus FINAL", 4, "Song D", "encore", 1, 2),
+    ]
+
+    with patch("app.routers.tours.get_db_connection", return_value=conn):
+        response = TestClient(app).get("/api/catalog/tours/7/statistics")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["coverage"] == {
+        "stop_count": 2,
+        "setlist_stop_count": 2,
+        "comparable_transition_count": 1,
+    }
+    assert payload["overview"] == {"distinct_song_count": 4, "common_song_count": 0}
+    transition = payload["transitions"][0]
+    assert transition["replacements"][0]["from_song"]["song_id"] == 1
+    assert transition["replacements"][0]["to_song"]["song_id"] == 3
+    assert [song["song_id"] for song in transition["removed_songs"]] == [2]
+    assert [song["song_id"] for song in transition["added_songs"]] == [4]
+    assert cursor.execute.call_args_list == [call(TOUR_STATISTICS_QUERY, (7,))]
+
+
+# 测试点：同一歌曲发生顺序变化时，应优先归为顺序变化，不能再按占用位置生成更换记录。
+def test_get_tour_statistics_prefers_movement_over_replacement():
+    conn, cursor = _build_connection_mock()
+    cursor.fetchall.return_value = [
+        (45, "2026-04-17", "Exitus 福冈", 1, "Song A", "main", 1, 1),
+        (45, "2026-04-17", "Exitus 福冈", 2, "Song B", "main", 2, 2),
+        (53, "2026-06-20", "Exitus FINAL", 2, "Song B", "main", 1, 1),
+        (53, "2026-06-20", "Exitus FINAL", 1, "Song A", "main", 2, 2),
+    ]
+
+    with patch("app.routers.tours.get_db_connection", return_value=conn):
+        response = TestClient(app).get("/api/catalog/tours/7/statistics")
+
+    assert response.status_code == 200
+    transition = response.json()["transitions"][0]
+    assert transition["replacements"] == []
+    assert [song["song_id"] for song in transition["moved_songs"]] == [1, 2]
+    assert transition["added_songs"] == []
+    assert transition["removed_songs"] == []

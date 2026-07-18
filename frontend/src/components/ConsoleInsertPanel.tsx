@@ -25,6 +25,7 @@ import {
 import { MemberStatusTable } from "./DetailMemberTable";
 import { LiveAdminSection } from "./console/LiveAdminSection";
 import { PageTitle } from "./PageTitle";
+import { SectionTabs } from "./SectionTabs";
 import { LiveInsertTab } from "./console/LiveInsertTab";
 import { SongAdminSection } from "./console/SongAdminSection";
 import { TourAdminSection } from "./console/TourAdminSection";
@@ -1731,44 +1732,17 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         </div>
       )}
 
-      <div className="console-admin-modes" role="tablist" aria-label="控制台录入类型">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "live_create"}
-          className={`console-mode-btn ${mode === "live_create" ? "active" : ""}`}
-          onClick={() => setMode("live_create")}
-        >
-          新增Live
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "setlist"}
-          className={`console-mode-btn ${mode === "setlist" ? "active" : ""}`}
-          onClick={() => setMode("setlist")}
-        >
-          新增Setlist
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "song"}
-          className={`console-mode-btn ${mode === "song" ? "active" : ""}`}
-          onClick={() => setMode("song")}
-        >
-          新增歌曲
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "tour"}
-          className={`console-mode-btn ${mode === "tour" ? "active" : ""}`}
-          onClick={() => setMode("tour")}
-        >
-          巡演管理
-        </button>
-      </div>
+      <SectionTabs
+        label="控制台录入类型"
+        value={mode}
+        options={[
+          { value: "live_create", label: "新增Live" },
+          { value: "setlist", label: "新增Setlist" },
+          { value: "song", label: "新增歌曲" },
+          { value: "tour", label: "巡演管理" },
+        ]}
+        onChange={setMode}
+      />
 
       {mode === "live_create" && (
         <LiveAdminSection

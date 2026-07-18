@@ -20,7 +20,6 @@ import {
   type StatisticsScope,
   type LiveItem,
   type TourRef,
-  type TourStopItem,
   type TourSummary,
 } from "./api";
 import { useAuth } from "./auth/AuthProvider";
@@ -888,17 +887,6 @@ function App() {
     openLiveDetail(row);
   };
 
-  const openTourLive = (stop: TourStopItem) => {
-    openLiveDetail({
-      liveId: stop.live_id,
-      liveDate: stop.live_date,
-      liveTitle: stop.live_title,
-      liveType: stop.live_type,
-      icons: [],
-      url: stop.url,
-    }, "tour_detail");
-  };
-
   // 页签切换统一做权限闸门，防止未登录或低权限用户进入受限页。
   const handleTabChange = (nextTab: TabKey) => {
     setNavDrawerOpen(false);
@@ -1318,11 +1306,6 @@ function App() {
           <TourDetailPage
             tourId={detailTourId}
             fallback={tourFallback}
-            isAuthenticated={auth.isAuthenticated}
-            isFavorite={isFavorite}
-            isSyncing={(liveId) => favorites.isFavoriteSyncing(liveId)}
-            onToggleFavorite={(liveId) => void toggleFavorite(liveId)}
-            onOpenLive={openTourLive}
             onBack={handleBackFromTourDetail}
           />
         ) : showHomePanel ? (

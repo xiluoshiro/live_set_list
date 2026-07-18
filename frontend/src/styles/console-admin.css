@@ -69,27 +69,6 @@
   }
 }
 
-.console-admin-modes {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.console-mode-btn {
-  border: 1px solid var(--border-normal);
-  background: var(--surface-chip-soft);
-  color: var(--text-tab);
-  border-radius: 10px;
-  padding: 6px 14px;
-  cursor: pointer;
-}
-
-.console-mode-btn.active {
-  background: var(--accent-primary);
-  color: var(--text-on-primary);
-  border-color: var(--accent-primary);
-}
-
 .console-admin-table {
   width: 100%;
   min-width: 860px;

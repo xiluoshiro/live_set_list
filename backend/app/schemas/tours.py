@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -54,3 +55,61 @@ class TourStopItem(BaseModel):
 
 class TourDetailResponse(TourSummary):
     stops: list[TourStopItem] = Field(..., min_length=1, description="Collected tour stops in display order")
+
+
+class TourStatisticsCoverage(BaseModel):
+    stop_count: int = Field(..., ge=1)
+    setlist_stop_count: int = Field(..., ge=0)
+    comparable_transition_count: int = Field(..., ge=0)
+
+
+class TourStatisticsOverview(BaseModel):
+    distinct_song_count: int = Field(..., ge=0)
+    common_song_count: int = Field(..., ge=0)
+
+
+class TourStatisticsSongRef(BaseModel):
+    song_id: int
+    song_name: str
+
+
+class TourStatisticsSong(BaseModel):
+    song_id: int
+    song_name: str
+    appearance_count: int = Field(..., ge=1)
+    first_live_id: int
+    last_live_id: int
+    status: Literal["common", "single", "added", "removed", "intermittent"]
+
+
+class TourStatisticsReplacement(BaseModel):
+    segment_type: str
+    sub_order: int
+    from_song: TourStatisticsSongRef
+    to_song: TourStatisticsSongRef
+
+
+class TourStatisticsMovedSong(TourStatisticsSongRef):
+    from_order: int
+    to_order: int
+
+
+class TourStatisticsTransition(BaseModel):
+    from_live_id: int
+    from_live_date: date
+    from_live_title: str
+    to_live_id: int
+    to_live_date: date
+    to_live_title: str
+    replacements: list[TourStatisticsReplacement]
+    added_songs: list[TourStatisticsSongRef]
+    removed_songs: list[TourStatisticsSongRef]
+    moved_songs: list[TourStatisticsMovedSong]
+
+
+class TourStatisticsResponse(BaseModel):
+    tour_id: int
+    coverage: TourStatisticsCoverage
+    overview: TourStatisticsOverview
+    songs: list[TourStatisticsSong]
+    transitions: list[TourStatisticsTransition]
