@@ -378,17 +378,16 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
       <div className="tour-admin-block">
         <h3>已选场次（{stops.length}）</h3>
         <div className="console-table-wrap">
-          <table className="console-admin-table tour-stop-table">
-            <thead><tr><th>日期</th><th>Live</th><th>场地</th><th>场次标签</th><th>操作</th></tr></thead>
+          <table className="console-admin-table tour-stop-table" aria-label="已选场次">
+            <thead><tr><th>日期</th><th>Live</th><th>场地</th><th>操作</th></tr></thead>
             <tbody>
               {stops.map((stop) => (
                 <tr key={stop.live_id}>
                   <td>{stop.live_date}</td><td>#{stop.live_id} {stop.live_title}</td><td>{stop.venue ?? "-"}</td>
-                  <td><input aria-label={`场次标签 ${stop.live_id}`} value={stop.stop_label} maxLength={255} onChange={(event) => setStops((current) => current.map((item) => item.live_id === stop.live_id ? { ...item, stop_label: event.target.value } : item))} /></td>
                   <td><button type="button" className="console-ghost-btn" onClick={() => setStops((current) => current.filter((item) => item.live_id !== stop.live_id))}>移除</button></td>
                 </tr>
               ))}
-              {stops.length === 0 && <tr><td colSpan={5}>至少添加一场 Live 后才能保存巡演。</td></tr>}
+              {stops.length === 0 && <tr><td colSpan={4}>至少添加一场 Live 后才能保存巡演。</td></tr>}
             </tbody>
           </table>
         </div>
@@ -419,9 +418,9 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
                 </table>
               </div>
               <div className="console-table-wrap console-confirm-setlist-wrap">
-                <table className="console-admin-table console-confirm-setlist-table">
-                  <thead><tr><th>live_date</th><th>live_id</th><th>stop_label</th></tr></thead>
-                  <tbody>{stops.map((stop) => <tr key={stop.live_id}><td>{stop.live_date}</td><td>{stop.live_id}</td><td>{stop.stop_label || "-"}</td></tr>)}</tbody>
+                <table className="console-admin-table console-confirm-setlist-table" aria-label="确认场次">
+                  <thead><tr><th>live_date</th><th>live_id</th></tr></thead>
+                  <tbody>{stops.map((stop) => <tr key={stop.live_id}><td>{stop.live_date}</td><td>{stop.live_id}</td></tr>)}</tbody>
                 </table>
               </div>
             </div>

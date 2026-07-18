@@ -1238,7 +1238,7 @@ describe("ConsoleInsertPanel", () => {
     rectSpy.mockRestore();
   });
 
-  // 测试点：巡演管理保留可空、多选的乐队复选框，并提交按 ID 排序的完整关系集合。
+  // 测试点：巡演管理隐藏场次标签，并提交按 ID 排序的乐队及场次关系集合。
   test("巡演管理创建巡演并提交完整关系集合", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -1274,6 +1274,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText("简短说明")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "上移" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "下移" })).not.toBeInTheDocument();
+    expect(screen.queryByText("场次标签")).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("巡演名称"), "New Tour");
     await user.click(screen.getByRole("button", { name: "不指定" }));
     expect(screen.getByRole("checkbox", { name: "不指定" })).toBeChecked();
@@ -1282,17 +1283,17 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("checkbox", { name: "不指定" })).not.toBeChecked();
     expect(screen.getByRole("button", { name: "已占用" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "添加" }));
-    await user.type(screen.getByLabelText("场次标签 41"), "Final");
     await user.click(screen.getByRole("button", { name: "创建巡演" }));
     expect(screen.getByRole("dialog", { name: "确认创建巡演" })).toHaveClass("compact");
     expect(screen.getByRole("dialog", { name: "确认创建巡演" })).not.toHaveClass("wide");
+    expect(within(screen.getByRole("dialog", { name: "确认创建巡演" })).queryByText("stop_label")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleTour).toHaveBeenCalledWith(
       {
         tour_title: "New Tour",
         band_ids: [1, 2],
-        stops: [{ live_id: 41, stop_label: "Final" }],
+        stops: [{ live_id: 41, stop_label: null }],
       },
       "csrf-token",
     ));
@@ -1318,8 +1319,12 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "一键添加筛选结果" }));
 
     await waitFor(() => expect(apiMocks.getConsoleTourLiveCandidates).toHaveBeenCalledWith("", 1, 500));
-    const labels = screen.getAllByLabelText(/场次标签/).map((input) => input.getAttribute("aria-label"));
-    expect(labels).toEqual(["场次标签 41", "场次标签 42"]);
+    const selectedRows = within(screen.getByRole("table", { name: "已选场次" }))
+      .getAllByRole("row").slice(1).map((row) => row.textContent);
+    expect(selectedRows).toEqual([
+      expect.stringContaining("#41 Earlier"),
+      expect.stringContaining("#42 Later"),
+    ]);
     expect(screen.getByRole("status")).toHaveTextContent("已添加 2 场，跳过 1 场");
   });
 });
