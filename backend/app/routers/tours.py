@@ -339,7 +339,12 @@ SELECT
     s.song_name,
     stl.segment_type,
     stl.sub_order,
-    stl.absolute_order
+    stl.absolute_order,
+    EXISTS (
+        SELECT 1
+        FROM tour_bands explicit_tour_band
+        WHERE explicit_tour_band.tour_id = tl.tour_id
+    ) AS has_explicit_bands
 FROM tour_lives tl
 JOIN live_attrs l ON l.id = tl.live_id
 LEFT JOIN live_setlist stl
@@ -387,6 +392,9 @@ def _build_tour_statistics(tour_id: int, rows: list[tuple[Any, ...]]) -> dict[st
             stop_by_id[live_id] = stop
             stops.append(stop)
         if row[3] is not None:
+            comparison_order = (
+                len(stop["songs"]) + 1 if bool(row[8]) else int(row[7])
+            )
             stop["songs"].append(
                 {
                     "song_id": int(row[3]),
@@ -394,6 +402,7 @@ def _build_tour_statistics(tour_id: int, rows: list[tuple[Any, ...]]) -> dict[st
                     "segment_type": str(row[5]),
                     "sub_order": int(row[6]),
                     "absolute_order": int(row[7]),
+                    "comparison_order": comparison_order,
                 }
             )
 
@@ -452,15 +461,22 @@ def _build_tour_statistics(tour_id: int, rows: list[tuple[Any, ...]]) -> dict[st
         moved_song_ids = {
             song_id
             for song_id in from_by_song.keys() & to_by_song.keys()
-            if from_by_song[song_id]["absolute_order"] != to_by_song[song_id]["absolute_order"]
+            if from_by_song[song_id]["comparison_order"] != to_by_song[song_id]["comparison_order"]
         }
         moved_songs = [
             {
                 **_song_ref(from_by_song[song_id]),
-                "from_order": from_by_song[song_id]["absolute_order"],
-                "to_order": to_by_song[song_id]["absolute_order"],
+                "from_order": from_by_song[song_id]["comparison_order"],
+                "to_order": to_by_song[song_id]["comparison_order"],
             }
-            for song_id in sorted(moved_song_ids)
+            for song_id in sorted(
+                moved_song_ids,
+                key=lambda item: (
+                    from_by_song[item]["comparison_order"],
+                    to_by_song[item]["comparison_order"],
+                    item,
+                ),
+            )
         ]
         replacements: list[dict[str, Any]] = []
         replaced_from_ids: set[int] = set()
