@@ -45,6 +45,7 @@ function renderSection(
       liveCandidateLoading={false}
       editingLiveId={options.editingLiveId ?? null}
       isLiveDirty={options.isLiveDirty ?? (options.editingLiveId != null)}
+      clearAfterCreate
       venues={[{ venue_id: 1, venue_name: "Test Venue" }]}
       timezoneHourOptions={["+9"]}
       liveTypeOptions={[{ value: "other", label: "其他" }, { value: "event", label: "活动" }]}
@@ -73,6 +74,7 @@ function renderSection(
       onLiveCandidatePageChange={vi.fn()}
       onSelectLiveForEdit={vi.fn()}
       onStartNewLive={vi.fn()}
+      onClearAfterCreateChange={vi.fn()}
       onOpenVenueMenu={vi.fn()}
       onOpenDefaultBandMenu={vi.fn()}
       onSelectVenue={vi.fn()}
@@ -131,12 +133,25 @@ describe("LiveAdminSection", () => {
     expect(screen.getByText("Live #55 有未保存修改")).toBeInTheDocument();
   });
 
-  // 测试点：Live 类型筛选应与高亮的新建入口同时呈现，已保存的干净编辑态不重复显示状态提示。
-  test("shows the type filter and highlighted create action without a clean edit hint", () => {
+  // 测试点：新建模式的类型和四个主控件应挂载共享宽度、对齐样式，并保留高亮入口与清空选项。
+  test("shows the type filter, highlighted create action, and clear option", () => {
+    renderSection();
+
+    expect(screen.getByRole("combobox", { name: "按 Live 类型筛选" })).toHaveClass("live-type-filter");
+    expect(screen.getByDisplayValue("其他")).toHaveClass("live-type-input");
+    expect(screen.getByPlaceholderText("输入 Live ID 或标题")).toHaveClass("live-management-primary-control");
+    expect(screen.getByLabelText("查询 venue")).toHaveClass("live-management-primary-control");
+    expect(screen.getByRole("button", { name: /Test Venue/ })).toHaveClass("live-management-primary-control");
+    expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toHaveClass("live-management-primary-control");
+    expect(screen.getByRole("button", { name: "新建 Live" })).toHaveClass("console-submit-btn", "console-new-btn");
+    expect(screen.getByRole("checkbox", { name: "新增后清空录入数据" })).toBeChecked();
+  });
+
+  // 测试点：已保存的干净编辑态不应重复显示状态提示或新增后的清空选项。
+  test("hides create-only controls and the clean edit hint while editing", () => {
     renderSection(vi.fn(), { editingLiveId: 55, isLiveDirty: false });
 
-    expect(screen.getByRole("combobox", { name: "按 Live 类型筛选" })).toHaveValue("");
-    expect(screen.getByRole("button", { name: "新建 Live" })).toHaveClass("console-submit-btn", "console-new-btn");
+    expect(screen.queryByRole("checkbox", { name: "新增后清空录入数据" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Live #55 有未保存修改/)).not.toBeInTheDocument();
   });
 });

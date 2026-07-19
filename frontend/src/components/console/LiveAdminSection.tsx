@@ -28,6 +28,7 @@ type LiveAdminSectionProps = {
   liveCandidateLoading: boolean;
   editingLiveId: number | null;
   isLiveDirty: boolean;
+  clearAfterCreate: boolean;
   venues: VenueOption[];
   timezoneHourOptions: string[];
   liveTypeOptions: { value: string; label: string }[];
@@ -69,6 +70,7 @@ type LiveAdminSectionProps = {
   onLiveCandidatePageChange: (page: number) => void;
   onSelectLiveForEdit: (liveId: number) => void;
   onStartNewLive: () => void;
+  onClearAfterCreateChange: (checked: boolean) => void;
   onOpenVenueMenu: () => void;
   onOpenDefaultBandMenu: () => void;
   onSelectVenue: (venueId: number) => void;
@@ -106,6 +108,7 @@ export function LiveAdminSection({
   liveCandidateLoading,
   editingLiveId,
   isLiveDirty,
+  clearAfterCreate,
   venues,
   timezoneHourOptions,
   liveTypeOptions,
@@ -134,6 +137,7 @@ export function LiveAdminSection({
   onLiveCandidatePageChange,
   onSelectLiveForEdit,
   onStartNewLive,
+  onClearAfterCreateChange,
   onOpenVenueMenu,
   onOpenDefaultBandMenu,
   onSelectVenue,
@@ -163,10 +167,10 @@ export function LiveAdminSection({
   return (
     <>
       <div className="tour-admin-toolbar live-admin-toolbar">
-        <label htmlFor="live-admin-query">已有 Live</label>
+        <label className="live-management-label" htmlFor="live-admin-query">已有 Live</label>
         <input
           id="live-admin-query"
-          className="venue-query-input"
+          className="venue-query-input live-management-primary-control"
           value={liveCandidateQuery}
           onChange={(event) => onLiveCandidateQueryChange(event.target.value)}
           onKeyDown={(event) => { if (event.key === "Enter") onQueryLiveCandidates(); }}
@@ -208,11 +212,11 @@ export function LiveAdminSection({
       </div>
 
       <div className="live-id-selector live-create-query-row">
-        <label htmlFor="venue-query-input">查询 venue</label>
+        <label className="live-management-label" htmlFor="venue-query-input">查询 venue</label>
         <input
           id="venue-query-input"
           ref={venueQueryInputRef}
-          className="venue-query-input"
+          className="venue-query-input live-management-primary-control"
           value={venueQueryText}
           onChange={(e) => onVenueQueryTextChange(e.target.value)}
           placeholder="输入 venue 关键词"
@@ -225,11 +229,11 @@ export function LiveAdminSection({
         </button>
       </div>
       <div className="live-id-selector live-create-tools">
-        <label>选择 venue</label>
+        <label className="live-management-label">选择 venue</label>
         <button
           ref={venueTriggerRef}
           type="button"
-          className="bands-picker-trigger venue-picker-trigger"
+          className="bands-picker-trigger venue-picker-trigger live-management-primary-control"
           onClick={onOpenVenueMenu}
           title={selectedVenueText}
         >
@@ -238,11 +242,11 @@ export function LiveAdminSection({
       </div>
 
       <div className="live-id-selector live-create-tools live-default-bands-row">
-        <span className="live-default-bands-label">默认 Band</span>
+        <span className="live-default-bands-label live-management-label">默认 Band</span>
         <button
           ref={defaultBandTriggerRef}
           type="button"
-          className="bands-picker-trigger default-band-picker-trigger"
+          className="bands-picker-trigger default-band-picker-trigger live-management-primary-control"
           onClick={onOpenDefaultBandMenu}
           title={selectedDefaultBandText}
           aria-expanded={defaultBandOpen}
@@ -280,7 +284,7 @@ export function LiveAdminSection({
                 <input value={liveTitle} onChange={(e) => onLiveTitleChange(e.target.value)} placeholder="请输入Live标题" />
               </td>
               <td>
-                <select value={liveType} onChange={(e) => onLiveTypeChange(e.target.value)}>
+                <select className="live-type-input" value={liveType} onChange={(e) => onLiveTypeChange(e.target.value)}>
                   {liveTypeOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -328,6 +332,16 @@ export function LiveAdminSection({
       </div>
 
       <div className="console-submit-row live-admin-insert-row">
+        {editingLiveId === null && (
+          <label className="live-clear-after-create-option">
+            <input
+              type="checkbox"
+              checked={clearAfterCreate}
+              onChange={(event) => onClearAfterCreateChange(event.target.checked)}
+            />
+            新增后清空录入数据
+          </label>
+        )}
         <button type="button" className="console-ghost-btn" onClick={onClearInsertLive}>
           {editingLiveId === null ? "清空数据" : "恢复原值"}
         </button>

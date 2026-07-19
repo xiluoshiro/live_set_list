@@ -1,4 +1,8 @@
 .console-admin {
+  --console-live-management-control-width: 280px;
+  --console-live-type-control-width: 86px;
+  --console-entity-select-width: 420px;
+
   padding: 24px;
 }
 
@@ -155,17 +159,21 @@
   font-size: 13px;
 }
 
+.tour-admin-toolbar > label,
+.live-id-selector label {
+  color: var(--text-table-head);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .tour-admin-toolbar select,
 .tour-candidate-search input {
   min-width: min(420px, 100%);
 }
 
 .live-admin-toolbar {
+  gap: 8px;
   margin-bottom: 12px;
-}
-
-.live-admin-toolbar .venue-query-input {
-  min-width: min(260px, 100%);
 }
 
 .live-admin-toolbar select {
@@ -174,8 +182,35 @@
 }
 
 .live-admin-toolbar .live-type-filter {
-  flex: 0 1 140px;
-  min-width: 120px;
+  flex: 0 0 var(--console-live-type-control-width);
+  width: var(--console-live-type-control-width);
+  min-width: var(--console-live-type-control-width);
+  max-width: var(--console-live-type-control-width);
+}
+
+.live-admin-form-table .live-type-input {
+  width: var(--console-live-type-control-width);
+  min-width: var(--console-live-type-control-width);
+  max-width: var(--console-live-type-control-width);
+}
+
+.live-management-label {
+  flex: 0 0 88px;
+  text-align: left;
+}
+
+.live-management-primary-control {
+  flex: 0 1 var(--console-live-management-control-width);
+  width: min(var(--console-live-management-control-width), 100%);
+  min-width: min(var(--console-live-management-control-width), 100%);
+  max-width: var(--console-live-management-control-width);
+}
+
+.tour-admin-toolbar .console-entity-select {
+  flex: 0 1 var(--console-entity-select-width);
+  width: min(var(--console-entity-select-width), 100%);
+  min-width: min(var(--console-entity-select-width), 100%);
+  max-width: var(--console-entity-select-width);
 }
 
 .tour-candidate-search {
@@ -420,12 +455,6 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.live-id-selector label {
-  color: var(--text-table-head);
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .live-id-selector select {
@@ -712,6 +741,21 @@
   gap: 8px;
 }
 
+.live-clear-after-create-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.live-clear-after-create-option input {
+  margin: 0;
+}
+
 .song-submit-row {
   margin-top: 8px;
 }
@@ -740,9 +784,9 @@
 
 .live-admin-form-table th:nth-child(3),
 .live-admin-form-table td:nth-child(3) {
-  width: 110px;
-  min-width: 110px;
-  max-width: 110px;
+  width: calc(var(--console-live-type-control-width) + 24px);
+  min-width: calc(var(--console-live-type-control-width) + 24px);
+  max-width: calc(var(--console-live-type-control-width) + 24px);
 }
 
 .live-admin-form-table th:nth-child(5),
@@ -802,8 +846,6 @@
 }
 
 .default-band-picker-trigger {
-  width: min(420px, 100%);
-  min-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -813,13 +855,7 @@
   margin-top: 2px;
 }
 
-.venue-picker-trigger {
-  min-width: 240px;
-  width: auto;
-}
-
 .venue-query-input {
-  width: 280px;
   border: 1px solid var(--border-normal);
   border-radius: 7px;
   padding: 6px 8px;

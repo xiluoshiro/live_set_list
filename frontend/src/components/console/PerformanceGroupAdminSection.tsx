@@ -264,6 +264,7 @@ export function PerformanceGroupAdminSection({
         <label htmlFor="pg-admin-select">已有活动组</label>
         <select
           id="pg-admin-select"
+          className="console-entity-select"
           value={selectedGroupId ?? ""}
           onChange={(event) => {
             const groupId = Number(event.target.value);
