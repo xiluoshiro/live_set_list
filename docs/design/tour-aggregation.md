@@ -33,12 +33,12 @@ live_attrs 1 ── N live_setlist N ── 1 song_list
 
 ### 使用关联表
 
-新增 `tour_lives` 保存 Tour 与 Live 的关系、场次顺序和场次标签。第一版对 `live_id` 增加唯一约束，保证一场 Live 最多属于一个巡演。
+新增 `tour_lives` 保存 Tour 与 Live 的关系、场次顺序和兼容用场次标签。第一版对 `live_id` 增加唯一约束，保证一场 Live 最多属于一个巡演。
 
 使用关联表而不是直接在 `live_attrs` 增加 `tour_id`，原因是：
 
 - `stop_order` 保留为关系字段，但控制台保存时始终按 Live 日期和 ID 重建，不接受人工排序。
-- 场次标签属于关系本身。
+- `stop_label` 属于关系本身，但当前前端不展示或维护；公演名由 Live 标题与巡演名计算。
 - 删除巡演时只需删除关系，不改变 Live 主数据。
 - 将来若确认存在多归属需求，可以移除 `live_id` 唯一约束而不重构 Live 表。
 
@@ -215,9 +215,9 @@ tour: TourRef | None = None
 - 登录用户批量查询 stops 对应的收藏状态；匿名统一为 `false`。
 - Tour 意外没有关联 Live 时视为数据异常，返回 `500` 并记录日志，不伪装成正常空详情。
 
-### 扩展 `GET /api/catalog/search`
+### 扩展 `GET /api/catalog/search`（尚未实施）
 
-`CatalogSearchResponse` 增加：
+目标方案是为 `CatalogSearchResponse` 增加：
 
 ```python
 tours: list[TourSummary]
@@ -312,8 +312,8 @@ Live 类型增加 `tour: TourRef | null`。旧缓存数据不能假设该字段�
 type TabKey = ExistingTabKey | "tours" | "tour_detail";
 ```
 
-- 全局导航仍只显示一个“演出资料”。
-- 当 tab 为 `all / favorites` 时，“演出资料”保持选中；当 tab 为 `tours / tour_detail` 时，“巡演资料”保持选中。
+- 全局导航同时显示“演出资料”和“巡演资料”。
+- 当 tab 为 `all / favorites / performance_group_detail`，或普通 Live 详情来源于演出资料时，“演出资料”保持选中；当 tab 为 `tours / tour_detail` 时，“巡演资料”保持选中。
 - `all / favorites` 继续承载场次与收藏范围。
 - `tours` 承载巡演列表，不复用 favorites 语义。
 - `tour_detail` 保存 `tourId`、来源 tab、巡演列表页码和滚动位置。
@@ -323,7 +323,7 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 
 ### 组件拆分
 
-建议新增：
+当前组件拆分：
 
 - `TourListFilters.tsx`：巡演关键词、年份、乐队和排序。
 - `TourCardGrid.tsx`：巡演卡片与分页/连续加载状态。
@@ -338,9 +338,11 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 
 - “巡演资料”作为独立主导航页签，不在“演出资料”内部增加实体切换。
 - 巡演卡片直接复用演出资料的 `live-card` 结构与样式，点击整卡进入详情；官方来源使用独立 `<a>` 并阻止触发整卡操作。
+- 巡演列表复用演出资料的布局顺序和间距：`list-filter-panel` → `pager`（总计和分页）→ `live-card-grid`；加载、空结果和错误状态复用 `live-card-state`。
 - 巡演详情标题外链复用演出详情的 `DetailTitleLink` 与 SVG 图标；场次来源复用现有 `🔗` 链接样式，不另造字符箭头或专用样式。
 - 巡演详情的日期范围、场次和参与乐队复用演出详情的 `detail-meta-line` 与 `detail-inline-item`；场次导航只保留由主题边框色竖条分隔的短标题，并复用 `detail-tour-link` 交互，不重复日期、场地、类型、收藏或来源链接。
-- 登录用户在 Tour stop 中复用现有 Live 收藏按钮和乐观同步逻辑。
+- 巡演详情的直属 `section-tabs` 使用 `14px` 上间距，公演导航继续使用 `14px` 上间距，使“已收录日期 → 场次详情 → 公演名”两段垂直距离一致。
+- 当前 Tour stop 导航不展示收藏按钮；收藏仍在“演出资料”及单场 Live 入口中维护。若后续在巡演详情增加逐场收藏，应复用现有 Live 收藏与乐观同步逻辑。
 - Tour stop 通过现有 `GET /api/lives/{live_id}` 缓存接口加载，并在 `TourDetailPage` 内复用 `LiveDetailContent` 渲染，不改变主导航状态。
 - “场次详情 / 巡演统计”复用控制台既有页签样式；统计通过 `GET /api/catalog/tours/{tour_id}/statistics` 首次打开时按需加载。统计查询在 `LEFT JOIN live_setlist` 的连接条件中检查 `tour_bands`：存在显式乐队时，只连接 `band_member` 命中任一指定 `band_name` 的行；没有显式乐队时连接全部 Setlist。过滤保留没有指定乐队歌曲的巡演场次，使覆盖率仍以完整巡演场次为分母，但该场次不计入有 Setlist 场次或相邻比较。场次变化在 `TourStatisticsPanel` 内使用主从布局：左侧从相邻比较数据还原纵向场次时间线，选择器显示变化总数并默认定位最近一次有变化的比较；右侧复用统计卡片和主题变量，按更换、新增、移除、顺序变化分组展示差异，无变化使用单一状态。相同歌曲的顺序变化仍先于位置更换计算；时间线和差异标题中的场次名复用 `detail-tour-link`，点击后设置对应 `live_id` 并切回场次详情。窄屏改为上下布局，时间线保持纵向，不引入横向滚动。
 - Live 详情中的 Tour 名称打开 `TourDetailPage`，返回时恢复 Live 详情。
@@ -355,7 +357,7 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 4. 已属于任意 Tour 的 Live 在候选查询和分页前直接排除，不在搜索结果中显示。
 5. 支持一次添加当前筛选命中的全部未占用 Live；超过 500 条时要求缩小范围。
 6. 所有场次始终按 `live_date ASC, live_id ASC` 排列；editor 可以移除关联。`stop_label` 作为兼容字段保留，但暂不在前端展示或编辑。
-7. 提交前显示完整确认页；创建和更新复用现有控制台确认交互。
+7. 提交前显示完整确认页；创建和更新复用现有控制台确认交互，确认表列名为 `short_title`，值由 Live 名称精确移除巡演名称前缀计算，不提交派生字段。
 8. 创建或更新成功后清空编辑区并恢复新建状态；仅创建操作追加到页面底部的会话级新增记录表格。
 
 写接口仍保留服务端 `409` 作为并发和绕过 UI 的最终保护。
@@ -405,8 +407,8 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 - 巡演筛选参数、分页、加载、错误和空状态。
 - “全部 / 仅收藏”不出现在巡演视图。
 - 巡演详情页内切换 Live、Live 反向进入巡演、浏览器返回恢复来源。
-- 登录用户可在 stop 上切换 Live 收藏；匿名点击时打开登录框。
-- 搜索结果巡演分组和空分组隐藏。
+- 当前巡演详情不提供 stop 收藏控件；若后续补充，需测试登录用户切换、匿名登录引导和跨页面同步。
+- 公共搜索的巡演分组尚未落地，实施时需补充结果分组和空分组隐藏测试。
 - 控制台候选冲突前置提示、确认页和更新后缓存清理。
 - 测试文件中的测试附近保留简短“测试点”注释。
 
@@ -433,17 +435,17 @@ python scripts/run_checks.py functional
 2. `DONE`：新增 V13、测试 seed 和数据库约束/权限集成测试。
 3. `DONE`：增加 Tour schema、公共列表/详情和 Live `TourRef`。
 4. `DONE`：增加控制台创建/更新接口、Live 候选查询和审计。
-5. `DONE`：增加控制台巡演管理 UI，可维护乐队顺序、场次标签与顺序，并前置提示归属冲突。
+5. `DONE`：增加控制台巡演管理 UI，可维护参与乐队和自动排序场次，以计算出的 `short_title` 确认，并前置排除归属冲突；不展示标签或人工排序控件。
 6. `DONE`：增加独立巡演资料页签、巡演列表、巡演详情和 Live 反向入口。
-7. 扩展公共搜索和所有 Live 消费路径。
-8. 更新 `docs/api.md`、Flyway/数据库 README 和产品状态。
-9. 运行 functional，并完成桌面与 390px 浏览器验收。
+7. `DONE`：所有 Live 公共读取路径返回一致的 Tour 反向引用；公共搜索的 Tour 实体分组仍待实现。
+8. `DONE`：同步 `docs/api.md`、Flyway/数据库 README 和产品状态。
+9. `PARTIAL`：functional 已通过；桌面与 390px 真实浏览器验收随发布批次执行。
 
 ## 后续演进
 
 巡演聚合稳定后，可按真实需求依次评估：
 
-- 巡演 setlist 差异、固定曲目、替换曲目和平均 setlist。
+- 固定曲目、平均 setlist 和跨全巡演的高级统计；相邻场次差异已经由巡演统计面板实现。
 - 官方总场数与缺失场次，但必须引入明确来源和人工维护。
 - 巡演收藏或关注，使用独立 `user_tour_favorites`，不能复用 Live 收藏表。
 - 场地城市、国家和坐标结构化后的路线图。

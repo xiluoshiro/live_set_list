@@ -229,7 +229,7 @@ schema 级权限：
 
 当前限制：
 
-- 初始化脚本没有给它 `DELETE`
+- 初始化脚本不授予全局 `DELETE`；V13/V14 仅对集合替换所需的 `tour_bands`、`tour_lives` 和 `performance_group_lives` 显式授予 `DELETE`
 - 也没有给它 `CREATE TABLE` / `ALTER TABLE` 这类 DDL 权限
 
 当前职责：
@@ -296,6 +296,13 @@ schema 级权限：
   - `GET /api/lives`
   - `GET /api/lives/{live_id}`
   - `POST /api/lives/details:batch`
+- [catalog.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/catalog.py)
+  - 公共搜索、乐队浏览与资料库概览
+- [tours.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/tours.py)
+  - 巡演列表、详情与统计
+- [performance_groups.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/performance_groups.py)
+  - 统一演出投影与活动组详情
+- 控制台巡演 / 活动组的候选、列表和编辑详情也使用只读连接
 
 ### 4.2 运行时读写连接
 
@@ -327,12 +334,16 @@ schema 级权限：
   - `POST /api/console/venues`
   - `POST /api/console/lives`
   - `POST /api/console/lives/{live_id}/setlist`
+- [console_tours.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/console_tours.py)
+  - 巡演候选、详情、创建和完整集合更新
+- [console_performance_groups.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/console_performance_groups.py)
+  - 活动组列表、候选、详情、创建和完整集合更新
 
 说明：
 
 - 认证链路虽然包含部分读取，但因为会同时更新 session、登录时间、审计，所以统一走写连接
 - 当前默认 admin 自动插入 `app_users` 时，使用的也是 `live_project_super_ro`
-- 控制台写接口要求 `editor+`，并统一做 CSRF 校验；当前 setlist 写入是 append-only，不依赖 `DELETE`
+- 控制台写接口要求 `editor+`，并统一做 CSRF 校验；setlist 写入保持 append-only，巡演和活动组更新只删除并重建各自的关系行
 
 ### 4.3 运行时普通用户写连接
 
@@ -493,18 +504,18 @@ PostgreSQL 的默认行为意味着：
 
 所以认证写入、session 管理、默认 admin upsert 都依赖它。
 
-### 6.4 当前还没有给运行时写账号 `DELETE`
+### 6.4 运行时写账号只获得定向 `DELETE`
 
-初始化脚本只给了：
+初始化脚本的通用授权只有：
 
 - `INSERT`
 - `UPDATE`
 
-没有给：
+没有全局授予：
 
 - `DELETE`
 
-所以后面如果新增真正的删除型业务接口，需要再单独核对角色设计和权限 SQL。
+V13/V14 migration 仅为完整集合替换显式授予 `tour_bands`、`tour_lives` 和 `performance_group_lives` 的 `DELETE`。主实体 `tour_attrs`、`performance_group_attrs` 仍不可删除，也没有删除接口。后续新增删除型业务仍需逐表核对角色设计和权限 SQL。
 
 ## 7. 建议的阅读顺序
 

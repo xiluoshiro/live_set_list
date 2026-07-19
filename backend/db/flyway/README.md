@@ -35,7 +35,7 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
   - Flyway 项目配置模板
 - `sql/B1__baseline_schema.sql`
   - 当前 baseline migration
-- `sql/V2__...` 到 `sql/V13__...`
-  - 当前已经落地的认证、收藏、权限、控制台、`live_type`、默认 Band 与巡演聚合等版本化迁移
+- `sql/V2__...` 到 `sql/V14__...`
+  - 当前已经落地的认证、收藏、权限、控制台、`live_type`、默认 Band、巡演聚合与演出活动组聚合等版本化迁移
 - `../postgres/init/010-create-flyway-role.sh`
   - PostgreSQL 容器初始化时创建 Flyway / app / test admin 角色并授予相应权限
