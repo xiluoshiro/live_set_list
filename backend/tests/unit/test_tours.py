@@ -142,10 +142,10 @@ def test_get_tour_detail_not_found_returns_404():
 def test_get_tour_statistics_compares_adjacent_setlists():
     conn, cursor = _build_connection_mock()
     cursor.fetchall.return_value = [
-        (45, "2026-04-17", "Exitus 福冈", 1, "Song A", "main", 1, 1),
-        (45, "2026-04-17", "Exitus 福冈", 2, "Song B", "main", 2, 2),
-        (53, "2026-06-20", "Exitus FINAL", 3, "Song C", "main", 1, 1),
-        (53, "2026-06-20", "Exitus FINAL", 4, "Song D", "encore", 1, 2),
+        (45, "2026-04-17", "Exitus 福冈", 1, "Song A", "main", 1, 1, False),
+        (45, "2026-04-17", "Exitus 福冈", 2, "Song B", "main", 2, 2, False),
+        (53, "2026-06-20", "Exitus FINAL", 3, "Song C", "main", 1, 1, False),
+        (53, "2026-06-20", "Exitus FINAL", 4, "Song D", "encore", 1, 2, False),
     ]
 
     with patch("app.routers.tours.get_db_connection", return_value=conn):
@@ -167,14 +167,14 @@ def test_get_tour_statistics_compares_adjacent_setlists():
     assert cursor.execute.call_args_list == [call(TOUR_STATISTICS_QUERY, (7,))]
 
 
-# 测试点：同一歌曲发生顺序变化时，应优先归为顺序变化，不能再按占用位置生成更换记录。
+# 测试点：顺序变化应优先于位置更换，并按前一场歌单顺序而非 song_id 排列。
 def test_get_tour_statistics_prefers_movement_over_replacement():
     conn, cursor = _build_connection_mock()
     cursor.fetchall.return_value = [
-        (45, "2026-04-17", "Exitus 福冈", 1, "Song A", "main", 1, 1),
-        (45, "2026-04-17", "Exitus 福冈", 2, "Song B", "main", 2, 2),
-        (53, "2026-06-20", "Exitus FINAL", 2, "Song B", "main", 1, 1),
-        (53, "2026-06-20", "Exitus FINAL", 1, "Song A", "main", 2, 2),
+        (45, "2026-04-17", "Exitus 福冈", 20, "Song A", "main", 1, 1, False),
+        (45, "2026-04-17", "Exitus 福冈", 10, "Song B", "main", 2, 2, False),
+        (53, "2026-06-20", "Exitus FINAL", 10, "Song B", "main", 1, 1, False),
+        (53, "2026-06-20", "Exitus FINAL", 20, "Song A", "main", 2, 2, False),
     ]
 
     with patch("app.routers.tours.get_db_connection", return_value=conn):
@@ -183,6 +183,27 @@ def test_get_tour_statistics_prefers_movement_over_replacement():
     assert response.status_code == 200
     transition = response.json()["transitions"][0]
     assert transition["replacements"] == []
-    assert [song["song_id"] for song in transition["moved_songs"]] == [1, 2]
+    assert [song["song_id"] for song in transition["moved_songs"]] == [20, 10]
+    assert transition["added_songs"] == []
+    assert transition["removed_songs"] == []
+
+
+# 测试点：显式参与乐队过滤后应按剩余歌曲重新编号，忽略开场乐队造成的整体绝对序号偏移。
+def test_get_tour_statistics_uses_filtered_order_for_explicit_bands():
+    conn, cursor = _build_connection_mock()
+    cursor.fetchall.return_value = [
+        (13, "2024-12-14", "Stille Nacht", 20, "Song A", "M", 1, 6, True),
+        (13, "2024-12-14", "Stille Nacht", 10, "Song B", "M", 2, 7, True),
+        (17, "2025-02-15", "上海追加公演", 20, "Song A", "M", 1, 1, True),
+        (17, "2025-02-15", "上海追加公演", 10, "Song B", "M", 2, 2, True),
+    ]
+
+    with patch("app.routers.tours.get_db_connection", return_value=conn):
+        response = TestClient(app).get("/api/catalog/tours/6/statistics")
+
+    assert response.status_code == 200
+    transition = response.json()["transitions"][0]
+    assert transition["replacements"] == []
+    assert transition["moved_songs"] == []
     assert transition["added_songs"] == []
     assert transition["removed_songs"] == []
