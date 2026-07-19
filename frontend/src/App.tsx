@@ -206,6 +206,12 @@ function buildAvatarSvgDataUrl(initial: string, color: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+function resetPageScroll(): void {
+  if (window.scrollY !== 0) {
+    window.scrollTo(0, 0);
+  }
+}
+
 function App() {
   const auth = useAuth();
   const favorites = useFavorites();
@@ -312,6 +318,7 @@ function App() {
         : requestedTab;
     setUserMenuOpen(false);
     if (allowedTab === "detail" && state.detailLiveId && state.detailFallback && state.previousTab) {
+      resetPageScroll();
       setDetailLiveId(state.detailLiveId);
       setDetailFallback(state.detailFallback);
       setPreviousTab(state.previousTab);
@@ -319,6 +326,7 @@ function App() {
       return;
     }
     if (allowedTab === "tour_detail" && state.detailTourId && state.tourFallback) {
+      resetPageScroll();
       setDetailTourId(state.detailTourId);
       setTourFallback(state.tourFallback);
       setDetailLiveId(null);
@@ -330,6 +338,7 @@ function App() {
       return;
     }
     if (allowedTab === "performance_group_detail" && state.detailGroupId && state.groupFallback) {
+      resetPageScroll();
       setDetailGroupId(state.detailGroupId);
       setDetailGroupLiveId(state.detailGroupLiveId ?? null);
       setGroupFallback(state.groupFallback);

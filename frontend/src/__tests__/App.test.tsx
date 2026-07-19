@@ -709,6 +709,27 @@ describe("App", () => {
     }
   });
 
+  // 测试点：从已滚动的演出资料进入详情时必须置顶，不继承列表滚动位置。
+  test("演出资料下滑后打开 Live 详情会从顶部显示", async () => {
+    const originalScrollY = Object.getOwnPropertyDescriptor(window, "scrollY");
+    const originalScrollTo = window.scrollTo;
+    Object.defineProperty(window, "scrollY", { value: 480, configurable: true });
+    window.scrollTo = vi.fn();
+    try {
+      const user = userEvent.setup();
+      renderApp();
+      await openAllContent(user);
+
+      await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
+
+      expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
+      expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "detail", detailLiveId: 1 });
+    } finally {
+      if (originalScrollY) Object.defineProperty(window, "scrollY", originalScrollY);
+      window.scrollTo = originalScrollTo;
+    }
+  });
+
   test("首页搜索会进入搜索结果，并可从结果打开详情", async () => {
     // 测试点：首页搜索框接入公共搜索，Live 结果继续复用现有详情弹窗。
     getLivesMock.mockResolvedValue(
