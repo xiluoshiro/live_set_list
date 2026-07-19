@@ -13,6 +13,16 @@ sync_production_db = importlib.util.module_from_spec(script_spec)
 script_spec.loader.exec_module(sync_production_db)
 
 
+# 测试点：生产同步只能通过 root-owned 导出入口执行 check/dump，不能重新放开远端任意 shell。
+def test_remote_commands_use_restricted_export_entrypoint() -> None:
+    assert sync_production_db.REMOTE_BACKUP_COMMAND == (
+        "sudo -n /usr/local/sbin/livesetlist-sync-export dump"
+    )
+    assert sync_production_db.REMOTE_PRECHECK_COMMAND == (
+        "sudo -n /usr/local/sbin/livesetlist-sync-export check"
+    )
+
+
 # 测试点：远端 SSH 备份失败时必须删除不完整 dump，且不进入本地恢复流程。
 def test_download_production_backup_removes_partial_file_on_ssh_failure(tmp_path, monkeypatch) -> None:
     destination = tmp_path / "production.dump"
@@ -29,7 +39,7 @@ def test_download_production_backup_removes_partial_file_on_ssh_failure(tmp_path
     assert not destination.exists()
 
 
-# 测试点：SSH 预检必须执行与真实同步相同的远端备份启动和 dump 读取权限验证。
+# 测试点：SSH 预检必须调用受限入口的 check 模式验证备份生成与 dump 读取权限。
 def test_precheck_ssh_environment_checks_remote_backup_access(monkeypatch) -> None:
     recorded_commands: list[list[str]] = []
     monkeypatch.setattr(sync_production_db, "resolve_ssh_command", lambda: "ssh")
@@ -43,8 +53,7 @@ def test_precheck_ssh_environment_checks_remote_backup_access(monkeypatch) -> No
     sync_production_db.precheck_ssh_environment("production")
 
     assert recorded_commands[0][:4] == ["ssh", "-o", "BatchMode=yes", "production"]
-    assert "systemctl start livesetlist-backup.service" in recorded_commands[0][4]
-    assert "dd if=\"$latest\"" in recorded_commands[0][4]
+    assert recorded_commands[0][4] == "sudo -n /usr/local/sbin/livesetlist-sync-export check"
 
 
 # 测试点：dump 校验失败时不得 drop 本地主库。

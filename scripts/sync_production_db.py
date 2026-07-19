@@ -18,21 +18,9 @@ from recovery.docker_ops import ensure_container_ready
 from recovery.restore import apply_app_database_permissions, reset_database_for_restore
 
 
-REMOTE_BACKUP_COMMAND = """set -eu
-sudo -n systemctl start livesetlist-backup.service
-sudo -n sh -c '
-  latest=$(find /var/backups/livesetlist/app/auto -maxdepth 1 -type f -name "live_statistic_auto_*.dump" -printf "%T@ %p\\n" | sort -n | tail -n 1 | cut -d" " -f2-)
-  test -n "$latest"
-  cat "$latest"
-'"""
-
-REMOTE_PRECHECK_COMMAND = """set -eu
-sudo -n systemctl start livesetlist-backup.service
-sudo -n sh -c '
-  latest=$(find /var/backups/livesetlist/app/auto -maxdepth 1 -type f -name "live_statistic_auto_*.dump" -printf "%T@ %p\\n" | sort -n | tail -n 1 | cut -d" " -f2-)
-  test -s "$latest"
-  dd if="$latest" of=/dev/null bs=1 count=1 status=none
-'"""
+REMOTE_EXPORT_COMMAND = "/usr/local/sbin/livesetlist-sync-export"
+REMOTE_BACKUP_COMMAND = f"sudo -n {REMOTE_EXPORT_COMMAND} dump"
+REMOTE_PRECHECK_COMMAND = f"sudo -n {REMOTE_EXPORT_COMMAND} check"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -64,7 +52,7 @@ def download_production_backup(ssh_host: str, destination: Path) -> None:
     stderr = completed.stderr.decode("utf-8", errors="ignore").strip()
     raise SystemExit(
         "生产数据库下载失败。SSH 别名必须可无交互登录，且远端账户需要允许 "
-        "sudo -n 启动 livesetlist-backup.service 并读取备份文件。"
+        f"sudo -n 执行 {REMOTE_EXPORT_COMMAND} dump。"
         + (f"\n{stderr}" if stderr else "")
     )
 
@@ -88,7 +76,7 @@ def precheck_ssh_environment(ssh_host: str) -> None:
 
     stderr = completed.stderr.strip()
     raise SystemExit(
-        "SSH 预检失败。请检查 SSH 配置、主机指纹、密钥和 sudo -n 权限。"
+        f"SSH 预检失败。请检查 SSH 配置、主机指纹、密钥和 {REMOTE_EXPORT_COMMAND} 的 sudo -n 权限。"
         + (f"\n{stderr}" if stderr else "")
     )
 
