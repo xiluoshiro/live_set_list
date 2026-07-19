@@ -220,6 +220,37 @@
   min-width: 48px;
 }
 
+.event-attendee-list,
+.event-attendee-item,
+.event-attendee-token {
+  display: inline-flex;
+  align-items: center;
+}
+
+.event-attendee-list {
+  flex-wrap: wrap;
+  gap: 4px 0;
+}
+
+.event-attendee-item {
+  gap: 6px;
+}
+
+.event-attendee-token {
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.event-attendee-separator {
+  color: var(--text-muted);
+}
+
+.event-attendee-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
 .detail-table-wrap {
   margin: 14px 0 0;
   overflow: auto;

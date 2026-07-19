@@ -15,6 +15,7 @@ type LiveAdminSectionProps = {
   timezoneMinuteDisabled: boolean;
   selectedVenueId: number;
   defaultBandIds: number[];
+  eventAttendees: Record<number, string[]>;
   bandOptions: BandOption[];
   venueQueryText: string;
   venues: VenueOption[];
@@ -40,6 +41,7 @@ type LiveAdminSectionProps = {
     timezone: string;
     venue_id: number;
     default_band_ids: number[];
+    event_attendees: Array<{ band_id: number; mode: "partial" | "full"; members: string[] }>;
   }>;
   onLiveDateChange: (value: string) => void;
   onLiveTitleChange: (value: string) => void;
@@ -54,6 +56,7 @@ type LiveAdminSectionProps = {
   onOpenDefaultBandMenu: () => void;
   onSelectVenue: (venueId: number) => void;
   onToggleDefaultBand: (bandId: number) => void;
+  onToggleEventAttendee: (bandId: number, memberName: string) => void;
   onQueryVid: () => void;
   onInsertVenue: () => void;
   onClearInsertLive: () => void;
@@ -74,6 +77,7 @@ export function LiveAdminSection({
   timezoneMinuteDisabled,
   selectedVenueId,
   defaultBandIds,
+  eventAttendees,
   bandOptions,
   venueQueryText,
   venues,
@@ -102,6 +106,7 @@ export function LiveAdminSection({
   onOpenDefaultBandMenu,
   onSelectVenue,
   onToggleDefaultBand,
+  onToggleEventAttendee,
   onQueryVid,
   onInsertVenue,
   onClearInsertLive,
@@ -290,16 +295,37 @@ export function LiveAdminSection({
             width: defaultBandMenuPos.width,
           }}
         >
-          {selectableBands.map((band) => (
-            <label key={band.band_id}>
-              <input
-                type="checkbox"
-                checked={defaultBandIds.includes(band.band_id)}
-                onChange={() => onToggleDefaultBand(band.band_id)}
-              />
-              <span>{band.band_id} - {band.band_name}</span>
-            </label>
-          ))}
+          {selectableBands.map((band) => {
+            const selected = defaultBandIds.includes(band.band_id);
+            const selectedMembers = eventAttendees[band.band_id] ?? [];
+            const memberOptions = band.band_members ?? [];
+            return (
+              <div key={band.band_id} className="band-member-block">
+                <label className="band-member-main">
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={() => onToggleDefaultBand(band.band_id)}
+                  />
+                  <span>{band.band_id} - {band.band_name}</span>
+                </label>
+                {liveType === "event" && selected && memberOptions.length > 0 && (
+                  <div className="band-member-sub-list" role="group" aria-label={`${band.band_name} 出演成员`}>
+                    {memberOptions.map((memberName) => (
+                      <label key={memberName}>
+                        <input
+                          type="checkbox"
+                          checked={selectedMembers.includes(memberName)}
+                          onChange={() => onToggleEventAttendee(band.band_id, memberName)}
+                        />
+                        <span>{memberName}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -317,12 +343,13 @@ export function LiveAdminSection({
               <th>timezone</th>
               <th>venue_id</th>
               <th>default_band_ids</th>
+              <th>event_attendees</th>
             </tr>
           </thead>
           <tbody>
             {insertedLives.length === 0 ? (
               <tr>
-                <td colSpan={10} className="empty-cell">暂无新增Live记录</td>
+                <td colSpan={11} className="empty-cell">暂无新增Live记录</td>
               </tr>
             ) : (
               insertedLives.map((row) => (
@@ -337,6 +364,7 @@ export function LiveAdminSection({
                   <td>{row.timezone}</td>
                   <td>{row.venue_id}</td>
                   <td>{(row.default_band_ids ?? []).join(", ") || "-"}</td>
+                  <td>{row.event_attendees.map((item) => `${item.band_id}:${item.mode}(${item.members.join("/")})`).join("; ") || "-"}</td>
                 </tr>
               ))
             )}

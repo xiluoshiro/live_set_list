@@ -200,6 +200,49 @@ def test_get_live_detail_returns_seeded_detail_payload(integration_test_client):
     assert second_row["band_members"][0]["is_full"] is False
 
 
+# 测试点：活动无 Setlist 时，单条与批量详情都应回退默认 Band，并根据完整成员名单计算 partial/full。
+def test_event_detail_returns_default_bands_and_computed_attendees(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO live_attrs (
+                id, live_date, live_title, live_type, is_internal, url,
+                opening_time, start_time, venue_id, default_band_ids, event_attendees
+            )
+            VALUES (
+                9002, '2026-08-08', 'Event Attendees Live', 'event', false,
+                'https://example.com/lives/9002', TIME WITH TIME ZONE '12:00:00+09',
+                TIME WITH TIME ZONE '13:00:00+09', 1, ARRAY[1, 3],
+                '{"1":["Kasumi"],"3":["Tomori","Anon","Raana","Soyo","Taki"]}'::jsonb
+            )
+            """
+        )
+
+    response = integration_test_client.get("/api/lives/9002")
+    assert response.status_code == 200
+    detail = response.json()
+    assert detail["bands"] == [1, 3]
+    assert detail["band_names"] == ["Poppin'Party", "MyGO!!!!!"]
+    assert detail["event_attendees"] == [
+        {"band_id": 1, "band_name": "Poppin'Party", "mode": "partial", "members": ["Kasumi"]},
+        {
+            "band_id": 3,
+            "band_name": "MyGO!!!!!",
+            "mode": "full",
+            "members": ["Tomori", "Anon", "Raana", "Soyo", "Taki"],
+        },
+    ]
+    assert detail["detail_rows"] == []
+
+    batch_response = integration_test_client.post("/api/lives/details:batch", json={"live_ids": [9002]})
+    assert batch_response.status_code == 200
+    assert batch_response.json()["items"][0]["event_attendees"] == detail["event_attendees"]
+
+
 # 测试点：详情接口应把 song_list.is_cover=true 映射为“翻唱”备注 tag。
 def test_get_live_detail_marks_cover_song_as_comment_tag(
     integration_test_client,

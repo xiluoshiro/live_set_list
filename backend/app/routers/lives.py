@@ -41,6 +41,36 @@ CASE
 END
 """
 
+EVENT_ATTENDEES_SQL = """
+CASE
+    WHEN l.live_type = 'event' THEN COALESCE(
+        (
+            SELECT jsonb_agg(
+                jsonb_build_object(
+                    'band_id', ba.id,
+                    'band_name', ba.band_name,
+                    'mode', CASE
+                        WHEN jsonb_array_length(attendee.members) = cardinality(ba.band_members) THEN 'full'
+                        ELSE 'partial'
+                    END,
+                    'members', attendee.members
+                )
+                ORDER BY ba.id
+            )
+            FROM jsonb_each(l.event_attendees) attendee(band_id_text, members)
+            JOIN band_attrs ba
+                ON ba.id = CASE
+                    WHEN attendee.band_id_text ~ '^[0-9]+$' THEN attendee.band_id_text::int
+                    ELSE NULL
+                END
+            WHERE jsonb_typeof(attendee.members) = 'array'
+        ),
+        '[]'::jsonb
+    )
+    ELSE '[]'::jsonb
+END
+"""
+
 LIVES_BAND_IDS_SQL = effective_band_ids_sql(live_alias="l", setlist_alias="ls", band_alias="b")
 
 LIVES_BASE_QUERY = f"""
@@ -127,7 +157,7 @@ ORDER BY l.live_date DESC, l.id DESC
 LIMIT %s OFFSET %s
 """
 
-LIVE_DETAIL_HEADER_QUERY = """
+LIVE_DETAIL_HEADER_QUERY = f"""
 SELECT
     l.id AS live_id,
     l.live_date,
@@ -135,44 +165,58 @@ SELECT
     COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
     to_jsonb(l) ->> 'opening_time' AS opening_time,
     to_jsonb(l) ->> 'start_time' AS start_time,
-    COALESCE(
-        (
-            SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-            FROM live_setlist stl
-            JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
-                ON jsonb_typeof(stl.band_member) = 'object'
-            JOIN band_attrs ba
-                ON ba.band_name = k.band_name
-            WHERE stl.live_id = l.id
-        ),
-        ARRAY[]::int[]
-    ) AS bands,
-    COALESCE(
-        (
-            SELECT array_agg(
-                x.band_name
-                ORDER BY (x.band_id IS NULL), x.band_id, x.band_name
-            )
-            FROM (
-                SELECT DISTINCT
-                    k.band_name AS band_name,
-                    ba.id AS band_id
+    CASE
+        WHEN EXISTS (SELECT 1 FROM live_setlist stl WHERE stl.live_id = l.id) THEN COALESCE(
+            (
+                SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
                 FROM live_setlist stl
                 JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
                     ON jsonb_typeof(stl.band_member) = 'object'
-                LEFT JOIN band_attrs ba
+                JOIN band_attrs ba
                     ON ba.band_name = k.band_name
                 WHERE stl.live_id = l.id
-            ) x
-        ),
-        ARRAY[]::text[]
-    ) AS band_names,
+            ),
+            ARRAY[]::int[]
+        )
+        ELSE l.default_band_ids
+    END AS bands,
+    CASE
+        WHEN EXISTS (SELECT 1 FROM live_setlist stl WHERE stl.live_id = l.id) THEN COALESCE(
+            (
+                SELECT array_agg(
+                    x.band_name
+                    ORDER BY (x.band_id IS NULL), x.band_id, x.band_name
+                )
+                FROM (
+                    SELECT DISTINCT
+                        k.band_name AS band_name,
+                        ba.id AS band_id
+                    FROM live_setlist stl
+                    JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
+                        ON jsonb_typeof(stl.band_member) = 'object'
+                    LEFT JOIN band_attrs ba
+                        ON ba.band_name = k.band_name
+                    WHERE stl.live_id = l.id
+                ) x
+            ),
+            ARRAY[]::text[]
+        )
+        ELSE COALESCE(
+            (
+                SELECT array_agg(ba.band_name ORDER BY ba.id)
+                FROM band_attrs ba
+                WHERE ba.id = ANY(l.default_band_ids)
+            ),
+            ARRAY[]::text[]
+        )
+    END AS band_names,
     to_jsonb(l) ->> 'url' AS url,
     l.live_type,
     tour.id AS tour_id,
     tour.tour_title,
     pg.id AS performance_group_id,
-    pg.group_title
+    pg.group_title,
+    {EVENT_ATTENDEES_SQL} AS event_attendees
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -202,7 +246,7 @@ WHERE stl.live_id = %s
 ORDER BY stl.absolute_order
 """
 
-BATCH_LIVE_DETAIL_HEADERS_QUERY = """
+BATCH_LIVE_DETAIL_HEADERS_QUERY = f"""
 SELECT
     l.id AS live_id,
     l.live_date,
@@ -210,44 +254,58 @@ SELECT
     COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
     to_jsonb(l) ->> 'opening_time' AS opening_time,
     to_jsonb(l) ->> 'start_time' AS start_time,
-    COALESCE(
-        (
-            SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-            FROM live_setlist stl
-            JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
-                ON jsonb_typeof(stl.band_member) = 'object'
-            JOIN band_attrs ba
-                ON ba.band_name = k.band_name
-            WHERE stl.live_id = l.id
-        ),
-        ARRAY[]::int[]
-    ) AS bands,
-    COALESCE(
-        (
-            SELECT array_agg(
-                x.band_name
-                ORDER BY (x.band_id IS NULL), x.band_id, x.band_name
-            )
-            FROM (
-                SELECT DISTINCT
-                    k.band_name AS band_name,
-                    ba.id AS band_id
+    CASE
+        WHEN EXISTS (SELECT 1 FROM live_setlist stl WHERE stl.live_id = l.id) THEN COALESCE(
+            (
+                SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
                 FROM live_setlist stl
                 JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
                     ON jsonb_typeof(stl.band_member) = 'object'
-                LEFT JOIN band_attrs ba
+                JOIN band_attrs ba
                     ON ba.band_name = k.band_name
                 WHERE stl.live_id = l.id
-            ) x
-        ),
-        ARRAY[]::text[]
-    ) AS band_names,
+            ),
+            ARRAY[]::int[]
+        )
+        ELSE l.default_band_ids
+    END AS bands,
+    CASE
+        WHEN EXISTS (SELECT 1 FROM live_setlist stl WHERE stl.live_id = l.id) THEN COALESCE(
+            (
+                SELECT array_agg(
+                    x.band_name
+                    ORDER BY (x.band_id IS NULL), x.band_id, x.band_name
+                )
+                FROM (
+                    SELECT DISTINCT
+                        k.band_name AS band_name,
+                        ba.id AS band_id
+                    FROM live_setlist stl
+                    JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
+                        ON jsonb_typeof(stl.band_member) = 'object'
+                    LEFT JOIN band_attrs ba
+                        ON ba.band_name = k.band_name
+                    WHERE stl.live_id = l.id
+                ) x
+            ),
+            ARRAY[]::text[]
+        )
+        ELSE COALESCE(
+            (
+                SELECT array_agg(ba.band_name ORDER BY ba.id)
+                FROM band_attrs ba
+                WHERE ba.id = ANY(l.default_band_ids)
+            ),
+            ARRAY[]::text[]
+        )
+    END AS band_names,
     to_jsonb(l) ->> 'url' AS url,
     l.live_type,
     tour.id AS tour_id,
     tour.tour_title,
     pg.id AS performance_group_id,
-    pg.group_title
+    pg.group_title,
+    {EVENT_ATTENDEES_SQL} AS event_attendees
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -371,6 +429,32 @@ def _to_string_list(raw: Any) -> list[str]:
     if isinstance(raw, tuple):
         return [str(item) for item in raw]
     return [str(raw)]
+
+
+def _normalize_event_attendees(raw: Any, live_type: str) -> list[dict[str, Any]]:
+    """Normalize query-computed event attendance and suppress it for every other Live type."""
+    if live_type != "event":
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in _ensure_json_array(raw):
+        if not isinstance(item, dict):
+            continue
+        band_id = item.get("band_id")
+        band_name = item.get("band_name")
+        mode = item.get("mode")
+        members = _to_string_list(item.get("members"))
+        if not isinstance(band_id, int) or band_name is None or mode not in {"partial", "full"} or not members:
+            continue
+        normalized.append(
+            {
+                "band_id": band_id,
+                "band_name": str(band_name),
+                "mode": mode,
+                "members": members,
+            }
+        )
+    normalized.sort(key=lambda item: int(item["band_id"]))
+    return normalized
 
 
 def _to_string_array(raw: Any) -> list[str]:
@@ -526,11 +610,13 @@ def _build_live_detail_payload(
             }
         )
 
+    live_type = str(header_row[9])
+    event_attendees_raw = header_row[14] if len(header_row) > 14 else []
     return {
         "live_id": int(header_row[0]),
         "live_date": header_row[1],
         "live_title": str(header_row[2]),
-        "live_type": str(header_row[9]),
+        "live_type": live_type,
         "venue": header_row[3],
         "opening_time": header_row[4],
         "start_time": header_row[5],
@@ -539,6 +625,7 @@ def _build_live_detail_payload(
         "url": header_row[8],
         "tour": build_tour_ref_from_row(header_row, tour_id_index=10, tour_title_index=11),
         "performance_group": build_performance_group_ref_from_row(header_row, group_id_index=12, group_title_index=13),
+        "event_attendees": _normalize_event_attendees(event_attendees_raw, live_type),
         "detail_rows": detail_rows,
     }
 
@@ -859,11 +946,13 @@ def get_live_details_batch(
                             }
                         )
 
+                    live_type = str(header_row[9])
+                    event_attendees_raw = header_row[14] if len(header_row) > 14 else []
                     detail = {
                         "live_id": int(header_row[0]),
                         "live_date": header_row[1],
                         "live_title": str(header_row[2]),
-                        "live_type": str(header_row[9]),
+                        "live_type": live_type,
                         "venue": header_row[3],
                         "opening_time": header_row[4],
                         "start_time": header_row[5],
@@ -877,6 +966,7 @@ def get_live_details_batch(
                         "is_favorite": live_id in favorite_live_ids if current_user is not None else False,
                         "tour": build_tour_ref_from_row(header_row, tour_id_index=10, tour_title_index=11),
                         "performance_group": build_performance_group_ref_from_row(header_row, group_id_index=12, group_title_index=13),
+                        "event_attendees": _normalize_event_attendees(event_attendees_raw, live_type),
                         "detail_rows": detail_rows,
                     }
                     items.append(detail)

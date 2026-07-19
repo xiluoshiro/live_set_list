@@ -531,6 +531,7 @@ def test_console_create_live_persists_live_row(
             "start_time": "19:00:30+09:00",
             "venue_id": 2,
             "default_band_ids": [1, 3],
+            "event_attendees": [],
         },
     }
 
@@ -577,6 +578,7 @@ def test_console_create_live_persists_live_row(
             "start_time": "19:00:30+09:00",
             "live_type": "oneman",
             "default_band_ids": [1, 3],
+            "event_attendees": [],
         },
     )
 

@@ -415,18 +415,46 @@ def create_live(
                 if cur.fetchone() is None:
                     raise HTTPException(status_code=404, detail=f"Venue id {payload.venue_id} not found")
 
+                band_members_by_id: dict[int, list[str]] = {}
                 if payload.default_band_ids:
                     cur.execute(
-                        "SELECT id FROM band_attrs WHERE id = ANY(%s) ORDER BY id",
+                        "SELECT id, band_members FROM band_attrs WHERE id = ANY(%s) ORDER BY id",
                         (payload.default_band_ids,),
                     )
-                    existing_band_ids = {int(row[0]) for row in cur.fetchall()}
+                    band_rows = cur.fetchall()
+                    existing_band_ids = {int(row[0]) for row in band_rows}
+                    band_members_by_id = {
+                        int(row[0]): _to_string_list(row[1]) if len(row) > 1 else []
+                        for row in band_rows
+                    }
                     missing_band_ids = [
                         band_id for band_id in payload.default_band_ids if band_id not in existing_band_ids
                     ]
                     if missing_band_ids:
                         missing_text = ", ".join(str(band_id) for band_id in missing_band_ids)
                         raise HTTPException(status_code=404, detail=f"Band ids not found: {missing_text}")
+
+                normalized_event_attendees: list[dict[str, Any]] = []
+                persisted_event_attendees: dict[str, list[str]] = {}
+                for attendee in sorted(payload.event_attendees, key=lambda item: item.band_id):
+                    catalog_members = band_members_by_id.get(attendee.band_id, [])
+                    requested_members = set(attendee.members)
+                    unknown_members = [member for member in attendee.members if member not in catalog_members]
+                    if unknown_members:
+                        unknown_text = ", ".join(unknown_members)
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Band {attendee.band_id} members not found: {unknown_text}",
+                        )
+                    ordered_members = [member for member in catalog_members if member in requested_members]
+                    persisted_event_attendees[str(attendee.band_id)] = ordered_members
+                    normalized_event_attendees.append(
+                        {
+                            "band_id": attendee.band_id,
+                            "mode": "full" if len(ordered_members) == len(catalog_members) else "partial",
+                            "members": ordered_members,
+                        }
+                    )
 
                 cur.execute(
                     """
@@ -439,9 +467,10 @@ def create_live(
                         opening_time,
                         start_time,
                         venue_id,
-                        default_band_ids
+                        default_band_ids,
+                        event_attendees
                     )
-                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -453,6 +482,7 @@ def create_live(
                         start_time,
                         payload.venue_id,
                         payload.default_band_ids,
+                        Json(persisted_event_attendees),
                     ),
                 )
                 created_row = cur.fetchone()
@@ -465,6 +495,7 @@ def create_live(
                     "start_time": start_time,
                     "live_type": payload.live_type,
                     "default_band_ids": payload.default_band_ids,
+                    "event_attendees": normalized_event_attendees,
                 }
 
                 _write_console_audit_log(
@@ -501,6 +532,7 @@ def create_live(
             "start_time": start_time,
             "venue_id": payload.venue_id,
             "default_band_ids": payload.default_band_ids,
+            "event_attendees": normalized_event_attendees,
         },
     }
 

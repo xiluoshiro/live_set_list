@@ -273,6 +273,7 @@ describe("api cache behavior", () => {
         timezone: "+09:00",
         venue_id: 1,
         default_band_ids: [3],
+        event_attendees: [],
       },
       "csrf-token",
     );

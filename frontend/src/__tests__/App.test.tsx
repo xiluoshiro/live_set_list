@@ -224,6 +224,7 @@ function makeDetailResponse(params: {
     band_names: ["Band 1", "Band 2"],
     url: params.url === undefined ? `https://example.com/live/${params.liveId}` : params.url,
     is_favorite: false,
+    event_attendees: [],
     detail_rows: Array.from({ length: rowCount }, (_, idx) => ({
       row_id: `M${idx + 1}`,
       song_name: `曲目 ${idx + 1}`,

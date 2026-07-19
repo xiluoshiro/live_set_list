@@ -5,12 +5,20 @@ import { describe, expect, test, vi } from "vitest";
 import { LiveAdminSection } from "../components/console/LiveAdminSection";
 
 
-function renderSection(onToggleDefaultBand = vi.fn()) {
+function renderSection(
+  onToggleDefaultBand = vi.fn(),
+  options: {
+    liveType?: string;
+    eventAttendees?: Record<number, string[]>;
+    onToggleEventAttendee?: ReturnType<typeof vi.fn>;
+  } = {},
+) {
+  const onToggleEventAttendee = options.onToggleEventAttendee ?? vi.fn();
   render(
     <LiveAdminSection
       liveDate="2026-07-17"
       liveTitle="Draft Live"
-      liveType="other"
+      liveType={options.liveType ?? "other"}
       liveUrl="https://example.com/live"
       openingTime="18:00"
       startTime="19:00"
@@ -19,15 +27,16 @@ function renderSection(onToggleDefaultBand = vi.fn()) {
       timezoneMinuteDisabled={false}
       selectedVenueId={1}
       defaultBandIds={[3]}
+      eventAttendees={options.eventAttendees ?? {}}
       bandOptions={[
         { band_id: 0, band_name: "Other bands", band_abbr: "", band_members: [] },
         { band_id: 1, band_name: "Poppin'Party", band_abbr: "ppp", band_members: [] },
-        { band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: [] },
+        { band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["高松燈", "千早愛音"] },
       ]}
       venueQueryText=""
       venues={[{ venue_id: 1, venue_name: "Test Venue" }]}
       timezoneHourOptions={["+9"]}
-      liveTypeOptions={[{ value: "other", label: "其他" }]}
+      liveTypeOptions={[{ value: "other", label: "其他" }, { value: "event", label: "活动" }]}
       venueOpen={false}
       venueMenuPos={null}
       defaultBandOpen
@@ -51,6 +60,7 @@ function renderSection(onToggleDefaultBand = vi.fn()) {
       onOpenDefaultBandMenu={vi.fn()}
       onSelectVenue={vi.fn()}
       onToggleDefaultBand={onToggleDefaultBand}
+      onToggleEventAttendee={onToggleEventAttendee}
       onQueryVid={vi.fn()}
       onInsertVenue={vi.fn()}
       onClearInsertLive={vi.fn()}
@@ -59,14 +69,14 @@ function renderSection(onToggleDefaultBand = vi.fn()) {
       submitInsertDisabled={false}
     />,
   );
-  return onToggleDefaultBand;
+  return { onToggleDefaultBand, onToggleEventAttendee };
 }
 
 
 describe("LiveAdminSection", () => {
   // 测试点：默认 Band 下拉应允许多选正数 Band，并排除 band_id=0 占位项。
   test("renders and toggles default Band choices", () => {
-    const onToggleDefaultBand = renderSection();
+    const { onToggleDefaultBand } = renderSection();
     const group = screen.getByRole("group", { name: "default_band_ids" });
 
     expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toHaveAttribute("aria-expanded", "true");
@@ -75,5 +85,22 @@ describe("LiveAdminSection", () => {
 
     fireEvent.click(within(group).getByRole("checkbox", { name: /Poppin'Party/ }));
     expect(onToggleDefaultBand).toHaveBeenCalledWith(1);
+  });
+
+  // 测试点：活动类型应在已选默认 Band 下复用成员二级复选列表，并回传具体成员切换。
+  test("renders event attendee member choices only for selected event Bands", () => {
+    const onToggleEventAttendee = vi.fn();
+    renderSection(vi.fn(), {
+      liveType: "event",
+      eventAttendees: { 3: ["高松燈"] },
+      onToggleEventAttendee,
+    });
+
+    const memberGroup = screen.getByRole("group", { name: "MyGO!!!!! 出演成员" });
+    expect(within(memberGroup).getByRole("checkbox", { name: "高松燈" })).toBeChecked();
+    expect(within(memberGroup).getByRole("checkbox", { name: "千早愛音" })).not.toBeChecked();
+
+    fireEvent.click(within(memberGroup).getByRole("checkbox", { name: "千早愛音" }));
+    expect(onToggleEventAttendee).toHaveBeenCalledWith(3, "千早愛音");
   });
 });

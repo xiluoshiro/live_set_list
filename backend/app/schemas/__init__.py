@@ -1,6 +1,8 @@
 from app.schemas.console import (
     ConsoleBandItem,
     ConsoleBandListResponse,
+    ConsoleEventAttendee,
+    ConsoleEventAttendeeRequest,
     ConsoleLiveCreateRequest,
     ConsoleLiveItem,
     ConsoleLiveMutationResponse,
@@ -51,6 +53,7 @@ from app.schemas.tours import (
 from app.schemas.lives import (
     LiveDetailBandMember,
     LiveDetailBatchRequest,
+    LiveDetailEventAttendee,
     LiveDetailOtherMember,
     LiveDetailResponse,
     LiveDetailRow,
@@ -99,6 +102,8 @@ __all__ = [
     'CatalogVenueItem',
     'ConsoleBandItem',
     'ConsoleBandListResponse',
+    'ConsoleEventAttendee',
+    'ConsoleEventAttendeeRequest',
     'ConsoleSongCreateRequest',
     'ConsoleSongItem',
     'ConsoleSongLookupItem',
@@ -137,6 +142,7 @@ __all__ = [
     'LivesPagination',
     'LivesResponse',
     'LiveDetailBandMember',
+    'LiveDetailEventAttendee',
     'LiveDetailOtherMember',
     'LiveDetailRow',
     'LiveDetailResponse',

@@ -345,6 +345,55 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert cursor.execute.call_args_list[2] == call(BAND_ID_LOOKUP_QUERY, (["Afterglow", "Poppin'Party", "Unknown Band"],))
 
 
+# 测试点：无 Setlist 的活动详情应回退默认 Band，并返回查询时计算 mode 的完整出席成员名单。
+def test_get_live_detail_event_uses_default_bands_and_computed_attendees():
+    header_row = (
+        88,
+        "2026-08-08",
+        "Event Live",
+        "活动会场",
+        "12:00",
+        "13:00",
+        [3, 8],
+        ["MyGO!!!!!", "Ave Mujica"],
+        "https://example.com/live/88",
+        "event",
+        None,
+        None,
+        None,
+        None,
+        [
+            {"band_id": 3, "band_name": "MyGO!!!!!", "mode": "partial", "members": ["高松燈"]},
+            {
+                "band_id": 8,
+                "band_name": "Ave Mujica",
+                "mode": "full",
+                "members": ["三角初華", "若葉睦"],
+            },
+        ],
+    )
+    conn, _ = _build_detail_connection_mock(header_row, [], [])
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.get("/api/lives/88")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["bands"] == [3, 8]
+    assert payload["band_names"] == ["MyGO!!!!!", "Ave Mujica"]
+    assert payload["event_attendees"] == [
+        {"band_id": 3, "band_name": "MyGO!!!!!", "mode": "partial", "members": ["高松燈"]},
+        {
+            "band_id": 8,
+            "band_name": "Ave Mujica",
+            "mode": "full",
+            "members": ["三角初華", "若葉睦"],
+        },
+    ]
+    assert payload["detail_rows"] == []
+
+
 def test_get_live_detail_not_found_returns_404():
     # 测试点：详情接口在 live_id 不存在时返回 404。
     conn, _ = _build_detail_connection_mock(None, [], [])

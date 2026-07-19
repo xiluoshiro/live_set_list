@@ -103,6 +103,7 @@ function makeLiveDetailResponse(liveId: number) {
     band_names: ["Poppin'Party"],
     url: `https://example.com/live/${liveId}`,
     is_favorite: false,
+    event_attendees: [],
     detail_rows: [],
   };
 }
