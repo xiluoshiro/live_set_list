@@ -1080,8 +1080,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("button", { name: "应用到表格" })).toBeDisabled();
   });
 
-  test("应用到表格弹出确认窗口，确认提交后才替换下方表格", async () => {
-    // 测试点：确认窗口展示预览内容，取消不应用，确认提交才真正写入下方表格。
+  test("应用到表格弹出确认窗口，预览 abs/sub 后确认才替换下方表格", async () => {
+    // 测试点：确认窗口按解析编号预览 abs/sub，确认提交后才真正写入下方表格。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
@@ -1091,15 +1091,20 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
 
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
-      target: { value: "＜Roselia×愛美 from Poppin'Party＞\nM1. BLACK SHOUT\nM2. Requiem for Fate" },
+      target: { value: "＜Roselia×愛美 from Poppin'Party＞\nM2. BLACK SHOUT\nM3. Requiem for Fate" },
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
 
     const confirmDialog = screen.getByRole("dialog", { name: "确认应用到表格" });
     expect(confirmDialog).toBeInTheDocument();
-    expect(within(confirmDialog).getByText("BLACK SHOUT")).toBeInTheDocument();
-    expect(within(confirmDialog).getByText("Requiem for Fate")).toBeInTheDocument();
+    expect(within(confirmDialog).queryByRole("columnheader", { name: "#" })).not.toBeInTheDocument();
+    expect(within(confirmDialog).getByRole("columnheader", { name: "abs" })).toBeInTheDocument();
+    expect(within(confirmDialog).getByRole("columnheader", { name: "sub" })).toBeInTheDocument();
+    const blackShoutRow = within(confirmDialog).getByText("BLACK SHOUT").closest("tr") as HTMLElement;
+    const requiemRow = within(confirmDialog).getByText("Requiem for Fate").closest("tr") as HTMLElement;
+    expect(within(blackShoutRow).getAllByRole("cell").filter((_, index) => index === 0 || index === 2).map((cell) => cell.textContent)).toEqual(["2", "2"]);
+    expect(within(requiemRow).getAllByRole("cell").filter((_, index) => index === 0 || index === 2).map((cell) => cell.textContent)).toEqual(["3", "3"]);
     expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "确认提交" }));
