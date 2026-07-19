@@ -155,18 +155,20 @@ export function LiveInsertTab({
       <table className="console-admin-table setlist-full-preview-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th>abs</th>
             <th>seg</th>
+            <th>sub</th>
             <th>song_name</th>
             <th>band_member</th>
             <th>other_member</th>
           </tr>
         </thead>
         <tbody>
-          {setlistParsePreviewRows.map((row, index) => (
+          {setlistParsePreviewRows.map((row) => (
             <tr key={row.row_key}>
-              <td>{index + 1}</td>
+              <td>{row.absolute_order}</td>
               <td>{row.segment_start_type || "-"}</td>
+              <td>{row.sub_order}</td>
               <td>{row.song_name}</td>
               <td><code>{JSON.stringify(row.band_member)}</code></td>
               <td>{summarizeOtherMember(row)}</td>
