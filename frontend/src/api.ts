@@ -1373,9 +1373,11 @@ export async function getConsoleLiveCandidates(
   q = "",
   page = 1,
   pageSize = 20,
+  liveType = "",
 ): Promise<ConsoleLiveCandidatesResponse> {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (q.trim()) query.set("q", q.trim());
+  if (liveType) query.set("live_type", liveType);
   const response = await fetchWithTimeout(
     `${BASE_URL}/api/console/lives?${query.toString()}`,
     undefined,

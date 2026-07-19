@@ -148,6 +148,13 @@
   flex-wrap: wrap;
 }
 
+.tour-admin-toolbar,
+.tour-candidate-search,
+.tour-candidate-pager,
+.tour-admin-fields {
+  font-size: 13px;
+}
+
 .tour-admin-toolbar select,
 .tour-candidate-search input {
   min-width: min(420px, 100%);
@@ -164,6 +171,11 @@
 .live-admin-toolbar select {
   flex: 1 1 360px;
   min-width: min(360px, 100%);
+}
+
+.live-admin-toolbar .live-type-filter {
+  flex: 0 1 140px;
+  min-width: 120px;
 }
 
 .tour-candidate-search {
@@ -232,11 +244,13 @@
 .tour-stop-table input,
 .tour-admin-toolbar select {
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: 7px;
+  min-height: 31px;
+  padding: 6px 8px;
   background: var(--surface-input);
   color: var(--text-main);
-  font: inherit;
+  font-family: inherit;
+  font-size: 13px;
 }
 
 .tour-admin-block {
@@ -388,6 +402,7 @@
 
 .bands-picker-trigger {
   width: 100%;
+  min-height: 31px;
   border: 1px solid var(--border-normal);
   border-radius: 7px;
   padding: 6px 8px;
@@ -681,8 +696,13 @@
   color: var(--text-secondary);
   border-radius: 8px;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
+}
+
+.console-new-btn {
+  font-weight: 600;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-primary) 24%, transparent);
 }
 
 .console-submit-row {

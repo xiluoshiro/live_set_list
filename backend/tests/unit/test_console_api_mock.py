@@ -182,10 +182,10 @@ def test_console_lookup_mock_returns_empty_items_for_no_match():
     assert response.json() == {"items": []}
 
 
-# 测试点：Live 编辑候选必须包含分页信息，并支持加载带计算 mode 的完整编辑数据。
+# 测试点：Live 编辑候选必须支持类型筛选和分页，并能加载带计算 mode 的完整编辑数据。
 def test_console_live_edit_reads_candidates_and_detail():
     _set_authenticated_role("editor")
-    candidates_conn, _ = _build_connection_mock(
+    candidates_conn, candidates_cursor = _build_connection_mock(
         fetchone_side_effect=[(1,)],
         fetchall_side_effect=[[(55, "2026-07-05", "Event Live", "event", "Mock Venue")]],
     )
@@ -207,7 +207,7 @@ def test_console_live_edit_reads_candidates_and_detail():
 
     with patch("app.routers.console_read.get_db_connection", side_effect=[candidates_conn, detail_conn]):
         client = TestClient(app)
-        candidates_response = client.get("/api/console/lives?q=55&page=1&page_size=20")
+        candidates_response = client.get("/api/console/lives?q=55&live_type=event&page=1&page_size=20")
         detail_response = client.get("/api/console/lives/55")
 
     assert candidates_response.status_code == 200
@@ -225,6 +225,7 @@ def test_console_live_edit_reads_candidates_and_detail():
         "total_pages": 1,
     }
     assert detail_response.status_code == 200
+    assert candidates_cursor.execute.call_args_list[0].args[1] == ("%55%", "55", "event")
     assert detail_response.json()["item"]["timezone"] == "+09:00"
     assert detail_response.json()["item"]["event_attendees"] == [
         {"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]}

@@ -280,7 +280,7 @@ export function PerformanceGroupAdminSection({
         </select>
         <button
           type="button"
-          className="console-ghost-btn"
+          className="console-submit-btn console-new-btn"
           onClick={() => {
             resetForm();
             void queryCandidates("");

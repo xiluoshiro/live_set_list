@@ -6,7 +6,7 @@
 
 ## 接口
 
-- `GET /api/console/lives?q=&page=1&page_size=20`：按 `live_date DESC, live_id DESC` 返回全部 Live 的编辑候选。
+- `GET /api/console/lives?q=&live_type=&page=1&page_size=20`：按关键词和可选精确类型筛选，并以 `live_date DESC, live_id DESC` 返回全部 Live 的编辑候选。
 - `GET /api/console/lives/{live_id}`：返回完整可编辑资料、Venue 名称和计算后的出演成员 mode。
 - `PUT /api/console/lives/{live_id}`：以完整请求体替换目标 Live 的可编辑基础资料。
 
@@ -26,9 +26,11 @@
 
 - 控制台页签显示为“Live管理”，内部模式仍由 `ConsoleMode` 的 Live 分支承载。
 - `originalDraft` 保存最近一次服务端快照，`draft` 保存当前表单值；二者规范化比较得到 dirty 状态。
-- 编辑工具栏复用巡演管理的选择器、翻页和 ghost button 样式。
+- 编辑工具栏复用巡演管理结构；三个管理区的新建入口统一使用强调按钮，选择器和同类查询控件统一使用 Venue/Band 的 `13px` 字体、间距与高度基准。
+- 类型筛选通过后端 `live_type` 参数重新查询并从第一页展示，不在前端对当前页做局部过滤。
 - 新建时主按钮为“提交插入”，编辑时为“保存修改”；编辑确认框只展示差异。
 - 更新成功后清理 Live 列表与详情缓存，刷新候选，并把响应设为新的原始快照。
+- 已保存结果由顶部成功信息表达；表单下方只在 dirty 时显示未保存修改警告。
 
 ## 错误行为
 

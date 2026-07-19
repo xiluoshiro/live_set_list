@@ -690,6 +690,16 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("button", { name: "提交插入" })).toBeInTheDocument();
   });
 
+  // 测试点：切换已有 Live 的类型筛选时应从第一页向后端重新查询，而不是只过滤当前页。
+  test("Live管理按类型重新查询已有Live", async () => {
+    const user = userEvent.setup();
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+
+    await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledWith("", 1, 20, ""));
+    await user.selectOptions(screen.getByRole("combobox", { name: "按 Live 类型筛选" }), "event");
+    await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledWith("", 1, 20, "event"));
+  });
+
   // 测试点：活动 Live 应把默认 Band 下勾选的完整成员名单提交给后端，不在前端写入 mode。
   test("活动Live会提交完整出演成员名单", async () => {
     const user = userEvent.setup();
