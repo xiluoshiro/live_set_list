@@ -14,10 +14,10 @@ from app.logging_config import get_logger
 from app.schemas import ErrorResponse, ValidationErrorResponse
 from app.schemas.auth import AuthErrorResponse
 from app.schemas.console import (
-    ConsoleLiveCreateRequest,
     ConsoleLiveMutationResponse,
     ConsoleLiveSetlistAppendRequest,
     ConsoleLiveSetlistAppendResponse,
+    ConsoleLiveUpsertRequest,
     ConsoleSongBatchCreateRequest,
     ConsoleSongBatchCreateResponse,
     ConsoleSongCreateRequest,
@@ -133,6 +133,76 @@ def _normalize_other_member_payload(raw: Mapping[str, Any] | None) -> dict[str, 
 def _format_date(value: date) -> str:
     """Return an ISO date string for FastAPI response payloads."""
     return value.isoformat()
+
+
+def _validate_and_normalize_live_relations(
+    cur: Any,
+    payload: ConsoleLiveUpsertRequest,
+) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    """Validate Live foreign keys and normalize event attendance for create and update."""
+    cur.execute("SELECT 1 FROM venue_list WHERE id = %s", (payload.venue_id,))
+    if cur.fetchone() is None:
+        raise HTTPException(status_code=404, detail=f"Venue id {payload.venue_id} not found")
+
+    band_members_by_id: dict[int, list[str]] = {}
+    if payload.default_band_ids:
+        cur.execute(
+            "SELECT id, band_members FROM band_attrs WHERE id = ANY(%s) ORDER BY id",
+            (payload.default_band_ids,),
+        )
+        band_rows = cur.fetchall()
+        existing_band_ids = {int(row[0]) for row in band_rows}
+        band_members_by_id = {
+            int(row[0]): _to_string_list(row[1]) if len(row) > 1 else []
+            for row in band_rows
+        }
+        missing_band_ids = [band_id for band_id in payload.default_band_ids if band_id not in existing_band_ids]
+        if missing_band_ids:
+            missing_text = ", ".join(str(band_id) for band_id in missing_band_ids)
+            raise HTTPException(status_code=404, detail=f"Band ids not found: {missing_text}")
+
+    normalized_event_attendees: list[dict[str, Any]] = []
+    persisted_event_attendees: dict[str, list[str]] = {}
+    for attendee in sorted(payload.event_attendees, key=lambda item: item.band_id):
+        catalog_members = band_members_by_id.get(attendee.band_id, [])
+        requested_members = set(attendee.members)
+        unknown_members = [member for member in attendee.members if member not in catalog_members]
+        if unknown_members:
+            unknown_text = ", ".join(unknown_members)
+            raise HTTPException(status_code=400, detail=f"Band {attendee.band_id} members not found: {unknown_text}")
+        ordered_members = [member for member in catalog_members if member in requested_members]
+        persisted_event_attendees[str(attendee.band_id)] = ordered_members
+        normalized_event_attendees.append(
+            {
+                "band_id": attendee.band_id,
+                "mode": "full" if len(ordered_members) == len(catalog_members) else "partial",
+                "members": ordered_members,
+            }
+        )
+    return normalized_event_attendees, persisted_event_attendees
+
+
+def _build_live_mutation_item(
+    *,
+    live_id: int,
+    payload: ConsoleLiveUpsertRequest,
+    opening_time: str,
+    start_time: str,
+    normalized_event_attendees: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build the common normalized response item for Live create and update."""
+    return {
+        "live_id": live_id,
+        "live_date": _format_date(payload.live_date),
+        "live_title": payload.live_title,
+        "live_type": payload.live_type,
+        "url": payload.url,
+        "opening_time": opening_time,
+        "start_time": start_time,
+        "venue_id": payload.venue_id,
+        "default_band_ids": payload.default_band_ids,
+        "event_attendees": normalized_event_attendees,
+    }
 
 
 @router.post(
@@ -397,7 +467,7 @@ def create_venue(
     },
 )
 def create_live(
-    payload: ConsoleLiveCreateRequest,
+    payload: ConsoleLiveUpsertRequest,
     request: Request,
     _: Any = Depends(require_role("editor")),
     context: AuthSessionContext = Depends(get_current_auth_context),
@@ -411,50 +481,10 @@ def create_live(
     try:
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM venue_list WHERE id = %s", (payload.venue_id,))
-                if cur.fetchone() is None:
-                    raise HTTPException(status_code=404, detail=f"Venue id {payload.venue_id} not found")
-
-                band_members_by_id: dict[int, list[str]] = {}
-                if payload.default_band_ids:
-                    cur.execute(
-                        "SELECT id, band_members FROM band_attrs WHERE id = ANY(%s) ORDER BY id",
-                        (payload.default_band_ids,),
-                    )
-                    band_rows = cur.fetchall()
-                    existing_band_ids = {int(row[0]) for row in band_rows}
-                    band_members_by_id = {
-                        int(row[0]): _to_string_list(row[1]) if len(row) > 1 else []
-                        for row in band_rows
-                    }
-                    missing_band_ids = [
-                        band_id for band_id in payload.default_band_ids if band_id not in existing_band_ids
-                    ]
-                    if missing_band_ids:
-                        missing_text = ", ".join(str(band_id) for band_id in missing_band_ids)
-                        raise HTTPException(status_code=404, detail=f"Band ids not found: {missing_text}")
-
-                normalized_event_attendees: list[dict[str, Any]] = []
-                persisted_event_attendees: dict[str, list[str]] = {}
-                for attendee in sorted(payload.event_attendees, key=lambda item: item.band_id):
-                    catalog_members = band_members_by_id.get(attendee.band_id, [])
-                    requested_members = set(attendee.members)
-                    unknown_members = [member for member in attendee.members if member not in catalog_members]
-                    if unknown_members:
-                        unknown_text = ", ".join(unknown_members)
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Band {attendee.band_id} members not found: {unknown_text}",
-                        )
-                    ordered_members = [member for member in catalog_members if member in requested_members]
-                    persisted_event_attendees[str(attendee.band_id)] = ordered_members
-                    normalized_event_attendees.append(
-                        {
-                            "band_id": attendee.band_id,
-                            "mode": "full" if len(ordered_members) == len(catalog_members) else "partial",
-                            "members": ordered_members,
-                        }
-                    )
+                normalized_event_attendees, persisted_event_attendees = _validate_and_normalize_live_relations(
+                    cur,
+                    payload,
+                )
 
                 cur.execute(
                     """
@@ -522,18 +552,129 @@ def create_live(
 
     return {
         "ok": True,
-        "item": {
-            "live_id": live_id,
-            "live_date": _format_date(payload.live_date),
-            "live_title": payload.live_title,
-            "live_type": payload.live_type,
-            "url": payload.url,
-            "opening_time": opening_time,
-            "start_time": start_time,
-            "venue_id": payload.venue_id,
-            "default_band_ids": payload.default_band_ids,
-            "event_attendees": normalized_event_attendees,
-        },
+        "item": _build_live_mutation_item(
+            live_id=live_id,
+            payload=payload,
+            opening_time=opening_time,
+            start_time=start_time,
+            normalized_event_attendees=normalized_event_attendees,
+        ),
+    }
+
+
+@router.put(
+    "/lives/{live_id}",
+    response_model=ConsoleLiveMutationResponse,
+    summary="更新 Live",
+    description="`editor+` 用户完整替换一个 Live 的可编辑基础资料，不修改 Setlist 或聚合关系。",
+    responses={
+        400: {"model": ErrorResponse, "description": "业务参数错误"},
+        401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
+        403: {"model": AuthErrorResponse, "description": "缺少权限或 CSRF 校验失败"},
+        404: {"model": ErrorResponse, "description": "Live、Venue 或 Band 不存在"},
+        422: {"model": ValidationErrorResponse, "description": "请求体验证失败"},
+        500: {"model": ErrorResponse, "description": "数据库一般错误"},
+        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
+    },
+)
+def update_live(
+    payload: ConsoleLiveUpsertRequest,
+    request: Request,
+    live_id: int = Path(..., ge=1, description="Target live_id"),
+    _: Any = Depends(require_role("editor")),
+    context: AuthSessionContext = Depends(get_current_auth_context),
+):
+    """Update one Live under a row lock and record only meaningful field changes."""
+    assert_valid_csrf(request, context)
+    opening_time = _normalize_time_with_timezone(payload.opening_time, payload.timezone)
+    start_time = _normalize_time_with_timezone(payload.start_time, payload.timezone)
+    try:
+        with get_write_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT to_jsonb(l) FROM live_attrs l WHERE l.id = %s FOR UPDATE", (live_id,))
+                existing_row = cur.fetchone()
+                if existing_row is None:
+                    raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
+                existing = dict(existing_row[0])
+                normalized_event_attendees, persisted_event_attendees = _validate_and_normalize_live_relations(
+                    cur,
+                    payload,
+                )
+                target = {
+                    "live_date": _format_date(payload.live_date),
+                    "live_title": payload.live_title,
+                    "live_type": payload.live_type,
+                    "url": payload.url,
+                    "opening_time": opening_time,
+                    "start_time": start_time,
+                    "venue_id": payload.venue_id,
+                    "default_band_ids": payload.default_band_ids,
+                    "event_attendees": persisted_event_attendees,
+                }
+                changes = {
+                    field: {"before": existing.get(field), "after": value}
+                    for field, value in target.items()
+                    if existing.get(field) != value
+                }
+                if changes:
+                    cur.execute(
+                        """
+                        UPDATE live_attrs
+                        SET
+                            live_date = %s,
+                            live_title = %s,
+                            live_type = %s,
+                            url = %s,
+                            opening_time = %s,
+                            start_time = %s,
+                            venue_id = %s,
+                            default_band_ids = %s,
+                            event_attendees = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            payload.live_date,
+                            payload.live_title,
+                            payload.live_type,
+                            payload.url,
+                            opening_time,
+                            start_time,
+                            payload.venue_id,
+                            payload.default_band_ids,
+                            Json(persisted_event_attendees),
+                            live_id,
+                        ),
+                    )
+                    _write_console_audit_log(
+                        cur,
+                        user_id=context.user.id,
+                        action="live_update",
+                        resource_type="live",
+                        resource_id=str(live_id),
+                        payload_json={"changes": changes},
+                    )
+    except HTTPException:
+        raise
+    except QueryCanceled as exc:
+        logger.exception("update_live timeout user_id=%s live_id=%s", context.user.id, live_id)
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        logger.exception("update_live operational error user_id=%s live_id=%s", context.user.id, live_id)
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        logger.exception("update_live failed user_id=%s live_id=%s", context.user.id, live_id)
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    return {
+        "ok": True,
+        "item": _build_live_mutation_item(
+            live_id=live_id,
+            payload=payload,
+            opening_time=opening_time,
+            start_time=start_time,
+            normalized_event_attendees=normalized_event_attendees,
+        ),
     }
 
 

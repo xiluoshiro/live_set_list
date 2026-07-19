@@ -72,6 +72,9 @@ vi.mock("../api", () => ({
   getConsoleSongs: vi.fn().mockResolvedValue({ items: [] }),
   getConsoleBands: vi.fn().mockResolvedValue({ items: [] }),
   getConsoleVenues: vi.fn().mockResolvedValue({ items: [] }),
+  getConsoleLiveCandidates: vi.fn().mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 }),
+  getConsoleLive: vi.fn(),
+  updateConsoleLive: vi.fn(),
   ApiError: class ApiError extends Error {
     status: number;
     code: string | null;

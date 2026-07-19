@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 
+import type { ConsoleLiveCandidate } from "../../api";
 import { formatLiveType } from "./constants";
 import type { BandOption, Position, VenueOption } from "./types";
 
@@ -18,6 +19,14 @@ type LiveAdminSectionProps = {
   eventAttendees: Record<number, string[]>;
   bandOptions: BandOption[];
   venueQueryText: string;
+  liveCandidateQuery: string;
+  liveCandidates: ConsoleLiveCandidate[];
+  liveCandidatePage: number;
+  liveCandidateTotal: number;
+  liveCandidateTotalPages: number;
+  liveCandidateLoading: boolean;
+  editingLiveId: number | null;
+  isLiveDirty: boolean;
   venues: VenueOption[];
   timezoneHourOptions: string[];
   liveTypeOptions: { value: string; label: string }[];
@@ -31,6 +40,7 @@ type LiveAdminSectionProps = {
   defaultBandMenuRef: RefObject<HTMLDivElement>;
   venueQueryInputRef: RefObject<HTMLInputElement>;
   insertedLives: Array<{
+    action: "create" | "update";
     live_id: number;
     live_date: string;
     live_title: string;
@@ -52,6 +62,11 @@ type LiveAdminSectionProps = {
   onTimezoneHourChange: (value: string) => void;
   onCycleTimezoneMinute: () => void;
   onVenueQueryTextChange: (value: string) => void;
+  onLiveCandidateQueryChange: (value: string) => void;
+  onQueryLiveCandidates: () => void;
+  onLiveCandidatePageChange: (page: number) => void;
+  onSelectLiveForEdit: (liveId: number) => void;
+  onStartNewLive: () => void;
   onOpenVenueMenu: () => void;
   onOpenDefaultBandMenu: () => void;
   onSelectVenue: (venueId: number) => void;
@@ -80,6 +95,14 @@ export function LiveAdminSection({
   eventAttendees,
   bandOptions,
   venueQueryText,
+  liveCandidateQuery,
+  liveCandidates,
+  liveCandidatePage,
+  liveCandidateTotal,
+  liveCandidateTotalPages,
+  liveCandidateLoading,
+  editingLiveId,
+  isLiveDirty,
   venues,
   timezoneHourOptions,
   liveTypeOptions,
@@ -102,6 +125,11 @@ export function LiveAdminSection({
   onTimezoneHourChange,
   onCycleTimezoneMinute,
   onVenueQueryTextChange,
+  onLiveCandidateQueryChange,
+  onQueryLiveCandidates,
+  onLiveCandidatePageChange,
+  onSelectLiveForEdit,
+  onStartNewLive,
   onOpenVenueMenu,
   onOpenDefaultBandMenu,
   onSelectVenue,
@@ -125,9 +153,45 @@ export function LiveAdminSection({
     if (selected.length === 0) return "请选择默认 Band";
     return selected.map((band) => band.band_name).join("、");
   })();
+  const selectedCandidateMissing = editingLiveId !== null && !liveCandidates.some((live) => live.live_id === editingLiveId);
+  const normalizedLiveCandidateTotalPages = Math.max(1, liveCandidateTotalPages);
 
   return (
     <>
+      <div className="tour-admin-toolbar live-admin-toolbar">
+        <label htmlFor="live-admin-query">已有 Live</label>
+        <input
+          id="live-admin-query"
+          className="venue-query-input"
+          value={liveCandidateQuery}
+          onChange={(event) => onLiveCandidateQueryChange(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Enter") onQueryLiveCandidates(); }}
+          placeholder="输入 Live ID 或标题"
+        />
+        <button type="button" className="console-ghost-btn" onClick={onQueryLiveCandidates} disabled={liveCandidateLoading}>查询</button>
+        <select
+          aria-label="选择要编辑的 Live"
+          value={editingLiveId ?? ""}
+          disabled={liveCandidateLoading || liveCandidates.length === 0}
+          onChange={(event) => {
+            const liveId = Number(event.target.value);
+            if (liveId > 0) onSelectLiveForEdit(liveId);
+          }}
+        >
+          <option value="">选择要编辑的 Live</option>
+          {selectedCandidateMissing && <option value={editingLiveId ?? ""}>#{editingLiveId} {liveTitle}</option>}
+          {liveCandidates.map((live) => (
+            <option key={live.live_id} value={live.live_id}>
+              #{live.live_id} {live.live_date} {formatLiveType(live.live_type)} {live.live_title}
+            </option>
+          ))}
+        </select>
+        <button type="button" className="console-ghost-btn" onClick={() => onLiveCandidatePageChange(Math.max(1, liveCandidatePage - 1))} disabled={liveCandidateLoading || liveCandidatePage <= 1}>上一页</button>
+        <span>第 {liveCandidatePage} / {normalizedLiveCandidateTotalPages} 页，共 {liveCandidateTotal} 条</span>
+        <button type="button" className="console-ghost-btn" onClick={() => onLiveCandidatePageChange(Math.min(normalizedLiveCandidateTotalPages, liveCandidatePage + 1))} disabled={liveCandidateLoading || liveCandidatePage >= normalizedLiveCandidateTotalPages}>下一页</button>
+        <button type="button" className="console-ghost-btn" onClick={onStartNewLive}>新建 Live</button>
+      </div>
+
       <div className="live-id-selector live-create-query-row">
         <label htmlFor="venue-query-input">查询 venue</label>
         <input
@@ -250,12 +314,17 @@ export function LiveAdminSection({
 
       <div className="console-submit-row live-admin-insert-row">
         <button type="button" className="console-ghost-btn" onClick={onClearInsertLive}>
-          清空数据
+          {editingLiveId === null ? "清空数据" : "恢复原值"}
         </button>
         <button type="button" className="console-submit-btn" onClick={onSubmitInsertLive} disabled={submitInsertDisabled}>
-          提交插入
+          {editingLiveId === null ? "提交插入" : "保存修改"}
         </button>
       </div>
+      {editingLiveId !== null && (
+        <p className="console-admin-hint" role="status">
+          正在编辑 Live #{editingLiveId}{isLiveDirty ? "（有未保存修改）" : "（未修改）"}
+        </p>
+      )}
 
       {venueOpen && venueMenuPos && (
         <div
@@ -334,6 +403,7 @@ export function LiveAdminSection({
           <thead>
             <tr>
               <th>live_id</th>
+              <th>操作</th>
               <th>live_date</th>
               <th>live_title</th>
               <th>live_type</th>
@@ -349,12 +419,13 @@ export function LiveAdminSection({
           <tbody>
             {insertedLives.length === 0 ? (
               <tr>
-                <td colSpan={11} className="empty-cell">暂无新增Live记录</td>
+                <td colSpan={12} className="empty-cell">暂无 Live 变更记录</td>
               </tr>
             ) : (
               insertedLives.map((row) => (
                 <tr key={row.live_id}>
                   <td>{row.live_id}</td>
+                  <td>{row.action === "create" ? "新增" : "更新"}</td>
                   <td>{row.live_date}</td>
                   <td>{row.live_title}</td>
                   <td>{formatLiveType(row.live_type)}</td>

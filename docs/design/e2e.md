@@ -217,7 +217,7 @@ E2E 用例应少而关键，不应复制所有 unit/integration 覆盖面。
 1. 登录默认 admin。
 2. 进入“演出资料”，记录当前总数。
 3. 切到“控制台”。
-4. 进入“新增Live”。
+4. 进入“Live管理”。
 5. 选择 seed 中已有 venue。
 6. 在“默认 Band”浮动多选下拉中选择一个 seed 乐队。
 7. 填写唯一标题，例如 `E2E Live <timestamp>`。

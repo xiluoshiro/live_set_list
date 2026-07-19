@@ -7,6 +7,7 @@ import { ConsoleInsertPanel } from "../ConsoleInsertPanel";
 const apiMocks = vi.hoisted(() => ({
   appendConsoleLiveSetlist: vi.fn(),
   createConsoleLive: vi.fn(),
+  updateConsoleLive: vi.fn(),
   createConsoleSong: vi.fn(),
   createConsoleSongsBatch: vi.fn(),
   createConsoleVenue: vi.fn(),
@@ -18,6 +19,8 @@ const apiMocks = vi.hoisted(() => ({
   getTourDetail: vi.fn(),
   getConsoleSongs: vi.fn(),
   getConsoleBands: vi.fn(),
+  getConsoleLive: vi.fn(),
+  getConsoleLiveCandidates: vi.fn(),
   getConsoleVenues: vi.fn(),
   getLiveDetail: vi.fn(),
   getLives: vi.fn(),
@@ -33,6 +36,7 @@ vi.mock("../../auth/AuthProvider", () => ({
 vi.mock("../../api", () => ({
   appendConsoleLiveSetlist: apiMocks.appendConsoleLiveSetlist,
   createConsoleLive: apiMocks.createConsoleLive,
+  updateConsoleLive: apiMocks.updateConsoleLive,
   createConsoleSong: apiMocks.createConsoleSong,
   createConsoleSongsBatch: apiMocks.createConsoleSongsBatch,
   createConsoleVenue: apiMocks.createConsoleVenue,
@@ -44,6 +48,8 @@ vi.mock("../../api", () => ({
   getTourDetail: apiMocks.getTourDetail,
   getConsoleSongs: apiMocks.getConsoleSongs,
   getConsoleBands: apiMocks.getConsoleBands,
+  getConsoleLive: apiMocks.getConsoleLive,
+  getConsoleLiveCandidates: apiMocks.getConsoleLiveCandidates,
   getConsoleVenues: apiMocks.getConsoleVenues,
   getLiveDetail: apiMocks.getLiveDetail,
   getLives: apiMocks.getLives,
@@ -61,6 +67,7 @@ describe("ConsoleInsertPanel", () => {
   beforeEach(() => {
     apiMocks.appendConsoleLiveSetlist.mockReset();
     apiMocks.createConsoleLive.mockReset();
+    apiMocks.updateConsoleLive.mockReset();
     apiMocks.createConsoleSong.mockReset();
     apiMocks.createConsoleSongsBatch.mockReset();
     apiMocks.createConsoleVenue.mockReset();
@@ -72,11 +79,30 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getTourDetail.mockReset();
     apiMocks.getConsoleSongs.mockReset();
     apiMocks.getConsoleBands.mockReset();
+    apiMocks.getConsoleLive.mockReset();
+    apiMocks.getConsoleLiveCandidates.mockReset();
     apiMocks.getConsoleVenues.mockReset();
     apiMocks.getLiveDetail.mockReset();
     apiMocks.getLives.mockReset();
     apiMocks.getConsoleSongs.mockResolvedValue({ items: [] });
     apiMocks.getConsoleBands.mockResolvedValue({ items: [] });
+    apiMocks.getConsoleLiveCandidates.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 });
+    apiMocks.getConsoleLive.mockResolvedValue({
+      item: {
+        live_id: 55,
+        live_date: "2026-07-05",
+        live_title: "Event Live",
+        live_type: "event",
+        url: "https://example.com/event",
+        opening_time: "09:00:00+09:00",
+        start_time: "21:30:00+09:00",
+        timezone: "+09:00",
+        venue_id: 88,
+        venue_name: "New Venue",
+        default_band_ids: [3],
+        event_attendees: [{ band_id: 3, mode: "partial", members: ["高松燈"] }],
+      },
+    });
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [] });
     apiMocks.getTours.mockResolvedValue({ items: [], pagination: { page: 1, page_size: 20, total: 0, total_pages: 1 } });
     apiMocks.getConsoleTourLiveCandidates.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 });
@@ -97,6 +123,21 @@ describe("ConsoleInsertPanel", () => {
         venue_id: 88,
         default_band_ids: [3],
         event_attendees: [],
+      },
+    });
+    apiMocks.updateConsoleLive.mockResolvedValue({
+      ok: true,
+      item: {
+        live_id: 55,
+        live_date: "2026-07-05",
+        live_title: "Updated Event Live",
+        live_type: "event",
+        url: "https://example.com/event",
+        opening_time: "09:00:00+09:00",
+        start_time: "21:30:00+09:00",
+        venue_id: 88,
+        default_band_ids: [3],
+        event_attendees: [{ band_id: 3, mode: "partial", members: ["高松燈"] }],
       },
     });
     apiMocks.createConsoleSong.mockResolvedValue({
@@ -145,11 +186,11 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
     await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20, true));
 
-    expect(screen.getByRole("tab", { name: "新增Live" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Live管理" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "新增Setlist" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "新增歌曲" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "新增乐队" })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "新增Live" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Live管理" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByLabelText("查询 venue")).toHaveFocus();
     expect(screen.getAllByRole("columnheader", { name: "live_date" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("columnheader", { name: "live_title" }).length).toBeGreaterThan(0);
@@ -434,7 +475,7 @@ describe("ConsoleInsertPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "请选择 band_id" }));
     expect(screen.queryByText(/1 - /)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("tab", { name: "新增Live" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Live管理" }));
     expect(screen.getByRole("button", { name: "请选择 venue" })).toBeInTheDocument();
     expect(screen.queryByText(/301 - /)).not.toBeInTheDocument();
   });
@@ -489,7 +530,7 @@ describe("ConsoleInsertPanel", () => {
     const bandOptions = screen.getAllByText(/Band$/).map((node) => node.textContent);
     expect(bandOptions).toEqual(["2 - Early Band", "9 - Later Band"]);
 
-    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    await user.click(screen.getByRole("tab", { name: "Live管理" }));
     await user.click(screen.getByRole("button", { name: "101 - Early Venue" }));
     const venueMenu = screen.getByText("301 - Later Venue").closest(".bands-floating-menu") as HTMLElement;
     const venueOptions = within(venueMenu).getAllByText(/Venue$/).map((node) => node.textContent);
@@ -501,7 +542,7 @@ describe("ConsoleInsertPanel", () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel />);
 
-    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    await user.click(screen.getByRole("tab", { name: "Live管理" }));
     await user.type(screen.getByLabelText("查询 venue"), "New Venue");
     await user.click(screen.getByRole("button", { name: "插入" }));
 
@@ -530,7 +571,7 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel onLiveDataChanged={onLiveDataChanged} />);
 
-    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    await user.click(screen.getByRole("tab", { name: "Live管理" }));
     await screen.findByRole("button", { name: "88 - New Venue" });
     await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
     await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
@@ -582,6 +623,73 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("第 1 / 1 页，共 2 条")).toBeInTheDocument();
   });
 
+  // 测试点：选择既有 Live 后应回填共用表单，只提交差异确认过的完整更新请求。
+  test("Live管理会加载并更新既有Live", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleLiveCandidates.mockResolvedValue({
+      items: [{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "New Venue" }],
+      page: 1,
+      page_size: 20,
+      total: 1,
+      total_pages: 1,
+    });
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["高松燈", "千早愛音"] }],
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+    const selector = await screen.findByRole("combobox", { name: "选择要编辑的 Live" });
+    await user.selectOptions(selector, "55");
+    await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live"));
+    expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+
+    await user.clear(screen.getByPlaceholderText("请输入Live标题"));
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), "Updated Event Live");
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认更新 Live #55" });
+    expect(within(dialog).getByText("Event Live")).toBeInTheDocument();
+    expect(within(dialog).getByText("Updated Event Live")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
+
+    await waitFor(() => expect(apiMocks.updateConsoleLive).toHaveBeenCalledWith(
+      55,
+      expect.objectContaining({
+        live_title: "Updated Event Live",
+        live_type: "event",
+        default_band_ids: [3],
+        event_attendees: [{ band_id: 3, members: ["高松燈"] }],
+      }),
+      "csrf-token",
+    ));
+    expect(screen.getByText(/已更新Live #55/)).toBeInTheDocument();
+  });
+
+  // 测试点：编辑草稿存在修改时，切换到新建模式必须先确认放弃，不能静默清空。
+  test("Live编辑脏草稿切换新建前要求确认", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleLiveCandidates.mockResolvedValue({
+      items: [{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "New Venue" }],
+      page: 1,
+      page_size: 20,
+      total: 1,
+      total_pages: 1,
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+    await user.selectOptions(await screen.findByRole("combobox", { name: "选择要编辑的 Live" }), "55");
+    await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live"));
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), " Changed");
+    await user.click(screen.getByRole("button", { name: "新建 Live" }));
+
+    expect(screen.getByRole("dialog", { name: "确认放弃 Live 修改" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live Changed");
+    await user.click(screen.getByRole("button", { name: "确认放弃" }));
+    expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "提交插入" })).toBeInTheDocument();
+  });
+
   // 测试点：活动 Live 应把默认 Band 下勾选的完整成员名单提交给后端，不在前端写入 mode。
   test("活动Live会提交完整出演成员名单", async () => {
     const user = userEvent.setup();
@@ -612,7 +720,7 @@ describe("ConsoleInsertPanel", () => {
       },
     });
 
-    render(<ConsoleInsertPanel />);
+    render(<ConsoleInsertPanel initialMode="live_create" />);
     await screen.findByRole("button", { name: "88 - New Venue" });
     await user.selectOptions(screen.getByDisplayValue("专场"), "event");
     await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
@@ -645,7 +753,7 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel />);
 
-    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    await user.click(screen.getByRole("tab", { name: "Live管理" }));
     await screen.findByRole("button", { name: "88 - New Venue" });
     await user.selectOptions(screen.getByDisplayValue("专场"), "event");
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "No Band Event");
@@ -1336,7 +1444,7 @@ describe("ConsoleInsertPanel", () => {
     });
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalledWith(undefined, 100));
-    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    await user.click(screen.getByRole("tab", { name: "Live管理" }));
     const trigger: HTMLElement = document.querySelector(".venue-picker-trigger")!;
 
     const rectSpy = vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({

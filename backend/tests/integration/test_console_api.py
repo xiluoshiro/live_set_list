@@ -583,6 +583,80 @@ def test_console_create_live_persists_live_row(
     )
 
 
+# 测试点：更新活动为非活动时应原子清空出演成员，同时保留既有活动组关系和 Setlist 数据。
+def test_console_update_live_persists_base_fields_without_touching_relations(
+    integration_test_client,
+    integration_admin_connection,
+):
+    live_id = 1
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE live_attrs
+            SET live_type = 'event', event_attendees = %s::jsonb
+            WHERE id = %s
+            """,
+            ('{"3": ["Tomori"]}', live_id),
+        )
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_tester",
+        password="editor-test-pass",
+    )
+    detail_response = integration_test_client.get(f"/api/console/lives/{live_id}")
+    assert detail_response.status_code == 200
+    item = detail_response.json()["item"]
+    relation_count_before = _count_rows(
+        integration_admin_connection,
+        "SELECT COUNT(*) FROM performance_group_lives WHERE live_id = %s",
+        (live_id,),
+    )
+    setlist_count_before = _count_rows(
+        integration_admin_connection,
+        "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s",
+        (live_id,),
+    )
+
+    response = integration_test_client.put(
+        f"/api/console/lives/{live_id}",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "live_date": item["live_date"],
+            "live_title": f"{item['live_title']} Updated",
+            "live_type": "other",
+            "url": item["url"],
+            "opening_time": item["opening_time"][:5],
+            "start_time": item["start_time"][:5],
+            "timezone": item["timezone"],
+            "venue_id": item["venue_id"],
+            "default_band_ids": item["default_band_ids"],
+            "event_attendees": [],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["item"]["live_type"] == "other"
+    assert response.json()["item"]["event_attendees"] == []
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("SELECT live_type, event_attendees FROM live_attrs WHERE id = %s", (live_id,))
+        persisted = cursor.fetchone()
+    assert persisted == ("other", {})
+    assert _count_rows(
+        integration_admin_connection,
+        "SELECT COUNT(*) FROM performance_group_lives WHERE live_id = %s",
+        (live_id,),
+    ) == relation_count_before
+    assert _count_rows(
+        integration_admin_connection,
+        "SELECT COUNT(*) FROM live_setlist WHERE live_id = %s",
+        (live_id,),
+    ) == setlist_count_before
+    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "live_update"
+
+
 # 测试点：追加 Setlist 时应保留具名空成员，并将完全为空的 other_member 写成 NULL。
 def test_console_append_live_setlist_inserts_rows_to_clean_live(
     integration_test_client,

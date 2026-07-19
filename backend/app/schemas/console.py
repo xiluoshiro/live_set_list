@@ -129,7 +129,7 @@ class ConsoleEventAttendee(BaseModel):
     members: list[str] = Field(..., description="Complete recorded attendee list")
 
 
-class ConsoleLiveCreateRequest(BaseModel):
+class ConsoleLiveUpsertRequest(BaseModel):
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., min_length=1, max_length=255, description="Live title")
     url: str = Field(..., min_length=1, max_length=2048, description="Live URL")
@@ -175,7 +175,7 @@ class ConsoleLiveCreateRequest(BaseModel):
         return sorted(set(value))
 
     @model_validator(mode="after")
-    def validate_event_attendees(self) -> "ConsoleLiveCreateRequest":
+    def validate_event_attendees(self) -> "ConsoleLiveUpsertRequest":
         """Keep event attendance scoped to event Lives and selected default Bands."""
         if self.live_type != "event" and self.event_attendees:
             raise ValueError("event_attendees are only allowed when live_type is event")
@@ -187,6 +187,9 @@ class ConsoleLiveCreateRequest(BaseModel):
             missing_text = ", ".join(str(band_id) for band_id in missing_default_ids)
             raise ValueError(f"event attendee band_ids must be included in default_band_ids: {missing_text}")
         return self
+
+
+ConsoleLiveCreateRequest = ConsoleLiveUpsertRequest
 
 
 class ConsoleLiveItem(BaseModel):
@@ -203,6 +206,31 @@ class ConsoleLiveItem(BaseModel):
         default_factory=list,
         description="Event attendance with mode computed from the complete persisted member list",
     )
+
+
+class ConsoleLiveCandidate(BaseModel):
+    live_id: int = Field(..., description="live_attrs.id")
+    live_date: date = Field(..., description="Live date")
+    live_title: str = Field(..., description="Live title")
+    live_type: str = Field(..., description="Stable live type code")
+    venue_name: str = Field(..., description="Venue display name")
+
+
+class ConsoleLiveCandidatesResponse(BaseModel):
+    items: list[ConsoleLiveCandidate] = Field(..., description="Lives available for console editing")
+    page: int = Field(..., ge=1, description="Current page")
+    page_size: int = Field(..., ge=1, description="Requested page size")
+    total: int = Field(..., ge=0, description="Total matching Lives")
+    total_pages: int = Field(..., ge=1, description="Total pages")
+
+
+class ConsoleLiveEditItem(ConsoleLiveItem):
+    timezone: str = Field(..., min_length=6, max_length=6, description="UTC offset used by both times")
+    venue_name: str = Field(..., description="Venue display name")
+
+
+class ConsoleLiveEditResponse(BaseModel):
+    item: ConsoleLiveEditItem = Field(..., description="Complete editable Live payload")
 
 
 class ConsoleLiveMutationResponse(BaseModel):

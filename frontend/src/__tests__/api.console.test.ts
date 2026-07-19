@@ -168,6 +168,40 @@ describe("console lookup api", () => {
     }));
   });
 
+  // 测试点：Live 管理 API 应分别使用候选、详情和 PUT 更新路由，并由更新调用携带完整请求体。
+  test("Live 编辑 API 会查询候选和详情并通过 PUT 保存", async () => {
+    fetchMock
+      .mockResolvedValueOnce(makeJsonResponse({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 }))
+      .mockResolvedValueOnce(makeJsonResponse({ item: { live_id: 55 } }))
+      .mockResolvedValueOnce(makeJsonResponse({ ok: true, item: { live_id: 55 } }));
+    const { getConsoleLiveCandidates, getConsoleLive, updateConsoleLive } = await import("../api");
+    const requestPayload = {
+      live_date: "2026-07-05",
+      live_title: "Updated Live",
+      live_type: "event",
+      url: "https://example.com/live",
+      opening_time: "09:00",
+      start_time: "21:30",
+      timezone: "+09:00",
+      venue_id: 2,
+      default_band_ids: [3],
+      event_attendees: [{ band_id: 3, members: ["高松燈"] }],
+    };
+
+    await getConsoleLiveCandidates(" 55 ", 2, 20);
+    await getConsoleLive(55);
+    await updateConsoleLive(55, requestPayload, "csrf-token");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/lives?page=2&page_size=20&q=55");
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/console/lives/55");
+    expect(fetchMock.mock.calls[2][0]).toBe("/api/console/lives/55");
+    expect(fetchMock.mock.calls[2][1]).toEqual(expect.objectContaining({
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      body: JSON.stringify(requestPayload),
+    }));
+  });
+
   test("appendConsoleLiveSetlist 会携带 CSRF 追加 setlist 行", async () => {
     // 测试点：新增 Setlist 封装应调用指定 live 的 append 接口，且不覆盖已有行。
     fetchMock.mockResolvedValueOnce(
