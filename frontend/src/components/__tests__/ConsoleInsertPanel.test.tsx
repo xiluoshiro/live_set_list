@@ -579,6 +579,27 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("第 1 / 1 页，共 2 条")).toBeInTheDocument();
   });
 
+  // 测试点：活动类型未选择默认 Band 时，新增 Live 确认框应显示非阻断提醒。
+  test("活动未选择默认Band时在新增Live确认框显示提示", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleVenues.mockResolvedValue({
+      items: [{ venue_id: 88, venue_name: "New Venue" }],
+    });
+
+    render(<ConsoleInsertPanel />);
+
+    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    await screen.findByRole("button", { name: "88 - New Venue" });
+    await user.selectOptions(screen.getByDisplayValue("专场"), "event");
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), "No Band Event");
+    await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/no-band-event");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认新增 Live" });
+    expect(within(dialog).getByText("提示：当前 Live 类型为活动，且未选择默认 Band，请确认是否需要补充。")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "确认提交" })).not.toBeDisabled();
+  });
+
   test("新增歌曲会调用真实写入接口并使用后端返回的song_id", async () => {
     // 测试点：新增歌曲应调用后端写接口，并用返回的 song_id 更新候选和插入记录。
     const user = userEvent.setup();

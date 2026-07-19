@@ -1554,18 +1554,28 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
     if (pendingConfirmation.kind === "live") {
       const payload = pendingConfirmation.payload;
-      return renderCompactConfirmation([
-        ["live_date", payload.live_date],
-        ["live_title", payload.live_title],
-        ["live_type", formatLiveType(payload.live_type)],
-        ["url", payload.url],
-        ["opening_time", payload.opening_time],
-        ["start_time", payload.start_time],
-        ["timezone", payload.timezone],
-        ["venue_id", payload.venue_id],
-        ["venue_name", pendingConfirmation.venueName],
-        ["default_band_ids", payload.default_band_ids.join(", ") || "-"],
-      ]);
+      const shouldWarnMissingEventBands = payload.live_type === "event" && payload.default_band_ids.length === 0;
+      return (
+        <>
+          {renderCompactConfirmation([
+            ["live_date", payload.live_date],
+            ["live_title", payload.live_title],
+            ["live_type", formatLiveType(payload.live_type)],
+            ["url", payload.url],
+            ["opening_time", payload.opening_time],
+            ["start_time", payload.start_time],
+            ["timezone", payload.timezone],
+            ["venue_id", payload.venue_id],
+            ["venue_name", pendingConfirmation.venueName],
+            ["default_band_ids", payload.default_band_ids.join(", ") || "-"],
+          ])}
+          {shouldWarnMissingEventBands && (
+            <p className="console-admin-hint" role="status">
+              提示：当前 Live 类型为活动，且未选择默认 Band，请确认是否需要补充。
+            </p>
+          )}
+        </>
+      );
     }
 
     if (pendingConfirmation.kind === "song") {
