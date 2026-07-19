@@ -557,7 +557,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText("新增Live失败：live_date 与 live_title 为必填项。")).not.toBeInTheDocument();
   });
 
-  // 测试点：新增 Live 应提交选中的默认 Band 与时区，并在成功后重置表单。
+  // 测试点：默认开启清空选项时，新增 Live 成功后应重置表单、Venue 查询和 Venue 选择。
   test("新增Live会调用真实写入接口并使用后端返回的live_id", async () => {
     const user = userEvent.setup();
     const onLiveDataChanged = vi.fn();
@@ -573,6 +573,8 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(screen.getByRole("tab", { name: "Live管理" }));
     await screen.findByRole("button", { name: "88 - New Venue" });
+    expect(screen.getByRole("checkbox", { name: "新增后清空录入数据" })).toBeChecked();
+    await user.type(screen.getByLabelText("查询 venue"), "New");
     await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
     await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
     expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toHaveAttribute("aria-expanded", "true");
@@ -612,6 +614,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("");
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
+    expect(screen.getByLabelText("查询 venue")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "请选择 venue" })).toBeInTheDocument();
     expect(screen.getByLabelText("timezone")).toHaveValue("+9");
     expect(screen.getByLabelText("timezone minute offset")).toHaveTextContent(":00");
     expect(screen.getByRole("button", { name: "请选择默认 Band" })).toHaveAttribute("aria-expanded", "false");
@@ -621,6 +625,30 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
     expect(screen.getByText("第 1 / 1 页，共 2 条")).toBeInTheDocument();
+  });
+
+  // 测试点：关闭清空选项时，新增 Live 成功后应保留当前草稿、Venue 查询和 Venue 选择以便连续录入。
+  test("新增Live关闭清空选项后保留录入数据", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleVenues.mockResolvedValue({
+      items: [{ venue_id: 88, venue_name: "New Venue" }],
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+    await screen.findByRole("button", { name: "88 - New Venue" });
+    await user.click(screen.getByRole("checkbox", { name: "新增后清空录入数据" }));
+    await user.type(screen.getByLabelText("查询 venue"), "Keep Venue");
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), "Keep Draft Live");
+    await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/keep-draft");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalled());
+    expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Keep Draft Live");
+    expect(screen.getByPlaceholderText("https://...")).toHaveValue("https://example.com/keep-draft");
+    expect(screen.getByLabelText("查询 venue")).toHaveValue("Keep Venue");
+    expect(screen.getByRole("button", { name: "88 - New Venue" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "新增后清空录入数据" })).not.toBeChecked();
   });
 
   // 测试点：选择既有 Live 后应回填共用表单，只提交差异确认过的完整更新请求。
@@ -1543,7 +1571,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(insertedTourTable).getByText("1")).toBeInTheDocument();
   });
 
-  // 测试点：保存已有巡演后退出编辑态并还原空白表单，但不把更新操作计入新增记录。
+  // 测试点：已有巡演使用共享实体选择器宽度，保存后退出编辑态且不把更新计入新增记录。
   test("巡演管理保存修改后还原表单", async () => {
     const user = userEvent.setup();
     apiMocks.getTours.mockResolvedValue({
@@ -1587,6 +1615,7 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel initialMode="tour" />);
     await screen.findByRole("option", { name: "#7 Existing Tour" });
+    expect(screen.getByLabelText("已有巡演")).toHaveClass("console-entity-select");
     await user.selectOptions(screen.getByLabelText("已有巡演"), "7");
     await waitFor(() => expect(screen.getByLabelText("巡演名称")).toHaveValue("Existing Tour"));
     await user.clear(screen.getByLabelText("巡演名称"));

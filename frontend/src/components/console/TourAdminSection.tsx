@@ -280,6 +280,7 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
         <label htmlFor="tour-admin-select">已有巡演</label>
         <select
           id="tour-admin-select"
+          className="console-entity-select"
           value={selectedTourId ?? ""}
           onChange={(event) => {
             const tourId = Number(event.target.value);

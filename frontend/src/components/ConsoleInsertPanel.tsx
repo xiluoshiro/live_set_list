@@ -339,6 +339,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [liveCandidateLoading, setLiveCandidateLoading] = useState(false);
   const [editingLiveId, setEditingLiveId] = useState<number | null>(null);
   const [originalLivePayload, setOriginalLivePayload] = useState<ConsoleLiveUpsertPayload | null>(null);
+  const [clearLiveAfterCreate, setClearLiveAfterCreate] = useState(true);
   const [setlistDetailOpen, setSetlistDetailOpen] = useState(false);
   const [setlistDetailData, setSetlistDetailData] = useState<LiveDetailResponse | null>(null);
   const [setlistDetailLoading, setSetlistDetailLoading] = useState(false);
@@ -712,8 +713,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setOpeningTime(DEFAULT_LIVE_OPENING_TIME);
     setStartTime(DEFAULT_LIVE_START_TIME);
     setTimezone(DEFAULT_LIVE_TIMEZONE);
+    setSelectedVenueId(0);
     setDefaultBandIds([]);
     setEventAttendees({});
+    setVenueQueryText("");
+    setVenueOpen(false);
+    setVenueMenuPos(null);
     setDefaultBandOpen(false);
     setDefaultBandMenuPos(null);
   };
@@ -1597,7 +1602,16 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setSelectedLiveId(inserted.live_id);
       onLiveDataChanged?.();
       if (action === "create") {
-        startNewLive();
+        setEditingLiveId(null);
+        setOriginalLivePayload(null);
+        if (clearLiveAfterCreate) {
+          resetLiveForm();
+        } else {
+          setVenueOpen(false);
+          setVenueMenuPos(null);
+          setDefaultBandOpen(false);
+          setDefaultBandMenuPos(null);
+        }
       } else {
         setEditingLiveId(inserted.live_id);
         setOriginalLivePayload(savedPayload);
@@ -2078,6 +2092,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           liveCandidateLoading={liveCandidateLoading}
           editingLiveId={editingLiveId}
           isLiveDirty={isLiveDirty}
+          clearAfterCreate={clearLiveAfterCreate}
           venues={venues}
           timezoneHourOptions={TIMEZONE_HOUR_OPTIONS}
           liveTypeOptions={LIVE_TYPE_OPTIONS}
@@ -2109,6 +2124,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onLiveCandidatePageChange={setLiveCandidatePage}
           onSelectLiveForEdit={(liveId) => requestLiveTarget({ type: "edit", liveId })}
           onStartNewLive={() => requestLiveTarget({ type: "new" })}
+          onClearAfterCreateChange={setClearLiveAfterCreate}
           onOpenVenueMenu={openVenueMenu}
           onOpenDefaultBandMenu={openDefaultBandMenu}
           onSelectVenue={(venueId) => {
