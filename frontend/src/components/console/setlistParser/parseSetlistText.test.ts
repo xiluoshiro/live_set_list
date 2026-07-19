@@ -109,10 +109,10 @@ describe("parseSetlistText", () => {
     expect(result.rows.map((row) => row.absolute_order)).toEqual([2, 3, 8, 11]);
   });
 
-  test("支持 OP/ED/WEN 段类型并标记 segment_start_type", () => {
-    // 测试点：新增的 OP/ED/WEN 段类型应与已有类型一致地生成 segment_start_type。
+  // 测试点：OP/EN/WEN/RH 段类型应生成对应的 segment_start_type。
+  test("支持 OP/EN/WEN/RH 段类型并标记 segment_start_type", () => {
     const result = parseSetlistText(
-      "<Roselia>\nOP1. Opening\nM1. Song A\nED1. Ending\nEN1. Encore\nWEN1. W Encore",
+      "<Roselia>\nOP1. Opening\nM1. Song A\nEN1. Encore\nWEN1. W Encore\nRH1. Rehearsal",
       bands,
       1,
       1,
@@ -121,14 +121,26 @@ describe("parseSetlistText", () => {
     expect(result.rows).toHaveLength(5);
     expect(result.rows[0]).toMatchObject({ song_name: "Opening", segment_start_type: "OP" });
     expect(result.rows[1]).toMatchObject({ song_name: "Song A", segment_start_type: "M" });
-    expect(result.rows[2]).toMatchObject({ song_name: "Ending", segment_start_type: "ED" });
-    expect(result.rows[3]).toMatchObject({ song_name: "Encore", segment_start_type: "EN" });
-    expect(result.rows[4]).toMatchObject({ song_name: "W Encore", segment_start_type: "WEN" });
+    expect(result.rows[2]).toMatchObject({ song_name: "Encore", segment_start_type: "EN" });
+    expect(result.rows[3]).toMatchObject({ song_name: "W Encore", segment_start_type: "WEN" });
+    expect(result.rows[4]).toMatchObject({ song_name: "Rehearsal", segment_start_type: "RH" });
     expect(result.warnings).toEqual([]);
   });
 
-  test("支持无点号格式 M1 SP1 等", () => {
-    // 测试点：M1 空格格式应能正确解析，与 M1.点号格式等价。
+  // 测试点：已移除的 ED/SP 前缀应作为未知行提示，不能进入草稿表格。
+  test("不再识别 ED/SP 段类型", () => {
+    const result = parseSetlistText("<Roselia>\nED1. Ending\nSP1. Special", bands, 1, 1);
+
+    expect(result.rows).toEqual([]);
+    expect(result.warnings.map((warning) => warning.message)).toEqual([
+      "未识别行：ED1. Ending",
+      "未识别行：SP1. Special",
+      "未解析到任何歌曲行。",
+    ]);
+  });
+
+  // 测试点：M1 空格格式应能正确解析，与 M1. 点号格式等价。
+  test("支持无点号格式 M1 等", () => {
     const result = parseSetlistText(
       "＜Roselia×戸山香澄 from Poppin'Party＞\nM1 キラキラ\nM2 ときめき",
       bands,
