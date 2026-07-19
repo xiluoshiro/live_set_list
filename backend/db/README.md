@@ -2,7 +2,7 @@
 
 本目录存放当前项目与 PostgreSQL / Flyway / seed 相关的内容。
 
-当前仓库结构基线为 `B1__baseline_schema.sql`，后续 migration 为 V2~V13；V12 为 `live_attrs.default_band_ids` 增加版本化结构，V13 增加巡演聚合表和权限。目标数据库的实际版本仍应通过 `flyway info` 确认。
+当前仓库结构基线为 `B1__baseline_schema.sql`，后续 migration 为 V2~V14；V12 为 `live_attrs.default_band_ids` 增加版本化结构，V13 增加巡演聚合表和权限，V14 增加演出活动组表和权限。目标数据库的实际版本仍应通过 `flyway info` 确认。
 
 ## 角色分工
 

@@ -41,6 +41,10 @@
   - 单条 Live 详情查询
 - `POST /api/lives/details:batch`
   - 批量详情预读接口
+- `GET /api/catalog/performances`
+  - “演出资料”统一分页投影，混合返回独立 Live 与至少两场的演出活动组；支持全部 / 当前用户收藏范围
+- `GET /api/catalog/performance-groups/{group_id}`
+  - 公共活动组详情、自动排序子 Live 与逐场收藏状态，匿名可用
 - `GET /api/catalog/tours`
   - 公共巡演聚合列表，匿名可用
 - `GET /api/catalog/tours/{tour_id}`
@@ -75,15 +79,27 @@
   - `editor+` 向指定 Live 追加 setlist 行；当前是 append-only，不修改既有 setlist
 - `GET /api/console/tours/live-candidates`
   - `editor+` 按 Live 标题或 ID 分页查询尚未关联任何巡演的场次候选，并返回场地
+- `GET /api/console/tours/{tour_id}`
+  - `editor+` 获取巡演标题、显式参与乐队和完整场次关系，供控制台编辑
 - `POST /api/console/tours`
   - `editor+` 在一个事务中创建巡演及完整乐队、场次关系
 - `PUT /api/console/tours/{tour_id}`
   - `editor+` 更新巡演，并以请求中的乐队和场次作为完整目标集合替换现有关系
+- `GET /api/console/performance-groups`
+  - `editor+` 获取全部可编辑活动组，按名称和 ID 排序
+- `GET /api/console/performance-groups/live-candidates`
+  - `editor+` 查询尚未关联任何活动组的 Live 候选
+- `GET /api/console/performance-groups/{group_id}`
+  - `editor+` 获取活动组编辑数据和规范顺序场次
+- `POST /api/console/performance-groups`
+  - `editor+` 创建活动组及完整 Live 关系
+- `PUT /api/console/performance-groups/{group_id}`
+  - `editor+` 完整替换活动组名称与 Live 关系
 
 说明：
 - 全量路径、请求参数、响应 schema 请直接查看自动文档
 - 控制台写接口都要求有效登录态、`editor+` 角色和 `X-CSRF-Token`
-- `GET /api/catalog/statistics?scope=favorites` 要求登录，但不接收 `user_id`，只统计当前 session 用户的收藏
+- `GET /api/catalog/statistics?scope=favorites` 与 `GET /api/catalog/performances?scope=favorites` 都要求登录，且不接收 `user_id`，只使用当前 session 用户的收藏
 
 ## 自动文档中已覆盖的内容
 
@@ -106,7 +122,7 @@
 - `q` 会 trim；空字符串等同于未传，最大长度为 `255`，匹配 Live 标题、场地、歌曲、乐队名和乐队缩写
 - `year` 范围为 `1900..2100`
 - `live_type` 只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
-- Live 列表项、收藏列表项、乐队 Live、catalog 搜索 Live、单详情和批量详情都会返回 `tour`；未归入巡演时为 `null`，已归入时为 `{tour_id, tour_title}`
+- Live 列表项、收藏列表项、乐队 Live、catalog 搜索 Live、单详情和批量详情都会返回 `tour` 与 `performance_group` 反向引用；未归属时为 `null`，已归属时分别返回 `{tour_id, tour_title}` 与 `{group_id, group_title}`
 - `band_id` 必须大于等于 `1`；有 setlist 时按 `live_setlist.band_member` 判断，无 setlist 时按 `live_attrs.default_band_ids` 判断
 - `sort` 只允许 `date_desc` 或 `date_asc`，默认 `date_desc`
 - 多个筛选条件按 AND 组合；文本值使用参数绑定并转义 `%`、`_`、`\`
@@ -167,9 +183,9 @@
 
 ### 5. 公共 catalog 接口
 
-`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/tours`、`GET /api/catalog/tours/{tour_id}`、`GET /api/catalog/tours/{tour_id}/statistics`、`GET /api/catalog/stats`、`GET /api/catalog/statistics?scope=all` 用于匿名可访问的公共资料库搜索、浏览与统计。
+`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/performances`、`GET /api/catalog/performance-groups/{group_id}`、`GET /api/catalog/tours`、`GET /api/catalog/tours/{tour_id}`、`GET /api/catalog/tours/{tour_id}/statistics`、`GET /api/catalog/stats`、`GET /api/catalog/statistics?scope=all` 用于匿名可访问的公共资料库搜索、浏览与统计。
 
-- 上述公共读取默认不要求登录；只有 `GET /api/catalog/statistics?scope=favorites` 要求当前 session 已登录。
+- 上述公共读取默认不要求登录；`GET /api/catalog/statistics?scope=favorites` 与 `GET /api/catalog/performances?scope=favorites` 要求当前 session 已登录。
 - 登录用户访问搜索结果或乐队 Live 列表时，Live 项的 `is_favorite` 会按当前用户收藏计算；匿名请求统一返回 `false`。
 - `GET /api/catalog/search`
   - `q` 会 trim，空字符串返回 `400`
@@ -194,11 +210,24 @@
   - 页码超过最后一页时会自动钳制到最后一页
   - 未找到乐队时返回 `404`
   - Live 结果按 `live_date DESC, id DESC` 排序
+- `GET /api/catalog/performances`
+  - `scope` 只允许 `all` 或 `favorites`，默认 `all`；`favorites` 要求当前 session 已登录
+  - 支持 `q/year/live_type/band_id/sort`，含义与演出资料现有筛选一致；活动组只要任一子 Live 或组名命中就返回完整组
+  - 服务端先生成独立 Live / 完整活动组 / 部分收藏单场的联合投影，再 count 和分页，禁止前端按当前页临时合并
+  - `scope=all` 中，有效活动组返回一个 `kind=performance_group` 项，组内 Live 不重复作为同级项返回
+  - `scope=favorites` 中，组内全部 Live 已收藏时返回组项；部分收藏时仅返回已收藏子 Live；一场未收藏则不会伪造组收藏
+  - 活动组因 Live 删除只剩一场时不再作为有效组，剩余 Live 自动恢复为独立 `kind=live` 项
+  - 默认倒序使用组 `end_date` / Live 日期，升序使用组 `start_date` / Live 日期；同日期以实体 ID 保持稳定
+- `GET /api/catalog/performance-groups/{group_id}`
+  - 只对至少两场的有效活动组返回详情；不存在或无效组返回 `404`
+  - 子 Live 按 `live_date ASC, start_time ASC, live_id ASC` 返回
+  - 返回动态 `day_count/live_count/display_type`、参与乐队、场地和每场 Live 的当前用户收藏状态
+  - 活动组本身没有收藏字段；前端在详情中继续逐场收藏
 - `GET /api/catalog/tours`
   - `page_size` 当前只允许 `15` 或 `20`，超过最后一页会钳制到最后一页
   - `q` 匹配巡演名称、场次标签和关联 Live 标题，并转义 `%`、`_`、`\`
   - `year` 表示至少一场已收录 Live 位于该年份；跨年巡演可以命中多个年份
-  - `band_id` 只匹配 `tour_bands` 中显式维护的巡演乐队，不从 setlist 推断
+  - `band_id` 在巡演显式维护 `tour_bands` 时匹配该集合；未显式指定时，回退到各场 Live 的有效乐队
   - 默认按已收录场次的最晚日期倒序；升序按最早日期排序
   - 只返回至少关联一场 Live 的巡演，日期范围和 `collected_live_count` 均由当前关联实时聚合
 - `GET /api/catalog/tours/{tour_id}`
@@ -273,6 +302,21 @@
   - 第一版不提供删除巡演接口
 - `GET /api/console/tours/live-candidates`
   - 只返回尚未出现在 `tour_lives` 中的 Live；已被任意巡演占用的场次在数据库分页前排除
+- `GET /api/console/tours/{tour_id}`
+  - 返回显式 `band_ids` 与完整 stops，按 `live_date ASC, live_id ASC` 排序；`stop_label` 作为兼容字段返回，但当前控制台不展示或维护
+- `GET /api/console/performance-groups`
+  - 返回全部活动组的 `group_id/group_title`，按 `group_title ASC, group_id ASC` 排序；控制台不再从公共分页列表截取可编辑实体
+- `GET /api/console/performance-groups/live-candidates`
+  - 支持标题或精确 Live ID 查询；已出现在 `performance_group_lives` 的 Live 在 count 和分页前直接排除
+  - 候选包含 `start_time`，供控制台按日期、开演时间和 ID 自动排序
+- `GET /api/console/performance-groups/{group_id}`
+  - 返回完整现有关系，按 `live_date ASC, start_time ASC, live_id ASC` 排序
+- `POST /api/console/performance-groups`、`PUT /api/console/performance-groups/{group_id}`
+  - `group_title` trim 后必须非空且最长 255；`live_ids` 要求 2~500 个存在且不重复的正整数
+  - 一场 Live 最多属于一个活动组；更新允许保留当前组成员，不能接管其他组成员，冲突返回 `409`
+  - 服务端不信任请求数组顺序，按 Live 日期、开演时间和 ID 生成关系写入、响应与审计中的 `ordered_live_ids`
+  - 更新使用完整目标集合替换，并与 `performance_group_create/performance_group_update` 审计写入处于同一事务
+  - 第一版不提供活动组删除、合并或拆分接口
 
 ## 错误处理说明
 
