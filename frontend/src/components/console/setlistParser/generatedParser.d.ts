@@ -6,7 +6,7 @@ export type ParsedSetlistLine =
     }
   | {
       type: "song_entry";
-      segmentType: "M" | "OP" | "ED" | "EN" | "WEN" | "SP";
+      segmentType: "M" | "OP" | "EN" | "WEN" | "RH";
       segmentOrder: number;
       songName: string;
       line: number;

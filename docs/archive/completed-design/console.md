@@ -608,7 +608,7 @@ EN1. BRAVE JEWEL
 - 空行忽略。
 - 支持半角尖括号 `<...>` 与全角尖括号 `＜...＞`。
 - 尖括号行表示“演出者上下文”，作用于后续歌曲行，直到遇到下一条尖括号行。
-- 歌曲行格式为 `M1. song_name` / `EN1. song_name` / `SP1. song_name`。
+- 歌曲行格式为 `M1. song_name` / `EN1. song_name` / `RH1. song_name`。
 - 歌曲行、演出者行、空行和未知行由 parser grammar 识别，不在 React 组件中手写逐行正则。
 - `song_name` 取序号点号后的文本，保留原始大小写和符号。
 - `song_id` 初始为空，继续由 `GET /api/console/songs` 的“查询歌曲”流程填充。
@@ -638,7 +638,7 @@ EN1. BRAVE JEWEL
 
 - `song_name`：歌曲行中的曲名。
 - `song_id`：解析阶段置空。
-- `segment_start_type`：每个段落的第一首填 `M / EN / SP`，同段后续歌曲填空。
+- `segment_start_type`：每个段落的第一首填 `M / OP / EN / WEN / RH`，同段后续歌曲填空。
 - `is_short`：第一版默认 `false`，后续可再识别 `short / 短版 / TV size`。
 - `band_member`：来自当前尖括号上下文中可匹配到有效 band 的 token。
 - `other_member`：来自无法归属到有效 band 的 token。
@@ -715,7 +715,7 @@ warning 设计：
 
 1. 引入 `Peggy`，先用 grammar 生成 parser，避免手写解析器。
 2. 新增 `mapParsedSetlist(ast, bands): ParseSetlistResult`，只负责业务映射，不负责文本语法解析。
-3. 给 parser 和 mapper 分别补单元测试，重点覆盖全角尖括号、`M/EN/SP`、`×`、`from`、`band_id=0`、未知 band、曲序跳号。
+3. 给 parser 和 mapper 分别补单元测试，重点覆盖全角尖括号、`M/OP/EN/WEN/RH`、`×`、`from`、`band_id=0`、未知 band、曲序跳号。
 4. 在 `LiveInsertTab` 增加批量粘贴面板和预览结果。
 5. `应用到表格` 时替换 `setlistRows`，并重置 `didSongLookup=false`。
 6. 复用现有“查询歌曲”按钮填充 `song_id`。

@@ -1,6 +1,6 @@
 import type { BandOption, LiveInsertRow, SetlistDraftRow, SongInsertRow, VenueOption } from "./types";
 
-export const SEGMENT_OPTIONS = ["M", "OP", "ED", "EN", "WEN", "SP"];
+export const SEGMENT_OPTIONS = ["M", "OP", "EN", "WEN", "RH"];
 export const DEFAULT_BAND_MEMBERS = ["主唱", "吉他", "贝斯", "鼓手", "键盘"];
 export const LIVE_TYPE_LABELS = {
   oneman: "专场",
