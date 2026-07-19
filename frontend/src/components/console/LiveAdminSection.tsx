@@ -5,6 +5,7 @@ import { formatLiveType } from "./constants";
 import type { BandOption, Position, VenueOption } from "./types";
 
 type LiveAdminSectionProps = {
+  variant: "create" | "edit";
   liveDate: string;
   liveTitle: string;
   liveType: string;
@@ -69,7 +70,6 @@ type LiveAdminSectionProps = {
   onQueryLiveCandidates: () => void;
   onLiveCandidatePageChange: (page: number) => void;
   onSelectLiveForEdit: (liveId: number) => void;
-  onStartNewLive: () => void;
   onClearAfterCreateChange: (checked: boolean) => void;
   onOpenVenueMenu: () => void;
   onOpenDefaultBandMenu: () => void;
@@ -85,6 +85,7 @@ type LiveAdminSectionProps = {
 };
 
 export function LiveAdminSection({
+  variant,
   liveDate,
   liveTitle,
   liveType,
@@ -136,7 +137,6 @@ export function LiveAdminSection({
   onQueryLiveCandidates,
   onLiveCandidatePageChange,
   onSelectLiveForEdit,
-  onStartNewLive,
   onClearAfterCreateChange,
   onOpenVenueMenu,
   onOpenDefaultBandMenu,
@@ -163,53 +163,60 @@ export function LiveAdminSection({
   })();
   const selectedCandidateMissing = editingLiveId !== null && !liveCandidates.some((live) => live.live_id === editingLiveId);
   const normalizedLiveCandidateTotalPages = Math.max(1, liveCandidateTotalPages);
+  const visibleHistory = insertedLives.filter((row) => row.action === (variant === "create" ? "create" : "update"));
+  const showEditor = variant === "create" || editingLiveId !== null;
 
   return (
     <>
-      <div className="tour-admin-toolbar live-admin-toolbar">
-        <label className="live-management-label" htmlFor="live-admin-query">已有 Live</label>
-        <input
-          id="live-admin-query"
-          className="venue-query-input live-management-primary-control"
-          value={liveCandidateQuery}
-          onChange={(event) => onLiveCandidateQueryChange(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") onQueryLiveCandidates(); }}
-          placeholder="输入 Live ID 或标题"
-        />
-        <button type="button" className="console-ghost-btn" onClick={onQueryLiveCandidates} disabled={liveCandidateLoading}>查询</button>
-        <select
-          className="live-type-filter"
-          aria-label="按 Live 类型筛选"
-          value={liveCandidateType}
-          onChange={(event) => onLiveCandidateTypeChange(event.target.value)}
-        >
-          <option value="">全部类型</option>
-          {liveTypeOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-        <select
-          aria-label="选择要编辑的 Live"
-          value={editingLiveId ?? ""}
-          disabled={liveCandidateLoading || liveCandidates.length === 0}
-          onChange={(event) => {
-            const liveId = Number(event.target.value);
-            if (liveId > 0) onSelectLiveForEdit(liveId);
-          }}
-        >
-          <option value="">选择要编辑的 Live</option>
-          {selectedCandidateMissing && <option value={editingLiveId ?? ""}>#{editingLiveId} {liveTitle}</option>}
-          {liveCandidates.map((live) => (
-            <option key={live.live_id} value={live.live_id}>
-              #{live.live_id} {live.live_date} {formatLiveType(live.live_type)} {live.live_title}
-            </option>
-          ))}
-        </select>
-        <button type="button" className="console-ghost-btn" onClick={() => onLiveCandidatePageChange(Math.max(1, liveCandidatePage - 1))} disabled={liveCandidateLoading || liveCandidatePage <= 1}>上一页</button>
-        <span>第 {liveCandidatePage} / {normalizedLiveCandidateTotalPages} 页，共 {liveCandidateTotal} 条</span>
-        <button type="button" className="console-ghost-btn" onClick={() => onLiveCandidatePageChange(Math.min(normalizedLiveCandidateTotalPages, liveCandidatePage + 1))} disabled={liveCandidateLoading || liveCandidatePage >= normalizedLiveCandidateTotalPages}>下一页</button>
-        <button type="button" className="console-submit-btn console-new-btn" onClick={onStartNewLive}>新建 Live</button>
-      </div>
+      {variant === "edit" && (
+        <div className="tour-admin-toolbar live-admin-toolbar">
+          <label className="live-management-label" htmlFor="live-admin-query">已有 Live</label>
+          <input
+            id="live-admin-query"
+            className="venue-query-input live-management-primary-control"
+            value={liveCandidateQuery}
+            onChange={(event) => onLiveCandidateQueryChange(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") onQueryLiveCandidates(); }}
+            placeholder="输入 Live ID 或标题"
+          />
+          <button type="button" className="console-ghost-btn" onClick={onQueryLiveCandidates} disabled={liveCandidateLoading}>查询</button>
+          <select
+            className="live-type-filter"
+            aria-label="按 Live 类型筛选"
+            value={liveCandidateType}
+            onChange={(event) => onLiveCandidateTypeChange(event.target.value)}
+          >
+            <option value="">全部类型</option>
+            {liveTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          <select
+            aria-label="选择要编辑的 Live"
+            value={editingLiveId ?? ""}
+            disabled={liveCandidateLoading || liveCandidates.length === 0}
+            onChange={(event) => {
+              const liveId = Number(event.target.value);
+              if (liveId > 0) onSelectLiveForEdit(liveId);
+            }}
+          >
+            <option value="">选择要编辑的 Live</option>
+            {selectedCandidateMissing && <option value={editingLiveId ?? ""}>#{editingLiveId} {liveTitle}</option>}
+            {liveCandidates.map((live) => (
+              <option key={live.live_id} value={live.live_id}>
+                #{live.live_id} {live.live_date} {formatLiveType(live.live_type)} {live.live_title}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="console-ghost-btn" onClick={() => onLiveCandidatePageChange(Math.max(1, liveCandidatePage - 1))} disabled={liveCandidateLoading || liveCandidatePage <= 1}>上一页</button>
+          <span>第 {liveCandidatePage} / {normalizedLiveCandidateTotalPages} 页，共 {liveCandidateTotal} 条</span>
+          <button type="button" className="console-ghost-btn" onClick={() => onLiveCandidatePageChange(Math.min(normalizedLiveCandidateTotalPages, liveCandidatePage + 1))} disabled={liveCandidateLoading || liveCandidatePage >= normalizedLiveCandidateTotalPages}>下一页</button>
+        </div>
+      )}
+
+      {!showEditor && <p className="console-admin-hint">请先选择要编辑的 Live。</p>}
+      {showEditor && (
+        <>
 
       <div className="live-id-selector live-create-query-row">
         <label className="live-management-label" htmlFor="venue-query-input">查询 venue</label>
@@ -332,7 +339,7 @@ export function LiveAdminSection({
       </div>
 
       <div className="console-submit-row live-admin-insert-row">
-        {editingLiveId === null && (
+        {variant === "create" && (
           <label className="live-clear-after-create-option">
             <input
               type="checkbox"
@@ -342,14 +349,19 @@ export function LiveAdminSection({
             新增后清空录入数据
           </label>
         )}
-        <button type="button" className="console-ghost-btn" onClick={onClearInsertLive}>
-          {editingLiveId === null ? "清空数据" : "恢复原值"}
+        <button
+          type="button"
+          className="console-ghost-btn"
+          onClick={onClearInsertLive}
+          disabled={variant === "edit" && editingLiveId === null}
+        >
+          {variant === "create" ? "清空数据" : "恢复原值"}
         </button>
         <button type="button" className="console-submit-btn" onClick={onSubmitInsertLive} disabled={submitInsertDisabled}>
-          {editingLiveId === null ? "提交插入" : "保存修改"}
+          {variant === "create" ? "提交插入" : "保存修改"}
         </button>
       </div>
-      {editingLiveId !== null && isLiveDirty && (
+      {variant === "edit" && editingLiveId !== null && isLiveDirty && (
         <p className="console-admin-hint" role="status">
           Live #{editingLiveId} 有未保存修改
         </p>
@@ -426,6 +438,8 @@ export function LiveAdminSection({
           })}
         </div>
       )}
+        </>
+      )}
 
       <div className="console-table-wrap live-history-wrap">
         <table className="console-admin-table live-history-table">
@@ -446,12 +460,12 @@ export function LiveAdminSection({
             </tr>
           </thead>
           <tbody>
-            {insertedLives.length === 0 ? (
+            {visibleHistory.length === 0 ? (
               <tr>
-                <td colSpan={12} className="empty-cell">暂无 Live 变更记录</td>
+                <td colSpan={12} className="empty-cell">暂无 Live {variant === "create" ? "新增" : "更新"}记录</td>
               </tr>
             ) : (
-              insertedLives.map((row) => (
+              visibleHistory.map((row) => (
                 <tr key={row.live_id}>
                   <td>{row.live_id}</td>
                   <td>{row.action === "create" ? "新增" : "更新"}</td>
