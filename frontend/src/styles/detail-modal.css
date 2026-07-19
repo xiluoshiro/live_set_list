@@ -242,6 +242,7 @@
 }
 
 .event-attendee-separator {
+  margin-left: 6px;
   color: var(--text-muted);
 }
 
