@@ -153,6 +153,30 @@
   min-width: min(420px, 100%);
 }
 
+.tour-candidate-search {
+  margin-bottom: 12px;
+}
+
+.tour-candidate-table {
+  table-layout: fixed;
+}
+
+.tour-candidate-col-date {
+  width: 118px;
+}
+
+.tour-candidate-col-time {
+  width: 72px;
+}
+
+.tour-candidate-col-venue {
+  width: 24%;
+}
+
+.tour-candidate-col-action {
+  width: 88px;
+}
+
 .tour-admin-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
