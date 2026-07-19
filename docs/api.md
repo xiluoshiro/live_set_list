@@ -67,6 +67,10 @@
   - `editor+` 查询控制台乐队与成员候选
 - `GET /api/console/venues`
   - `editor+` 查询控制台场地候选
+- `GET /api/console/lives`
+  - `editor+` 按标题或 ID 分页查询全部可编辑 Live
+- `GET /api/console/lives/{live_id}`
+  - `editor+` 获取 Live 基础资料、Venue、默认 Band 和计算后的活动出演成员
 - `POST /api/console/songs`
   - `editor+` 新增单首歌曲
 - `POST /api/console/songs:batch`
@@ -75,6 +79,8 @@
   - `editor+` 新增场地
 - `POST /api/console/lives`
   - `editor+` 新增 Live；`live_type` 必填，值为稳定 code
+- `PUT /api/console/lives/{live_id}`
+  - `editor+` 完整更新 Live 基础资料，不修改 Setlist、巡演、活动组或收藏关系
 - `POST /api/console/lives/{live_id}/setlist`
   - `editor+` 向指定 Live 追加 setlist 行；当前是 append-only，不修改既有 setlist
 - `GET /api/console/tours/live-candidates`
@@ -290,6 +296,16 @@
   - 成功响应会原样返回后端已经验证并保存的 `default_band_ids`
   - `event_attendees` 只允许活动类型提交；每项 Band 必须属于 `default_band_ids`，成员必须属于对应 Band
   - `event_attendees[].members` 始终保存完整名单；响应额外返回计算得到的 `mode=partial|full`
+- `GET /api/console/lives`
+  - 候选包含有无 Setlist 的全部 Live，按 `live_date DESC, live_id DESC` 排序
+  - `q` 同时支持标题模糊匹配和精确 Live ID
+- `GET /api/console/lives/{live_id}`
+  - 返回完整可编辑字段和 `timezone`；活动出演成员的 `mode` 仍为计算值
+- `PUT /api/console/lives/{live_id}`
+  - 请求体与新增 Live 共用完整字段契约，不接受出演成员 `mode`
+  - 使用行锁并在单一事务中校验、更新；无实际变化时不写审计日志
+  - 有变化时写 `live_update` 审计，payload 记录变化字段的前后值
+  - 不修改 `live_setlist`、`tour_lives`、`performance_group_lives` 或收藏关系
 - `POST /api/console/lives/{live_id}/setlist`
   - 要求目标 Live 存在
   - 如果目标 Live 已有任何 setlist 行，返回 `409`

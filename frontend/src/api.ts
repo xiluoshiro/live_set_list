@@ -414,7 +414,7 @@ export type ConsoleVenueMutationResponse = {
   item: ConsoleVenueItem;
 };
 
-export type ConsoleLiveCreatePayload = {
+export type ConsoleLiveUpsertPayload = {
   live_date: string;
   live_title: string;
   live_type: string;
@@ -426,6 +426,8 @@ export type ConsoleLiveCreatePayload = {
   default_band_ids: number[];
   event_attendees: Array<{ band_id: number; members: string[] }>;
 };
+
+export type ConsoleLiveCreatePayload = ConsoleLiveUpsertPayload;
 
 export type ConsoleEventAttendee = {
   band_id: number;
@@ -537,6 +539,29 @@ export type ConsolePerformanceGroupLiveCandidate = {
   band_ids: number[];
 };
 
+export type ConsoleLiveCandidate = {
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  live_type: string;
+  venue_name: string;
+};
+
+export type ConsoleLiveCandidatesResponse = {
+  items: ConsoleLiveCandidate[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+};
+
+export type ConsoleLiveEditResponse = {
+  item: ConsoleLiveMutationItem & {
+    timezone: string;
+    venue_name: string;
+  };
+};
+
 export type ConsolePerformanceGroupListResponse = {
   items: Array<{
     group_id: number;
@@ -601,7 +626,10 @@ type RequestKind =
   | "console_bands"
   | "console_venues"
   | "console_venue_create"
+  | "console_live_candidates"
+  | "console_live_detail"
   | "console_live_create"
+  | "console_live_update"
   | "console_song_create"
   | "console_song_batch_create"
   | "console_live_setlist_append"
@@ -1339,6 +1367,48 @@ export async function getConsolePerformanceGroupLiveCandidates(
   );
   if (!response.ok) throw new Error(`Failed to fetch candidates: ${response.status}`);
   return expectJsonResponse<ConsolePerformanceGroupLiveCandidatesResponse>(response);
+}
+
+export async function getConsoleLiveCandidates(
+  q = "",
+  page = 1,
+  pageSize = 20,
+): Promise<ConsoleLiveCandidatesResponse> {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (q.trim()) query.set("q", q.trim());
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/lives?${query.toString()}`,
+    undefined,
+    { requestKind: "console_live_candidates" },
+  );
+  return expectJsonResponse<ConsoleLiveCandidatesResponse>(response);
+}
+
+export async function getConsoleLive(liveId: number): Promise<ConsoleLiveEditResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/lives/${liveId}`, undefined, {
+    requestKind: "console_live_detail",
+  });
+  return expectJsonResponse<ConsoleLiveEditResponse>(response);
+}
+
+export async function updateConsoleLive(
+  liveId: number,
+  payload: ConsoleLiveUpsertPayload,
+  csrfToken: string,
+): Promise<ConsoleLiveMutationResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/lives/${liveId}`,
+    {
+      method: "PUT",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_live_update", method: "PUT" },
+  );
+  const result = await expectJsonResponse<ConsoleLiveMutationResponse>(response);
+  clearLiveCollectionCaches();
+  detailCache.delete(detailCacheKey(liveId));
+  return result;
 }
 
 export async function getConsolePerformanceGroups(): Promise<ConsolePerformanceGroupListResponse> {

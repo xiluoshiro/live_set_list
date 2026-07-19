@@ -182,6 +182,55 @@ def test_console_lookup_mock_returns_empty_items_for_no_match():
     assert response.json() == {"items": []}
 
 
+# 测试点：Live 编辑候选必须包含分页信息，并支持加载带计算 mode 的完整编辑数据。
+def test_console_live_edit_reads_candidates_and_detail():
+    _set_authenticated_role("editor")
+    candidates_conn, _ = _build_connection_mock(
+        fetchone_side_effect=[(1,)],
+        fetchall_side_effect=[[(55, "2026-07-05", "Event Live", "event", "Mock Venue")]],
+    )
+    detail_conn, _ = _build_connection_mock(
+        fetchone_side_effect=[(
+            55,
+            "2026-07-05",
+            "Event Live",
+            "event",
+            "https://example.com/event",
+            "09:00:00+09",
+            "21:30:00+09",
+            2,
+            "Mock Venue",
+            [3],
+            [{"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]}],
+        )],
+    )
+
+    with patch("app.routers.console_read.get_db_connection", side_effect=[candidates_conn, detail_conn]):
+        client = TestClient(app)
+        candidates_response = client.get("/api/console/lives?q=55&page=1&page_size=20")
+        detail_response = client.get("/api/console/lives/55")
+
+    assert candidates_response.status_code == 200
+    assert candidates_response.json() == {
+        "items": [{
+            "live_id": 55,
+            "live_date": "2026-07-05",
+            "live_title": "Event Live",
+            "live_type": "event",
+            "venue_name": "Mock Venue",
+        }],
+        "page": 1,
+        "page_size": 20,
+        "total": 1,
+        "total_pages": 1,
+    }
+    assert detail_response.status_code == 200
+    assert detail_response.json()["item"]["timezone"] == "+09:00"
+    assert detail_response.json()["item"]["event_attendees"] == [
+        {"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]}
+    ]
+
+
 # 测试点：console 只读查询接口应拒绝非法 limit，避免一次性返回过多数据。
 @pytest.mark.parametrize(
     "path",
@@ -228,6 +277,7 @@ def test_console_lookup_mock_surfaces_database_errors(exc: Exception, expected_s
         ("post", "/api/console/songs", _valid_song_payload()),
         ("post", "/api/console/venues", _valid_venue_payload()),
         ("post", "/api/console/lives", _valid_live_payload()),
+        ("put", "/api/console/lives/1", _valid_live_payload()),
         ("post", "/api/console/lives/1/setlist", _valid_setlist_payload()),
     ],
 )
@@ -259,6 +309,24 @@ def test_console_insert_mock_requires_valid_csrf(path: str, json_body: dict):
     client = TestClient(app)
     missing_response = client.post(path, json=json_body)
     invalid_response = client.post(path, json=json_body, headers={"X-CSRF-Token": "wrong-token"})
+
+    assert missing_response.status_code == 403
+    assert missing_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+    assert invalid_response.status_code == 403
+    assert invalid_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+
+
+# 测试点：Live 更新与其他控制台写接口一样必须拒绝缺失或错误的 CSRF token。
+def test_console_update_live_mock_requires_valid_csrf():
+    _set_authenticated_role("editor")
+    client = TestClient(app)
+
+    missing_response = client.put("/api/console/lives/1", json=_valid_live_payload())
+    invalid_response = client.put(
+        "/api/console/lives/1",
+        json=_valid_live_payload(),
+        headers={"X-CSRF-Token": "wrong-token"},
+    )
 
     assert missing_response.status_code == 403
     assert missing_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
@@ -496,6 +564,76 @@ def test_console_create_event_persists_members_and_computes_modes():
     ]
     persisted_json = cursor.execute.call_args_list[2].args[1][-1]
     assert persisted_json.adapted == {"3": ["高松燈", "千早愛音"], "8": ["若葉睦"]}
+
+
+# 测试点：更新 Live 应复用成员规范化，在同一事务中写入基础字段并记录字段差异审计。
+def test_console_update_live_mock_persists_changes_and_audits():
+    _set_authenticated_role("editor")
+    existing = {
+        "live_date": "2026-05-29",
+        "live_title": "Old Live",
+        "live_type": "event",
+        "url": "https://example.com/old",
+        "opening_time": "18:00:00+09:00",
+        "start_time": "19:00:30+09:00",
+        "venue_id": 2,
+        "default_band_ids": [3],
+        "event_attendees": {"3": ["高松燈"]},
+    }
+    conn, cursor = _build_connection_mock(
+        fetchone_side_effect=[(existing,), (1,)],
+        fetchall_side_effect=[[(3, ["高松燈", "千早愛音"])]],
+    )
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.put(
+            "/api/console/lives/55",
+            json=_valid_live_payload(
+                live_title="Updated Live",
+                live_type="event",
+                default_band_ids=[3],
+                event_attendees=[{"band_id": 3, "members": ["千早愛音", "高松燈"]}],
+            ),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["item"]["event_attendees"] == [
+        {"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]}
+    ]
+    assert "UPDATE live_attrs" in cursor.execute.call_args_list[3].args[0]
+    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[4].args[0]
+    audit_json = cursor.execute.call_args_list[4].args[1][-1]
+    assert audit_json.adapted["changes"]["live_title"] == {"before": "Old Live", "after": "Updated Live"}
+
+
+# 测试点：完全相同的 Live PUT 应返回成功，但不得执行 UPDATE 或制造无意义审计。
+def test_console_update_live_mock_noop_skips_update_and_audit():
+    _set_authenticated_role("editor")
+    existing = {
+        "live_date": "2026-05-29",
+        "live_title": "Mock Live",
+        "live_type": "oneman",
+        "url": "https://example.com/mock-live",
+        "opening_time": "18:00:00+09:00",
+        "start_time": "19:00:30+09:00",
+        "venue_id": 2,
+        "default_band_ids": [],
+        "event_attendees": {},
+    }
+    conn, cursor = _build_connection_mock(fetchone_side_effect=[(existing,), (1,)])
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.put(
+            "/api/console/lives/55",
+            json=_valid_live_payload(default_band_ids=[], event_attendees=[]),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 200
+    assert cursor.execute.call_count == 2
 
 
 # 测试点：非活动 Live 不允许提交活动专用的出席成员数据。

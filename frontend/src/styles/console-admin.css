@@ -153,6 +153,19 @@
   min-width: min(420px, 100%);
 }
 
+.live-admin-toolbar {
+  margin-bottom: 12px;
+}
+
+.live-admin-toolbar .venue-query-input {
+  min-width: min(260px, 100%);
+}
+
+.live-admin-toolbar select {
+  flex: 1 1 360px;
+  min-width: min(360px, 100%);
+}
+
 .tour-candidate-search {
   margin-bottom: 12px;
 }
@@ -319,6 +332,14 @@
 .console-confirm-table td {
   max-width: min(420px, calc(100vw - 220px));
   overflow-wrap: anywhere;
+}
+
+.live-update-diff-table {
+  width: 100%;
+}
+
+.live-update-diff-table th:first-child {
+  width: 140px;
 }
 
 .console-confirm-setlist-wrap {

@@ -11,6 +11,7 @@ function renderSection(
     liveType?: string;
     eventAttendees?: Record<number, string[]>;
     onToggleEventAttendee?: ReturnType<typeof vi.fn>;
+    editingLiveId?: number | null;
   } = {},
 ) {
   const onToggleEventAttendee = options.onToggleEventAttendee ?? vi.fn();
@@ -34,6 +35,14 @@ function renderSection(
         { band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["高松燈", "千早愛音"] },
       ]}
       venueQueryText=""
+      liveCandidateQuery=""
+      liveCandidates={[{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "Test Venue" }]}
+      liveCandidatePage={1}
+      liveCandidateTotal={1}
+      liveCandidateTotalPages={1}
+      liveCandidateLoading={false}
+      editingLiveId={options.editingLiveId ?? null}
+      isLiveDirty={options.editingLiveId != null}
       venues={[{ venue_id: 1, venue_name: "Test Venue" }]}
       timezoneHourOptions={["+9"]}
       liveTypeOptions={[{ value: "other", label: "其他" }, { value: "event", label: "活动" }]}
@@ -56,6 +65,11 @@ function renderSection(
       onTimezoneHourChange={vi.fn()}
       onCycleTimezoneMinute={vi.fn()}
       onVenueQueryTextChange={vi.fn()}
+      onLiveCandidateQueryChange={vi.fn()}
+      onQueryLiveCandidates={vi.fn()}
+      onLiveCandidatePageChange={vi.fn()}
+      onSelectLiveForEdit={vi.fn()}
+      onStartNewLive={vi.fn()}
       onOpenVenueMenu={vi.fn()}
       onOpenDefaultBandMenu={vi.fn()}
       onSelectVenue={vi.fn()}
@@ -102,5 +116,15 @@ describe("LiveAdminSection", () => {
 
     fireEvent.click(within(memberGroup).getByRole("checkbox", { name: "千早愛音" }));
     expect(onToggleEventAttendee).toHaveBeenCalledWith(3, "千早愛音");
+  });
+
+  // 测试点：编辑既有 Live 时应复用同一表单，并把操作按钮切换为恢复和保存语义。
+  test("shows edit controls in the shared Live form", () => {
+    renderSection(vi.fn(), { editingLiveId: 55 });
+
+    expect(screen.getByRole("combobox", { name: "选择要编辑的 Live" })).toHaveValue("55");
+    expect(screen.getByRole("button", { name: "恢复原值" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存修改" })).toBeInTheDocument();
+    expect(screen.getByText(/正在编辑 Live #55/)).toHaveTextContent("有未保存修改");
   });
 });
