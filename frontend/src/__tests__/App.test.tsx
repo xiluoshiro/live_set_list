@@ -1003,6 +1003,40 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
   });
 
+  // 测试点：单日多场活动组在演出资料的表格和卡片视图都只显示一个日期。
+  test("单日多场活动组不重复显示起止日期", async () => {
+    getPerformancesMock.mockResolvedValue({
+      items: [{
+        kind: "performance_group",
+        performance_group: {
+          kind: "performance_group",
+          group_id: 89,
+          group_title: "示例单日多场",
+          start_date: "2026-08-01",
+          end_date: "2026-08-01",
+          day_count: 1,
+          live_count: 2,
+          display_type: "single_day_multi_show",
+          bands: [{ band_id: 1, band_name: "Band 1", band_abbr: "B1" }],
+          venues: ["测试场地"],
+        },
+      }],
+      pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+    });
+    const user = userEvent.setup();
+    renderApp();
+
+    await openAllContent(user);
+    const tableRow = getTableRowByLiveTitle("示例单日多场");
+    expect(within(tableRow).getByText("2026-08-01")).toBeInTheDocument();
+    expect(within(tableRow).queryByText("2026-08-01 ~ 2026-08-01")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "切换为卡片模式" }));
+    const card = screen.getByText("示例单日多场").closest("article") as HTMLElement;
+    expect(within(card).getByText("2026-08-01")).toBeInTheDocument();
+    expect(within(card).queryByText("2026-08-01 ~ 2026-08-01")).not.toBeInTheDocument();
+  });
+
   // 测试点：巡演资料复用演出列表的筛选、总计、内容顺序和 pager 间距容器。
   test("巡演资料页签展示聚合资料并支持独立筛选", async () => {
     const user = userEvent.setup();

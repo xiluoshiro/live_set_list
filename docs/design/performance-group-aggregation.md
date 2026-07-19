@@ -346,7 +346,7 @@ favorite_live_count
 不新增“多日活动”主导航。“演出资料”改用 `GET /api/catalog/performances`，同一网格渲染两种项目：
 
 - `kind=live`：复用现有 `live-card`。
-- `kind=performance_group`：继续复用 `live-card` 外形，展示日期范围、动态类型、聚合名称、乐队图标和数量。
+- `kind=performance_group`：继续复用 `live-card` 外形；单日多场展示单个日期，多日活动展示日期范围，并展示动态类型、聚合名称、乐队图标和数量。
 
 类型文案：
 
