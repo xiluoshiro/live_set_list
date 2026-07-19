@@ -333,6 +333,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [insertedLives, setInsertedLives] = useState<LiveInsertDraft[]>([]);
   const [liveCandidates, setLiveCandidates] = useState<ConsoleLiveCandidate[]>([]);
   const [liveCandidateQuery, setLiveCandidateQuery] = useState("");
+  const [liveCandidateType, setLiveCandidateType] = useState("");
   const [liveCandidatePage, setLiveCandidatePage] = useState(1);
   const [liveCandidatePagination, setLiveCandidatePagination] = useState({ page: 1, page_size: 20, total: 0, total_pages: 1 });
   const [liveCandidateLoading, setLiveCandidateLoading] = useState(false);
@@ -784,10 +785,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     restoreLiveForm();
   };
 
-  const loadLiveCandidatePage = async (query: string, page: number) => {
+  const loadLiveCandidatePage = async (query: string, page: number, candidateType = liveCandidateType) => {
     setLiveCandidateLoading(true);
     try {
-      const response = await getConsoleLiveCandidates(query, page, 20);
+      const response = await getConsoleLiveCandidates(query, page, 20, candidateType);
       setLiveCandidates(response.items);
       setLiveCandidatePage(response.page);
       setLiveCandidatePagination(response);
@@ -801,10 +802,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
   const queryLiveCandidates = () => {
     if (liveCandidatePage === 1) {
-      void loadLiveCandidatePage(liveCandidateQuery, 1);
+      void loadLiveCandidatePage(liveCandidateQuery, 1, liveCandidateType);
     } else {
       setLiveCandidatePage(1);
     }
+  };
+
+  const changeLiveCandidateType = (candidateType: string) => {
+    setLiveCandidateType(candidateType);
+    setLiveCandidatePage(1);
   };
 
   const loadLiveForEdit = async (liveId: number) => {
@@ -869,8 +875,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
   useEffect(() => {
     if (mode !== "live_create") return;
-    void loadLiveCandidatePage(liveCandidateQuery, liveCandidatePage);
-  }, [liveCandidatePage, mode]);
+    void loadLiveCandidatePage(liveCandidateQuery, liveCandidatePage, liveCandidateType);
+  }, [liveCandidatePage, liveCandidateType, mode]);
 
   const resetSongForm = () => {
     setSongName("");
@@ -1548,6 +1554,21 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         default_band_ids: response.item.default_band_ids ?? [],
         event_attendees: response.item.event_attendees ?? [],
       };
+      const savedPayload = normalizeLivePayload({
+        live_date: response.item.live_date,
+        live_title: response.item.live_title,
+        live_type: response.item.live_type,
+        url: response.item.url,
+        opening_time: getClockValue(response.item.opening_time),
+        start_time: getClockValue(response.item.start_time),
+        timezone: response.item.opening_time.match(/[+-]\d{2}:\d{2}$/)?.[0] ?? payload.timezone,
+        venue_id: response.item.venue_id,
+        default_band_ids: response.item.default_band_ids ?? [],
+        event_attendees: (response.item.event_attendees ?? []).map((attendee) => ({
+          band_id: attendee.band_id,
+          members: attendee.members,
+        })),
+      });
 
       setInsertedLives((prev) => [inserted, ...prev]);
       setLives((prev) =>
@@ -1579,10 +1600,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         startNewLive();
       } else {
         setEditingLiveId(inserted.live_id);
-        setOriginalLivePayload(normalizeLivePayload(payload));
-        applyLivePayloadToForm(normalizeLivePayload(payload));
+        setOriginalLivePayload(savedPayload);
+        applyLivePayloadToForm(savedPayload);
       }
-      await loadLiveCandidatePage(liveCandidateQuery, liveCandidatePage);
+      await loadLiveCandidatePage(liveCandidateQuery, liveCandidatePage, liveCandidateType);
       setMessage(`已${action === "create" ? "新增" : "更新"}Live #${inserted.live_id}（${inserted.live_title}）`);
     } catch (error) {
       setMessage(`${action === "create" ? "新增" : "更新"}Live失败：${errorMessage(error)}`);
@@ -2049,6 +2070,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           bandOptions={bands}
           venueQueryText={venueQueryText}
           liveCandidateQuery={liveCandidateQuery}
+          liveCandidateType={liveCandidateType}
           liveCandidates={liveCandidates}
           liveCandidatePage={liveCandidatePagination.page}
           liveCandidateTotal={liveCandidatePagination.total}
@@ -2082,6 +2104,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onCycleTimezoneMinute={cycleTimezoneMinute}
           onVenueQueryTextChange={setVenueQueryText}
           onLiveCandidateQueryChange={setLiveCandidateQuery}
+          onLiveCandidateTypeChange={changeLiveCandidateType}
           onQueryLiveCandidates={queryLiveCandidates}
           onLiveCandidatePageChange={setLiveCandidatePage}
           onSelectLiveForEdit={(liveId) => requestLiveTarget({ type: "edit", liveId })}

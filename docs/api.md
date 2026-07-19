@@ -68,7 +68,7 @@
 - `GET /api/console/venues`
   - `editor+` 查询控制台场地候选
 - `GET /api/console/lives`
-  - `editor+` 按标题或 ID 分页查询全部可编辑 Live
+  - `editor+` 按标题或 ID 分页查询全部可编辑 Live，并可用 `live_type` 精确筛选类型
 - `GET /api/console/lives/{live_id}`
   - `editor+` 获取 Live 基础资料、Venue、默认 Band 和计算后的活动出演成员
 - `POST /api/console/songs`
@@ -299,6 +299,7 @@
 - `GET /api/console/lives`
   - 候选包含有无 Setlist 的全部 Live，按 `live_date DESC, live_id DESC` 排序
   - `q` 同时支持标题模糊匹配和精确 Live ID
+  - `live_type` 可选值为 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`，与 `q` 按 AND 组合
 - `GET /api/console/lives/{live_id}`
   - 返回完整可编辑字段和 `timezone`；活动出演成员的 `mode` 仍为计算值
 - `PUT /api/console/lives/{live_id}`

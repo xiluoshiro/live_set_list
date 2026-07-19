@@ -12,6 +12,7 @@ function renderSection(
     eventAttendees?: Record<number, string[]>;
     onToggleEventAttendee?: ReturnType<typeof vi.fn>;
     editingLiveId?: number | null;
+    isLiveDirty?: boolean;
   } = {},
 ) {
   const onToggleEventAttendee = options.onToggleEventAttendee ?? vi.fn();
@@ -36,13 +37,14 @@ function renderSection(
       ]}
       venueQueryText=""
       liveCandidateQuery=""
+      liveCandidateType=""
       liveCandidates={[{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "Test Venue" }]}
       liveCandidatePage={1}
       liveCandidateTotal={1}
       liveCandidateTotalPages={1}
       liveCandidateLoading={false}
       editingLiveId={options.editingLiveId ?? null}
-      isLiveDirty={options.editingLiveId != null}
+      isLiveDirty={options.isLiveDirty ?? (options.editingLiveId != null)}
       venues={[{ venue_id: 1, venue_name: "Test Venue" }]}
       timezoneHourOptions={["+9"]}
       liveTypeOptions={[{ value: "other", label: "其他" }, { value: "event", label: "活动" }]}
@@ -66,6 +68,7 @@ function renderSection(
       onCycleTimezoneMinute={vi.fn()}
       onVenueQueryTextChange={vi.fn()}
       onLiveCandidateQueryChange={vi.fn()}
+      onLiveCandidateTypeChange={vi.fn()}
       onQueryLiveCandidates={vi.fn()}
       onLiveCandidatePageChange={vi.fn()}
       onSelectLiveForEdit={vi.fn()}
@@ -125,6 +128,15 @@ describe("LiveAdminSection", () => {
     expect(screen.getByRole("combobox", { name: "选择要编辑的 Live" })).toHaveValue("55");
     expect(screen.getByRole("button", { name: "恢复原值" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存修改" })).toBeInTheDocument();
-    expect(screen.getByText(/正在编辑 Live #55/)).toHaveTextContent("有未保存修改");
+    expect(screen.getByText("Live #55 有未保存修改")).toBeInTheDocument();
+  });
+
+  // 测试点：Live 类型筛选应与高亮的新建入口同时呈现，已保存的干净编辑态不重复显示状态提示。
+  test("shows the type filter and highlighted create action without a clean edit hint", () => {
+    renderSection(vi.fn(), { editingLiveId: 55, isLiveDirty: false });
+
+    expect(screen.getByRole("combobox", { name: "按 Live 类型筛选" })).toHaveValue("");
+    expect(screen.getByRole("button", { name: "新建 Live" })).toHaveClass("console-submit-btn", "console-new-btn");
+    expect(screen.queryByText(/Live #55 有未保存修改/)).not.toBeInTheDocument();
   });
 });

@@ -84,7 +84,7 @@ describe("PerformanceGroupAdminSection", () => {
     getConsolePerformanceGroupLiveCandidatesMock.mockResolvedValue(makeCandidateResponse());
   });
 
-  // 测试点：加载已有活动组到下拉菜单
+  // 测试点：加载已有活动组到下拉菜单，并保持统一高亮的新建入口。
   test("loads existing groups into dropdown", async () => {
     getConsolePerformanceGroupsMock.mockResolvedValue({
       items: [
@@ -94,6 +94,8 @@ describe("PerformanceGroupAdminSection", () => {
     });
 
     render(<PerformanceGroupAdminSection csrfToken="csrf-token" />);
+
+    expect(screen.getByRole("button", { name: "新建活动组" })).toHaveClass("console-submit-btn", "console-new-btn");
 
     await waitFor(() => {
       const select = screen.getByLabelText("已有活动组");

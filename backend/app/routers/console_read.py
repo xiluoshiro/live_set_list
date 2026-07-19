@@ -1,6 +1,6 @@
 import re
 from math import ceil
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from psycopg2 import Error, OperationalError
@@ -107,7 +107,7 @@ def _normalize_console_event_attendees(raw: Any) -> list[dict[str, Any]]:
     "/lives",
     response_model=ConsoleLiveCandidatesResponse,
     summary="查询可编辑 Live",
-    description="`editor+` 用户按 Live 标题或 ID 分页查询全部可编辑 Live。",
+    description="`editor+` 用户按 Live 标题或 ID 分页查询全部可编辑 Live，并可按类型筛选。",
     responses={
         401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
         403: {"model": AuthErrorResponse, "description": "缺少权限"},
@@ -118,6 +118,10 @@ def _normalize_console_event_attendees(raw: Any) -> list[dict[str, Any]]:
 )
 def list_editable_lives(
     q: str | None = Query(default=None, max_length=255, description="Live title keyword or exact ID"),
+    live_type: Literal["oneman", "taiban", "multi_act", "festival", "event", "other"] | None = Query(
+        default=None,
+        description="Optional exact Live type filter",
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     _: Any = Depends(require_role("editor")),
@@ -129,6 +133,9 @@ def list_editable_lives(
     if query_text:
         conditions.append("(l.live_title ILIKE %s ESCAPE '\\' OR CAST(l.id AS text) = %s)")
         params.extend((_build_lookup_pattern(query_text), query_text))
+    if live_type is not None:
+        conditions.append("l.live_type = %s")
+        params.append(live_type)
     where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     try:
         with get_db_connection() as conn:

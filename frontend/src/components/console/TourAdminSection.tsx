@@ -290,7 +290,7 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
           <option value="">选择要编辑的巡演</option>
           {tours.map((tour) => <option key={tour.tour_id} value={tour.tour_id}>#{tour.tour_id} {tour.tour_title}</option>)}
         </select>
-        <button type="button" className="console-ghost-btn" onClick={() => { resetForm(); void queryCandidates(""); }}>新建巡演</button>
+        <button type="button" className="console-submit-btn console-new-btn" onClick={() => { resetForm(); void queryCandidates(""); }}>新建巡演</button>
       </div>
 
       <div className="tour-admin-fields">
