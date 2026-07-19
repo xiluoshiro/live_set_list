@@ -18,7 +18,12 @@ from app.schemas.console import (
     ConsoleSongListResponse,
     ConsoleVenueListResponse,
 )
-from app.song_lookup import SONG_LOOKUP_SQL_FROM_CHARS, SONG_LOOKUP_SQL_TO_CHARS, normalize_song_lookup_text
+from app.song_lookup import (
+    SONG_LOOKUP_SQL_FROM_CHARS,
+    SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS,
+    SONG_LOOKUP_SQL_TO_CHARS,
+    normalize_song_lookup_text,
+)
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -297,7 +302,27 @@ def list_songs(
                                 s.band_id,
                                 s.is_cover,
                                 b.band_name,
-                                translate(s.song_name, %s, %s) AS normalized_song_name
+                                regexp_replace(
+                                    regexp_replace(
+                                        regexp_replace(
+                                            regexp_replace(
+                                                translate(s.song_name, %s, %s),
+                                                %s,
+                                                '\\1',
+                                                'g'
+                                            ),
+                                            %s,
+                                            '\\1',
+                                            'g'
+                                        ),
+                                        %s,
+                                        '\\1\\2',
+                                        'g'
+                                    ),
+                                    %s,
+                                    '\\1\\2',
+                                    'g'
+                                ) AS normalized_song_name
                             FROM song_list AS s
                             JOIN band_attrs AS b ON b.id = s.band_id
                         )
@@ -318,6 +343,10 @@ def list_songs(
                         (
                             SONG_LOOKUP_SQL_FROM_CHARS,
                             SONG_LOOKUP_SQL_TO_CHARS,
+                            SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[0],
+                            SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[1],
+                            SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[2],
+                            SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[3],
                             _build_lookup_pattern(query_text),
                             _build_lookup_pattern(normalized_query_text),
                             _build_exact_lookup_pattern(query_text),

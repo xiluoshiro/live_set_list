@@ -269,7 +269,7 @@
 - `q` 会 trim；空字符串等同于默认候选列表
 - `limit` 范围是 `1..100`，默认 `20`
 - 文本查询使用 `ILIKE`，并转义 `%`、`_`、`\`
-- 歌曲查询会额外按 `config/song_lookup_punctuation_groups.json` 对常见等价标点做查询归一化，并把名称精确匹配结果排在前面，再按 `song_name, id` 排序
+- 歌曲查询会额外按 `config/song_lookup_punctuation_groups.json` 对常见等价标点做查询归一化，并忽略这些标点前后的空白；含内部等价标点的拉丁词与相邻日文之间的空白也会忽略，普通词间空格仍参与匹配。名称精确匹配结果排在前面，再按 `song_name, id` 排序
 - 乐队查询匹配 `band_name` 或 `band_abbr`
 - 场地查询匹配 `venue`
 

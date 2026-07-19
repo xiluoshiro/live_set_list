@@ -5,13 +5,100 @@ import type { DerivedSegment, OtherMemberDraft, SetlistDraftRow } from "./types"
 const songLookupPunctuationTranslation = new Map<string, string>(
   songLookupPunctuationConfig.groups.flatMap((group) => group.map((value) => [value, group[0]] as [string, string])),
 );
+const songLookupCanonicalPunctuation = new Set(songLookupPunctuationConfig.groups.map((group) => group[0]));
+
+function removeWhitespaceAdjacentToLookupPunctuation(value: string): string {
+  const characters = Array.from(value);
+  const result: string[] = [];
+
+  for (let index = 0; index < characters.length;) {
+    if (!/\s/u.test(characters[index])) {
+      result.push(characters[index]);
+      index += 1;
+      continue;
+    }
+
+    let whitespaceEnd = index + 1;
+    while (whitespaceEnd < characters.length && /\s/u.test(characters[whitespaceEnd])) {
+      whitespaceEnd += 1;
+    }
+    const previousCharacter = result[result.length - 1];
+    const nextCharacter = characters[whitespaceEnd];
+    if (
+      !songLookupCanonicalPunctuation.has(previousCharacter)
+      && !songLookupCanonicalPunctuation.has(nextCharacter)
+    ) {
+      result.push(...characters.slice(index, whitespaceEnd));
+    }
+    index = whitespaceEnd;
+  }
+
+  return result.join("");
+}
+
+function isAsciiAlphaNumeric(value: string | undefined): boolean {
+  return value !== undefined && /^[A-Za-z0-9]$/u.test(value);
+}
+
+function isNonAscii(value: string | undefined): boolean {
+  return value !== undefined && value.codePointAt(0)! > 0x7f;
+}
+
+function isPunctuatedAsciiToken(value: string): boolean {
+  const characters = Array.from(value);
+  return characters.some((character, index) => (
+    songLookupCanonicalPunctuation.has(character)
+    && isAsciiAlphaNumeric(characters[index - 1])
+    && isAsciiAlphaNumeric(characters[index + 1])
+  ));
+}
+
+function removeWhitespaceBetweenPunctuatedAsciiTokenAndNonAscii(value: string): string {
+  const characters = Array.from(value);
+  const result: string[] = [];
+
+  for (let index = 0; index < characters.length;) {
+    if (!/\s/u.test(characters[index])) {
+      result.push(characters[index]);
+      index += 1;
+      continue;
+    }
+
+    let whitespaceEnd = index + 1;
+    while (whitespaceEnd < characters.length && /\s/u.test(characters[whitespaceEnd])) {
+      whitespaceEnd += 1;
+    }
+    let previousTokenStart = result.length;
+    while (previousTokenStart > 0 && !/\s/u.test(result[previousTokenStart - 1])) {
+      previousTokenStart -= 1;
+    }
+    let nextTokenEnd = whitespaceEnd;
+    while (nextTokenEnd < characters.length && !/\s/u.test(characters[nextTokenEnd])) {
+      nextTokenEnd += 1;
+    }
+    const previousToken = result.slice(previousTokenStart).join("");
+    const nextToken = characters.slice(whitespaceEnd, nextTokenEnd).join("");
+    const joinsPreviousTokenToNonAscii = isPunctuatedAsciiToken(previousToken)
+      && isNonAscii(characters[whitespaceEnd]);
+    const joinsNonAsciiToNextToken = isNonAscii(result[result.length - 1])
+      && isPunctuatedAsciiToken(nextToken);
+    if (!joinsPreviousTokenToNonAscii && !joinsNonAsciiToNextToken) {
+      result.push(...characters.slice(index, whitespaceEnd));
+    }
+    index = whitespaceEnd;
+  }
+
+  return result.join("");
+}
 
 export function normalizeSongLookupText(value: string): string {
-  return value
+  const punctuationNormalized = value
     .normalize("NFKC")
     .split("")
     .map((char) => songLookupPunctuationTranslation.get(char) ?? char)
-    .join("")
+    .join("");
+  const punctuationWhitespaceNormalized = removeWhitespaceAdjacentToLookupPunctuation(punctuationNormalized);
+  return removeWhitespaceBetweenPunctuatedAsciiTokenAndNonAscii(punctuationWhitespaceNormalized)
     .trim()
     .toLowerCase();
 }
