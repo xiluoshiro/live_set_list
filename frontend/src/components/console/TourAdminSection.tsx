@@ -26,6 +26,7 @@ type DraftStop = {
 
 type TourAdminSectionProps = {
   bands: BandOption[];
+  onMessage: (message: string) => void;
   onTourDataChanged?: () => void;
 };
 
@@ -50,7 +51,7 @@ function candidateToDraft(candidate: ConsoleTourLiveCandidate): DraftStop {
   };
 }
 
-export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionProps) {
+export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAdminSectionProps) {
   const auth = useAuth();
   const sortedBands = useMemo(
     () => bands.filter((band) => band.band_id > 0).sort((left, right) => left.band_id - right.band_id),
@@ -74,7 +75,6 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
   const [candidateLoading, setCandidateLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [message, setMessage] = useState("");
   const [insertedTours, setInsertedTours] = useState<ConsoleTourMutationResponse["item"][]>([]);
 
   const resetForm = () => {
@@ -89,7 +89,6 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
     setCandidatePage(1);
     setCandidateTotalPages(1);
     setCandidates([]);
-    setMessage("");
   };
 
   const loadTourList = async () => {
@@ -98,7 +97,7 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
   };
 
   useEffect(() => {
-    void loadTourList().catch((error) => setMessage(`加载巡演列表失败：${errorMessage(error)}`));
+    void loadTourList().catch((error) => onMessage(`加载巡演列表失败：${errorMessage(error)}`));
   }, []);
 
   useEffect(() => {
@@ -112,7 +111,7 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
         setCandidateTotalPages(response.total_pages);
       })
       .catch((error) => {
-        if (!canceled) setMessage(`加载 Live 候选失败：${errorMessage(error)}`);
+        if (!canceled) onMessage(`加载 Live 候选失败：${errorMessage(error)}`);
       })
       .finally(() => {
         if (!canceled) setCandidateLoading(false);
@@ -157,7 +156,6 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
 
   const loadSelectedTour = async (tourId: number) => {
     setLoading(true);
-    setMessage("");
     try {
       const detail = await getConsoleTour(tourId);
       setSelectedTourId(tourId);
@@ -173,7 +171,7 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
         band_ids: stop.band_ids,
       }))));
     } catch (error) {
-      setMessage(`加载巡演详情失败：${errorMessage(error)}`);
+      onMessage(`加载巡演详情失败：${errorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -187,7 +185,7 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
       setCandidates(response.items);
       setCandidateTotalPages(response.total_pages);
     } catch (error) {
-      setMessage(`查询 Live 候选失败：${errorMessage(error)}`);
+      onMessage(`查询 Live 候选失败：${errorMessage(error)}`);
     } finally {
       setCandidateLoading(false);
     }
@@ -200,20 +198,19 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
 
   const addAllFilteredCandidates = async () => {
     setCandidateLoading(true);
-    setMessage("");
     try {
       const response = await getConsoleTourLiveCandidates(candidateQuery, 1, 500);
       if (response.total > 500) {
-        setMessage("筛选结果超过 500 场，请缩小查询范围后再一键添加。");
+        onMessage("筛选结果超过 500 场，请缩小查询范围后再一键添加。");
         return;
       }
       const existingIds = new Set(stops.map((stop) => stop.live_id));
       const eligible = response.items.filter((candidate) => !existingIds.has(candidate.live_id));
       const skippedCount = response.items.length - eligible.length;
       setStops((current) => sortStops([...current, ...eligible.map(candidateToDraft)]));
-      setMessage(`已添加 ${eligible.length} 场${skippedCount > 0 ? `，跳过 ${skippedCount} 场已选 Live` : ""}。`);
+      onMessage(`已添加 ${eligible.length} 场${skippedCount > 0 ? `，跳过 ${skippedCount} 场已选 Live` : ""}。`);
     } catch (error) {
-      setMessage(`一键添加失败：${errorMessage(error)}`);
+      onMessage(`一键添加失败：${errorMessage(error)}`);
     } finally {
       setCandidateLoading(false);
     }
@@ -251,7 +248,6 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
   const submit = async () => {
     if (!auth.csrfToken || !canSubmit) return;
     setSubmitting(true);
-    setMessage("");
     try {
       const wasNew = isNew;
       const response = wasNew
@@ -263,11 +259,11 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
       }
       resetForm();
       await Promise.all([loadTourList(), queryCandidates("")]);
-      setMessage(`${wasNew ? "创建" : "更新"}巡演成功：#${response.item.tour_id} ${response.item.tour_title}`);
+      onMessage(`${wasNew ? "创建" : "更新"}巡演成功：#${response.item.tour_id} ${response.item.tour_title}`);
       onTourDataChanged?.();
     } catch (error) {
       setConfirming(false);
-      setMessage(`保存巡演失败：${errorMessage(error)}`);
+      onMessage(`保存巡演失败：${errorMessage(error)}`);
     } finally {
       setSubmitting(false);
     }
@@ -275,7 +271,6 @@ export function TourAdminSection({ bands, onTourDataChanged }: TourAdminSectionP
 
   return (
     <section className="tour-admin-section" aria-label="巡演管理">
-      {message && <p className="console-admin-hint" role="status">{message}</p>}
       <div className="tour-admin-toolbar">
         <label htmlFor="tour-admin-select">已有巡演</label>
         <select

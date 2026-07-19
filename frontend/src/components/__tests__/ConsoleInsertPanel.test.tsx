@@ -560,7 +560,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText("新增Live失败：live_date 与 live_title 为必填项。")).not.toBeInTheDocument();
   });
 
-  // 测试点：默认开启清空选项时，新增 Live 成功后应重置表单、Venue 查询和 Venue 选择。
+  // 测试点：新增 Live 成功后应重置表单，并让共享日志在切换标签页后继续显示最新结果。
   test("新增Live会调用真实写入接口并使用后端返回的live_id", async () => {
     const user = userEvent.setup();
     const onLiveDataChanged = vi.fn();
@@ -628,6 +628,7 @@ describe("ConsoleInsertPanel", () => {
     expect(onLiveDataChanged).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
+    expect(screen.getByRole("status")).toHaveTextContent("已新增Live #39（Inserted Live）");
     expect(screen.getByText("第 1 / 1 页，共 2 条")).toBeInTheDocument();
   });
 
@@ -1160,8 +1161,8 @@ describe("ConsoleInsertPanel", () => {
     expect(inputs[0]).toHaveValue("");
   });
 
+  // 测试点：批量新增歌曲只提交 sid 为空的行，并将完整结果覆盖写入唯一的共享日志。
   test("批量插入弹出确认窗口，已有 sid 的行被忽略，仅创建 sid 为空的行", async () => {
-    // 测试点：批量新增歌曲确认窗口只保留后端会接收的歌曲字段，并允许在确认前勾选 cover。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [
@@ -1216,13 +1217,15 @@ describe("ConsoleInsertPanel", () => {
       "csrf-token",
     ));
     expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledTimes(1);
-    const logPanel = await screen.findByRole("log", { name: "控制台日志" });
-    expect(within(logPanel).getByText(/批量新增完成：请求 1 首，成功 1 首/)).toBeInTheDocument();
-    expect(within(logPanel).getByText(/#902 Requiem for Fate/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("批量新增完成：请求 1 首，成功 1 首");
+      expect(screen.getByRole("status")).toHaveTextContent("#902 Requiem for Fate");
+    });
+    expect(screen.queryByRole("log", { name: "控制台日志" })).not.toBeInTheDocument();
   });
 
-  test("批量插入失败时会在控制台日志保留后端错误原因", async () => {
-    // 测试点：批量新增歌曲写接口失败时，应把后端状态码、错误码和 message 记录到日志区。
+  // 测试点：批量新增歌曲失败时，共享日志应覆盖旧值并完整显示后端错误原因。
+  test("批量插入失败时会在共享日志显示后端错误原因", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
@@ -1252,8 +1255,8 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await screen.findByText("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
-    const logPanel = screen.getByRole("log", { name: "控制台日志" });
-    expect(within(logPanel).getByText(/批量插入失败：HTTP 403 \/ AUTH_CSRF_INVALID \/ CSRF Token 校验失败/)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
+    expect(screen.queryByRole("log", { name: "控制台日志" })).not.toBeInTheDocument();
     expect(apiMocks.getConsoleSongs).toHaveBeenCalledTimes(2);
   });
 
@@ -1671,7 +1674,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(screen.getByRole("table", { name: "新增巡演记录" })).getByText("暂无新增巡演记录")).toBeInTheDocument();
   });
 
-  // 测试点：一键添加接收后端已排除占用场次的结果，并按日期自动排列全部候选。
+  // 测试点：巡演结果写入共享日志，切换到新增 Live 后的新结果会覆盖上一条。
   test("巡演管理一键添加全部筛选结果", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleTourLiveCandidates.mockImplementation((_query, _page, pageSize) => Promise.resolve({
@@ -1697,5 +1700,10 @@ describe("ConsoleInsertPanel", () => {
       expect.stringContaining("#42 Later"),
     ]);
     expect(screen.getByRole("status")).toHaveTextContent("已添加 2 场");
+
+    await user.click(screen.getByRole("tab", { name: "新增Live" }));
+    await user.click(screen.getByRole("button", { name: "清空数据" }));
+    expect(screen.getByRole("status")).toHaveTextContent("已清空新增Live表格。");
+    expect(screen.queryByText(/已添加 2 场。/)).not.toBeInTheDocument();
   });
 });

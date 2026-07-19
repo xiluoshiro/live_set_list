@@ -82,12 +82,6 @@ type ConsoleInsertPanelProps = {
   initialMode?: ConsoleMode;
 };
 
-type ConsoleLogEntry = {
-  id: number;
-  level: "info" | "error";
-  message: string;
-};
-
 type SetlistConfirmRow = ConsoleLiveSetlistRowPayload & {
   song_name: string;
 };
@@ -213,10 +207,6 @@ function backendFailureDetail(error: unknown): string {
   return [statusText, codeText, message].filter(Boolean).join(" / ");
 }
 
-function formatConsoleLogTime(): string {
-  return new Date().toLocaleTimeString("zh-CN", { hour12: false });
-}
-
 function formatTimedLabel(value: string | null | undefined): string {
   const raw = value?.trim();
   if (!raw) return "-";
@@ -298,7 +288,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [submittedBundles, setSubmittedBundles] = useState<LiveInsertBundle[]>([]);
   const [displayedBundle, setDisplayedBundle] = useState<LiveInsertBundle | null>(null);
   const [message, setMessage] = useState<string>("");
-  const [consoleLogs, setConsoleLogs] = useState<ConsoleLogEntry[]>([]);
   const [transientNotice, setTransientNotice] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [confirmationSubmitting, setConfirmationSubmitting] = useState(false);
@@ -376,7 +365,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const bandMemberMenuRef = useRef<HTMLDivElement | null>(null);
   const otherMemberTriggerRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const otherMemberMenuRef = useRef<HTMLDivElement | null>(null);
-  const consoleLogIdRef = useRef(0);
   const didInitialVenueFocusRef = useRef(false);
 
   const timezoneHour = getTimezoneHourValue(timezone);
@@ -431,19 +419,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     didInitialVenueFocusRef.current = true;
     venueQueryInputRef.current?.focus();
   }, [mode]);
-
-  const appendConsoleLog = (level: ConsoleLogEntry["level"], messageText: string) => {
-    const id = consoleLogIdRef.current + 1;
-    consoleLogIdRef.current = id;
-    setConsoleLogs((prev) => [
-      {
-        id,
-        level,
-        message: `${formatConsoleLogTime()} ${messageText}`,
-      },
-      ...prev,
-    ].slice(0, 20));
-  };
 
   const nextSongId = useMemo(
     () => songs.reduce((maxId, row) => Math.max(maxId, row.song_id), 200) + 1,
@@ -881,12 +856,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setEditingLiveId(null);
       setOriginalLivePayload(null);
       resetLiveForm();
-      setMessage("");
     } else if (nextMode === "live_edit" && mode !== "live_edit") {
       setEditingLiveId(null);
       setOriginalLivePayload(null);
       resetLiveForm();
-      setMessage("");
     }
     setMode(nextMode);
   };
@@ -1695,7 +1668,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const requestBatchSongInsert = () => {
     if (!auth.isAuthenticated || !auth.csrfToken) {
       setMessage("批量插入失败：登录态已失效，请重新登录。");
-      appendConsoleLog("error", "批量插入失败：登录态已失效，请重新登录。");
       return;
     }
 
@@ -1767,13 +1739,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       });
       const skipped = rows.length - response.created.length;
       const summary = `批量新增完成：请求 ${rows.length} 首，成功 ${response.created.length} 首${skipped > 0 ? `，后端跳过 ${skipped} 首` : ""}。`;
-      setMessage(summary);
-      appendConsoleLog("info", `${summary} ${response.created.map((item) => `#${item.song_id} ${item.song_name}`).join("；") || "后端未返回新增歌曲。"}`);
       await querySongsForSetlist();
+      setMessage(`${summary} ${response.created.map((item) => `#${item.song_id} ${item.song_name}`).join("；") || "后端未返回新增歌曲。"}`);
     } catch (error) {
       const detail = backendFailureDetail(error);
       setMessage(`批量新增失败：${detail}`);
-      appendConsoleLog("error", `批量插入失败：${detail}`);
     }
   };
 
@@ -1819,7 +1789,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           setEditingLiveId(null);
           setOriginalLivePayload(null);
           resetLiveForm();
-          setMessage("");
           setMode(pendingConfirmation.target.mode);
         }
       } else if (pendingConfirmation.kind === "song") {
@@ -2057,16 +2026,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       )}
       <section className="console-admin">
       <PageTitle kicker="Console" title="控制台" description="录入和维护 Live、Setlist、歌曲、场地与巡演资料。" />
-      {message && <p className="console-admin-hint">{message}</p>}
-      {consoleLogs.length > 0 && (
-        <div className="console-log-panel" role="log" aria-label="控制台日志" aria-live="polite">
-          {consoleLogs.map((entry) => (
-            <p key={entry.id} className={`console-log-entry ${entry.level}`}>
-              {entry.message}
-            </p>
-          ))}
-        </div>
-      )}
+      {message && <p className="console-admin-hint" role="status" aria-live="polite">{message}</p>}
 
       <SectionTabs
         label="控制台录入类型"
@@ -2230,11 +2190,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       )}
 
       {mode === "tour" && (
-        <TourAdminSection bands={bands} onTourDataChanged={onLiveDataChanged} />
+        <TourAdminSection bands={bands} onMessage={setMessage} onTourDataChanged={onLiveDataChanged} />
       )}
 
       {mode === "performance_group" && (
-        <PerformanceGroupAdminSection csrfToken={auth.csrfToken ?? ""} onGroupDataChanged={onLiveDataChanged} />
+        <PerformanceGroupAdminSection
+          csrfToken={auth.csrfToken ?? ""}
+          onMessage={setMessage}
+          onGroupDataChanged={onLiveDataChanged}
+        />
       )}
 
       {pendingConfirmation && (
