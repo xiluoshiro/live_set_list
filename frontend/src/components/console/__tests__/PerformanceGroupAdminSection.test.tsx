@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -72,6 +73,20 @@ function makeMutationResponse() {
   };
 }
 
+function renderSection() {
+  function SharedMessageHarness() {
+    const [message, setMessage] = useState("");
+    return (
+      <>
+        {message && <p role="status">{message}</p>}
+        <PerformanceGroupAdminSection csrfToken="csrf-token" onMessage={setMessage} />
+      </>
+    );
+  }
+
+  return render(<SharedMessageHarness />);
+}
+
 describe("PerformanceGroupAdminSection", () => {
   beforeEach(() => {
     getConsolePerformanceGroupsMock.mockReset();
@@ -93,7 +108,7 @@ describe("PerformanceGroupAdminSection", () => {
       ],
     });
 
-    render(<PerformanceGroupAdminSection csrfToken="csrf-token" />);
+    renderSection();
 
     expect(screen.getByRole("button", { name: "新建活动组" })).toHaveClass("console-submit-btn", "console-new-btn");
 
@@ -111,7 +126,7 @@ describe("PerformanceGroupAdminSection", () => {
     getConsolePerformanceGroupMock.mockResolvedValue(makeConsoleGroupEditResponse());
 
     const user = userEvent.setup();
-    render(<PerformanceGroupAdminSection csrfToken="csrf-token" />);
+    renderSection();
 
     await waitFor(() => {
       expect(screen.getByRole("option", { name: "#1 Edit Target" })).toBeInTheDocument();
@@ -144,7 +159,7 @@ describe("PerformanceGroupAdminSection", () => {
     );
 
     const user = userEvent.setup();
-    render(<PerformanceGroupAdminSection csrfToken="csrf-token" />);
+    renderSection();
 
     const searchInput = screen.getByPlaceholderText("输入 Live ID 或标题");
     await user.type(searchInput, "Searched");
@@ -185,7 +200,7 @@ describe("PerformanceGroupAdminSection", () => {
       }));
 
     const user = userEvent.setup();
-    render(<PerformanceGroupAdminSection csrfToken="csrf-token" />);
+    renderSection();
 
     await waitFor(() => {
       expect(screen.getByText(/Tour Stop A/)).toBeInTheDocument();
@@ -215,7 +230,7 @@ describe("PerformanceGroupAdminSection", () => {
     );
 
     const user = userEvent.setup();
-    render(<PerformanceGroupAdminSection csrfToken="csrf-token" />);
+    renderSection();
 
     await waitFor(() => {
       expect(screen.getByText(/Single Live/)).toBeInTheDocument();
@@ -254,7 +269,7 @@ describe("PerformanceGroupAdminSection", () => {
       }));
 
     const user = userEvent.setup();
-    render(<PerformanceGroupAdminSection csrfToken="csrf-token" />);
+    renderSection();
 
     await waitFor(() => {
       expect(screen.getByText(/My Tour 2026 Tokyo/)).toBeInTheDocument();
@@ -315,7 +330,7 @@ describe("PerformanceGroupAdminSection", () => {
       .mockResolvedValueOnce({ items: [{ group_id: 5, group_title: "New Tour 2026" }] });
 
     const user = userEvent.setup();
-    render(<PerformanceGroupAdminSection csrfToken="csrf-token" />);
+    renderSection();
 
     await waitFor(() => {
       expect(screen.getByText(/New Tour 2026 晚场/)).toBeInTheDocument();
@@ -377,7 +392,7 @@ describe("PerformanceGroupAdminSection", () => {
     );
 
     const user = userEvent.setup();
-    render(<PerformanceGroupAdminSection csrfToken="csrf-token" />);
+    renderSection();
 
     await waitFor(() => {
       expect(screen.getByText(/Bad Tour Day1/)).toBeInTheDocument();
@@ -427,7 +442,7 @@ describe("PerformanceGroupAdminSection", () => {
     });
 
     const user = userEvent.setup();
-    render(<PerformanceGroupAdminSection csrfToken="csrf-token" />);
+    renderSection();
 
     await waitFor(() => {
       expect(screen.getByRole("option", { name: "#1 Update Target" })).toBeInTheDocument();

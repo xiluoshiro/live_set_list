@@ -27,6 +27,7 @@ type EditableGroup = {
 
 type PerformanceGroupAdminSectionProps = {
   csrfToken: string;
+  onMessage: (message: string) => void;
   onGroupDataChanged?: () => void;
 };
 
@@ -61,6 +62,7 @@ function candidateToDraft(
 
 export function PerformanceGroupAdminSection({
   csrfToken,
+  onMessage,
   onGroupDataChanged,
 }: PerformanceGroupAdminSectionProps) {
   const [groups, setGroups] = useState<EditableGroup[]>([]);
@@ -78,7 +80,6 @@ export function PerformanceGroupAdminSection({
   const [candidateLoading, setCandidateLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [message, setMessage] = useState("");
   const [insertedGroups, setInsertedGroups] = useState<
     ConsolePerformanceGroupMutationResponse["item"][]
   >([]);
@@ -92,7 +93,6 @@ export function PerformanceGroupAdminSection({
     setCandidatePage(1);
     setCandidateTotalPages(1);
     setCandidates([]);
-    setMessage("");
   };
 
   const loadGroupList = async () => {
@@ -100,7 +100,7 @@ export function PerformanceGroupAdminSection({
       const response = await getConsolePerformanceGroups();
       setGroups(response.items);
     } catch (error) {
-      setMessage(`加载活动组列表失败：${errorMessage(error)}`);
+      onMessage(`加载活动组列表失败：${errorMessage(error)}`);
     }
   };
 
@@ -119,7 +119,7 @@ export function PerformanceGroupAdminSection({
         setCandidateTotalPages(response.total_pages);
       })
       .catch((error) => {
-        if (!canceled) setMessage(`加载 Live 候选失败：${errorMessage(error)}`);
+        if (!canceled) onMessage(`加载 Live 候选失败：${errorMessage(error)}`);
       })
       .finally(() => {
         if (!canceled) setCandidateLoading(false);
@@ -131,7 +131,6 @@ export function PerformanceGroupAdminSection({
 
   const loadSelectedGroup = async (groupId: number) => {
     setLoading(true);
-    setMessage("");
     try {
       const detail = await getConsolePerformanceGroup(groupId);
       setSelectedGroupId(groupId);
@@ -149,7 +148,7 @@ export function PerformanceGroupAdminSection({
         ),
       );
     } catch (error) {
-      setMessage(`加载活动组详情失败：${errorMessage(error)}`);
+      onMessage(`加载活动组详情失败：${errorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -167,7 +166,7 @@ export function PerformanceGroupAdminSection({
       setCandidates(response.items);
       setCandidateTotalPages(response.total_pages);
     } catch (error) {
-      setMessage(`查询 Live 候选失败：${errorMessage(error)}`);
+      onMessage(`查询 Live 候选失败：${errorMessage(error)}`);
     } finally {
       setCandidateLoading(false);
     }
@@ -180,7 +179,6 @@ export function PerformanceGroupAdminSection({
 
   const addAllFilteredCandidates = async () => {
     setCandidateLoading(true);
-    setMessage("");
     try {
       const response = await getConsolePerformanceGroupLiveCandidates(
         candidateQuery,
@@ -188,7 +186,7 @@ export function PerformanceGroupAdminSection({
         500,
       );
       if (response.total > 500) {
-        setMessage("筛选结果超过 500 场，请缩小查询范围后再一键添加。");
+        onMessage("筛选结果超过 500 场，请缩小查询范围后再一键添加。");
         return;
       }
       const existingIds = new Set(stops.map((stop) => stop.live_id));
@@ -199,11 +197,11 @@ export function PerformanceGroupAdminSection({
       setStops((current) =>
         sortStops([...current, ...eligible.map(candidateToDraft)]),
       );
-      setMessage(
+      onMessage(
         `已添加 ${eligible.length} 场${skippedCount > 0 ? `，跳过 ${skippedCount} 场已选 Live` : ""}。`,
       );
     } catch (error) {
-      setMessage(`一键添加失败：${errorMessage(error)}`);
+      onMessage(`一键添加失败：${errorMessage(error)}`);
     } finally {
       setCandidateLoading(false);
     }
@@ -225,7 +223,6 @@ export function PerformanceGroupAdminSection({
   const submit = async () => {
     if (!csrfToken || !canSubmit) return;
     setSubmitting(true);
-    setMessage("");
     try {
       const wasNew = isNew;
       const response = wasNew
@@ -241,13 +238,13 @@ export function PerformanceGroupAdminSection({
       }
       resetForm();
       await Promise.all([loadGroupList(), queryCandidates("")]);
-      setMessage(
+      onMessage(
         `${wasNew ? "创建" : "更新"}活动组成功：#${response.item.group_id} ${response.item.group_title}`,
       );
       onGroupDataChanged?.();
     } catch (error) {
       setConfirming(false);
-      setMessage(`保存活动组失败：${errorMessage(error)}`);
+      onMessage(`保存活动组失败：${errorMessage(error)}`);
     } finally {
       setSubmitting(false);
     }
@@ -255,11 +252,6 @@ export function PerformanceGroupAdminSection({
 
   return (
     <section className="tour-admin-section" aria-label="活动组管理">
-      {message && (
-        <p className="console-admin-hint" role="status">
-          {message}
-        </p>
-      )}
       <div className="tour-admin-toolbar">
         <label htmlFor="pg-admin-select">已有活动组</label>
         <select
