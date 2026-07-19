@@ -227,7 +227,7 @@ describe("ConsoleInsertPanel", () => {
   });
 
   test("提交新增Setlist会调用真实追加接口并出现插入记录", async () => {
-    // 测试点：新增 Setlist 成功后传递正确数据、更新预览，并从无 setlist 候选中移除该 Live。
+    // 测试点：新增 Setlist 成功后更新统一成功态回显，并从无 setlist 候选中移除该 Live。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
@@ -282,6 +282,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("columnheader", { name: "setlist_rows" })).toBeInTheDocument();
     const resultTable = document.querySelector(".setlist-preview-wrap table") as HTMLElement;
     expect(resultTable).not.toBeNull();
+    expect(resultTable).toHaveClass("live-history-table");
     expect(within(resultTable).getByRole("columnheader", { name: "sid" })).toBeInTheDocument();
     expect(within(resultTable).getByRole("columnheader", { name: "abs" })).toBeInTheDocument();
     expect(within(resultTable).getByRole("columnheader", { name: "seg" })).toBeInTheDocument();

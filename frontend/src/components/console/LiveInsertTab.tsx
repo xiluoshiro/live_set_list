@@ -535,7 +535,7 @@ export function LiveInsertTab({
 
       {displayedBundle && (
         <div className="console-table-wrap setlist-preview-wrap">
-          <table className="console-admin-table setlist-result-table">
+          <table className="console-admin-table setlist-result-table live-history-table">
             <thead>
               <tr>
                 <th>sid</th>
