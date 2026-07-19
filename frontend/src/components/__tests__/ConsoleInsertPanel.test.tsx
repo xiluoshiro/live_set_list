@@ -270,8 +270,8 @@ describe("ConsoleInsertPanel", () => {
     expect(liveOptions[1]).toHaveClass("live-id-option-muted");
   });
 
+  // 测试点：Setlist 确认框单独展示 Live 字段，提交成功后从无 setlist 候选中移除该 Live。
   test("提交新增Setlist会调用真实追加接口并出现插入记录", async () => {
-    // 测试点：新增 Setlist 成功后更新统一成功态回显，并从无 setlist 候选中移除该 Live。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
@@ -296,8 +296,10 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
     expect(apiMocks.appendConsoleLiveSetlist).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: /确认提交 Setlist/ })).toBeInTheDocument();
-    expect(screen.getByText("BLACK SHOUT")).toBeInTheDocument();
+    const confirmDialog = screen.getByRole("dialog", { name: "确认提交 Setlist" });
+    expect(within(confirmDialog).getByRole("row", { name: "live_id 101" })).toBeInTheDocument();
+    expect(within(confirmDialog).getByRole("row", { name: "live_title 春日联合公演" })).toBeInTheDocument();
+    expect(within(confirmDialog).getByText("BLACK SHOUT")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.appendConsoleLiveSetlist).toHaveBeenCalledWith(
@@ -730,6 +732,30 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByPlaceholderText("请输入Live标题")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByRole("combobox", { name: "按 Live 类型筛选" }), "event");
     await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledWith("", 1, 20, "event"));
+  });
+
+  // 测试点：Live 管理显式查询命中后会选中首个真实候选并加载编辑表单。
+  test("Live管理查询命中后自动选中首个Live", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleLiveCandidates
+      .mockResolvedValueOnce({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 })
+      .mockResolvedValueOnce({
+        items: [{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "New Venue" }],
+        page: 1,
+        page_size: 20,
+        total: 1,
+        total_pages: 1,
+      });
+
+    render(<ConsoleInsertPanel initialMode="live_edit" />);
+    await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledTimes(1));
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "Event Live");
+    await user.click(screen.getByRole("button", { name: "查询" }));
+
+    const selector = screen.getByRole("combobox", { name: "选择要编辑的 Live" });
+    await waitFor(() => expect(selector).toHaveValue("55"));
+    expect(apiMocks.getConsoleLive).toHaveBeenCalledWith(55);
+    expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live");
   });
 
   // 测试点：活动 Live 应把默认 Band 下勾选的完整成员名单提交给后端，不在前端写入 mode。
