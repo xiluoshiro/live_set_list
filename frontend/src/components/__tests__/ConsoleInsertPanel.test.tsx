@@ -389,6 +389,28 @@ describe("ConsoleInsertPanel", () => {
     expect(await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。")).toBeInTheDocument();
   });
 
+  test("查询歌曲忽略等价标点相邻空白并回填sid", async () => {
+    // 测试点：setlist 歌名只缺少等价标点旁的空白时，仍应采用候选的规范歌名和 sid。
+    const user = userEvent.setup();
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({
+        items: [{ song_id: 908, song_name: "LET’S あちあちトレーニング！", band_id: 9, cover: false }],
+      });
+
+    render(<ConsoleInsertPanel />);
+
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await user.type(screen.getByPlaceholderText("请输入歌曲名"), "LET'Sあちあちトレーニング！");
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+
+    await waitFor(() => {
+      expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("LET'Sあちあちトレーニング！", 10);
+    });
+    expect(await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。")).toBeInTheDocument();
+    expect(screen.getByText("908")).toBeInTheDocument();
+  });
+
   test("查询歌曲唯一模糊候选时自动回填sid", async () => {
     // 测试点：后端只返回一个包含匹配候选时，setlist 查询应自动采用该候选 sid。
     const user = userEvent.setup();
