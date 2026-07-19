@@ -330,6 +330,13 @@ export function PerformanceGroupAdminSection({
         </div>
         <div className="console-table-wrap">
           <table className="console-admin-table tour-candidate-table">
+            <colgroup>
+              <col className="tour-candidate-col-date" />
+              <col className="tour-candidate-col-time" />
+              <col className="tour-candidate-col-live" />
+              <col className="tour-candidate-col-venue" />
+              <col className="tour-candidate-col-action" />
+            </colgroup>
             <thead>
               <tr>
                 <th>日期</th>
