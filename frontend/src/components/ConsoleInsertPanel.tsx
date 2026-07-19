@@ -337,6 +337,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [liveCandidatePage, setLiveCandidatePage] = useState(1);
   const [liveCandidatePagination, setLiveCandidatePagination] = useState({ page: 1, page_size: 20, total: 0, total_pages: 1 });
   const [liveCandidateLoading, setLiveCandidateLoading] = useState(false);
+  const selectFirstLiveCandidateAfterQueryRef = useRef(false);
   const [editingLiveId, setEditingLiveId] = useState<number | null>(null);
   const [originalLivePayload, setOriginalLivePayload] = useState<ConsoleLiveUpsertPayload | null>(null);
   const [clearLiveAfterCreate, setClearLiveAfterCreate] = useState(true);
@@ -790,7 +791,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setLiveCandidates(response.items);
       setLiveCandidatePage(response.page);
       setLiveCandidatePagination(response);
+      if (selectFirstLiveCandidateAfterQueryRef.current) {
+        selectFirstLiveCandidateAfterQueryRef.current = false;
+        const firstCandidate = response.items[0];
+        if (firstCandidate && firstCandidate.live_id !== editingLiveId) {
+          requestLiveForEdit(firstCandidate.live_id);
+        }
+      }
     } catch (error) {
+      selectFirstLiveCandidateAfterQueryRef.current = false;
       setLiveCandidates([]);
       setMessage(`加载可编辑 Live 失败：${errorMessage(error)}`);
     } finally {
@@ -799,6 +808,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   };
 
   const queryLiveCandidates = () => {
+    selectFirstLiveCandidateAfterQueryRef.current = true;
     if (liveCandidatePage === 1) {
       void loadLiveCandidatePage(liveCandidateQuery, 1, liveCandidateType);
     } else {
@@ -1403,7 +1413,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
     setPendingConfirmation({
       kind: "setlist",
-      title: `确认提交 Setlist：#${targetLive.live_id} ${targetLive.live_title}`,
+      title: "确认提交 Setlist",
       live: targetLive,
       payload: { setlist_rows: setlistPayload },
       previewRows,
@@ -1956,20 +1966,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
     return (
       <>
-        <p className="detail-row">
-          <strong>{pendingConfirmation.live.live_title}</strong>
-          <span>#{pendingConfirmation.live.live_id}</span>
-        </p>
-        <div className="detail-meta-line">
-          <p className="detail-inline-item detail-inline-item-date">
-            <strong>日期：</strong>
-            <span>{pendingConfirmation.live.live_date}</span>
-          </p>
-          <p className="detail-inline-item">
-            <strong>待提交：</strong>
-            <span>{pendingConfirmation.previewRows.length} 行</span>
-          </p>
-        </div>
+        {renderCompactConfirmation([
+          ["live_id", pendingConfirmation.live.live_id],
+          ["live_title", pendingConfirmation.live.live_title],
+          ["live_date", pendingConfirmation.live.live_date],
+          ["setlist_rows", pendingConfirmation.previewRows.length],
+        ])}
         <div className="console-table-wrap console-confirm-setlist-wrap">
           <table className="console-admin-table console-confirm-setlist-table">
             <thead>
