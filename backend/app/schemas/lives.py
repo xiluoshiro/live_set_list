@@ -1,4 +1,5 @@
 ﻿from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -51,6 +52,13 @@ class LiveDetailOtherMember(BaseModel):
     value: list[str] = Field(..., description='Normalized other member values')
 
 
+class LiveDetailEventAttendee(BaseModel):
+    band_id: int = Field(..., description='band_attrs.id')
+    band_name: str = Field(..., description='Band display name')
+    mode: Literal['partial', 'full'] = Field(..., description='Computed attendance coverage')
+    members: list[str] = Field(..., description='Complete recorded attendee list')
+
+
 class LiveDetailRow(BaseModel):
     row_id: str = Field(..., description='segment_type + sub_order composite row ID')
     song_name: str = Field(..., description='Song title')
@@ -77,6 +85,10 @@ class LiveDetailResponse(BaseModel):
     tour: TourRef | None = Field(default=None, description='Tour reference when this live belongs to a tour')
     performance_group: PerformanceGroupRef | None = Field(
         default=None, description='Performance group reference when this live belongs to an activity group'
+    )
+    event_attendees: list[LiveDetailEventAttendee] = Field(
+        default_factory=list,
+        description='Event-only attendance grouped by Band; empty for non-event Lives',
     )
     detail_rows: list[LiveDetailRow] = Field(..., description='Detailed song rows for the live')
 

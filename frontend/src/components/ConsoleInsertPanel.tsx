@@ -13,6 +13,7 @@ import {
   getLiveDetail,
   getLives,
   type ConsoleBandItem,
+  type ConsoleEventAttendee,
   type ConsoleLiveCreatePayload,
   type ConsoleLiveSetlistAppendPayload,
   type ConsoleLiveSetlistRowPayload,
@@ -68,6 +69,7 @@ type LiveInsertDraft = {
   timezone: string;
   venue_id: number;
   default_band_ids: number[];
+  event_attendees: ConsoleEventAttendee[];
 };
 
 type ConsoleInsertPanelProps = {
@@ -279,6 +281,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [timezone, setTimezone] = useState(DEFAULT_LIVE_TIMEZONE);
   const [selectedVenueId, setSelectedVenueId] = useState<number>(0);
   const [defaultBandIds, setDefaultBandIds] = useState<number[]>([]);
+  const [eventAttendees, setEventAttendees] = useState<Record<number, string[]>>({});
   const [defaultBandOpen, setDefaultBandOpen] = useState(false);
   const [defaultBandMenuPos, setDefaultBandMenuPos] = useState<Position | null>(null);
   const [venueQueryText, setVenueQueryText] = useState("");
@@ -629,16 +632,40 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setStartTime(DEFAULT_LIVE_START_TIME);
     setTimezone(DEFAULT_LIVE_TIMEZONE);
     setDefaultBandIds([]);
+    setEventAttendees({});
     setDefaultBandOpen(false);
     setDefaultBandMenuPos(null);
   };
 
   const toggleDefaultBand = (bandId: number) => {
-    setDefaultBandIds((current) =>
-      current.includes(bandId)
-        ? current.filter((currentBandId) => currentBandId !== bandId)
-        : [...current, bandId].sort((left, right) => left - right),
-    );
+    setDefaultBandIds((current) => {
+      if (current.includes(bandId)) {
+        setEventAttendees((attendees) => {
+          const next = { ...attendees };
+          delete next[bandId];
+          return next;
+        });
+        return current.filter((currentBandId) => currentBandId !== bandId);
+      }
+      return [...current, bandId].sort((left, right) => left - right);
+    });
+  };
+
+  const toggleEventAttendee = (bandId: number, memberName: string) => {
+    setEventAttendees((current) => {
+      const selected = current[bandId] ?? [];
+      const bandMembers = bands.find((band) => band.band_id === bandId)?.band_members ?? [];
+      const nextSelected = selected.includes(memberName)
+        ? selected.filter((member) => member !== memberName)
+        : bandMembers.filter((member) => member === memberName || selected.includes(member));
+      const next = { ...current };
+      if (nextSelected.length === 0) {
+        delete next[bandId];
+      } else {
+        next[bandId] = nextSelected;
+      }
+      return next;
+    });
   };
 
   const clearLiveForm = () => {
@@ -1278,6 +1305,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }
 
     const selectedVenue = venues.find((venue) => venue.venue_id === selectedVenueId);
+    const normalizedEventAttendees = liveType === "event"
+      ? defaultBandIds.flatMap((bandId) => {
+          const members = eventAttendees[bandId] ?? [];
+          return members.length > 0 ? [{ band_id: bandId, members }] : [];
+        })
+      : [];
     setPendingConfirmation({
       kind: "live",
       title: "确认新增 Live",
@@ -1291,6 +1324,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         timezone,
         venue_id: selectedVenueId,
         default_band_ids: defaultBandIds,
+        event_attendees: normalizedEventAttendees,
       },
       venueName: selectedVenue?.venue_name ?? "-",
     });
@@ -1313,6 +1347,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         timezone: payload.timezone,
         venue_id: response.item.venue_id,
         default_band_ids: response.item.default_band_ids ?? [],
+        event_attendees: response.item.event_attendees ?? [],
       };
 
       setInsertedLives((prev) => [inserted, ...prev]);
@@ -1568,6 +1603,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
             ["venue_id", payload.venue_id],
             ["venue_name", pendingConfirmation.venueName],
             ["default_band_ids", payload.default_band_ids.join(", ") || "-"],
+            [
+              "event_attendees",
+              payload.event_attendees
+                .map((attendee) => `${attendee.band_id}: ${attendee.members.join(" / ")}`)
+                .join("; ") || "-",
+            ],
           ])}
           {shouldWarnMissingEventBands && (
             <p className="console-admin-hint" role="status">
@@ -1771,6 +1812,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           timezoneMinuteDisabled={timezoneMinuteDisabled}
           selectedVenueId={selectedVenueId}
           defaultBandIds={defaultBandIds}
+          eventAttendees={eventAttendees}
           bandOptions={bands}
           venueQueryText={venueQueryText}
           venues={venues}
@@ -1788,7 +1830,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           insertedLives={insertedLives}
           onLiveDateChange={setLiveDate}
           onLiveTitleChange={setLiveTitle}
-          onLiveTypeChange={setLiveType}
+          onLiveTypeChange={(value) => {
+            setLiveType(value);
+            if (value !== "event") setEventAttendees({});
+          }}
           onLiveUrlChange={setLiveUrl}
           onOpeningTimeChange={setOpeningTime}
           onStartTimeChange={setStartTime}
@@ -1802,6 +1847,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
             setVenueOpen(false);
           }}
           onToggleDefaultBand={toggleDefaultBand}
+          onToggleEventAttendee={toggleEventAttendee}
           onQueryVid={queryVid}
           onInsertVenue={requestVenueConfirmation}
           onClearInsertLive={clearLiveForm}

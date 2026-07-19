@@ -96,6 +96,7 @@ describe("ConsoleInsertPanel", () => {
         start_time: "19:00:00+09:00",
         venue_id: 88,
         default_band_ids: [3],
+        event_attendees: [],
       },
     });
     apiMocks.createConsoleSong.mockResolvedValue({
@@ -119,6 +120,7 @@ describe("ConsoleInsertPanel", () => {
       band_names: ["Poppin'Party"],
       url: "https://example.com/live/101",
       is_favorite: false,
+      event_attendees: [],
       detail_rows: [],
     });
     apiMocks.getLives.mockResolvedValue({
@@ -560,6 +562,7 @@ describe("ConsoleInsertPanel", () => {
         timezone: "-03:30",
         venue_id: 88,
         default_band_ids: [3],
+        event_attendees: [],
       },
       "csrf-token",
     ));
@@ -577,6 +580,60 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
     expect(screen.getByText("第 1 / 1 页，共 2 条")).toBeInTheDocument();
+  });
+
+  // 测试点：活动 Live 应把默认 Band 下勾选的完整成员名单提交给后端，不在前端写入 mode。
+  test("活动Live会提交完整出演成员名单", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [
+        {
+          band_id: 3,
+          band_name: "MyGO!!!!!",
+          band_abbr: "mygo",
+          band_members: ["高松燈", "千早愛音"],
+        },
+      ],
+    });
+    apiMocks.createConsoleLive.mockResolvedValueOnce({
+      ok: true,
+      item: {
+        live_id: 40,
+        live_date: "2026-08-08",
+        live_title: "Event Live",
+        live_type: "event",
+        url: "https://example.com/event",
+        opening_time: "18:00:00+09:00",
+        start_time: "19:00:00+09:00",
+        venue_id: 88,
+        default_band_ids: [3],
+        event_attendees: [{ band_id: 3, mode: "full", members: ["高松燈", "千早愛音"] }],
+      },
+    });
+
+    render(<ConsoleInsertPanel />);
+    await screen.findByRole("button", { name: "88 - New Venue" });
+    await user.selectOptions(screen.getByDisplayValue("专场"), "event");
+    await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
+    await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
+    const memberGroup = screen.getByRole("group", { name: "MyGO!!!!! 出演成员" });
+    await user.click(within(memberGroup).getByRole("checkbox", { name: "高松燈" }));
+    await user.click(within(memberGroup).getByRole("checkbox", { name: "千早愛音" }));
+    fireEvent.change(screen.getByLabelText("live_date"), { target: { value: "2026-08-08" } });
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), "Event Live");
+    await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/event");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        live_type: "event",
+        default_band_ids: [3],
+        event_attendees: [{ band_id: 3, members: ["高松燈", "千早愛音"] }],
+      }),
+      "csrf-token",
+    ));
   });
 
   // 测试点：活动类型未选择默认 Band 时，新增 Live 确认框应显示非阻断提醒。

@@ -138,6 +138,7 @@ describe("console lookup api", () => {
           start_time: "19:00:00+09:00",
           venue_id: 88,
           default_band_ids: [1, 3],
+          event_attendees: [],
         },
       }, true, 201),
     );
@@ -152,6 +153,7 @@ describe("console lookup api", () => {
       timezone: "+09:00",
       venue_id: 88,
       default_band_ids: [1, 3],
+      event_attendees: [],
     };
 
     const payload = await createConsoleLive(requestPayload, "csrf-token");

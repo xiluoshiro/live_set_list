@@ -433,6 +433,7 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         "start_time": "19:00:30+09:00",
         "venue_id": 2,
         "default_band_ids": [],
+        "event_attendees": [],
     }
     assert "INSERT INTO live_attrs" in cursor.execute.call_args_list[1].args[0]
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
@@ -457,7 +458,62 @@ def test_console_create_live_mock_validates_and_persists_default_bands():
     assert response.status_code == 201
     assert response.json()["item"]["default_band_ids"] == [1, 3]
     assert cursor.execute.call_args_list[1].args[1] == ([1, 3],)
-    assert cursor.execute.call_args_list[2].args[1][-1] == [1, 3]
+    assert cursor.execute.call_args_list[2].args[1][-2] == [1, 3]
+
+
+# 测试点：活动出席成员应按 Band 目录顺序持久化完整名单，并仅在响应中计算 partial/full。
+def test_console_create_event_persists_members_and_computes_modes():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(
+        fetchone_side_effect=[(1,), (80,)],
+        fetchall_side_effect=[
+            [
+                (3, ["高松燈", "千早愛音"]),
+                (8, ["三角初華", "若葉睦", "八幡海鈴"]),
+            ]
+        ],
+    )
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/lives",
+            json=_valid_live_payload(
+                live_type="event",
+                default_band_ids=[8, 3],
+                event_attendees=[
+                    {"band_id": 3, "members": ["千早愛音", "高松燈"]},
+                    {"band_id": 8, "members": ["若葉睦"]},
+                ],
+            ),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["item"]["event_attendees"] == [
+        {"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]},
+        {"band_id": 8, "mode": "partial", "members": ["若葉睦"]},
+    ]
+    persisted_json = cursor.execute.call_args_list[2].args[1][-1]
+    assert persisted_json.adapted == {"3": ["高松燈", "千早愛音"], "8": ["若葉睦"]}
+
+
+# 测试点：非活动 Live 不允许提交活动专用的出席成员数据。
+def test_console_create_non_event_rejects_event_attendees():
+    _set_authenticated_role("editor")
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/console/lives",
+        json=_valid_live_payload(
+            live_type="oneman",
+            default_band_ids=[3],
+            event_attendees=[{"band_id": 3, "members": ["高松燈"]}],
+        ),
+        headers={"X-CSRF-Token": CSRF_TOKEN},
+    )
+
+    assert response.status_code == 422
 
 
 # 测试点：新增 Live 应拒绝 default_band_ids 中不存在的 Band。

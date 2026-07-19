@@ -1,6 +1,7 @@
 from datetime import date
+from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 LIVE_TYPE_VALUES = ("oneman", "taiban", "multi_act", "festival", "event", "other")
 
@@ -101,6 +102,33 @@ class ConsoleVenueMutationResponse(BaseModel):
     item: ConsoleVenueItem = Field(..., description="Created venue payload")
 
 
+class ConsoleEventAttendeeRequest(BaseModel):
+    band_id: int = Field(..., ge=1, description="Band whose members attend this event")
+    members: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Complete recorded attendee list for this band",
+    )
+
+    @field_validator("members")
+    @classmethod
+    def validate_members(cls, value: list[str]) -> list[str]:
+        """Trim attendee names and reject blanks or duplicates before DB-backed validation."""
+        normalized = [member.strip() for member in value]
+        if any(member == "" for member in normalized):
+            raise ValueError("members must not contain blank names")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("members must not contain duplicates")
+        return normalized
+
+
+class ConsoleEventAttendee(BaseModel):
+    band_id: int = Field(..., description="band_attrs.id")
+    mode: Literal["partial", "full"] = Field(..., description="Computed attendance coverage")
+    members: list[str] = Field(..., description="Complete recorded attendee list")
+
+
 class ConsoleLiveCreateRequest(BaseModel):
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., min_length=1, max_length=255, description="Live title")
@@ -119,6 +147,11 @@ class ConsoleLiveCreateRequest(BaseModel):
         default_factory=list,
         max_length=100,
         description="Fallback band_attrs IDs used only while the live has no setlist rows.",
+    )
+    event_attendees: list[ConsoleEventAttendeeRequest] = Field(
+        default_factory=list,
+        max_length=100,
+        description="Event-only Band member attendance; mode is computed and is not accepted as input.",
     )
 
     @field_validator("live_title", "url")
@@ -141,6 +174,20 @@ class ConsoleLiveCreateRequest(BaseModel):
             raise ValueError("default_band_ids must contain only positive band IDs")
         return sorted(set(value))
 
+    @model_validator(mode="after")
+    def validate_event_attendees(self) -> "ConsoleLiveCreateRequest":
+        """Keep event attendance scoped to event Lives and selected default Bands."""
+        if self.live_type != "event" and self.event_attendees:
+            raise ValueError("event_attendees are only allowed when live_type is event")
+        attendee_band_ids = [attendee.band_id for attendee in self.event_attendees]
+        if len(set(attendee_band_ids)) != len(attendee_band_ids):
+            raise ValueError("event_attendees must not contain duplicate band_id values")
+        missing_default_ids = sorted(set(attendee_band_ids) - set(self.default_band_ids))
+        if missing_default_ids:
+            missing_text = ", ".join(str(band_id) for band_id in missing_default_ids)
+            raise ValueError(f"event attendee band_ids must be included in default_band_ids: {missing_text}")
+        return self
+
 
 class ConsoleLiveItem(BaseModel):
     live_id: int = Field(..., description="Created live ID")
@@ -152,6 +199,10 @@ class ConsoleLiveItem(BaseModel):
     start_time: str = Field(..., description="Start time with timezone")
     venue_id: int = Field(..., description="venue_list.id")
     default_band_ids: list[int] = Field(..., description="Normalized fallback band_attrs IDs")
+    event_attendees: list[ConsoleEventAttendee] = Field(
+        default_factory=list,
+        description="Event attendance with mode computed from the complete persisted member list",
+    )
 
 
 class ConsoleLiveMutationResponse(BaseModel):

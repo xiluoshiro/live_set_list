@@ -153,6 +153,7 @@ function makeDetailResponse(params: { liveId: number; rowCount?: number }): Live
     band_names: ["Band 1", "Band 2"],
     url: `https://example.com/live/${params.liveId}`,
     is_favorite: false,
+    event_attendees: [],
     detail_rows: Array.from({ length: rowCount }, (_, idx) => ({
       row_id: `M${idx + 1}`,
       song_name: `曲目 ${idx + 1}`,

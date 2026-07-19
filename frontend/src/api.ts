@@ -164,6 +164,15 @@ export type LiveDetailOtherMember = {
   value: string[];
 };
 
+export type EventAttendeeMode = "partial" | "full";
+
+export type LiveDetailEventAttendee = {
+  band_id: number;
+  band_name: string;
+  mode: EventAttendeeMode;
+  members: string[];
+};
+
 export type LiveDetailRow = {
   row_id: string;
   song_name: string;
@@ -186,6 +195,7 @@ export type LiveDetailResponse = {
   is_favorite: boolean;
   tour?: TourRef | null;
   performance_group?: PerformanceGroupRef | null;
+  event_attendees: LiveDetailEventAttendee[];
   detail_rows: LiveDetailRow[];
 };
 
@@ -414,6 +424,13 @@ export type ConsoleLiveCreatePayload = {
   timezone: string;
   venue_id: number;
   default_band_ids: number[];
+  event_attendees: Array<{ band_id: number; members: string[] }>;
+};
+
+export type ConsoleEventAttendee = {
+  band_id: number;
+  mode: EventAttendeeMode;
+  members: string[];
 };
 
 export type ConsoleLiveMutationItem = {
@@ -426,6 +443,7 @@ export type ConsoleLiveMutationItem = {
   start_time: string;
   venue_id: number;
   default_band_ids: number[];
+  event_attendees: ConsoleEventAttendee[];
 };
 
 export type ConsoleLiveMutationResponse = {

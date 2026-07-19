@@ -147,6 +147,7 @@ function makeDetailResponse(liveId: number): LiveDetailResponse {
     band_names: ["Band 1", "Band 2"],
     url: `https://example.com/live/${liveId}`,
     is_favorite: false,
+    event_attendees: [],
     detail_rows: [],
   };
 }

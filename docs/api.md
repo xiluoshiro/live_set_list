@@ -149,6 +149,9 @@
 - `other_members` 最终按 `key` 升序排列
 - `comments` 由详情行规则生成：`live_setlist.is_short = true` 时包含 `"短版"`，`song_list.is_cover = true` 时包含 `"翻唱"`
 - `is_favorite` 会按当前登录用户的 `user_live_favorites` 计算；匿名请求统一返回 `false`
+- 无 Setlist 时，单条与批量详情的 `bands/band_names` 会回退 `default_band_ids`，与列表有效 Band 规则一致
+- `event_attendees` 只在 `live_type=event` 时返回内容；每项包含 `band_id/band_name/mode/members`
+- `mode=full|partial` 是查询时根据完整 `members` 与 `band_attrs.band_members` 计算的值，不在数据库中持久化
 
 ### 3. `POST /api/lives/details:batch`
 
@@ -285,6 +288,8 @@
   - `default_band_ids` 可选，最多 100 项；后端要求每项为已存在的正数 `band_attrs.id`，并去重、升序后写入
   - `default_band_ids` 只在该 Live 尚无任何 setlist 行时作为列表 Band 使用
   - 成功响应会原样返回后端已经验证并保存的 `default_band_ids`
+  - `event_attendees` 只允许活动类型提交；每项 Band 必须属于 `default_band_ids`，成员必须属于对应 Band
+  - `event_attendees[].members` 始终保存完整名单；响应额外返回计算得到的 `mode=partial|full`
 - `POST /api/console/lives/{live_id}/setlist`
   - 要求目标 Live 存在
   - 如果目标 Live 已有任何 setlist 行，返回 `409`
