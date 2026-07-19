@@ -24,7 +24,8 @@
 
 ## 前端状态
 
-- 控制台页签显示为“Live管理”，内部模式仍由 `ConsoleMode` 的 Live 分支承载。
+- `ConsoleMode` 使用独立的 `live_create` 与 `live_edit` 分支，分别显示“新增Live”和“Live管理”。
+- 两个分支复用 `LiveAdminSection` 的字段渲染，通过 `variant=create|edit` 隔离候选工具栏、按钮语义、清空选项和新增/更新记录。
 - `originalDraft` 保存最近一次服务端快照，`draft` 保存当前表单值；二者规范化比较得到 dirty 状态。
 - 编辑工具栏复用巡演管理结构；三个管理区的新建入口统一使用强调按钮，选择器和同类查询控件统一使用 Venue/Band 的 `13px` 字体、间距与高度基准。
 - 类型筛选通过后端 `live_type` 参数重新查询并从第一页展示，不在前端对当前页做局部过滤。

@@ -118,7 +118,7 @@ type PendingConfirmation =
   | {
       kind: "live_discard";
       title: string;
-      target: { type: "new" } | { type: "edit"; liveId: number } | { type: "mode"; mode: ConsoleMode };
+      target: { type: "edit"; liveId: number } | { type: "mode"; mode: ConsoleMode };
     }
   | {
       kind: "song";
@@ -469,7 +469,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     openingTime.trim() === "" ||
     startTime.trim() === "" ||
     timezone.trim() === "" ||
-    (editingLiveId !== null && !isLiveDirty);
+    (mode === "live_edit" && (editingLiveId === null || !isLiveDirty));
   const hasExistingSetlist = (setlistDetailData?.detail_rows ?? []).length > 0;
   // 校验规则 3：新增 Setlist 的“提交插入”要求每一行 song_name/sid/band_member 均非空。
   const isSetlistSubmitDisabled =
@@ -738,13 +738,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setDefaultBandMenuPos(null);
   };
 
-  const startNewLive = () => {
-    setEditingLiveId(null);
-    setOriginalLivePayload(null);
-    resetLiveForm();
-    setMessage("已切换为新建 Live。");
-  };
-
   const restoreLiveForm = () => {
     if (editingLiveId !== null && originalLivePayload !== null) {
       applyLivePayloadToForm(originalLivePayload);
@@ -853,21 +846,20 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }
   };
 
-  const requestLiveTarget = (target: { type: "new" } | { type: "edit"; liveId: number }) => {
+  const requestLiveForEdit = (liveId: number) => {
     if (isLiveDirty) {
       setPendingConfirmation({
         kind: "live_discard",
         title: "确认放弃 Live 修改",
-        target,
+        target: { type: "edit", liveId },
       });
       return;
     }
-    if (target.type === "new") startNewLive();
-    else void loadLiveForEdit(target.liveId);
+    void loadLiveForEdit(liveId);
   };
 
   const changeConsoleMode = (nextMode: ConsoleMode) => {
-    if (mode === "live_create" && nextMode !== "live_create" && isLiveDirty) {
+    if (mode === "live_edit" && nextMode !== "live_edit" && isLiveDirty) {
       setPendingConfirmation({
         kind: "live_discard",
         title: "确认放弃 Live 修改",
@@ -875,11 +867,22 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       });
       return;
     }
+    if (nextMode === "live_create" && mode !== "live_create") {
+      setEditingLiveId(null);
+      setOriginalLivePayload(null);
+      resetLiveForm();
+      setMessage("");
+    } else if (nextMode === "live_edit" && mode !== "live_edit") {
+      setEditingLiveId(null);
+      setOriginalLivePayload(null);
+      resetLiveForm();
+      setMessage("");
+    }
     setMode(nextMode);
   };
 
   useEffect(() => {
-    if (mode !== "live_create") return;
+    if (mode !== "live_edit") return;
     void loadLiveCandidatePage(liveCandidateQuery, liveCandidatePage, liveCandidateType);
   }, [liveCandidatePage, liveCandidateType, mode]);
 
@@ -1501,23 +1504,28 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   };
 
   const requestLiveConfirmation = () => {
+    const action = mode === "live_edit" ? "update" : "create";
     if (liveDate.trim() === "" || liveTitle.trim() === "") {
-      setMessage(`${editingLiveId === null ? "新增" : "更新"}Live失败：live_date 与 live_title 为必填项。`);
+      setMessage(`${action === "create" ? "新增" : "更新"}Live失败：live_date 与 live_title 为必填项。`);
       return;
     }
     if (selectedVenueId <= 0) {
-      setMessage(`${editingLiveId === null ? "新增" : "更新"}Live失败：请先选择 venue。`);
+      setMessage(`${action === "create" ? "新增" : "更新"}Live失败：请先选择 venue。`);
       return;
     }
     if (!auth.isAuthenticated || !auth.csrfToken) {
-      setMessage(`${editingLiveId === null ? "新增" : "更新"}Live失败：登录态已失效，请重新登录。`);
+      setMessage(`${action === "create" ? "新增" : "更新"}Live失败：登录态已失效，请重新登录。`);
+      return;
+    }
+    if (action === "update" && editingLiveId === null) {
+      setMessage("更新Live失败：请先选择要编辑的 Live。");
       return;
     }
 
     const selectedVenue = venues.find((venue) => venue.venue_id === selectedVenueId);
     const normalizedPayload = normalizeLivePayload(currentLivePayload);
     const fields = Object.keys(normalizedPayload) as Array<keyof ConsoleLiveUpsertPayload>;
-    const changes = editingLiveId !== null && originalLivePayload !== null
+    const changes = action === "update" && editingLiveId !== null && originalLivePayload !== null
       ? fields.flatMap((field) => {
           const before = formatLivePayloadValue(field, originalLivePayload[field]);
           const after = formatLivePayloadValue(field, normalizedPayload[field]);
@@ -1526,8 +1534,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       : [];
     setPendingConfirmation({
       kind: "live",
-      title: editingLiveId === null ? "确认新增 Live" : `确认更新 Live #${editingLiveId}`,
-      action: editingLiveId === null ? "create" : "update",
+      title: action === "create" ? "确认新增 Live" : `确认更新 Live #${editingLiveId}`,
+      action,
       liveId: editingLiveId,
       payload: normalizedPayload,
       venueName: selectedVenue?.venue_name ?? "-",
@@ -1617,7 +1625,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         setOriginalLivePayload(savedPayload);
         applyLivePayloadToForm(savedPayload);
       }
-      await loadLiveCandidatePage(liveCandidateQuery, liveCandidatePage, liveCandidateType);
+      if (action === "update") {
+        await loadLiveCandidatePage(liveCandidateQuery, liveCandidatePage, liveCandidateType);
+      }
       setMessage(`已${action === "create" ? "新增" : "更新"}Live #${inserted.live_id}（${inserted.live_title}）`);
     } catch (error) {
       setMessage(`${action === "create" ? "新增" : "更新"}Live失败：${errorMessage(error)}`);
@@ -1794,10 +1804,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           auth.csrfToken,
         );
       } else if (pendingConfirmation.kind === "live_discard") {
-        if (pendingConfirmation.target.type === "new") startNewLive();
-        else if (pendingConfirmation.target.type === "edit") await loadLiveForEdit(pendingConfirmation.target.liveId);
+        if (pendingConfirmation.target.type === "edit") await loadLiveForEdit(pendingConfirmation.target.liveId);
         else {
-          if (originalLivePayload !== null) applyLivePayloadToForm(originalLivePayload);
+          setEditingLiveId(null);
+          setOriginalLivePayload(null);
+          resetLiveForm();
+          setMessage("");
           setMode(pendingConfirmation.target.mode);
         }
       } else if (pendingConfirmation.kind === "song") {
@@ -2058,7 +2070,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         label="控制台录入类型"
         value={mode}
         options={[
-          { value: "live_create", label: "Live管理" },
+          { value: "live_create", label: "新增Live" },
+          { value: "live_edit", label: "Live管理" },
           { value: "setlist", label: "新增Setlist" },
           { value: "song", label: "新增歌曲" },
           { value: "tour", label: "巡演管理" },
@@ -2067,8 +2080,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         onChange={changeConsoleMode}
       />
 
-      {mode === "live_create" && (
+      {(mode === "live_create" || mode === "live_edit") && (
         <LiveAdminSection
+          variant={mode === "live_create" ? "create" : "edit"}
           liveDate={liveDate}
           liveTitle={liveTitle}
           liveType={liveType}
@@ -2122,8 +2136,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onLiveCandidateTypeChange={changeLiveCandidateType}
           onQueryLiveCandidates={queryLiveCandidates}
           onLiveCandidatePageChange={setLiveCandidatePage}
-          onSelectLiveForEdit={(liveId) => requestLiveTarget({ type: "edit", liveId })}
-          onStartNewLive={() => requestLiveTarget({ type: "new" })}
+          onSelectLiveForEdit={requestLiveForEdit}
           onClearAfterCreateChange={setClearLiveAfterCreate}
           onOpenVenueMenu={openVenueMenu}
           onOpenDefaultBandMenu={openDefaultBandMenu}

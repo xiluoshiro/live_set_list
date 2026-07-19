@@ -1,4 +1,4 @@
-export type ConsoleMode = "live_create" | "setlist" | "song" | "tour" | "performance_group";
+export type ConsoleMode = "live_create" | "live_edit" | "setlist" | "song" | "tour" | "performance_group";
 
 export type Position = {
   top: number;
