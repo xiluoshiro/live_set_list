@@ -35,7 +35,7 @@ import {
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
 import { HomeDashboard, type HomeLiveRow } from "./components/HomeDashboard";
 import { PageTitle } from "./components/PageTitle";
-import { LiveCardGrid } from "./components/LiveCardGrid";
+import { formatPerformanceDate, LiveCardGrid } from "./components/LiveCardGrid";
 import { LiveDetailPage } from "./components/LiveDetailPage";
 import { LiveListFiltersToolbar } from "./components/LiveListFilters";
 import { LoginDialog } from "./components/LoginDialog";
@@ -1621,7 +1621,7 @@ function App() {
                     row.kind === "performance_group" ? (
                       <tr key={`group-${row.groupId}`}>
                         {showFavoriteColumn && <td className="fav-col-cell"></td>}
-                        <td>{row.groupStartDate ? `${row.groupStartDate} ~ ${row.groupEndDate}` : row.liveDate}</td>
+                        <td>{formatPerformanceDate(row.groupStartDate, row.groupEndDate, row.liveDate)}</td>
                         <td>
                           <button
                             className="name-btn"

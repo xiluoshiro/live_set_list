@@ -35,6 +35,16 @@ interface LiveCardGridProps {
   total: number;
 }
 
+export function formatPerformanceDate(
+  startDate: string | null,
+  endDate: string | null,
+  fallbackDate: string,
+): string {
+  if (!startDate) return fallbackDate;
+  if (!endDate || startDate === endDate) return startDate;
+  return `${startDate} ~ ${endDate}`;
+}
+
 export function LiveCardGrid({
   rows,
   showStar,
@@ -70,7 +80,7 @@ export function LiveCardGrid({
             >
               <div className="live-card-head">
                 <span className="live-card-date">
-                  {row.groupStartDate ? `${row.groupStartDate} ~ ${row.groupEndDate}` : row.liveDate}
+                  {formatPerformanceDate(row.groupStartDate, row.groupEndDate, row.liveDate)}
                 </span>
                 <span className="live-card-type">{row.liveType}</span>
               </div>
