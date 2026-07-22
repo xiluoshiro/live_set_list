@@ -805,7 +805,7 @@ def test_console_append_setlist_mock_missing_song_rejects_batch_without_partial_
     assert all("INSERT INTO live_setlist" not in execute_call.args[0] for execute_call in cursor.execute.call_args_list)
 
 
-# 测试点：追加 setlist 若 Live 已有 setlist 数据，应返回 409 且不插入新行。
+# 测试点：追加 setlist 应先锁定目标 Live；若已有 setlist 数据则返回 409 且不插入新行。
 def test_console_append_setlist_mock_existing_setlist_rejects_with_409():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
@@ -823,4 +823,5 @@ def test_console_append_setlist_mock_existing_setlist_rejects_with_409():
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Live id 1 already has setlist data"
+    assert "FOR UPDATE" in str(cursor.execute.call_args_list[0].args[0])
     assert all("INSERT INTO live_setlist" not in execute_call.args[0] for execute_call in cursor.execute.call_args_list)

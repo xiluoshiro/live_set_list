@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { ConsoleInsertPanel } from "../ConsoleInsertPanel";
+import { CONSOLE_LIVE_CHANGE_STORAGE_KEY } from "../../consoleLiveSync";
 import "../../styles/index.css";
 
 const apiMocks = vi.hoisted(() => ({
@@ -986,8 +987,8 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLives).toHaveBeenCalledWith(2, 20, true);
   });
 
+  // 测试点：无 setlist 候选直接开放录入，只有显式点击详情按钮才请求完整 Live 详情。
   test("显示详细信息会复用主页详情API与详情表格", async () => {
-    // 测试点：新增Setlist的详情按钮应请求真实 live detail API，并渲染与主页一致的成员表格。
     const user = userEvent.setup();
     apiMocks.getLiveDetail.mockResolvedValue({
       live_id: 101,
@@ -1016,6 +1017,8 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel />);
 
     await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20, true));
+    expect(apiMocks.getLiveDetail).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("批量粘贴 Setlist 文本")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "显示详细信息" }));
 
     await waitFor(() => expect(apiMocks.getLiveDetail).toHaveBeenCalledWith(101));
@@ -1025,8 +1028,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("真实详情歌曲")).toBeInTheDocument();
   });
 
+  // 测试点：批量粘贴只在点击应用后替换表格、清空来源文本，并正确处理 from 成员归属。
   test("批量粘贴Setlist可解析预览并应用到草稿表格", async () => {
-    // 测试点：批量粘贴只在点击应用后替换表格，并正确处理 from 成员归属。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [
@@ -1055,8 +1058,77 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByDisplayValue("BLACK SHOUT")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Requiem for Fate")).toBeInTheDocument();
     expect(screen.getAllByText("2支 / 3人").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("批量粘贴 Setlist 文本")).toHaveValue("");
     expect(screen.queryByText("预览：2 行，提示 0 条")).not.toBeInTheDocument();
     expect(screen.getByText(/请继续点击“查询歌曲”匹配 sid/)).toBeInTheDocument();
+  });
+
+  // 测试点：切换 live_id 必须清空上一场的 Setlist 草稿，且不能触发自动完整详情检查。
+  test("切换live_id会清空上一场Setlist草稿", async () => {
+    const user = userEvent.setup();
+    apiMocks.getLives.mockResolvedValue({
+      items: [
+        { live_id: 101, live_date: "2026-03-30", live_title: "First Live", live_type: "oneman", bands: [], url: null, is_favorite: false },
+        { live_id: 102, live_date: "2026-03-29", live_title: "Second Live", live_type: "oneman", bands: [], url: null, is_favorite: false },
+      ],
+      pagination: { page: 1, page_size: 20, total: 2, total_pages: 1 },
+    });
+    render(<ConsoleInsertPanel />);
+    await screen.findByRole("option", { name: "101 - First Live (2026-03-30)" });
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "M1. Previous Song" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(within(screen.getByRole("dialog", { name: "确认应用到表格" })).getByRole("button", { name: "确认提交" }));
+    expect(screen.getByDisplayValue("Previous Song")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("选择 live_id"), "102");
+
+    expect(screen.getByLabelText("选择 live_id")).toHaveValue("102");
+    expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("");
+    expect(screen.getByLabelText("批量粘贴 Setlist 文本")).toHaveValue("");
+    expect(apiMocks.getLiveDetail).not.toHaveBeenCalled();
+  });
+
+  // 测试点：另一标签页写入当前 Live 的 Setlist 后，本页应刷新候选、切换 Live 并清空旧草稿。
+  test("跨标签页Setlist写入会刷新候选并清空冲突草稿", async () => {
+    apiMocks.getLives
+      .mockResolvedValueOnce({
+        items: [
+          { live_id: 101, live_date: "2026-03-30", live_title: "First Live", live_type: "oneman", bands: [], url: null, is_favorite: false },
+          { live_id: 102, live_date: "2026-03-29", live_title: "Second Live", live_type: "oneman", bands: [], url: null, is_favorite: false },
+        ],
+        pagination: { page: 1, page_size: 20, total: 2, total_pages: 1 },
+      })
+      .mockResolvedValueOnce({
+        items: [
+          { live_id: 102, live_date: "2026-03-29", live_title: "Second Live", live_type: "oneman", bands: [], url: null, is_favorite: false },
+        ],
+        pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+      });
+    render(<ConsoleInsertPanel />);
+    await screen.findByRole("option", { name: "101 - First Live (2026-03-30)" });
+    fireEvent.change(screen.getByPlaceholderText("请输入歌曲名"), { target: { value: "Unsaved Song" } });
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: CONSOLE_LIVE_CHANGE_STORAGE_KEY,
+        newValue: JSON.stringify({
+          action: "setlist_appended",
+          liveId: 101,
+          changedAt: "2026-07-22T16:09:49.000Z",
+          nonce: "other-tab-1",
+        }),
+      }));
+    });
+
+    await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByLabelText("选择 live_id")).toHaveValue("102"));
+    expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("");
+    expect(screen.getByRole("status")).toHaveTextContent("Live #101 已在另一标签页写入 Setlist");
+    expect(apiMocks.getLiveDetail).not.toHaveBeenCalled();
   });
 
   // 测试点：批量确认框的内容区应独立滚动且操作区不收缩，保证长预览仍可取消或确认。

@@ -60,7 +60,6 @@ type LiveInsertTabProps = {
   onSubmitLiveWithSetlist: () => void;
   submitDisabled: boolean;
   hasExistingSetlist: boolean;
-  setlistDetailLoading: boolean;
   onToggleBandForSetlistRow: (rowKey: number, bandName: string) => void;
   onToggleBandMemberForSetlistRow: (rowKey: number, bandName: string, memberName: string) => void;
   onUpdateOtherMemberEntry: (
@@ -131,7 +130,6 @@ export function LiveInsertTab({
   onSubmitLiveWithSetlist,
   submitDisabled,
   hasExistingSetlist,
-  setlistDetailLoading,
   onToggleBandForSetlistRow,
   onToggleBandMemberForSetlistRow,
   onUpdateOtherMemberEntry,
@@ -232,13 +230,10 @@ export function LiveInsertTab({
         </button>
       </div>
 
-      {setlistDetailLoading && selectedLiveId > 0 && (
-        <p className="console-admin-hint">正在检查 Live setlist 状态...</p>
-      )}
       {hasExistingSetlist && (
         <p className="console-admin-hint">此 Live 已有 setlist 数据，无法新增。</p>
       )}
-      {!hasExistingSetlist && !setlistDetailLoading && (
+      {!hasExistingSetlist && (
         <>
           <section className="setlist-paste-panel" aria-label="批量粘贴 Setlist">
         <div className="setlist-paste-head">

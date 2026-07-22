@@ -5,6 +5,7 @@ import {
   type LiveListFilters,
 } from "./liveListFilters";
 import { logError, logInfo } from "./logger";
+import { publishConsoleLiveChange } from "./consoleLiveSync";
 
 export type { LiveListFilters, LiveListSort } from "./liveListFilters";
 
@@ -1249,6 +1250,7 @@ export async function createConsoleLive(
   );
   const responsePayload = await expectJsonResponse<ConsoleLiveMutationResponse>(response);
   clearLiveCollectionCaches();
+  publishConsoleLiveChange("created", responsePayload.item.live_id);
   return responsePayload;
 }
 
@@ -1272,6 +1274,7 @@ export async function appendConsoleLiveSetlist(
   const responsePayload = await expectJsonResponse<ConsoleLiveSetlistAppendResponse>(response);
   clearLiveCollectionCaches();
   detailCache.delete(detailCacheKey(liveId));
+  publishConsoleLiveChange("setlist_appended", liveId);
   return responsePayload;
 }
 
@@ -1412,6 +1415,7 @@ export async function updateConsoleLive(
   const result = await expectJsonResponse<ConsoleLiveMutationResponse>(response);
   clearLiveCollectionCaches();
   detailCache.delete(detailCacheKey(liveId));
+  publishConsoleLiveChange("updated", liveId);
   return result;
 }
 
@@ -1500,15 +1504,18 @@ export async function getLives(
   const withoutSetlist = typeof withoutSetlistOrFilters === "boolean" ? withoutSetlistOrFilters : false;
   const filters = typeof withoutSetlistOrFilters === "boolean" ? undefined : withoutSetlistOrFilters;
   const requestedKey = livesCacheKey(page, pageSize, withoutSetlist, filters);
-  const fresh = livesCache.getFresh(requestedKey, LIVES_CACHE_TTL_MS);
-  if (fresh !== undefined) {
-    return fresh;
+  if (!withoutSetlist) {
+    const fresh = livesCache.getFresh(requestedKey, LIVES_CACHE_TTL_MS);
+    if (fresh !== undefined) {
+      return fresh;
+    }
   }
   const inFlight = livesCache.getInFlight(requestedKey);
   if (inFlight) return inFlight;
 
   const requestPromise = fetchLivesRemote(page, pageSize, withoutSetlist, filters)
     .then((payload) => {
+      if (withoutSetlist) return payload;
       const updatedAt = Date.now();
       livesCache.setData(requestedKey, payload, updatedAt);
       const canonicalKey = livesCacheKey(payload.pagination.page, pageSize, withoutSetlist, filters);
