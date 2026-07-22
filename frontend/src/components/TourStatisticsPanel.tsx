@@ -57,14 +57,14 @@ function TourTransitionExplorer({ tourTitle, transitions, onOpenStop }: TourTran
       key: `replacement:${index}:${replacement.to_song.song_id}`,
       song: replacement.to_song,
     })),
-    ...selectedTransition.added_songs.map((song) => ({ key: `added:${song.song_id}`, song })),
+    ...selectedTransition.added_songs.map((song, index) => ({ key: `added:${index}:${song.song_id}`, song })),
   ];
   const displayedRemovedSongs = [
     ...selectedTransition.replacements.map((replacement, index) => ({
       key: `replacement:${index}:${replacement.from_song.song_id}`,
       song: replacement.from_song,
     })),
-    ...selectedTransition.removed_songs.map((song) => ({ key: `removed:${song.song_id}`, song })),
+    ...selectedTransition.removed_songs.map((song, index) => ({ key: `removed:${index}:${song.song_id}`, song })),
   ];
 
   return (
