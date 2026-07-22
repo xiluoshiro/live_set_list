@@ -59,8 +59,8 @@ describe("api cache behavior", () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ credentials: "include" }));
   });
 
-  test("getLives 无 setlist 筛选使用独立请求与缓存", async () => {
-    // 测试点：控制台候选会传递 without_setlist，且不会误用公共 Live 列表缓存。
+  // 测试点：控制台无 setlist 候选每次都从服务端刷新，不能被公共列表或旧候选缓存污染。
+  test("getLives 无 setlist 筛选绕过持久缓存", async () => {
     fetchMock.mockResolvedValue(
       makeJsonResponse({
         items: [],
@@ -73,9 +73,10 @@ describe("api cache behavior", () => {
     await getLives(1, 20, true);
     await getLives(1, 20, true);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/lives?page=1&page_size=20");
     expect(fetchMock.mock.calls[1][0]).toBe("/api/lives?page=1&page_size=20&without_setlist=true");
+    expect(fetchMock.mock.calls[2][0]).toBe("/api/lives?page=1&page_size=20&without_setlist=true");
   });
 
   test("getLives 列表筛选会进入 URL 与缓存键", async () => {

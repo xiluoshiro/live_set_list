@@ -732,7 +732,7 @@ def append_live_setlist(
     try:
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM live_attrs WHERE id = %s", (live_id,))
+                cur.execute("SELECT 1 FROM live_attrs WHERE id = %s FOR UPDATE", (live_id,))
                 if cur.fetchone() is None:
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
 

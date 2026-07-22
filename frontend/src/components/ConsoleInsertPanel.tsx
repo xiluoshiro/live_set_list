@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../auth/AuthProvider";
 import {
+  CONSOLE_LIVE_CHANGE_STORAGE_KEY,
+  parseConsoleLiveChange,
+} from "../consoleLiveSync";
+import {
   appendConsoleLiveSetlist,
   createConsoleLive,
   createConsoleSong,
@@ -297,6 +301,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [livePage, setLivePage] = useState(1);
   const [livePagination, setLivePagination] = useState({ page: 1, page_size: 20, total: 0, total_pages: 1 });
   const [isLiveLoading, setIsLiveLoading] = useState(false);
+  const [setlistCandidateRefreshKey, setSetlistCandidateRefreshKey] = useState(0);
 
   const [songName, setSongName] = useState("");
   const [songBandId, setSongBandId] = useState<number | null>(null);
@@ -464,27 +469,23 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const isBatchSongInsertDisabled = !didSongLookup || !hasBatchSongInsertCandidate;
 
   useEffect(() => {
-    if (selectedLiveId <= 0) {
-      setSetlistDetailData(null);
-      setSetlistDetailLoading(false);
-      return;
-    }
-    let canceled = false;
+    setSetlistRows(INITIAL_SETLIST_ROWS.map((row) => ({ ...row, row_key: 1 })));
+    setSetlistRowKey(1000);
+    setOtherMemberEntryKey(100);
+    setDidSongLookup(false);
+    setSetlistPasteText("");
+    setSetlistParseWarnings([]);
+    setSetlistParsePreviewRows([]);
+    setSetlistParsePreviewOpen(false);
+    setSetlistParsePreviewMeta(null);
+    setEditingBandRowKey(null);
+    setEditingOtherRowKey(null);
+    setBandMemberMenuPos(null);
+    setOtherMemberMenuPos(null);
+    setSetlistDetailOpen(false);
     setSetlistDetailData(null);
-    setSetlistDetailLoading(true);
-    getLiveDetail(selectedLiveId).then((detail) => {
-      if (!canceled) {
-        setSetlistDetailData(detail);
-        setSetlistDetailLoading(false);
-      }
-    }).catch((error) => {
-      if (!canceled) {
-        setSetlistDetailData(null);
-        setSetlistDetailLoading(false);
-        setMessage(`检查Live #${selectedLiveId} setlist 状态失败：${errorMessage(error)}`);
-      }
-    });
-    return () => { canceled = true; };
+    setSetlistDetailError(null);
+    setSetlistDetailLoading(false);
   }, [selectedLiveId]);
 
   useEffect(() => {
@@ -557,7 +558,40 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     return () => {
       canceled = true;
     };
-  }, [livePage, mode]);
+  }, [livePage, mode, setlistCandidateRefreshKey]);
+
+  useEffect(() => {
+    const refreshSetlistCandidates = () => {
+      if (mode === "setlist") {
+        setSetlistCandidateRefreshKey((key) => key + 1);
+      }
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== CONSOLE_LIVE_CHANGE_STORAGE_KEY) return;
+      const change = parseConsoleLiveChange(event.newValue);
+      if (!change || mode !== "setlist") return;
+      if (change.action === "setlist_appended") {
+        setMessage(
+          change.liveId === selectedLiveId
+            ? `Live #${change.liveId} 已在另一标签页写入 Setlist，正在切换候选并清空当前草稿。`
+            : `另一标签页已为 Live #${change.liveId} 写入 Setlist，正在刷新候选。`,
+        );
+      }
+      refreshSetlistCandidates();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshSetlistCandidates();
+    };
+
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", refreshSetlistCandidates);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", refreshSetlistCandidates);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [mode, selectedLiveId]);
 
   useEffect(() => {
     if (!songBandOpen) return;
@@ -1136,6 +1170,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setSetlistRows(result.rows);
     setSetlistRowKey(result.nextRowKey);
     setOtherMemberEntryKey(result.nextOtherMemberEntryKey);
+    setSetlistPasteText("");
     setSetlistParseWarnings([]);
     setSetlistParsePreviewRows([]);
     setSetlistParsePreviewOpen(false);
@@ -1435,6 +1470,19 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         `已为Live #${targetLive.live_id} 插入 ${response.item.inserted_row_count} 条 setlist，总计 ${response.item.total_setlist_row_count} 条。`,
       );
     } catch (error) {
+      const status = (error as { status?: number }).status;
+      if (status === 409) {
+        const remainingLives = lives.filter((live) => live.live_id !== targetLive.live_id);
+        setLives(remainingLives);
+        setSelectedLiveId((currentLiveId) =>
+          currentLiveId === targetLive.live_id ? remainingLives[0]?.live_id ?? 0 : currentLiveId,
+        );
+        clearSetlistPastePreview();
+        clearSetlistData();
+        setMessage(`提交setlist失败：Live #${targetLive.live_id} 已有 setlist 数据，正在刷新候选并清空当前草稿。`);
+        setSetlistCandidateRefreshKey((key) => key + 1);
+        return;
+      }
       setMessage(`提交setlist失败：${errorMessage(error)}`);
     }
   };
@@ -2182,7 +2230,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onSubmitLiveWithSetlist={requestSetlistConfirmation}
           submitDisabled={isSetlistSubmitDisabled}
           hasExistingSetlist={hasExistingSetlist}
-          setlistDetailLoading={setlistDetailLoading}
           onToggleBandForSetlistRow={toggleBandForSetlistRow}
           onToggleBandMemberForSetlistRow={toggleBandMemberForSetlistRow}
           onUpdateOtherMemberEntry={updateOtherMemberEntry}
