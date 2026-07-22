@@ -75,4 +75,65 @@ describe("TourStatisticsPanel", () => {
     expect(region).not.toHaveTextContent("更换 1");
     expect(within(region).queryByText("顺序 0")).not.toBeInTheDocument();
   });
+
+  // 测试点：同一新增歌曲出现两次时，来回切换场次不会因重复 React key 残留额外的新增行。
+  test("重复歌曲在场次切换后保持正确的新增行数", async () => {
+    const user = userEvent.setup();
+    const statistics = makeStatistics();
+    statistics.transitions = [
+      {
+        from_live_id: 40,
+        from_live_date: "2025-06-28",
+        from_live_title: "Tour 2026 Vol.3",
+        to_live_id: 41,
+        to_live_date: "2025-07-13",
+        to_live_title: "Tour 2026 Vol.4",
+        replacements: [],
+        added_songs: [
+          { song_id: 256, song_name: "TRASH LIFE" },
+          { song_id: 257, song_name: "テレパシー" },
+          { song_id: 292, song_name: "FUTURE IDOL" },
+        ],
+        removed_songs: [],
+        moved_songs: [],
+      },
+      {
+        from_live_id: 41,
+        from_live_date: "2025-07-13",
+        from_live_title: "Tour 2026 Vol.4",
+        to_live_id: 42,
+        to_live_date: "2025-08-10",
+        to_live_title: "Tour 2026 Vol.5",
+        replacements: [{
+          segment_type: "M",
+          sub_order: 11,
+          from_song: { song_id: 160, song_name: "旧曲" },
+          to_song: { song_id: 291, song_name: "エンプティパペット" },
+        }],
+        added_songs: [
+          { song_id: 254, song_name: "Dream Voyage" },
+          { song_id: 258, song_name: "グラディエント" },
+          { song_id: 254, song_name: "Dream Voyage" },
+          { song_id: 293, song_name: "青空のラプソディ" },
+        ],
+        removed_songs: [],
+        moved_songs: [],
+      },
+    ];
+    statistics.coverage.comparable_transition_count = 2;
+
+    render(<TourStatisticsPanel tourTitle="Tour 2026" data={statistics} loading={false} error={null} onOpenStop={vi.fn()} />);
+
+    const progress = screen.getByRole("navigation", { name: "场次进程" });
+    const selectors = within(progress).getAllByRole("button", { name: /对比上一场/ });
+    const addedRows = () => within(screen.getByRole("region", { name: "歌单变化" })).queryAllByLabelText(/^新增 /);
+
+    expect(addedRows()).toHaveLength(5);
+    await user.click(selectors[0]);
+    expect(addedRows()).toHaveLength(3);
+    await user.click(selectors[1]);
+    expect(addedRows()).toHaveLength(5);
+    await user.click(selectors[0]);
+    expect(addedRows()).toHaveLength(3);
+  });
 });
