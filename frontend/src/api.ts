@@ -501,6 +501,7 @@ export type ConsoleTourMutationResponse = {
 export type ConsoleTourLiveCandidate = {
   live_id: number;
   live_date: string;
+  start_time: string;
   live_title: string;
   venue: string | null;
   tour_id: number | null;
@@ -523,6 +524,7 @@ export type ConsoleTourEditResponse = {
   stops: Array<{
     live_id: number;
     live_date: string;
+    start_time: string;
     live_title: string;
     venue: string | null;
     stop_label: string | null;

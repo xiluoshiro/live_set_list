@@ -1571,7 +1571,7 @@ describe("ConsoleInsertPanel", () => {
     });
     apiMocks.getConsoleTourLiveCandidates.mockResolvedValue({
       items: [
-        { live_id: 41, live_date: "2026-05-30", live_title: "New Tour 福岡公演", venue: "Zepp", tour_id: null, tour_title: null, band_ids: [1, 2] },
+        { live_id: 41, live_date: "2026-05-30", start_time: "18:00:00+09:00", live_title: "New Tour 福岡公演", venue: "Zepp", tour_id: null, tour_title: null, band_ids: [1, 2] },
       ],
       page: 1,
       page_size: 20,
@@ -1586,7 +1586,7 @@ describe("ConsoleInsertPanel", () => {
       tour_id: 7,
       tour_title: "New Tour",
       band_ids: [1, 2],
-      stops: [{ live_id: 41, live_date: "2026-05-30", live_title: "New Tour 福岡公演", venue: "Zepp", band_ids: [1, 2], stop_label: "Final" }],
+      stops: [{ live_id: 41, live_date: "2026-05-30", start_time: "18:00:00+09:00", live_title: "New Tour 福岡公演", venue: "Zepp", band_ids: [1, 2], stop_label: "Final" }],
     });
 
     render(<ConsoleInsertPanel initialMode="tour" />);
@@ -1632,6 +1632,32 @@ describe("ConsoleInsertPanel", () => {
     expect(within(insertedTourTable).getByText("1")).toBeInTheDocument();
   });
 
+  // 测试点：新建巡演未指定参与乐队时，确认弹窗应提示自动聚合与统计范围，但仍允许提交。
+  test("新建巡演未指定乐队时显示确认提示", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleTourLiveCandidates.mockResolvedValue({
+      items: [
+        { live_id: 41, live_date: "2026-05-30", start_time: "18:00:00+09:00", live_title: "No Band Tour", venue: "Zepp", tour_id: null, tour_title: null, band_ids: [1] },
+      ],
+      page: 1,
+      page_size: 20,
+      total: 1,
+      total_pages: 1,
+    });
+
+    render(<ConsoleInsertPanel initialMode="tour" />);
+    await screen.findByText(/#41 No Band Tour/);
+    await user.type(screen.getByLabelText("巡演名称"), "No Band Tour");
+    await user.click(screen.getByRole("button", { name: "添加" }));
+    await user.click(screen.getByRole("button", { name: "创建巡演" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认创建巡演" });
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "尚未指定参与乐队；创建后将按所选场次自动聚合乐队，巡演统计会包含全部 Setlist。",
+    );
+    expect(within(dialog).getByRole("button", { name: "确认提交" })).toBeEnabled();
+  });
+
   // 测试点：已有巡演使用共享实体选择器宽度，保存后退出编辑态且不把更新计入新增记录。
   test("巡演管理保存修改后还原表单", async () => {
     const user = userEvent.setup();
@@ -1656,6 +1682,7 @@ describe("ConsoleInsertPanel", () => {
       stops: [{
         live_id: 41,
         live_date: "2026-05-30",
+        start_time: "18:00:00+09:00",
         live_title: "Existing Live",
         venue: "Zepp",
         band_ids: [1],
@@ -1701,13 +1728,13 @@ describe("ConsoleInsertPanel", () => {
     expect(within(screen.getByRole("table", { name: "新增巡演记录" })).getByText("暂无新增巡演记录")).toBeInTheDocument();
   });
 
-  // 测试点：巡演结果写入共享日志，切换到新增 Live 后的新结果会覆盖上一条。
+  // 测试点：同日巡演场次按开演时间排序，巡演结果继续写入共享日志。
   test("巡演管理一键添加全部筛选结果", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleTourLiveCandidates.mockImplementation((_query, _page, pageSize) => Promise.resolve({
       items: pageSize === 500 ? [
-        { live_id: 42, live_date: "2026-06-02", live_title: "Later", venue: "B", tour_id: null, tour_title: null, band_ids: [2] },
-        { live_id: 41, live_date: "2026-05-30", live_title: "Earlier", venue: "A", tour_id: null, tour_title: null, band_ids: [1] },
+        { live_id: 41, live_date: "2026-06-02", start_time: "18:00:00+09:00", live_title: "Later", venue: "B", tour_id: null, tour_title: null, band_ids: [2] },
+        { live_id: 42, live_date: "2026-06-02", start_time: "13:00:00+09:00", live_title: "Earlier", venue: "A", tour_id: null, tour_title: null, band_ids: [1] },
       ] : [],
       page: 1,
       page_size: pageSize,
@@ -1723,8 +1750,8 @@ describe("ConsoleInsertPanel", () => {
     const selectedRows = within(screen.getByRole("table", { name: "已选场次" }))
       .getAllByRole("row").slice(1).map((row) => row.textContent);
     expect(selectedRows).toEqual([
-      expect.stringContaining("#41 Earlier"),
-      expect.stringContaining("#42 Later"),
+      expect.stringContaining("#42 Earlier"),
+      expect.stringContaining("#41 Later"),
     ]);
     expect(screen.getByRole("status")).toHaveTextContent("已添加 2 场");
 

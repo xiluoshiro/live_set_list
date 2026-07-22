@@ -128,24 +128,28 @@ def _build_tour_list_queries(
     sort: Literal["date_desc", "date_asc"],
 ) -> tuple[str, tuple[object, ...], str, tuple[object, ...]]:
     where_sql, params = _build_tour_filters(query=query, year=year, band_id=band_id)
-    matched_order = (
-        "(SELECT MIN(order_live.live_date) FROM tour_lives order_stop "
-        "JOIN live_attrs order_live ON order_live.id = order_stop.live_id "
-        "WHERE order_stop.tour_id = t.id) ASC, t.id ASC"
+    sort_dir = "ASC" if sort == "date_asc" else "DESC"
+    result_order = (
+        "summary.start_date ASC, summary.start_time ASC, summary.tour_id ASC"
         if sort == "date_asc"
-        else "(SELECT MAX(order_live.live_date) FROM tour_lives order_stop "
-        "JOIN live_attrs order_live ON order_live.id = order_stop.live_id "
-        "WHERE order_stop.tour_id = t.id) DESC, t.id DESC"
+        else "summary.end_date DESC, summary.end_time DESC, summary.tour_id DESC"
     )
-    result_order = "summary.start_date ASC, summary.tour_id ASC" if sort == "date_asc" else "summary.end_date DESC, summary.tour_id DESC"
 
     count_query = f"SELECT COUNT(*) FROM tour_attrs t WHERE {where_sql}"
     page_query = f"""
         WITH matched_tours AS (
             SELECT t.id
             FROM tour_attrs t
+            JOIN LATERAL (
+                SELECT order_live.live_date, order_live.start_time
+                FROM tour_lives order_stop
+                JOIN live_attrs order_live ON order_live.id = order_stop.live_id
+                WHERE order_stop.tour_id = t.id
+                ORDER BY order_live.live_date {sort_dir}, order_live.start_time {sort_dir}, order_live.id {sort_dir}
+                LIMIT 1
+            ) boundary_live ON true
             WHERE {where_sql}
-            ORDER BY {matched_order}
+            ORDER BY boundary_live.live_date {sort_dir}, boundary_live.start_time {sort_dir}, t.id {sort_dir}
             LIMIT %s OFFSET %s
         ),
         summary AS (
@@ -157,12 +161,14 @@ def _build_tour_list_queries(
                     FROM tour_lives first_stop
                     JOIN live_attrs first_live ON first_live.id = first_stop.live_id
                     WHERE first_stop.tour_id = t.id
-                    ORDER BY first_live.live_date, first_live.id
+                    ORDER BY first_live.live_date, first_live.start_time, first_live.id
                     LIMIT 1
                 ) AS url,
                 NULL::text AS description,
                 MIN(l.live_date) AS start_date,
                 MAX(l.live_date) AS end_date,
+                (array_agg(l.start_time ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC))[1] AS start_time,
+                (array_agg(l.start_time ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC))[1] AS end_time,
                 COUNT(*)::int AS collected_live_count,
                 COALESCE(
                     (
@@ -210,7 +216,7 @@ def _build_tour_list_queries(
                     '[]'::jsonb
                 ) AS bands,
                 COALESCE(
-                    array_agg(tl.stop_label ORDER BY l.live_date, l.id)
+                    array_agg(tl.stop_label ORDER BY l.live_date, l.start_time, l.id)
                         FILTER (WHERE tl.stop_label IS NOT NULL),
                     ARRAY[]::text[]
                 ) AS stop_labels
@@ -245,7 +251,7 @@ SELECT
         FROM tour_lives first_stop
         JOIN live_attrs first_live ON first_live.id = first_stop.live_id
         WHERE first_stop.tour_id = t.id
-        ORDER BY first_live.live_date, first_live.id
+        ORDER BY first_live.live_date, first_live.start_time, first_live.id
         LIMIT 1
     ) AS url,
     NULL::text AS description,
@@ -253,7 +259,7 @@ SELECT
     MAX(l.live_date) AS end_date,
     COUNT(*)::int AS collected_live_count,
     COALESCE(
-        array_agg(tl.stop_label ORDER BY l.live_date, l.id)
+        array_agg(tl.stop_label ORDER BY l.live_date, l.start_time, l.id)
             FILTER (WHERE tl.stop_label IS NOT NULL),
         ARRAY[]::text[]
     ) AS stop_labels
@@ -299,7 +305,7 @@ ORDER BY selected.id
 
 TOUR_DETAIL_STOPS_QUERY = """
 SELECT
-    ROW_NUMBER() OVER (ORDER BY l.live_date, l.id)::int AS stop_order,
+    ROW_NUMBER() OVER (ORDER BY l.live_date, l.start_time, l.id)::int AS stop_order,
     tl.stop_label,
     l.id,
     l.live_date,
@@ -327,7 +333,7 @@ FROM tour_lives tl
 JOIN live_attrs l ON l.id = tl.live_id
 LEFT JOIN venue_list v ON v.id = l.venue_id
 WHERE tl.tour_id = %s
-ORDER BY l.live_date, l.id
+ORDER BY l.live_date, l.start_time, l.id
 """
 
 TOUR_STATISTICS_QUERY = """
@@ -368,7 +374,7 @@ LEFT JOIN live_setlist stl
    )
 LEFT JOIN song_list s ON s.id = stl.song_id
 WHERE tl.tour_id = %s
-ORDER BY l.live_date, l.id, stl.absolute_order
+ORDER BY l.live_date, l.start_time, l.id, stl.absolute_order
 """
 
 

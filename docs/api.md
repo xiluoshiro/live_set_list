@@ -237,10 +237,10 @@
   - `q` 匹配巡演名称、场次标签和关联 Live 标题，并转义 `%`、`_`、`\`
   - `year` 表示至少一场已收录 Live 位于该年份；跨年巡演可以命中多个年份
   - `band_id` 在巡演显式维护 `tour_bands` 时匹配该集合；未显式指定时，回退到各场 Live 的有效乐队
-  - 默认按已收录场次的最晚日期倒序；升序按最早日期排序
+  - 默认按最后一场的日期、开演时间倒序；升序按第一场的日期、开演时间排序；ID 仅作完全同时间的稳定兜底
   - 只返回至少关联一场 Live 的巡演，日期范围和 `collected_live_count` 均由当前关联实时聚合
 - `GET /api/catalog/tours/{tour_id}`
-  - 场次按 `live_date ASC, live_id ASC` 返回；`stop_order` 是服务端按该顺序生成的连续值
+  - 场次按 `live_date ASC, start_time ASC, live_id ASC` 返回；`stop_order` 是服务端按该顺序生成的连续值
   - `url` 取日期最早场次的 Live URL，`description` 当前固定为 `null`
   - `tour_bands` 为空时，`bands` 从全部场次的有效 Live 乐队动态聚合并按 Band ID 排序
   - `has_setlist` 只表示是否至少存在一行 setlist，不加载 setlist 明细
@@ -318,14 +318,15 @@
   - `band_ids` 可为空，最多 100 个已存在且不重复的正数 ID；后端按 Band ID 排序
   - `band_ids` 非空时，每个 Band 必须至少出现在一场所选 Live 中；为空时数据库关系保持空集合
   - `stops` 要求 1~500 项且 `live_id` 不得重复；不接收人工 `stop_order`
-  - 服务端按关联 Live 的 `live_date ASC, live_id ASC` 生成连续 `stop_order`
+  - 服务端按关联 Live 的 `live_date ASC, start_time ASC, live_id ASC` 生成连续 `stop_order`
   - 所有关联 Live 必须存在；Live 已属于其他巡演时返回 `409`，detail 包含冲突的 `live_id / tour_id / tour_title`
   - 创建与完整替换都在单一事务中完成，并写一条 `tour_create` 或 `tour_update` 汇总审计日志
   - 第一版不提供删除巡演接口
 - `GET /api/console/tours/live-candidates`
   - 只返回尚未出现在 `tour_lives` 中的 Live；已被任意巡演占用的场次在数据库分页前排除
+  - 候选包含 `start_time`，并按 `live_date DESC, start_time DESC, live_id DESC` 分页
 - `GET /api/console/tours/{tour_id}`
-  - 返回显式 `band_ids` 与完整 stops，按 `live_date ASC, live_id ASC` 排序；`stop_label` 作为兼容字段返回，但当前控制台不展示或维护
+  - 返回显式 `band_ids` 与完整 stops，按 `live_date ASC, start_time ASC, live_id ASC` 排序；`stop_label` 作为兼容字段返回，但当前控制台不展示或维护
 - `GET /api/console/performance-groups`
   - 返回全部活动组的 `group_id/group_title`，按 `group_title ASC, group_id ASC` 排序；控制台不再从公共分页列表截取可编辑实体
 - `GET /api/console/performance-groups/live-candidates`

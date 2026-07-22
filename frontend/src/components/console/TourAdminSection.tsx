@@ -18,6 +18,7 @@ import type { BandOption, Position } from "./types";
 type DraftStop = {
   live_id: number;
   live_date: string;
+  start_time: string;
   live_title: string;
   venue: string | null;
   stop_label: string;
@@ -36,7 +37,10 @@ function errorMessage(error: unknown): string {
 
 function sortStops(stops: DraftStop[]): DraftStop[] {
   return [...stops].sort(
-    (left, right) => left.live_date.localeCompare(right.live_date) || left.live_id - right.live_id,
+    (left, right) =>
+      left.live_date.localeCompare(right.live_date) ||
+      left.start_time.localeCompare(right.start_time) ||
+      left.live_id - right.live_id,
   );
 }
 
@@ -44,6 +48,7 @@ function candidateToDraft(candidate: ConsoleTourLiveCandidate): DraftStop {
   return {
     live_id: candidate.live_id,
     live_date: candidate.live_date,
+    start_time: candidate.start_time,
     live_title: candidate.live_title,
     venue: candidate.venue,
     stop_label: "",
@@ -165,6 +170,7 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
       setStops(sortStops(detail.stops.map((stop) => ({
         live_id: stop.live_id,
         live_date: stop.live_date,
+        start_time: stop.start_time,
         live_title: stop.live_title,
         venue: stop.venue,
         stop_label: stop.stop_label ?? "",
@@ -413,6 +419,11 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
               </div>
             </div>
             <div className="console-confirm-body">
+              {isNew && selectedBandIds.length === 0 && (
+                <p className="console-admin-hint tour-band-validation" role="alert">
+                  尚未指定参与乐队；创建后将按所选场次自动聚合乐队，巡演统计会包含全部 Setlist。
+                </p>
+              )}
               <div className="console-confirm-table-wrap">
                 <table className="console-admin-table console-confirm-table">
                   <tbody>

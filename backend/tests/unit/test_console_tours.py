@@ -50,13 +50,13 @@ def _payload(**overrides):
     return payload
 
 
-# 测试点：巡演场次候选必须在计数和分页查询中排除已存在于 tour_lives 的 Live。
+# 测试点：巡演场次候选须在分页前排除已占用 Live，并按日期、开演时间、ID 倒序。
 def test_tour_live_candidates_filter_occupied_before_pagination():
     _authenticate_editor()
     conn, cursor = _connection_mock()
     cursor.fetchone.return_value = (1,)
     cursor.fetchall.return_value = [
-        (41, date(2026, 5, 30), "Available Live", "Zepp", None, None, [1]),
+        (41, date(2026, 5, 30), "18:00:00+09:00", "Available Live", "Zepp", None, None, [1]),
     ]
 
     with patch("app.routers.console_tours.get_db_connection", return_value=conn):
@@ -70,6 +70,7 @@ def test_tour_live_candidates_filter_occupied_before_pagination():
             {
                 "live_id": 41,
                 "live_date": "2026-05-30",
+                "start_time": "18:00:00+09:00",
                 "live_title": "Available Live",
                 "venue": "Zepp",
                 "tour_id": None,
@@ -89,9 +90,10 @@ def test_tour_live_candidates_filter_occupied_before_pagination():
         for sql in executed_sql
     )
     assert "LEFT JOIN tour_lives" not in executed_sql[1]
+    assert "ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC" in executed_sql[1]
 
 
-# 测试点：创建巡演应规范化文本、按请求顺序写入关系，并生成一条汇总审计日志。
+# 测试点：创建巡演应按日期、开演时间、ID 写入关系，并生成一条汇总审计日志。
 def test_create_console_tour_persists_complete_collection_and_audit():
     _authenticate_editor()
     conn, cursor = _connection_mock()
@@ -114,6 +116,7 @@ def test_create_console_tour_persists_complete_collection_and_audit():
     assert any("INSERT INTO tour_bands" in sql for sql in executed_sql)
     assert any("INSERT INTO tour_lives" in sql for sql in executed_sql)
     assert any("INSERT INTO audit_logs" in sql for sql in executed_sql)
+    assert any("ORDER BY l.live_date, l.start_time, l.id" in sql for sql in executed_sql)
 
 
 # 测试点：请求中的重复 Band 或 Live 应在写库前由 schema 拒绝。
