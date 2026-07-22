@@ -124,7 +124,7 @@
 自动文档能看到字段结构，但以下规则更值得额外说明：
 
 - `page_size` 当前只允许 `15` 或 `20`
-- `without_setlist=true` 时，仅返回尚无 `live_setlist` 数据的 Live；控制台“新增 Setlist”候选使用该筛选
+- `without_setlist=true` 时，仅返回尚无 `live_setlist` 数据的 Live，并在数据库分页前优先排列非 `event` 类型；控制台“新增 Setlist”候选使用该筛选
 - `q` 会 trim；空字符串等同于未传，最大长度为 `255`，匹配 Live 标题、场地、歌曲、乐队名和乐队缩写
 - `year` 范围为 `1900..2100`
 - `live_type` 只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
@@ -226,7 +226,7 @@
   - `scope=all` 中，有效活动组返回一个 `kind=performance_group` 项，组内 Live 不重复作为同级项返回
   - `scope=favorites` 中，组内全部 Live 已收藏时返回组项；部分收藏时仅返回已收藏子 Live；一场未收藏则不会伪造组收藏
   - 活动组因 Live 删除只剩一场时不再作为有效组，剩余 Live 自动恢复为独立 `kind=live` 项
-  - 默认倒序使用组 `end_date` / Live 日期，升序使用组 `start_date` / Live 日期；同日期以实体 ID 保持稳定
+  - 默认倒序使用组 `end_date` / Live 日期及对应开演时间，升序使用组 `start_date` / Live 日期及对应开演时间；只有日期和开演时间都相同时才以实体 ID 保持稳定
 - `GET /api/catalog/performance-groups/{group_id}`
   - 只对至少两场的有效活动组返回详情；不存在或无效组返回 `404`
   - 子 Live 按 `live_date ASC, start_time ASC, live_id ASC` 返回

@@ -272,9 +272,9 @@ GET /api/catalog/performances
 
 默认日期排序：
 
-- 降序按组内 `MAX(live_date) DESC`，再按 `group_id DESC`。
-- 升序按组内 `MIN(live_date) ASC`，再按 `group_id ASC`。
-- 普通 Live 使用自身日期和 ID，与组摘要投影到统一排序列。
+- 降序按组内最后一场的 `live_date DESC, start_time DESC`，再按 `group_id DESC` 保持稳定。
+- 升序按组内第一场的 `live_date ASC, start_time ASC`，再按 `group_id ASC` 保持稳定。
+- 普通 Live 使用自身日期、开演时间和 ID，与组摘要投影到统一排序列。
 
 筛选命中活动组时，卡片和详情仍展示完整活动组，不把未命中的子 Live 从组内隐藏。
 
