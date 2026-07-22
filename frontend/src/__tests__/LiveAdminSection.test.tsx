@@ -1,9 +1,10 @@
-import { createRef } from "react";
+import { createRef, type ComponentProps } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
 import { LiveAdminSection } from "../components/console/LiveAdminSection";
 
+type InsertedLiveHistory = ComponentProps<typeof LiveAdminSection>["insertedLives"];
 
 function renderSection(
   onToggleDefaultBand = vi.fn(),
@@ -14,6 +15,7 @@ function renderSection(
     editingLiveId?: number | null;
     isLiveDirty?: boolean;
     variant?: "create" | "edit";
+    insertedLives?: InsertedLiveHistory;
   } = {},
 ) {
   const onToggleEventAttendee = options.onToggleEventAttendee ?? vi.fn();
@@ -60,7 +62,7 @@ function renderSection(
       defaultBandTriggerRef={createRef<HTMLButtonElement>()}
       defaultBandMenuRef={createRef<HTMLDivElement>()}
       venueQueryInputRef={createRef<HTMLInputElement>()}
-      insertedLives={[]}
+      insertedLives={options.insertedLives ?? []}
       onLiveDateChange={vi.fn()}
       onLiveTitleChange={vi.fn()}
       onLiveTypeChange={vi.fn()}
@@ -155,5 +157,37 @@ describe("LiveAdminSection", () => {
     expect(screen.getByPlaceholderText("输入 Live ID 或标题")).toHaveClass("live-management-primary-control");
     expect(screen.queryByRole("checkbox", { name: "新增后清空录入数据" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Live #55 有未保存修改/)).not.toBeInTheDocument();
+  });
+
+  // 测试点：同一 Live 的多次更新快照使用独立历史标识，不产生重复 React key 或覆盖旧记录。
+  test("renders repeated updates for one Live as distinct history rows", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const commonHistory = {
+      action: "update" as const,
+      live_id: 55,
+      live_date: "2026-07-05",
+      live_type: "event",
+      url: "https://example.com/live/55",
+      opening_time: "18:00:00+09:00",
+      start_time: "19:00:00+09:00",
+      timezone: "+09:00",
+      venue_id: 1,
+      default_band_ids: [3],
+      event_attendees: [],
+    };
+
+    renderSection(vi.fn(), {
+      variant: "edit",
+      editingLiveId: 55,
+      insertedLives: [
+        { ...commonHistory, history_entry_id: 2, live_title: "Second saved title" },
+        { ...commonHistory, history_entry_id: 1, live_title: "First saved title" },
+      ],
+    });
+
+    expect(screen.getByText("Second saved title")).toBeInTheDocument();
+    expect(screen.getByText("First saved title")).toBeInTheDocument();
+    expect(consoleError.mock.calls.some((call) => call.some((value) => String(value).includes("same key")))).toBe(false);
+    consoleError.mockRestore();
   });
 });

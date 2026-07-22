@@ -63,6 +63,7 @@ import type {
 } from "./console/types";
 
 type LiveInsertDraft = {
+  history_entry_id: number;
   action: "create" | "update";
   live_id: number;
   live_date: string;
@@ -320,6 +321,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [venueOpen, setVenueOpen] = useState(false);
   const [venueMenuPos, setVenueMenuPos] = useState<Position | null>(null);
   const [insertedLives, setInsertedLives] = useState<LiveInsertDraft[]>([]);
+  const liveHistoryEntryIdRef = useRef(0);
   const [liveCandidates, setLiveCandidates] = useState<ConsoleLiveCandidate[]>([]);
   const [liveCandidateQuery, setLiveCandidateQuery] = useState("");
   const [liveCandidateType, setLiveCandidateType] = useState("");
@@ -1536,7 +1538,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       const response = action === "create"
         ? await createConsoleLive(payload, csrfToken)
         : await updateConsoleLive(liveId as number, payload, csrfToken);
+      const historyEntryId = liveHistoryEntryIdRef.current + 1;
+      liveHistoryEntryIdRef.current = historyEntryId;
       const inserted: LiveInsertDraft = {
+        history_entry_id: historyEntryId,
         action,
         live_id: response.item.live_id,
         live_date: response.item.live_date,
