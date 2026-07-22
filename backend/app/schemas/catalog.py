@@ -9,6 +9,7 @@ class CatalogBandItem(BaseModel):
     band_id: int = Field(..., description="band_attrs.id")
     band_name: str = Field(..., description="Band display name")
     band_abbr: str = Field(..., description="Band abbreviation")
+    band_members: list[str] = Field(default_factory=list, description="Default member roster")
     live_count: int = Field(..., description="Matched live count for this band")
 
 

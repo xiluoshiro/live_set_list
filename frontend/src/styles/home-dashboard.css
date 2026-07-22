@@ -318,4 +318,8 @@
     grid-template-columns: 1fr;
     gap: 6px;
   }
+
+  .home-section-head { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .home-section-head > .home-show-all-link { grid-column: 2; grid-row: 1; justify-self: end; white-space: nowrap; }
+  .home-section-head > .action-link:not(.home-show-all-link) { display: none; }
 }

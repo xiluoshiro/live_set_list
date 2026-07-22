@@ -113,7 +113,7 @@ export function HomeDashboard({
         <section className="home-section home-recent" aria-labelledby="home-recent-title">
           <div className="home-section-head">
             <h3 id="home-recent-title">最近收录</h3>
-            <button type="button" className="action-link" onClick={onShowAll}>
+            <button type="button" className="action-link home-show-all-link" onClick={onShowAll}>
               查看全部 Live <span className="action-link-arrow">→</span>
             </button>
             <button type="button" className="action-link" onClick={onShowBrowse}>

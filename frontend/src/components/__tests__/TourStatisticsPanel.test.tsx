@@ -1,9 +1,16 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { TourStatisticsResponse } from "../../api";
+import { getTourStatisticsComparison, type TourStatisticsResponse, type TourStopItem } from "../../api";
 import { TourStatisticsPanel } from "../TourStatisticsPanel";
+
+vi.mock("../../api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../api")>();
+  return { ...actual, getTourStatisticsComparison: vi.fn() };
+});
+
+const getTourStatisticsComparisonMock = vi.mocked(getTourStatisticsComparison);
 
 function makeStatistics(): TourStatisticsResponse {
   return {
@@ -43,6 +50,51 @@ function makeStatistics(): TourStatisticsResponse {
 }
 
 describe("TourStatisticsPanel", () => {
+  beforeEach(() => {
+    getTourStatisticsComparisonMock.mockReset();
+  });
+
+  // 测试点：只有两场可比较 Setlist 时，任意场次比较不应重复相邻场次的唯一结果。
+  test("两场 Setlist 时不显示任意场次比较", () => {
+    const stops: TourStopItem[] = [
+      { stop_order: 1, stop_label: null, live_id: 40, live_date: "2026-05-20", live_title: "Tour 2026 大阪公演", live_type: "oneman", venue: null, bands: [1], url: null, is_favorite: false, has_setlist: true },
+      { stop_order: 2, stop_label: null, live_id: 41, live_date: "2026-05-30", live_title: "Tour 2026 東京公演", live_type: "oneman", venue: null, bands: [1], url: null, is_favorite: false, has_setlist: true },
+    ];
+    render(<TourStatisticsPanel tourTitle="Tour 2026" data={makeStatistics()} loading={false} error={null} onOpenStop={vi.fn()} stops={stops} />);
+
+    expect(screen.queryByRole("button", { name: "比较这两场" })).not.toBeInTheDocument();
+  });
+
+  // 测试点：三场以上时只在点击后请求首末场比较，并复用完整的变化明细流。
+  test("按需加载任意两场的完整变化", async () => {
+    const user = userEvent.setup();
+    const stops: TourStopItem[] = [
+      { stop_order: 1, stop_label: null, live_id: 40, live_date: "2026-05-20", live_title: "Tour 2026 大阪公演", live_type: "oneman", venue: null, bands: [1], url: null, is_favorite: false, has_setlist: true },
+      { stop_order: 2, stop_label: null, live_id: 41, live_date: "2026-05-30", live_title: "Tour 2026 東京公演", live_type: "oneman", venue: null, bands: [1], url: null, is_favorite: false, has_setlist: true },
+      { stop_order: 3, stop_label: null, live_id: 42, live_date: "2026-06-02", live_title: "Tour 2026 FINAL", live_type: "oneman", venue: null, bands: [1], url: null, is_favorite: false, has_setlist: true },
+    ];
+    getTourStatisticsComparisonMock.mockResolvedValue({
+      from_live_id: 40,
+      from_live_date: "2026-05-20",
+      from_live_title: "Tour 2026 大阪公演",
+      to_live_id: 42,
+      to_live_date: "2026-06-02",
+      to_live_title: "Tour 2026 FINAL",
+      replacements: [],
+      added_songs: [{ song_id: 9, song_name: "任意场次新增曲" }],
+      removed_songs: [],
+      moved_songs: [],
+    });
+    render(<TourStatisticsPanel tourTitle="Tour 2026" data={makeStatistics()} loading={false} error={null} onOpenStop={vi.fn()} stops={stops} />);
+
+    expect(getTourStatisticsComparisonMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "比较这两场" }));
+
+    expect(getTourStatisticsComparisonMock).toHaveBeenCalledWith(7, 40, 42);
+    const customRegion = await screen.findByRole("region", { name: "任意场次歌单变化" });
+    expect(within(customRegion).getByLabelText("新增 任意场次新增曲")).toBeInTheDocument();
+  });
+
   // 测试点：时间线默认选中最近一次有变化的场次，并允许切换查看无变化的相邻场次。
   test("切换相邻场次歌单变化", async () => {
     const user = userEvent.setup();

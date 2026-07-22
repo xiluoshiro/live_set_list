@@ -52,6 +52,11 @@ class LiveDetailOtherMember(BaseModel):
     value: list[str] = Field(..., description='Normalized other member values')
 
 
+class LiveDetailCoverBand(BaseModel):
+    band_id: int = Field(..., ge=1, description='Owning band ID for an inferred cross-band cover')
+    band_name: str = Field(..., description='Owning band display name for the cover icon')
+
+
 class LiveDetailEventAttendee(BaseModel):
     band_id: int = Field(..., description='band_attrs.id')
     band_name: str = Field(..., description='Band display name')
@@ -65,6 +70,10 @@ class LiveDetailRow(BaseModel):
     band_members: list[LiveDetailBandMember] = Field(..., description='Band member info for this row')
     other_members: list[LiveDetailOtherMember] = Field(..., description='Other member info for this row')
     comments: list[str] = Field(..., description='Comment tags such as short version and cover markers')
+    cover_band: LiveDetailCoverBand | None = Field(
+        default=None,
+        description='Owning band when the song is inferred as a cross-band cover; null for song_list.is_cover tags',
+    )
 
 
 class LiveDetailResponse(BaseModel):

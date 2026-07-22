@@ -24,6 +24,7 @@
 .tour-statistics-table th:nth-child(2), .tour-statistics-table td:nth-child(2),
 .tour-statistics-table th:nth-child(3), .tour-statistics-table td:nth-child(3) { width: 140px; }
 .tour-transition-explorer { display: grid; grid-template-columns: minmax(220px, .72fr) minmax(0, 1.7fr); gap: 22px; align-items: start; }
+.tour-transition-explorer.detail-only { display: block; }
 .tour-transition-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .tour-transition-section-head h3,
 .tour-transition-detail h3,
@@ -77,6 +78,9 @@
 .tour-transition-diff-row.moved { background: var(--surface-muted); }
 .tour-transition-diff-row.moved > span:first-child { color: var(--accent-primary); }
 .tour-transition-order { color: var(--text-secondary); white-space: nowrap; }
+.tour-custom-comparison { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; padding: 10px 0 14px; border-bottom: 1px solid var(--border-table-row); }
+.tour-custom-comparison .list-filter-field { min-width: min(240px, 100%); }
+.tour-custom-result { margin: 14px 0 18px; padding: 14px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-2); }
 
 @media (max-width: 900px) {
   .list-filter-form.tour-filter-form { grid-template-columns: 1fr; }

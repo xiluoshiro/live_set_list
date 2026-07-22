@@ -173,6 +173,31 @@ def test_get_tour_statistics_compares_adjacent_setlists():
     assert cursor.execute.call_args_list == [call(TOUR_STATISTICS_QUERY, (7,))]
 
 
+# 测试点：任意场次接口按请求的起始和目标方向比较，而不是强制改回时间顺序。
+def test_get_tour_statistics_comparison_preserves_requested_direction():
+    conn, cursor = _build_connection_mock()
+    cursor.fetchall.return_value = [
+        (45, "2026-04-17", "Exitus 福冈", 1, "Song A", "main", 1, 1, False),
+        (45, "2026-04-17", "Exitus 福冈", 2, "Song B", "main", 2, 2, False),
+        (53, "2026-06-20", "Exitus FINAL", 1, "Song A", "main", 1, 1, False),
+        (53, "2026-06-20", "Exitus FINAL", 3, "Song C", "main", 2, 2, False),
+    ]
+
+    with patch("app.routers.tours.get_db_connection", return_value=conn):
+        response = TestClient(app).get(
+            "/api/catalog/tours/7/statistics/comparison?from_live_id=53&to_live_id=45"
+        )
+
+    assert response.status_code == 200
+    transition = response.json()
+    assert transition["from_live_id"] == 53
+    assert transition["to_live_id"] == 45
+    assert [song["song_id"] for song in transition["added_songs"]] == []
+    assert [song["song_id"] for song in transition["removed_songs"]] == []
+    assert transition["replacements"][0]["from_song"]["song_id"] == 3
+    assert transition["replacements"][0]["to_song"]["song_id"] == 2
+
+
 # 测试点：顺序变化应优先于位置更换，并按前一场歌单顺序而非 song_id 排列。
 def test_get_tour_statistics_prefers_movement_over_replacement():
     conn, cursor = _build_connection_mock()

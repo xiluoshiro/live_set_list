@@ -24,14 +24,19 @@ type StatisticsPanelProps = {
 export function StatisticsPanel(props: StatisticsPanelProps) {
   const { data, filters } = props;
   const maxYearCount = Math.max(1, ...(data?.years.map((item) => item.live_count) ?? [1]));
+  const setlistCoverage = data && data.overview.live_count > 0
+    ? Math.round(data.overview.setlist_live_count / data.overview.live_count * 100)
+    : 0;
   return (
     <section className="statistics-panel">
       <PageTitle kicker="Archive insights" title="数据统计" description="从资料库收录记录观察 Live 与歌曲演出轨迹。" />
-      <div className="statistics-controls" aria-label="统计条件">
-        <div className="statistics-scope" aria-label="统计范围">
-          <button className={props.scope === "all" ? "active" : ""} onClick={() => props.onScopeChange("all")}>全部 Live</button>
-          <button className={props.scope === "favorites" ? "active" : ""} onClick={() => props.onScopeChange("favorites")}>收藏 Live</button>
+      <div className="statistics-scope-row">
+        <div className="list-scope-toggle" role="group" aria-label="统计范围">
+          <button type="button" className={props.scope === "all" ? "active" : ""} aria-pressed={props.scope === "all"} onClick={() => props.onScopeChange("all")}>全部</button>
+          <button type="button" className={props.scope === "favorites" ? "active" : ""} aria-pressed={props.scope === "favorites"} onClick={() => props.onScopeChange("favorites")}>已收藏</button>
         </div>
+      </div>
+      <div className="statistics-controls" aria-label="统计条件">
         <label>年份<select value={filters.year ?? ""} onChange={(event) => props.onFiltersChange({ ...filters, year: event.target.value ? Number(event.target.value) : undefined })}>
           <option value="">全部年份</option>{props.years.map((year) => <option key={year} value={year}>{year}</option>)}
         </select></label>
@@ -55,12 +60,9 @@ export function StatisticsPanel(props: StatisticsPanelProps) {
           <article><strong>{data.overview.venue_count}</strong><span>场地</span></article>
         </div>
         <div className="statistics-grid">
-          <section className="statistics-card">
-            <h2>年份分布</h2>
-            <div className="statistics-bars">{data.years.map((item) => <div className="statistics-bar-row" key={item.key}>
-              <span>{item.label}</span><i style={{ width: `${Math.max(4, item.live_count / maxYearCount * 100)}%` }} /><strong>{item.live_count}</strong>
-            </div>)}</div>
-          </section>
+          {filters.year ? <section className="statistics-card"><h2>{filters.year} 年收录情况</h2><ul className="statistics-dimension-list"><li><span>Setlist 覆盖</span><strong>{setlistCoverage}%（{data.overview.setlist_live_count} / {data.overview.live_count}）</strong></li><li><span>当年首场</span><strong>{data.overview.earliest_live_date ?? "-"}</strong></li><li><span>当年末场</span><strong>{data.overview.latest_live_date ?? "-"}</strong></li></ul></section> : <section className="statistics-card">
+            <h2>年份分布</h2><div className="statistics-bars">{data.years.map((item) => <div className="statistics-bar-row" key={item.key}><span>{item.label}</span><i style={{ width: `${Math.max(4, item.live_count / maxYearCount * 100)}%` }} /><strong>{item.live_count}</strong></div>)}</div>
+          </section>}
           <section className="statistics-card">
             <h2>Live 类型</h2>
             <ul className="statistics-dimension-list">{data.live_types.map((item) => <li key={item.key}><span>{formatLiveType(item.key)}</span><strong>{item.live_count}</strong></li>)}</ul>

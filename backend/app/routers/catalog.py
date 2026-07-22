@@ -130,17 +130,28 @@ SELECT
     b.id,
     b.band_name,
     b.band_abbr,
-    COUNT(DISTINCT ls.live_id) AS live_count
+    b.band_members,
+    COUNT(DISTINCT l.id) AS live_count
 FROM band_attrs b
-LEFT JOIN live_setlist ls
-    ON jsonb_typeof(ls.band_member) = 'object'
-   AND ls.band_member ? b.band_name
+LEFT JOIN live_attrs l
+    ON (
+        EXISTS (
+            SELECT 1 FROM live_setlist ls
+            WHERE ls.live_id = l.id
+              AND jsonb_typeof(ls.band_member) = 'object'
+              AND ls.band_member ? b.band_name
+        )
+        OR (
+            NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id)
+            AND b.id = ANY(l.default_band_ids)
+        )
+    )
 WHERE b.id > 0
   AND (
       b.band_name ILIKE %s ESCAPE '\\'
       OR b.band_abbr ILIKE %s ESCAPE '\\'
   )
-GROUP BY b.id, b.band_name, b.band_abbr
+GROUP BY b.id, b.band_name, b.band_abbr, b.band_members
 ORDER BY live_count DESC, b.band_name, b.id
 LIMIT %s
 """
@@ -182,13 +193,24 @@ SELECT
     b.id,
     b.band_name,
     b.band_abbr,
-    COUNT(DISTINCT ls.live_id) AS live_count
+    b.band_members,
+    COUNT(DISTINCT l.id) AS live_count
 FROM band_attrs b
-LEFT JOIN live_setlist ls
-    ON jsonb_typeof(ls.band_member) = 'object'
-   AND ls.band_member ? b.band_name
+LEFT JOIN live_attrs l
+    ON (
+        EXISTS (
+            SELECT 1 FROM live_setlist ls
+            WHERE ls.live_id = l.id
+              AND jsonb_typeof(ls.band_member) = 'object'
+              AND ls.band_member ? b.band_name
+        )
+        OR (
+            NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id)
+            AND b.id = ANY(l.default_band_ids)
+        )
+    )
 WHERE b.id > 0
-GROUP BY b.id, b.band_name, b.band_abbr
+GROUP BY b.id, b.band_name, b.band_abbr, b.band_members
 ORDER BY b.id
 LIMIT %s
 """
@@ -198,36 +220,35 @@ SELECT
     b.id,
     b.band_name,
     b.band_abbr,
-    COUNT(DISTINCT ls.live_id) AS live_count
+    b.band_members,
+    COUNT(DISTINCT l.id) AS live_count
 FROM band_attrs b
-LEFT JOIN live_setlist ls
-    ON jsonb_typeof(ls.band_member) = 'object'
-   AND ls.band_member ? b.band_name
+LEFT JOIN live_attrs l
+    ON (
+        EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id AND jsonb_typeof(ls.band_member) = 'object' AND ls.band_member ? b.band_name)
+        OR (NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id) AND b.id = ANY(l.default_band_ids))
+    )
 WHERE b.id = %s
-GROUP BY b.id, b.band_name, b.band_abbr
+GROUP BY b.id, b.band_name, b.band_abbr, b.band_members
 """
 
 BAND_LIVES_COUNT_QUERY = """
 SELECT COUNT(DISTINCT l.id)
 FROM live_attrs l
-JOIN live_setlist ls
-    ON ls.live_id = l.id
 JOIN band_attrs b
     ON b.id = %s
-WHERE jsonb_typeof(ls.band_member) = 'object'
-  AND ls.band_member ? b.band_name
+WHERE EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id AND jsonb_typeof(ls.band_member) = 'object' AND ls.band_member ? b.band_name)
+   OR (NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id) AND b.id = ANY(l.default_band_ids))
 """
 
 BAND_LIVES_PAGE_QUERY = """
 WITH matched_live_ids AS (
     SELECT DISTINCT l.id
     FROM live_attrs l
-    JOIN live_setlist ls
-        ON ls.live_id = l.id
     JOIN band_attrs selected_band
         ON selected_band.id = %s
-    WHERE jsonb_typeof(ls.band_member) = 'object'
-      AND ls.band_member ? selected_band.band_name
+    WHERE EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id AND jsonb_typeof(ls.band_member) = 'object' AND ls.band_member ? selected_band.band_name)
+       OR (NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id) AND selected_band.id = ANY(l.default_band_ids))
 ),
 live_rows AS (
     SELECT
@@ -331,7 +352,8 @@ def search_catalog(
                 "band_id": int(row[0]),
                 "band_name": row[1],
                 "band_abbr": row[2],
-                "live_count": int(row[3]),
+                "band_members": list(row[3] or []),
+                "live_count": int(row[4]),
             }
             for row in band_rows
         ],
@@ -389,7 +411,8 @@ def list_catalog_bands(
                 "band_id": int(row[0]),
                 "band_name": row[1],
                 "band_abbr": row[2],
-                "live_count": int(row[3]),
+                "band_members": list(row[3] or []),
+                "live_count": int(row[4]),
             }
             for row in rows
         ]
@@ -460,7 +483,8 @@ def get_catalog_band_lives(
             "band_id": int(band_row[0]),
             "band_name": band_row[1],
             "band_abbr": band_row[2],
-            "live_count": int(band_row[3]),
+            "band_members": list(band_row[3] or []),
+            "live_count": int(band_row[4]),
         },
         "items": [_live_item_from_row(row, favorite_live_ids) for row in rows],
         "pagination": {

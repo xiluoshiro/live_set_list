@@ -538,6 +538,8 @@
   font-size: 12px;
   padding: 1px 8px;
 }
+.comment-tag.cover { display: inline-flex; align-items: center; gap: 3px; background: color-mix(in srgb, var(--band-color, var(--accent-primary)) 12%, var(--surface-chip)); color: var(--text-main); }
+.comment-cover-band-icon { display: block; width: 15px; height: 15px; object-fit: contain; }
 
 .console-band-modal {
   width: min(760px, 96vw);
