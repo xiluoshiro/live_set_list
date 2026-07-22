@@ -21,6 +21,13 @@ function getWholeBandMembers(band: BandOption): string[] {
     : getBandMembersTemplate(band.band_name);
 }
 
+function splitFromMemberNames(value: string): string[] {
+  return value
+    .split(/[,、]/)
+    .map((memberName) => memberName.trim())
+    .filter((memberName) => memberName !== "");
+}
+
 function addOtherMember(
   entries: OtherMemberDraft[],
   nextEntryId: () => number,
@@ -52,27 +59,35 @@ function mapPerformerContext(
   tokens.forEach((token) => {
     const fromMatch = token.match(/^(.+?)\s+from\s+(.+)$/i);
     if (fromMatch) {
-      const memberName = fromMatch[1]?.trim() ?? "";
+      const memberNames = splitFromMemberNames(fromMatch[1]?.trim() ?? "");
       const sourceBandName = fromMatch[2]?.trim() ?? "";
       const sourceBand = findValidBand(sourceBandName, bands);
       if (!sourceBand) {
-        addOtherMember(otherMember, nextEntryId, sourceBandName, memberName);
+        const memberText = memberNames.join(", ");
+        addOtherMember(otherMember, nextEntryId, sourceBandName, memberText);
         warnings.push({
           line: contextLine,
-          message: `${sourceBandName} 未匹配到有效 band，${memberName} 已放入 other_member。`,
+          message: `${sourceBandName} 未匹配到有效 band，${memberText} 已放入 other_member。`,
         });
         return;
       }
 
-      if (bandMember[sourceBand.band_name]) return;
-      if (sourceBand.band_members && sourceBand.band_members.length > 0 && !sourceBand.band_members.includes(memberName)) {
+      const catalogMembers = sourceBand.band_members ?? [];
+      const validMembers = memberNames.filter((memberName) => {
+        if (catalogMembers.length === 0 || catalogMembers.includes(memberName)) return true;
         warnings.push({
           line: contextLine,
           message: `${memberName} 不在 ${sourceBand.band_name} 的 band_members 中，已从解析结果中移除。`,
         });
-        return;
-      }
-      bandMember[sourceBand.band_name] = [memberName];
+        return false;
+      });
+      if (validMembers.length === 0) return;
+
+      const mergedMembers = [...(bandMember[sourceBand.band_name] ?? [])];
+      validMembers.forEach((memberName) => {
+        if (!mergedMembers.includes(memberName)) mergedMembers.push(memberName);
+      });
+      bandMember[sourceBand.band_name] = mergedMembers;
       return;
     }
 

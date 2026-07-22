@@ -16,6 +16,12 @@ const bands: BandOption[] = [
     band_abbr: "ロゼリア",
     band_members: ["湊友希那", "氷川紗夜"],
   },
+  {
+    band_id: 8,
+    band_name: "MyGO!!!!!",
+    band_abbr: "mygo",
+    band_members: ["羊宮妃那", "立石凛", "青木陽菜", "小日向美香", "林鼓子"],
+  },
 ];
 
 describe("parseSetlistText", () => {
@@ -72,6 +78,43 @@ describe("parseSetlistText", () => {
     expect(result.rows[0]?.band_member).toEqual({});
     expect(result.rows[0]?.other_member).toEqual([{ entry_id: 21, member_key: "", member_value: "" }]);
     expect(result.warnings[0]?.message).toBe("戸山香澄 不在 Roselia 的 band_members 中，已从解析结果中移除。");
+  });
+
+  // 测试点：同一 source band 的成员列表应支持半角逗号和顿号分隔，并保留输入顺序。
+  test("解析多个 member from band", () => {
+    const commaResult = parseSetlistText(
+      "<羊宮妃那, 立石凛, 青木陽菜, 林鼓子 from MyGO!!!!!>\nM1. 迷星叫",
+      bands,
+      10,
+      20,
+    );
+    const ideographicCommaResult = parseSetlistText(
+      "<羊宮妃那、立石凛、青木陽菜、林鼓子 from MyGO!!!!!>\nM1. 迷星叫",
+      bands,
+      10,
+      20,
+    );
+    const expectedMembers = ["羊宮妃那", "立石凛", "青木陽菜", "林鼓子"];
+
+    expect(commaResult.rows[0]?.band_member).toEqual({ "MyGO!!!!!": expectedMembers });
+    expect(commaResult.warnings).toEqual([]);
+    expect(ideographicCommaResult.rows[0]?.band_member).toEqual({ "MyGO!!!!!": expectedMembers });
+    expect(ideographicCommaResult.warnings).toEqual([]);
+  });
+
+  // 测试点：成员列表中的非法成员应单独移除，不能连带丢弃同一列表里的合法成员。
+  test("逐个校验多个 from 成员", () => {
+    const result = parseSetlistText(
+      "<羊宮妃那, 不存在的成员、林鼓子 from MyGO!!!!!>\nM1. 迷星叫",
+      bands,
+      10,
+      20,
+    );
+
+    expect(result.rows[0]?.band_member).toEqual({ "MyGO!!!!!": ["羊宮妃那", "林鼓子"] });
+    expect(result.warnings).toEqual([
+      { line: 1, message: "不存在的成员 不在 MyGO!!!!! 的 band_members 中，已从解析结果中移除。" },
+    ]);
   });
 
   test("保留未识别行和曲序异常提示但仍生成可应用草稿", () => {
