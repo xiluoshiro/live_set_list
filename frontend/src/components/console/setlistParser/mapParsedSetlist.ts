@@ -28,6 +28,16 @@ function splitFromMemberNames(value: string): string[] {
     .filter((memberName) => memberName !== "");
 }
 
+function deduplicateWarnings(warnings: ParsedSetlistWarning[]): ParsedSetlistWarning[] {
+  const seenWarnings = new Set<string>();
+  return warnings.filter((warning) => {
+    const key = `${warning.line}\u0000${warning.message}`;
+    if (seenWarnings.has(key)) return false;
+    seenWarnings.add(key);
+    return true;
+  });
+}
+
 function addOtherMember(
   entries: OtherMemberDraft[],
   nextEntryId: () => number,
@@ -209,7 +219,7 @@ export function mapParsedSetlist(
 
   return {
     rows,
-    warnings,
+    warnings: deduplicateWarnings(warnings),
     nextRowKey,
     nextOtherMemberEntryKey,
   };
