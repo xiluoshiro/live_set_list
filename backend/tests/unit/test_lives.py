@@ -334,6 +334,7 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert first_row["row_id"] == "M1"
     assert first_row["song_name"] == "Song 1"
     assert first_row["comments"] == ["短版", "翻唱"]
+    assert first_row["cover_band"] is None
     assert first_row["other_members"] == [
         {"key": "嘉宾", "value": ["Ommy", "荒幡亮平"]},
         {"key": "键盘支援", "value": ["远程连线"]},
@@ -351,6 +352,7 @@ def test_get_live_detail_success_maps_rows_and_rules():
 
     second_row = payload["detail_rows"][1]
     assert second_row["comments"] == ["翻唱"]
+    assert second_row["cover_band"] is None
     assert second_row["other_members"] == []
     assert second_row["band_members"][0]["band_id"] is None
     assert second_row["band_members"][0]["total_count"] == 5
@@ -547,7 +549,7 @@ def test_get_live_detail_new_fields_and_total_count_fallback_rules():
 
 
 def test_get_live_details_batch_success_and_partial_missing():
-    # 测试点：批量详情接口应支持去重、保序、部分缺失，并一次性聚合返回详情。
+    # 测试点：批量详情应去重保序，并按各自行成员隔离计算旧翻唱与跨乐队翻唱。
     header_rows = [
         (1, "2026-03-28", "Live 1", "场地 1", "16:30", "17:30", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman", None, None, 7, "Group 7"),
         (2, "2026-03-27", "Live 2", "场地 2", "17:00", "18:00", [2], ["Afterglow"], "https://example.com/live/2", "festival", None, None, None, None),
@@ -561,6 +563,8 @@ def test_get_live_details_batch_success_and_partial_missing():
             {"嘉宾": "Guest A"},
             True,
             True,
+            1,
+            "Poppin'Party",
         ),
         (
             1,
@@ -570,6 +574,8 @@ def test_get_live_details_batch_success_and_partial_missing():
             None,
             False,
             False,
+            2,
+            "Afterglow",
         ),
     ]
     conn, cursor = _build_batch_detail_connection_mock(header_rows, detail_rows)
@@ -590,11 +596,13 @@ def test_get_live_details_batch_success_and_partial_missing():
     assert first_item["url"] == "https://example.com/live/2"
     assert payload["items"][1]["performance_group"] == {"group_id": 7, "group_title": "Group 7"}
     assert first_item["detail_rows"][0]["comments"] == ["短版", "翻唱"]
+    assert first_item["detail_rows"][0]["cover_band"] is None
     assert first_item["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["Guest A"]}]
     assert first_item["detail_rows"][0]["band_members"][0]["total_count"] == 6
     assert first_item["detail_rows"][0]["band_members"][0]["is_full"] is False
     second_item = payload["items"][1]
-    assert second_item["detail_rows"][0]["comments"] == []
+    assert second_item["detail_rows"][0]["comments"] == ["翻唱"]
+    assert second_item["detail_rows"][0]["cover_band"] == {"band_id": 2, "band_name": "Afterglow"}
 
     assert cursor.execute.call_args_list[0] == call(BATCH_LIVE_DETAIL_HEADERS_QUERY, ([2, 999, 1],))
     assert cursor.execute.call_args_list[1] == call(BATCH_LIVE_DETAIL_ROWS_QUERY, ([2, 999, 1],))

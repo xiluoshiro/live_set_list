@@ -343,7 +343,7 @@ function makeSearchResponse(query: string): CatalogSearchResponse {
 
 function makeBandLivesResponse(): CatalogBandLivesResponse {
   return {
-    band: { band_id: 1, band_name: "Poppin'Party", band_abbr: "PoPiPa", live_count: 2 },
+    band: { band_id: 1, band_name: "Poppin'Party", band_abbr: "PoPiPa", band_members: ["Kasumi", "Tae"], live_count: 2 },
     items: [
       {
         live_id: 201,
@@ -510,7 +510,7 @@ describe("App", () => {
     });
   });
 
-  // 测试点：公共导航可进入统计页，并展示统一接口返回的资料库指标和歌曲排行。
+  // 测试点：统计页复用演出资料范围切换，并在指定年份后用收录情况替代年份分布。
   test("数据统计页展示概览与高频歌曲", async () => {
     getLivesMock.mockResolvedValue(makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }));
     const user = userEvent.setup();
@@ -521,6 +521,14 @@ describe("App", () => {
     await waitFor(() => expect(getCatalogStatisticsMock).toHaveBeenCalledWith("all", {}));
     expect(screen.getByText("Yes! BanG_Dream!")).toBeInTheDocument();
     expect(screen.getByText("高频歌曲")).toBeInTheDocument();
+    const scope = screen.getByRole("group", { name: "统计范围" });
+    expect(within(scope).getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(scope).getByRole("button", { name: "已收藏" })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("年份"), "2026");
+    expect(await screen.findByRole("heading", { name: "2026 年收录情况" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "年份分布" })).not.toBeInTheDocument();
+    expect(screen.getByText("Setlist 覆盖")).toBeInTheDocument();
   });
 
   test("匿名模式默认进入首页，且不显示收藏入口", async () => {
@@ -763,7 +771,7 @@ describe("App", () => {
     expect(await screen.findByText("没有找到与“不存在”匹配的资料。")).toBeInTheDocument();
   });
 
-  // 测试点：乐队浏览按钮仅为存在 SVG 的 Band 渲染图案与 SVG 代表色，并保持关联 Live 可打开。
+  // 测试点：乐队浏览显示默认成员，仅为有 SVG 的 Band 渲染图案，并保持关联 Live 可打开。
   test("乐队浏览页可加载乐队 Live 并打开详情", async () => {
     getCatalogBandsMock.mockResolvedValue({
       items: [
@@ -789,6 +797,7 @@ describe("App", () => {
     expect(bandWithoutIcon).not.toHaveClass("has-band-art");
     expect(bandWithoutIcon.querySelector(".catalog-band-btn-art")).toBeNull();
     expect(bandWithoutIcon.style.getPropertyValue("--band-color")).toBe("");
+    expect(await screen.findByText("默认成员：Kasumi / Tae")).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Poppin'Party Browse Live" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(201));
   });

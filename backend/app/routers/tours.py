@@ -15,6 +15,7 @@ from app.schemas import (
     TourDetailResponse,
     ToursResponse,
     TourStatisticsResponse,
+    TourStatisticsTransition,
     ValidationErrorResponse,
 )
 
@@ -662,6 +663,54 @@ def get_tour_statistics(tour_id: int):
     if not rows:
         raise HTTPException(status_code=404, detail=f"Tour id {tour_id} not found")
     return _build_tour_statistics(tour_id, rows)
+
+
+@router.get(
+    "/{tour_id}/statistics/comparison",
+    response_model=TourStatisticsTransition,
+    summary="按需比较巡演任意两场",
+    description="比较同一巡演中任意两场均有 Setlist 的场次；仅在用户选择后加载。",
+)
+def get_tour_statistics_comparison(
+    tour_id: int,
+    from_live_id: int = Query(..., ge=1),
+    to_live_id: int = Query(..., ge=1),
+):
+    if tour_id < 1:
+        raise HTTPException(status_code=400, detail="tour_id must be >= 1")
+    if from_live_id == to_live_id:
+        raise HTTPException(status_code=400, detail="from_live_id and to_live_id must differ")
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(TOUR_STATISTICS_QUERY, (tour_id,))
+                rows = cur.fetchall()
+    except QueryCanceled as exc:
+        logger.exception("get_tour_statistics_comparison timeout tour_id=%s", tour_id)
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        logger.exception("get_tour_statistics_comparison operational error tour_id=%s", tour_id)
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        logger.exception("get_tour_statistics_comparison failed tour_id=%s", tour_id)
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"Tour id {tour_id} not found")
+    rows_by_live_id: dict[int, list[tuple[Any, ...]]] = {}
+    for row in rows:
+        rows_by_live_id.setdefault(int(row[0]), []).append(row)
+    selected_rows = [
+        *rows_by_live_id.get(from_live_id, []),
+        *rows_by_live_id.get(to_live_id, []),
+    ]
+    comparison = _build_tour_statistics(tour_id, selected_rows).get("transitions", [])
+    if len(comparison) != 1:
+        raise HTTPException(status_code=422, detail="Both selected stops must belong to the tour and have setlists")
+    return comparison[0]
 
 
 @router.get(

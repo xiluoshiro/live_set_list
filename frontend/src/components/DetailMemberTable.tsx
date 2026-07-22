@@ -1,6 +1,8 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 
+import type { CSSProperties } from "react";
 import type { LiveDetailBandMember, LiveDetailRow } from "../api";
+import { getBandRepresentativeColor } from "./BandIconsCell";
 
 type OtherPopoverState = {
   rowId: string;
@@ -143,6 +145,9 @@ function normalizeRows(rows: LiveDetailRow[]): LiveDetailRow[] {
         : [String(other.value ?? "")].filter((v) => v !== ""),
     })),
     comments: Array.isArray(row.comments) ? row.comments.map((item) => String(item)) : [],
+    cover_band: row.cover_band && row.cover_band.band_id > 0
+      ? { band_id: Number(row.cover_band.band_id), band_name: String(row.cover_band.band_name) }
+      : null,
   }));
 }
 
@@ -229,6 +234,7 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                 const previewOthers = row.other_members.slice(0, 2);
                 const extraCount = Math.max(0, row.other_members.length - previewOthers.length);
                 const validComments = row.comments.filter((c) => c.trim() !== "");
+                const coverColor = getBandRepresentativeColor(row.cover_band?.band_id ?? 0);
                 return (
                   <tr key={row.row_id}>
                     <td>{row.row_id}</td>
@@ -298,9 +304,21 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                     <td title={validComments.join("/")}>
                       {validComments.length > 0 ? (
                         <div className="comment-tags">
-                          {validComments.map((comment) => (
-                            <span key={`${row.row_id}-${comment}`} className="comment-tag">
+                          {validComments.map((comment, commentIndex) => (
+                            <span
+                              key={`${row.row_id}-${comment}-${commentIndex}`}
+                              className={`comment-tag${comment === "翻唱" && row.cover_band ? " cover" : ""}`}
+                              style={comment === "翻唱" && row.cover_band && coverColor ? ({ "--band-color": coverColor } as CSSProperties) : undefined}
+                              title={comment === "翻唱" && row.cover_band ? `翻唱 ${row.cover_band.band_name} 的歌曲` : undefined}
+                            >
                               {comment}
+                              {comment === "翻唱" && row.cover_band && (
+                                <img
+                                  src={`/icons/Band_${row.cover_band.band_id}.svg`}
+                                  alt={row.cover_band.band_name}
+                                  className="comment-cover-band-icon"
+                                />
+                              )}
                             </span>
                           ))}
                         </div>

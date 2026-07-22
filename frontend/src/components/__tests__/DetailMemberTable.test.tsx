@@ -41,6 +41,7 @@ const detailRows: LiveDetailRow[] = [
       { key: "打击乐", value: ["额外一轨"] },
     ],
     comments: ["翻唱"],
+    cover_band: { band_id: 4, band_name: "Roselia" },
   },
 ];
 
@@ -63,13 +64,25 @@ describe("MemberStatusTable", () => {
     expect(screen.getByText("当前 Live 暂无详情数据")).toBeInTheDocument();
   });
 
-  // 测试点：详情表格应把 comments 中的“翻唱”渲染为备注 tag。
-  test("备注列展示后端返回的翻唱 tag", () => {
+  // 测试点：跨乐队翻唱标签应直接加载歌曲所属乐队的完整 SVG 文件。
+  test("跨乐队翻唱标签展示所属乐队 SVG", () => {
     render(<MemberStatusTable rows={detailRows} />);
 
     const coverTag = screen.getByText("翻唱");
     expect(coverTag).toBeInTheDocument();
+    expect(coverTag).toHaveClass("comment-tag", "cover");
+    expect(within(coverTag).getByRole("img", { name: "Roselia" })).toHaveAttribute("src", "/icons/Band_4.svg");
+    expect(coverTag.querySelector("svg")).toBeNull();
+  });
+
+  // 测试点：is_cover 产生的旧翻唱标签不应附带新的乐队 SVG。
+  test("旧翻唱标签保持纯文字", () => {
+    render(<MemberStatusTable rows={[{ ...detailRows[1], cover_band: null }]} />);
+
+    const coverTag = screen.getByText("翻唱");
     expect(coverTag).toHaveClass("comment-tag");
+    expect(coverTag).not.toHaveClass("cover");
+    expect(within(coverTag).queryByRole("img")).not.toBeInTheDocument();
   });
 
   test("乐队成员单元格点击后可打开“参加队员”二级详情", async () => {

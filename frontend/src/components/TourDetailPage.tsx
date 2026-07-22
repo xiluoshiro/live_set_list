@@ -169,6 +169,7 @@ export function TourDetailPage({
               data={statistics}
               loading={statisticsLoading}
               error={statisticsError}
+              stops={detail.stops}
               onOpenStop={(liveId) => {
                 setSelectedLiveId(liveId);
                 setActiveTab("stops");

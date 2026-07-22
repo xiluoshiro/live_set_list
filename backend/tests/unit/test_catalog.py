@@ -28,7 +28,7 @@ def test_search_catalog_returns_grouped_public_results():
     conn, cursor = _build_connection_mock()
     cursor.fetchall.side_effect = [
         [(1, "2026-03-28", "Poppin'Party Live", [1], "https://example.com/live/1", "oneman", None, None, 5, "Party Weekend")],
-        [(1, "Poppin'Party", "PoPiPa", 12)],
+        [(1, "Poppin'Party", "PoPiPa", ["Kasumi"], 12)],
         [(7, "STAR BEAT!", 1, "Poppin'Party", 5)],
         [(3, "有明アリーナ", 4)],
     ]
@@ -51,7 +51,7 @@ def test_search_catalog_returns_grouped_public_results():
         "tour": None,
         "performance_group": {"group_id": 5, "group_title": "Party Weekend"},
     }
-    assert payload["bands"] == [{"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "live_count": 12}]
+    assert payload["bands"] == [{"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "band_members": ["Kasumi"], "live_count": 12}]
     assert payload["songs"] == [
         {"song_id": 7, "song_name": "STAR BEAT!", "band_id": 1, "band_name": "Poppin'Party", "live_count": 5}
     ]
@@ -74,11 +74,11 @@ def test_search_catalog_blank_query_returns_400():
 
 
 def test_list_catalog_bands_uses_public_band_query():
-    # 测试点：乐队浏览列表应使用过滤 id=0 且按 band id 排序的公开查询。
+    # 测试点：乐队浏览应返回默认成员，并只在无 Setlist 时把 default_band_ids 计入关联 Live。
     conn, cursor = _build_connection_mock()
     cursor.fetchall.return_value = [
-        (1, "Poppin'Party", "PoPiPa", 12),
-        (2, "Roselia", "Roselia", 8),
+        (1, "Poppin'Party", "PoPiPa", ["Kasumi"], 12),
+        (2, "Roselia", "Roselia", ["Yukina"], 8),
     ]
 
     with patch("app.routers.catalog.get_db_connection", return_value=conn):
@@ -87,18 +87,21 @@ def test_list_catalog_bands_uses_public_band_query():
 
     assert response.status_code == 200
     assert response.json()["items"] == [
-        {"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "live_count": 12},
-        {"band_id": 2, "band_name": "Roselia", "band_abbr": "Roselia", "live_count": 8},
+        {"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "band_members": ["Kasumi"], "live_count": 12},
+        {"band_id": 2, "band_name": "Roselia", "band_abbr": "Roselia", "band_members": ["Yukina"], "live_count": 8},
     ]
     assert "WHERE b.id > 0" in BAND_LIST_QUERY
     assert "ORDER BY b.id" in BAND_LIST_QUERY
+    assert "NOT EXISTS (SELECT 1 FROM live_setlist" in BAND_LIST_QUERY
+    assert "b.id = ANY(l.default_band_ids)" in BAND_LIST_QUERY
+    assert "selected_band.id = ANY(l.default_band_ids)" in BAND_LIVES_PAGE_QUERY
     assert cursor.execute.call_args_list == [call(BAND_LIST_QUERY, (30,))]
 
 
 def test_get_catalog_band_lives_returns_band_and_paginated_lives():
     # 测试点：乐队页应返回乐队摘要、分页信息和可打开详情的 Live 行。
     conn, cursor = _build_connection_mock()
-    cursor.fetchone.side_effect = [(1, "Poppin'Party", "PoPiPa", 22), (22,)]
+    cursor.fetchone.side_effect = [(1, "Poppin'Party", "PoPiPa", ["Kasumi"], 22), (22,)]
     cursor.fetchall.return_value = [
         (9, "2026-06-01", "Band Live 9", [1, 2], "https://example.com/live/9", "multi_act", None, None, 5, "Party Weekend"),
     ]
@@ -109,7 +112,7 @@ def test_get_catalog_band_lives_returns_band_and_paginated_lives():
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["band"] == {"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "live_count": 22}
+    assert payload["band"] == {"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "band_members": ["Kasumi"], "live_count": 22}
     assert payload["pagination"] == {"page": 2, "page_size": 20, "total": 22, "total_pages": 2}
     assert payload["items"][0]["live_id"] == 9
     assert payload["items"][0]["bands"] == [1, 2]

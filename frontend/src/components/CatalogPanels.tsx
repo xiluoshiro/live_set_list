@@ -265,6 +265,7 @@ export function BandBrowsePanel({
 
         <section className="catalog-section catalog-band-lives" aria-labelledby="catalog-band-lives-title">
           <h3 id="catalog-band-lives-title">{bandLives?.band.band_name ?? "选择一个乐队"}</h3>
+          {bandLives && <p className="catalog-band-members">默认成员：{bandLives.band.band_members?.join(" / ") || "暂无资料"}</p>}
           {loadingLives ? (
             <p className="catalog-state">Live 加载中...</p>
           ) : !selectedBandId ? (

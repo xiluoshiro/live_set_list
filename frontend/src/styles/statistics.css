@@ -1,12 +1,8 @@
 .statistics-panel { padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+.statistics-scope-row { display: flex; }
 .statistics-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; padding: 14px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-2); }
 .statistics-controls label { display: grid; gap: 5px; color: var(--text-secondary); font-size: 13px; font-weight: 700; }
 .statistics-controls select { min-width: 130px; padding: 8px 10px; border: 1px solid var(--border-normal); border-radius: 7px; background: var(--surface-input); color: var(--text-main); }
-.statistics-scope { display: flex; align-self: stretch; }
-.statistics-scope button { border: 1px solid var(--border-normal); background: var(--surface-1); color: var(--text-main); padding: 8px 12px; }
-.statistics-scope button:first-child { border-radius: 7px 0 0 7px; }
-.statistics-scope button:last-child { border-left: 0; border-radius: 0 7px 7px 0; }
-.statistics-scope button.active { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
 .statistics-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .statistics-overview article { padding: 18px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-1); }
 .statistics-overview strong { display: block; color: var(--text-heading); font-size: 28px; }

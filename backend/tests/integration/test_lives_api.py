@@ -243,8 +243,8 @@ def test_event_detail_returns_default_bands_and_computed_attendees(
     assert batch_response.json()["items"][0]["event_attendees"] == detail["event_attendees"]
 
 
-# 测试点：详情接口应把 song_list.is_cover=true 映射为“翻唱”备注 tag。
-def test_get_live_detail_marks_cover_song_as_comment_tag(
+# 测试点：跨乐队歌曲附带所属乐队，is_cover 只保留旧标签，同乐队歌曲不生成新标签。
+def test_get_live_detail_applies_cross_band_cover_rules(
     integration_test_client,
     integration_admin_connection,
 ):
@@ -253,7 +253,10 @@ def test_get_live_detail_marks_cover_song_as_comment_tag(
         cursor.execute(
             """
             INSERT INTO song_list (id, song_name, band_id, is_cover)
-            VALUES (9000, 'Cover Detail Song', 1, true)
+            VALUES
+                (9000, 'Cross Band Cover Song', 2, false),
+                (9001, 'Legacy Cover Song', 2, true),
+                (9002, 'Own Band Song', 1, false)
             """
         )
         cursor.execute(
@@ -269,26 +272,26 @@ def test_get_live_detail_marks_cover_song_as_comment_tag(
                 other_member,
                 comment
             )
-            VALUES (
-                1,
-                9000,
-                99,
-                'SP',
-                99,
-                true,
-                '{"Poppin''Party": ["Kasumi"]}'::jsonb,
-                NULL,
-                NULL
-            )
+            VALUES
+                (1, 9000, 99, 'SP', 99, true, '{"Poppin''Party": ["Kasumi"]}'::jsonb, NULL, NULL),
+                (1, 9001, 100, 'SP', 100, false, '{"Poppin''Party": ["Kasumi"]}'::jsonb, NULL, NULL),
+                (1, 9002, 101, 'SP', 101, false, '{"Poppin''Party": ["Kasumi"]}'::jsonb, NULL, NULL)
             """
         )
 
     response = integration_test_client.get("/api/lives/1")
 
     assert response.status_code == 200
-    cover_row = response.json()["detail_rows"][-1]
-    assert cover_row["song_name"] == "Cover Detail Song"
-    assert cover_row["comments"] == ["短版", "翻唱"]
+    rows_by_song = {row["song_name"]: row for row in response.json()["detail_rows"]}
+    assert rows_by_song["Cross Band Cover Song"]["comments"] == ["短版", "翻唱"]
+    assert rows_by_song["Cross Band Cover Song"]["cover_band"] == {
+        "band_id": 2,
+        "band_name": "Roselia",
+    }
+    assert rows_by_song["Legacy Cover Song"]["comments"] == ["翻唱"]
+    assert rows_by_song["Legacy Cover Song"]["cover_band"] is None
+    assert rows_by_song["Own Band Song"]["comments"] == []
+    assert rows_by_song["Own Band Song"]["cover_band"] is None
 
 
 def test_get_live_detail_not_found_returns_404(integration_test_client):

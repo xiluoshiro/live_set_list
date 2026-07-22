@@ -77,6 +77,7 @@ export type CatalogBandItem = {
   band_id: number;
   band_name: string;
   band_abbr: string;
+  band_members?: string[];
   live_count: number;
 };
 
@@ -165,6 +166,11 @@ export type LiveDetailOtherMember = {
   value: string[];
 };
 
+export type LiveDetailCoverBand = {
+  band_id: number;
+  band_name: string;
+};
+
 export type EventAttendeeMode = "partial" | "full";
 
 export type LiveDetailEventAttendee = {
@@ -180,6 +186,7 @@ export type LiveDetailRow = {
   band_members: LiveDetailBandMember[];
   other_members: LiveDetailOtherMember[];
   comments: string[];
+  cover_band?: LiveDetailCoverBand | null;
 };
 
 export type LiveDetailResponse = {
@@ -428,6 +435,8 @@ export type ConsoleLiveUpsertPayload = {
   event_attendees: Array<{ band_id: number; members: string[] }>;
 };
 
+export type TourStatisticsTransition = TourStatisticsResponse["transitions"][number];
+
 export type ConsoleLiveCreatePayload = ConsoleLiveUpsertPayload;
 
 export type ConsoleEventAttendee = {
@@ -644,6 +653,7 @@ type RequestKind =
   | "catalog_tours"
   | "catalog_tour_detail"
   | "catalog_tour_statistics"
+  | "catalog_tour_statistics_comparison"
   | "catalog_bands"
   | "catalog_band_lives"
   | "catalog_stats"
@@ -1372,6 +1382,14 @@ export async function getConsolePerformanceGroupLiveCandidates(
   );
   if (!response.ok) throw new Error(`Failed to fetch candidates: ${response.status}`);
   return expectJsonResponse<ConsolePerformanceGroupLiveCandidatesResponse>(response);
+}
+
+export async function getTourStatisticsComparison(tourId: number, fromLiveId: number, toLiveId: number): Promise<TourStatisticsTransition> {
+  const query = new URLSearchParams({ from_live_id: String(fromLiveId), to_live_id: String(toLiveId) });
+  const response = await fetchWithTimeout(`${BASE_URL}/api/catalog/tours/${tourId}/statistics/comparison?${query.toString()}`, undefined, {
+    requestKind: "catalog_tour_statistics_comparison",
+  });
+  return expectJsonResponse<TourStatisticsTransition>(response);
 }
 
 export async function getConsoleLiveCandidates(

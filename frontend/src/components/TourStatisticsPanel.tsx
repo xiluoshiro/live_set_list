@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import type { TourStatisticsResponse, TourStatisticsSongStatus } from "../api";
+import { getTourStatisticsComparison, type TourStatisticsResponse, type TourStatisticsSongStatus, type TourStatisticsTransition, type TourStopItem } from "../api";
 import { getTourStopShortTitle } from "./tourHelpers";
 
 type TourStatisticsPanelProps = {
@@ -9,6 +9,7 @@ type TourStatisticsPanelProps = {
   loading: boolean;
   error: string | null;
   onOpenStop: (liveId: number) => void;
+  stops?: TourStopItem[];
 };
 
 type TourTransition = TourStatisticsResponse["transitions"][number];
@@ -40,9 +41,17 @@ type TourTransitionExplorerProps = {
   tourTitle: string;
   transitions: TourTransition[];
   onOpenStop: (liveId: number) => void;
+  showProgress?: boolean;
+  detailLabel?: string;
 };
 
-function TourTransitionExplorer({ tourTitle, transitions, onOpenStop }: TourTransitionExplorerProps) {
+function TourTransitionExplorer({
+  tourTitle,
+  transitions,
+  onOpenStop,
+  showProgress = true,
+  detailLabel = "歌单变化",
+}: TourTransitionExplorerProps) {
   const [selectedIndex, setSelectedIndex] = useState(() => getDefaultTransitionIndex(transitions));
   const resolvedSelectedIndex = transitions[selectedIndex] ? selectedIndex : getDefaultTransitionIndex(transitions);
   const selectedTransition = transitions[resolvedSelectedIndex];
@@ -68,8 +77,8 @@ function TourTransitionExplorer({ tourTitle, transitions, onOpenStop }: TourTran
   ];
 
   return (
-    <div className="tour-transition-explorer">
-      <nav className="tour-transition-progress" aria-label="场次进程">
+    <div className={`tour-transition-explorer${showProgress ? "" : " detail-only"}`}>
+      {showProgress && <nav className="tour-transition-progress" aria-label="场次进程">
         <div className="tour-transition-section-head">
           <h3>场次进程</h3>
           <span>选择相邻场次</span>
@@ -109,9 +118,9 @@ function TourTransitionExplorer({ tourTitle, transitions, onOpenStop }: TourTran
             );
           })}
         </ol>
-      </nav>
+      </nav>}
 
-      <section className="tour-transition-detail" aria-label="歌单变化" aria-live="polite">
+      <section className="tour-transition-detail" aria-label={detailLabel} aria-live="polite">
         <header className="tour-transition-detail-head">
           <div>
             <h3>
@@ -192,7 +201,22 @@ function TourTransitionExplorer({ tourTitle, transitions, onOpenStop }: TourTran
   );
 }
 
-export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenStop }: TourStatisticsPanelProps) {
+export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenStop, stops = [] }: TourStatisticsPanelProps) {
+  const comparableStops = useMemo(() => stops.filter((stop) => stop.has_setlist), [stops]);
+  const comparableStopKey = comparableStops.map((stop) => stop.live_id).join(":");
+  const [fromLiveId, setFromLiveId] = useState<number | null>(comparableStops[0]?.live_id ?? null);
+  const [toLiveId, setToLiveId] = useState<number | null>(comparableStops[comparableStops.length - 1]?.live_id ?? null);
+  const [customTransition, setCustomTransition] = useState<TourStatisticsTransition | null>(null);
+  const [customLoading, setCustomLoading] = useState(false);
+  const [customError, setCustomError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFromLiveId(comparableStops[0]?.live_id ?? null);
+    setToLiveId(comparableStops[comparableStops.length - 1]?.live_id ?? null);
+    setCustomTransition(null);
+    setCustomError(null);
+  }, [comparableStopKey, comparableStops]);
+
   if (loading) return <p className="statistics-state">统计中...</p>;
   if (error) return <p className="statistics-state error">巡演统计加载失败：{error}</p>;
   if (!data) return null;
@@ -222,6 +246,29 @@ export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenSto
 
       <section className="statistics-card">
         <h2>场次变化</h2>
+        {comparableStops.length >= 3 && (
+          <div className="tour-custom-comparison">
+            <label className="list-filter-field">起始场<select value={fromLiveId ?? ""} onChange={(event) => { setFromLiveId(Number(event.target.value)); setCustomTransition(null); setCustomError(null); }}>{comparableStops.map((stop) => <option key={stop.live_id} value={stop.live_id}>{stop.live_date} · {getTourStopShortTitle(stop.live_title, tourTitle)}</option>)}</select></label>
+            <label className="list-filter-field">目标场<select value={toLiveId ?? ""} onChange={(event) => { setToLiveId(Number(event.target.value)); setCustomTransition(null); setCustomError(null); }}>{comparableStops.map((stop) => <option key={stop.live_id} value={stop.live_id}>{stop.live_date} · {getTourStopShortTitle(stop.live_title, tourTitle)}</option>)}</select></label>
+            <button type="button" className="secondary-btn" disabled={customLoading || !fromLiveId || !toLiveId || fromLiveId === toLiveId} onClick={() => {
+              if (!fromLiveId || !toLiveId) return;
+              setCustomLoading(true); setCustomError(null); setCustomTransition(null);
+              getTourStatisticsComparison(data.tour_id, fromLiveId, toLiveId).then(setCustomTransition).catch((caught) => setCustomError(caught instanceof Error ? caught.message : "加载失败")).finally(() => setCustomLoading(false));
+            }}>{customLoading ? "比较中..." : "比较这两场"}</button>
+          </div>
+        )}
+        {customError && <p className="statistics-state error">任意场次比较加载失败：{customError}</p>}
+        {customTransition && (
+          <div className="tour-custom-result">
+            <TourTransitionExplorer
+              tourTitle={tourTitle}
+              transitions={[customTransition]}
+              onOpenStop={onOpenStop}
+              showProgress={false}
+              detailLabel="任意场次歌单变化"
+            />
+          </div>
+        )}
         {data.coverage.comparable_transition_count === 0 ? (
           <p className="statistics-state">没有可比较的相邻 Setlist 场次。</p>
         ) : (
