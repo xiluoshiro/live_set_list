@@ -168,9 +168,10 @@ def test_get_current_auth_context_raises_401_when_session_missing():
     assert exc_info.value.detail["code"] == "AUTH_SESSION_EXPIRED"
 
 
-# 测试点：CSRF 校验会拒绝缺失或错误的 token，只允许哈希匹配的请求通过。
+# 测试点：CSRF 校验接受同一 session 已签发的 token，并拒绝缺失或未知 token。
 def test_assert_valid_csrf_checks_missing_invalid_and_valid_token():
     valid_request = _make_request_with_headers({"X-CSRF-Token": "csrf-pass"})
+    previous_valid_request = _make_request_with_headers({"X-CSRF-Token": "csrf-previous"})
     missing_request = _make_request_with_headers()
     invalid_request = _make_request_with_headers({"X-CSRF-Token": "wrong"})
     with patch("app.auth._hash_token", side_effect=lambda token: f"hash:{token}"):
@@ -179,6 +180,7 @@ def test_assert_valid_csrf_checks_missing_invalid_and_valid_token():
             user=AuthUser(id=1, username="admin", display_name="Administrator", role="admin", is_active=True),
             csrf_token_hash="hash:csrf-pass",
             expires_at=None,  # type: ignore[arg-type]
+            csrf_token_hashes=("hash:csrf-pass", "hash:csrf-previous"),
         )
 
         with pytest.raises(Exception) as missing_exc:
@@ -187,6 +189,7 @@ def test_assert_valid_csrf_checks_missing_invalid_and_valid_token():
             assert_valid_csrf(invalid_request, context)
 
         assert_valid_csrf(valid_request, context)
+        assert_valid_csrf(previous_valid_request, context)
 
     assert missing_exc.value.status_code == 403
     assert missing_exc.value.detail["code"] == "AUTH_CSRF_INVALID"

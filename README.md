@@ -11,7 +11,7 @@
 - 按关键词、年份、Live 类型、乐队和日期排序筛选，支持表格 / 卡片视图。
 - 服务端登录、收藏、批量收藏、会话恢复与 CSRF 防护。
 - `editor+` 控制台支持新增和更新 Live、歌曲、场地、追加 setlist，以及创建和更新巡演、活动组关系。
-- Flyway 管理 PostgreSQL schema；当前仓库 migration 为 B1 + V2~V14。
+- Flyway 管理 PostgreSQL schema；当前仓库 migration 为 B1 + V2~V16。
 - 一键启动、功能检查、数据库备份恢复和 tag 发布工具链。
 
 ## 技术栈

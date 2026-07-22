@@ -15,7 +15,7 @@
 - 首个完整成功的自动发布 tag 为 `v2026-07-14-006`。
 - migration release 已完成：生产数据库先从 V9 升至 V11，随后 `v2026-07-18-001` 完成 V12/V13 migration、应用切换和 health 验收。
 
-两阶段 migration 发布代码、VM root-owned 入口、deploy-only sudoers 和 GitHub repository secrets/variables/Environments 已完成配置。生产当前已确认到 V13；当前仓库虽已增加 V14 演出活动组 migration，但在取得生产 `flyway info`、release state / attestation 和 health 证据前，不得把生产状态写成 V14。tag 存在仍不等价于生产验收。
+两阶段 migration 发布代码、VM root-owned 入口、deploy-only sudoers 和 GitHub repository secrets/variables/Environments 已完成配置。生产当前已确认到 V13；当前仓库已增加 V14~V16 migration，但在取得生产 `flyway info`、release state / attestation 和 health 证据前，不得把生产状态写成 V14 或更高版本。tag 存在仍不等价于生产验收。
 
 ## 生产拓扑与目录
 

@@ -105,6 +105,7 @@
 说明：
 - 全量路径、请求参数、响应 schema 请直接查看自动文档
 - 控制台写接口都要求有效登录态、`editor+` 角色和 `X-CSRF-Token`
+- `GET /api/auth/me` 会为当前 session 签发新的 CSRF Token；同一 session 已签发的 token 在 session 过期或注销前都有效，避免多个标签页互相使 token 失效
 - `GET /api/catalog/statistics?scope=favorites` 与 `GET /api/catalog/performances?scope=favorites` 都要求登录，且不接收 `user_id`，只使用当前 session 用户的收藏
 
 ## 自动文档中已覆盖的内容

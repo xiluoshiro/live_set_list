@@ -349,15 +349,15 @@ def test_favorite_batch_endpoint_requires_auth_and_csrf(
     assert missing_csrf_post.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
 
 
-# 测试点：batch 接口也应拒绝 stale/invalid CSRF，仅放行最新有效 token。
-def test_favorite_batch_endpoint_rejects_invalid_or_stale_csrf_token(
+# 测试点：batch 接口允许同一 session 的新旧页面 token，并拒绝从未签发的 token。
+def test_favorite_batch_endpoint_accepts_all_session_csrf_tokens_and_rejects_invalid_token(
     integration_test_client,
 ):
     login_csrf_token = _login_and_get_csrf(integration_test_client)
     me_response = integration_test_client.get("/api/auth/me")
     refreshed_csrf_token = me_response.json()["csrf_token"]
 
-    stale_post_response = integration_test_client.post(
+    original_token_response = integration_test_client.post(
         "/api/me/favorites/lives:batch",
         headers={"X-CSRF-Token": login_csrf_token},
         json={"action": "favorite", "live_ids": [1]},
@@ -367,7 +367,7 @@ def test_favorite_batch_endpoint_rejects_invalid_or_stale_csrf_token(
         headers={"X-CSRF-Token": "invalid-csrf-token"},
         json={"action": "favorite", "live_ids": [1]},
     )
-    valid_post_response = integration_test_client.post(
+    refreshed_token_response = integration_test_client.post(
         "/api/me/favorites/lives:batch",
         headers={"X-CSRF-Token": refreshed_csrf_token},
         json={"action": "favorite", "live_ids": [1]},
@@ -376,11 +376,10 @@ def test_favorite_batch_endpoint_rejects_invalid_or_stale_csrf_token(
     assert me_response.status_code == 200
     assert refreshed_csrf_token != login_csrf_token
 
-    assert stale_post_response.status_code == 403
-    assert stale_post_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+    assert original_token_response.status_code == 200
     assert invalid_post_response.status_code == 403
     assert invalid_post_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
-    assert valid_post_response.status_code == 200
+    assert refreshed_token_response.status_code == 200
 
 
 # 测试点：批量收藏应返回 applied/noop/not_found 分组，并保持幂等与去重语义。
@@ -657,15 +656,15 @@ def test_unfavorite_live_clears_server_side_state_and_marks_lives_responses(
     assert me_response.json()["favorite_live_ids"] == []
 
 
-# 测试点：CSRF token 一旦被 `/api/auth/me` 刷新，旧 token 与错误 token 都不应再放行收藏写操作。
-def test_favorite_endpoints_reject_invalid_or_stale_csrf_token(
+# 测试点：`/api/auth/me` 新签发 token 后，原标签页 token 仍可写入且未知 token 仍被拒绝。
+def test_favorite_endpoints_keep_previous_session_csrf_token_valid(
     integration_test_client,
 ):
     login_csrf_token = _login_and_get_csrf(integration_test_client)
     me_response = integration_test_client.get("/api/auth/me")
     refreshed_csrf_token = me_response.json()["csrf_token"]
 
-    stale_put_response = integration_test_client.put(
+    original_token_response = integration_test_client.put(
         "/api/me/favorites/lives/1",
         headers={"X-CSRF-Token": login_csrf_token},
     )
@@ -673,7 +672,7 @@ def test_favorite_endpoints_reject_invalid_or_stale_csrf_token(
         "/api/me/favorites/lives/1",
         headers={"X-CSRF-Token": "invalid-csrf-token"},
     )
-    valid_put_response = integration_test_client.put(
+    refreshed_token_response = integration_test_client.put(
         "/api/me/favorites/lives/1",
         headers={"X-CSRF-Token": refreshed_csrf_token},
     )
@@ -681,11 +680,10 @@ def test_favorite_endpoints_reject_invalid_or_stale_csrf_token(
     assert me_response.status_code == 200
     assert refreshed_csrf_token != login_csrf_token
 
-    assert stale_put_response.status_code == 403
-    assert stale_put_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
+    assert original_token_response.status_code == 204
     assert invalid_delete_response.status_code == 403
     assert invalid_delete_response.json()["detail"]["code"] == "AUTH_CSRF_INVALID"
-    assert valid_put_response.status_code == 204
+    assert refreshed_token_response.status_code == 204
 
 
 # 测试点：不同登录用户的收藏状态必须完全隔离，不能互相污染 `is_favorite` 与收藏列表。
