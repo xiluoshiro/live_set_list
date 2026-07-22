@@ -1129,7 +1129,7 @@ describe("App", () => {
     expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
   });
 
-  // 测试点：巡演统计按需加载时间线差异，以增删变化流展示替换，并可切回对应 Live 详情。
+  // 测试点：巡演统计按需加载时间线差异，把替换归入新增和移除，并可切回对应 Live 详情。
   test("巡演统计按需加载场次变化", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -1141,9 +1141,11 @@ describe("App", () => {
     await user.click(screen.getByRole("tab", { name: "巡演统计" }));
     await waitFor(() => expect(getTourStatisticsMock).toHaveBeenCalledWith(7));
     const progress = await screen.findByRole("navigation", { name: "场次进程" });
-    expect(within(progress).getByRole("button", { name: /对比上一场.*1 项变化/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(progress).getByRole("button", { name: /对比上一场.*2 项变化/ })).toHaveAttribute("aria-pressed", "true");
     const changePanel = screen.getByRole("region", { name: "歌单变化" });
-    expect(within(changePanel).getByRole("heading", { name: "同位置更换" })).toBeInTheDocument();
+    expect(within(changePanel).getByRole("heading", { name: "新增歌曲" })).toBeInTheDocument();
+    expect(within(changePanel).getByRole("heading", { name: "移除歌曲" })).toBeInTheDocument();
+    expect(within(changePanel).queryByRole("heading", { name: "同位置更换" })).not.toBeInTheDocument();
     expect(within(changePanel).getByLabelText("移除 旧曲")).toHaveClass("removed");
     expect(within(changePanel).getByLabelText("新增 新曲")).toHaveClass("added");
     expect(screen.queryByRole("table", { name: "场次变化" })).not.toBeInTheDocument();

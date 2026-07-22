@@ -110,7 +110,7 @@ export function LiveDetailContent({
       {detailData?.performance_group && onOpenPerformanceGroup && (
         <p className="detail-row">
           <strong>活动组：</strong>
-          <button type="button" className="detail-tour-link" onClick={() => onOpenPerformanceGroup(detailData.performance_group as PerformanceGroupRef, detailData.live_id)}>查看活动组: {detailData.performance_group.group_title}</button>
+          <button type="button" className="detail-tour-link" onClick={() => onOpenPerformanceGroup(detailData.performance_group as PerformanceGroupRef, detailData.live_id)}>{detailData.performance_group.group_title}</button>
         </p>
       )}
       {showTourReference && detailData?.tour && onOpenTour && (
