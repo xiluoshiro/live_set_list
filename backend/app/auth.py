@@ -42,6 +42,7 @@ class AuthSessionContext:
     user: AuthUser
     csrf_token_hash: str
     expires_at: datetime
+    csrf_token_hashes: tuple[str, ...] = ()
 
 
 def normalize_username(username: str) -> str:
@@ -312,17 +313,19 @@ def authenticate_user(username: str, password: str, request: Request) -> dict[st
                     user_id,
                     session_token_hash,
                     csrf_token_hash,
+                    csrf_token_hashes,
                     expires_at,
                     last_seen_at,
                     created_ip,
                     user_agent
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     user.id,
                     session_token_hash,
                     csrf_token_hash,
+                    [csrf_token_hash],
                     session_expires_at,
                     now,
                     client_ip,
@@ -352,17 +355,24 @@ def build_authenticated_response_payload(context: AuthSessionContext) -> dict[st
     csrf_token = secrets.token_urlsafe(32)
     csrf_token_hash = _hash_token(csrf_token)
     now = _now_utc()
-    # `/api/auth/me` 每次返回新的 CSRF token，避免前端长期复用同一个写令牌。
+    # 同一 session 可能同时存在于多个标签页；签发新 token 时保留该 session 的旧 token。
     with get_write_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 UPDATE auth_sessions
-                SET csrf_token_hash = %s,
+                SET csrf_token_hashes = array_append(
+                        CASE
+                            WHEN csrf_token_hash = ANY(csrf_token_hashes) THEN csrf_token_hashes
+                            ELSE array_append(csrf_token_hashes, csrf_token_hash)
+                        END,
+                        %s
+                    ),
+                    csrf_token_hash = %s,
                     last_seen_at = %s
                 WHERE id = %s
                 """,
-                (csrf_token_hash, now, context.session_id),
+                (csrf_token_hash, csrf_token_hash, now, context.session_id),
             )
             favorite_live_ids = get_favorite_live_ids(cur, context.user.id)
 
@@ -386,6 +396,7 @@ def _load_auth_context(session_token: str) -> AuthSessionContext | None:
                     s.id,
                     s.user_id,
                     s.csrf_token_hash,
+                    s.csrf_token_hashes,
                     s.expires_at,
                     u.id,
                     u.username,
@@ -404,7 +415,7 @@ def _load_auth_context(session_token: str) -> AuthSessionContext | None:
             if not row:
                 return None
 
-            expires_at = row[3]
+            expires_at = row[4]
             if not isinstance(expires_at, datetime) or expires_at <= now:
                 cur.execute(
                     """
@@ -417,11 +428,11 @@ def _load_auth_context(session_token: str) -> AuthSessionContext | None:
                 return None
 
             user = AuthUser(
-                id=int(row[4]),
-                username=str(row[5]),
-                display_name=str(row[6]),
-                role=str(row[7]),
-                is_active=bool(row[8]),
+                id=int(row[5]),
+                username=str(row[6]),
+                display_name=str(row[7]),
+                role=str(row[8]),
+                is_active=bool(row[9]),
             )
             if not user.is_active:
                 return None
@@ -439,6 +450,7 @@ def _load_auth_context(session_token: str) -> AuthSessionContext | None:
                 user=user,
                 csrf_token_hash=str(row[2]),
                 expires_at=expires_at,
+                csrf_token_hashes=tuple(str(token_hash) for token_hash in (row[3] or [])),
             )
 
 
@@ -492,7 +504,9 @@ def assert_valid_csrf(request: Request, context: AuthSessionContext) -> None:
     if not csrf_token:
         _raise_auth_error(status.HTTP_403_FORBIDDEN, "AUTH_CSRF_INVALID", "缺少 CSRF Token")
 
-    if not secrets.compare_digest(_hash_token(csrf_token), context.csrf_token_hash):
+    csrf_token_hash = _hash_token(csrf_token)
+    valid_hashes = (context.csrf_token_hash, *context.csrf_token_hashes)
+    if not any(secrets.compare_digest(csrf_token_hash, valid_hash) for valid_hash in valid_hashes):
         _raise_auth_error(status.HTTP_403_FORBIDDEN, "AUTH_CSRF_INVALID", "CSRF Token 校验失败")
 
 

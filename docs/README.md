@@ -11,7 +11,7 @@
 - [巡演聚合产品需求](product/tour-aggregation.md)：巡演与单场 Live 的产品边界、用户页面、资料口径、阶段范围和验收标准。
 - [活动出演成员需求](product/event-attendees.md)：活动类型的默认 Band、具体出演成员与详情展示规则。
 - [Live 更新需求](product/live-update.md)：控制台编辑既有 Live 基础资料、确认差异与关系保持规则。
-- [Flyway 落地说明](design/flyway.md)：仓库 migration、角色和日常迁移流程；当前仓库已到 V15。
+- [Flyway 落地说明](design/flyway.md)：仓库 migration、角色和日常迁移流程；当前仓库已到 V16。
 - [生产部署设计](design/production-deployment.md)：目标架构、安全边界和未完成的运维项。
 - [生产部署实录](production-deployment-runbook.md)：已执行步骤、发布流程、验收和排障；生产状态以此处的已确认记录为准。
 
