@@ -33,6 +33,7 @@
 - [数据库备份恢复](../recovery/README.md)
 - [生产服务器模板](../infra/production/README.md)
 - [前端全局样式覆盖缺口](fails/frontend-global-style-coverage-gap.md)
+- [React 列表 key 碰撞复盘](fails/react-list-key-collision.md)
 - [Flyway 踩坑指南](fails/flyway-pitfalls.md)
 
 ## 复盘与归档

@@ -43,6 +43,7 @@ type LiveAdminSectionProps = {
   defaultBandMenuRef: RefObject<HTMLDivElement>;
   venueQueryInputRef: RefObject<HTMLInputElement>;
   insertedLives: Array<{
+    history_entry_id: number;
     action: "create" | "update";
     live_id: number;
     live_date: string;
@@ -466,7 +467,7 @@ export function LiveAdminSection({
               </tr>
             ) : (
               visibleHistory.map((row) => (
-                <tr key={row.live_id}>
+                <tr key={row.history_entry_id}>
                   <td>{row.live_id}</td>
                   <td>{row.action === "create" ? "新增" : "更新"}</td>
                   <td>{row.live_date}</td>
