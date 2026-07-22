@@ -172,11 +172,15 @@ def build_filtered_live_queries(
         favorite_join = "JOIN user_live_favorites favorite ON favorite.live_id = l.id AND favorite.user_id = %s"
         leading_params.append(favorite_user_id)
 
-    order_sql = "l.live_date ASC, l.id ASC" if filters.sort == "date_asc" else "l.live_date DESC, l.id DESC"
+    event_priority_sql = "(l.live_type = 'event') ASC, " if filters.without_setlist else ""
+    result_event_priority_sql = "(matched.live_type = 'event') ASC, " if filters.without_setlist else ""
+    order_sql = event_priority_sql + (
+        "l.live_date ASC, l.id ASC" if filters.sort == "date_asc" else "l.live_date DESC, l.id DESC"
+    )
     result_order_sql = (
-        "matched.live_date ASC, matched.id ASC"
+        result_event_priority_sql + "matched.live_date ASC, matched.id ASC"
         if filters.sort == "date_asc"
-        else "matched.live_date DESC, matched.id DESC"
+        else result_event_priority_sql + "matched.live_date DESC, matched.id DESC"
     )
     matched_params = tuple([*leading_params, *filter_params])
     band_ids_sql = effective_band_ids_sql(

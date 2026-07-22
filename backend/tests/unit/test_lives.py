@@ -118,7 +118,7 @@ def test_get_lives_returns_url_from_live_attrs():
 
 
 def test_get_lives_without_setlist_uses_filtered_pagination_queries():
-    # 测试点：without_setlist 应在数据库分页前排除已有 setlist 的 Live。
+    # 测试点：without_setlist 应在数据库分页前排除已有 setlist，并让非活动 Live 跨页优先。
     rows = [(41, "2026-05-30", "Draft Live", [], None, "other", None, None, None, None)]
     conn, cursor = _build_connection_mock(1, rows)
 
@@ -133,6 +133,22 @@ def test_get_lives_without_setlist_uses_filtered_pagination_queries():
         call(LIVES_WITHOUT_SETLIST_COUNT_QUERY),
         call(LIVES_WITHOUT_SETLIST_PAGE_QUERY, (20, 0)),
     ]
+    assert "ORDER BY (l.live_type = 'event') ASC" in LIVES_WITHOUT_SETLIST_PAGE_QUERY
+
+
+# 测试点：without_setlist 叠加搜索条件时仍应在数据库分页前优先返回非活动 Live。
+def test_get_lives_filtered_without_setlist_prioritizes_non_event_before_pagination():
+    conn, cursor = _build_connection_mock(0, [])
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        response = TestClient(app).get(
+            "/api/lives?page=1&page_size=20&without_setlist=true&q=Draft"
+        )
+
+    assert response.status_code == 200
+    page_sql = str(cursor.execute.call_args_list[1].args[0])
+    assert "ORDER BY (l.live_type = 'event') ASC, l.live_date DESC, l.id DESC" in page_sql
+    assert "ORDER BY (matched.live_type = 'event') ASC" in page_sql
 
 
 # 测试点：筛选值必须通过参数绑定传入，关键词中的通配符需要按字面量转义。

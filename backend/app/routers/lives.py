@@ -153,7 +153,7 @@ SELECT COUNT(*) FROM (
 
 LIVES_WITHOUT_SETLIST_PAGE_QUERY = f"""
 {LIVES_WITHOUT_SETLIST_BASE_QUERY}
-ORDER BY l.live_date DESC, l.id DESC
+ORDER BY (l.live_type = 'event') ASC, l.live_date DESC, l.id DESC
 LIMIT %s OFFSET %s
 """
 

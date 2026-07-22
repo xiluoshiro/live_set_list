@@ -135,7 +135,7 @@ def test_scope_favorites_returns_401_when_not_logged_in():
     assert response.status_code == 401
 
 
-# 测试点：scope=favorites 应只返回已收藏的独立 live 和全部 live 都被收藏的 group。
+# 测试点：scope=favorites 应只返回完整收藏项，并按日期、开演时间、ID 统一倒序。
 def test_scope_favorites_returns_only_favorited_items():
     app.dependency_overrides.clear()
     from app.auth import get_current_user_optional as auth_get_current_user_optional
@@ -163,6 +163,9 @@ def test_scope_favorites_returns_only_favorited_items():
     assert len(items) == 1
     assert items[0]["kind"] == "performance_group"
     assert items[0]["performance_group"]["group_id"] == 1
+    page_sql = str(cursor.execute.call_args_list[1].args[0])
+    assert "gs.end_time AS sort_time" in page_sql
+    assert "ORDER BY sort_date DESC, sort_time DESC, sort_id DESC" in page_sql
 
 
 # 测试点：搜索关键词 q 应过滤独立 live 的标题。
@@ -255,7 +258,7 @@ def test_filters_match_groups_when_any_child_live_matches():
     assert "performance_group" in kinds
 
 
-# 测试点：sort=date_desc 时应使用 MAX(live_date) DESC 对 group 和 live_date DESC 对 live 排序。
+# 测试点：sort=date_desc 应按最后一场日期、开演时间倒序，ID 只作稳定兜底。
 def test_sort_date_desc_uses_correct_ordering():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (2,)
@@ -273,9 +276,12 @@ def test_sort_date_desc_uses_correct_ordering():
         )
 
     assert response.status_code == 200
+    page_sql = str(cursor.execute.call_args_list[1].args[0])
+    assert "gs.end_time AS sort_time" in page_sql
+    assert "ORDER BY sort_date DESC, sort_time DESC, sort_id DESC" in page_sql
 
 
-# 测试点：sort=date_asc 时应使用 MIN(live_date) ASC 对 group 和 live_date ASC 对 live 排序。
+# 测试点：sort=date_asc 应按第一场日期、开演时间升序，ID 只作稳定兜底。
 def test_sort_date_asc_uses_correct_ordering():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (2,)
@@ -293,6 +299,9 @@ def test_sort_date_asc_uses_correct_ordering():
         )
 
     assert response.status_code == 200
+    page_sql = str(cursor.execute.call_args_list[1].args[0])
+    assert "gs.start_time AS sort_time" in page_sql
+    assert "ORDER BY sort_date ASC, sort_time ASC, sort_id ASC" in page_sql
 
 
 # 测试点：page_size 必须为 15 或 20，其他值应返回 400。

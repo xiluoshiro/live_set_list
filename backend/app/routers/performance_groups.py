@@ -245,6 +245,7 @@ def _build_catalog_performances_queries(
         group_q_params = [pattern]
 
     sort_group_date = "end_date" if sort == "date_desc" else "start_date"
+    sort_group_time = "end_time" if sort == "date_desc" else "start_time"
     sort_dir = "DESC" if sort == "date_desc" else "ASC"
 
     if scope == "all":
@@ -254,6 +255,7 @@ def _build_catalog_performances_queries(
             group_q_condition=group_q_condition,
             group_q_params=group_q_params,
             sort_group_date=sort_group_date,
+            sort_group_time=sort_group_time,
             sort_dir=sort_dir,
         )
     else:
@@ -263,6 +265,7 @@ def _build_catalog_performances_queries(
             group_q_condition=group_q_condition,
             group_q_params=group_q_params,
             sort_group_date=sort_group_date,
+            sort_group_time=sort_group_time,
             sort_dir=sort_dir,
             user_id=user_id,
         )
@@ -298,6 +301,7 @@ def _build_all_scope_queries(
     group_q_condition: str,
     group_q_params: list[object],
     sort_group_date: str,
+    sort_group_time: str,
     sort_dir: str,
 ) -> tuple[str, tuple[object, ...], str, tuple[object, ...]]:
     standalone_where = f"{VALID_GROUP_MEMBERSHIP_NOT_EXISTS_SQL} AND ({live_where})"
@@ -341,6 +345,7 @@ def _build_all_scope_queries(
             SELECT
                 l.id,
                 l.live_date,
+                l.start_time,
                 l.live_title,
                 l.url,
                 l.live_type,
@@ -358,6 +363,7 @@ def _build_all_scope_queries(
             SELECT
                 sl.id,
                 sl.live_date,
+                sl.start_time,
                 sl.live_title,
                 sl.url,
                 sl.live_type,
@@ -373,7 +379,7 @@ def _build_all_scope_queries(
                 WHERE jsonb_typeof(ls.band_member) = 'object'
             ) bm ON true
             LEFT JOIN band_attrs ba ON ba.band_name = bm.band_name
-            GROUP BY sl.id, sl.live_date, sl.live_title, sl.url, sl.live_type, sl.default_band_ids,
+            GROUP BY sl.id, sl.live_date, sl.start_time, sl.live_title, sl.url, sl.live_type, sl.default_band_ids,
                      sl.tour_id, sl.tour_title, sl.performance_group_id, sl.group_title
         ),
         valid_groups AS (
@@ -382,6 +388,8 @@ def _build_all_scope_queries(
                 pg.group_title,
                 MIN(l.live_date) AS start_date,
                 MAX(l.live_date) AS end_date,
+                (array_agg(l.start_time ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC))[1] AS start_time,
+                (array_agg(l.start_time ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC))[1] AS end_time,
                 COUNT(DISTINCT l.live_date)::int AS day_count,
                 COUNT(DISTINCT l.id)::int AS live_count
             FROM performance_group_attrs pg
@@ -391,7 +399,8 @@ def _build_all_scope_queries(
             HAVING COUNT(DISTINCT l.id) >= 2
         ),
         matched_groups AS (
-            SELECT vg.group_id, vg.group_title, vg.start_date, vg.end_date, vg.day_count, vg.live_count
+            SELECT vg.group_id, vg.group_title, vg.start_date, vg.end_date,
+                   vg.start_time, vg.end_time, vg.day_count, vg.live_count
             FROM valid_groups vg
             WHERE ({group_exists_where} {group_q_condition})
         ),
@@ -432,6 +441,8 @@ def _build_all_scope_queries(
                 mg.group_title,
                 mg.start_date,
                 mg.end_date,
+                mg.start_time,
+                mg.end_time,
                 mg.day_count,
                 mg.live_count,
                 CASE WHEN mg.day_count = 1 THEN 'single_day_multi_show' ELSE 'multi_day' END AS display_type,
@@ -472,6 +483,7 @@ def _build_all_scope_queries(
                 NULL::jsonb AS group_bands,
                 NULL::jsonb AS group_venues,
                 slw.live_date AS sort_date,
+                slw.start_time AS sort_time,
                 slw.id AS sort_id
             FROM standalone_lives_with_bands slw
             UNION ALL
@@ -497,6 +509,7 @@ def _build_all_scope_queries(
                 gs.bands AS group_bands,
                 gs.venues AS group_venues,
                 gs.{sort_group_date} AS sort_date,
+                gs.{sort_group_time} AS sort_time,
                 gs.group_id AS sort_id
             FROM group_summary gs
         )
@@ -506,7 +519,7 @@ def _build_all_scope_queries(
             group_result_id, group_result_title, group_start_date, group_end_date,
             group_day_count, group_live_count, group_display_type, group_bands, group_venues
         FROM merged
-        ORDER BY sort_date {sort_dir}, sort_id {sort_dir}
+        ORDER BY sort_date {sort_dir}, sort_time {sort_dir}, sort_id {sort_dir}
         LIMIT %s OFFSET %s
     """
 
@@ -521,6 +534,7 @@ def _build_favorites_scope_queries(
     group_q_condition: str,
     group_q_params: list[object],
     sort_group_date: str,
+    sort_group_time: str,
     sort_dir: str,
     user_id: int | None,
 ) -> tuple[str, tuple[object, ...], str, tuple[object, ...]]:
@@ -621,6 +635,7 @@ def _build_favorites_scope_queries(
             SELECT
                 l.id,
                 l.live_date,
+                l.start_time,
                 l.live_title,
                 l.url,
                 l.live_type,
@@ -638,6 +653,7 @@ def _build_favorites_scope_queries(
             SELECT
                 sl.id,
                 sl.live_date,
+                sl.start_time,
                 sl.live_title,
                 sl.url,
                 sl.live_type,
@@ -653,7 +669,7 @@ def _build_favorites_scope_queries(
                 WHERE jsonb_typeof(ls.band_member) = 'object'
             ) bm ON true
             LEFT JOIN band_attrs ba ON ba.band_name = bm.band_name
-            GROUP BY sl.id, sl.live_date, sl.live_title, sl.url, sl.live_type, sl.default_band_ids,
+            GROUP BY sl.id, sl.live_date, sl.start_time, sl.live_title, sl.url, sl.live_type, sl.default_band_ids,
                      sl.tour_id, sl.tour_title, sl.performance_group_id, sl.group_title
         ),
         all_groups AS (
@@ -662,6 +678,8 @@ def _build_favorites_scope_queries(
                 pg.group_title,
                 MIN(l.live_date) AS start_date,
                 MAX(l.live_date) AS end_date,
+                (array_agg(l.start_time ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC))[1] AS start_time,
+                (array_agg(l.start_time ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC))[1] AS end_time,
                 COUNT(DISTINCT l.live_date)::int AS day_count,
                 COUNT(DISTINCT l.id)::int AS live_count
             FROM performance_group_attrs pg
@@ -676,6 +694,8 @@ def _build_favorites_scope_queries(
                 ag.group_title,
                 ag.start_date,
                 ag.end_date,
+                ag.start_time,
+                ag.end_time,
                 ag.day_count,
                 ag.live_count,
                 COUNT(DISTINCT fav.live_id)::int AS favorite_live_count
@@ -683,7 +703,8 @@ def _build_favorites_scope_queries(
             JOIN performance_group_lives pgl ON pgl.group_id = ag.group_id
             LEFT JOIN user_live_favorites fav
                 ON fav.live_id = pgl.live_id AND fav.user_id = %s
-            GROUP BY ag.group_id, ag.group_title, ag.start_date, ag.end_date, ag.day_count, ag.live_count
+            GROUP BY ag.group_id, ag.group_title, ag.start_date, ag.end_date,
+                     ag.start_time, ag.end_time, ag.day_count, ag.live_count
         ),
         full_groups AS (
             SELECT gfc.*
@@ -692,7 +713,8 @@ def _build_favorites_scope_queries(
               AND gfc.favorite_live_count > 0
         ),
         matched_full_groups AS (
-            SELECT fg.group_id, fg.group_title, fg.start_date, fg.end_date, fg.day_count, fg.live_count
+            SELECT fg.group_id, fg.group_title, fg.start_date, fg.end_date,
+                   fg.start_time, fg.end_time, fg.day_count, fg.live_count
             FROM full_groups fg
             WHERE ({fav_group_where} {fav_group_q_condition})
         ),
@@ -700,6 +722,7 @@ def _build_favorites_scope_queries(
             SELECT
                 l.id,
                 l.live_date,
+                l.start_time,
                 l.live_title,
                 l.url,
                 l.live_type,
@@ -725,6 +748,7 @@ def _build_favorites_scope_queries(
             SELECT
                 pfl.id,
                 pfl.live_date,
+                pfl.start_time,
                 pfl.live_title,
                 pfl.url,
                 pfl.live_type,
@@ -747,7 +771,7 @@ def _build_favorites_scope_queries(
                 WHERE jsonb_typeof(ls.band_member) = 'object'
             ) bm ON true
             LEFT JOIN band_attrs ba ON ba.band_name = bm.band_name
-            GROUP BY pfl.id, pfl.live_date, pfl.live_title, pfl.url, pfl.live_type, pfl.default_band_ids,
+            GROUP BY pfl.id, pfl.live_date, pfl.start_time, pfl.live_title, pfl.url, pfl.live_type, pfl.default_band_ids,
                      pfl.tour_id, pfl.tour_title, pfl.performance_group_id, pfl.group_title
         ),
         group_bands AS (
@@ -787,6 +811,8 @@ def _build_favorites_scope_queries(
                 mg.group_title,
                 mg.start_date,
                 mg.end_date,
+                mg.start_time,
+                mg.end_time,
                 mg.day_count,
                 mg.live_count,
                 CASE WHEN mg.day_count = 1 THEN 'single_day_multi_show' ELSE 'multi_day' END AS display_type,
@@ -827,6 +853,7 @@ def _build_favorites_scope_queries(
                 NULL::jsonb AS group_bands,
                 NULL::jsonb AS group_venues,
                 slw.live_date AS sort_date,
+                slw.start_time AS sort_time,
                 slw.id AS sort_id
             FROM standalone_lives_with_bands slw
             UNION ALL
@@ -852,6 +879,7 @@ def _build_favorites_scope_queries(
                 NULL::jsonb AS group_bands,
                 NULL::jsonb AS group_venues,
                 pflw.live_date AS sort_date,
+                pflw.start_time AS sort_time,
                 pflw.id AS sort_id
             FROM partial_fav_lives_with_bands pflw
             UNION ALL
@@ -877,6 +905,7 @@ def _build_favorites_scope_queries(
                 gs.bands AS group_bands,
                 gs.venues AS group_venues,
                 gs.{sort_group_date} AS sort_date,
+                gs.{sort_group_time} AS sort_time,
                 gs.group_id AS sort_id
             FROM group_summary gs
         )
@@ -886,7 +915,7 @@ def _build_favorites_scope_queries(
             group_result_id, group_result_title, group_start_date, group_end_date,
             group_day_count, group_live_count, group_display_type, group_bands, group_venues
         FROM merged
-        ORDER BY sort_date {sort_dir}, sort_id {sort_dir}
+        ORDER BY sort_date {sort_dir}, sort_time {sort_dir}, sort_id {sort_dir}
         LIMIT %s OFFSET %s
     """
 
