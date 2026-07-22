@@ -117,6 +117,21 @@ describe("parseSetlistText", () => {
     ]);
   });
 
+  // 测试点：同一演出者上下文作用于多首歌曲时，相同校验提示只应返回一次。
+  test("去重同一演出者上下文产生的重复 warning", () => {
+    const result = parseSetlistText(
+      "<不存在的成员 from MyGO!!!!!>\nM1. Song A\nM2. Song B\nM3. Song C",
+      bands,
+      10,
+      20,
+    );
+
+    expect(result.rows).toHaveLength(3);
+    expect(result.warnings).toEqual([
+      { line: 1, message: "不存在的成员 不在 MyGO!!!!! 的 band_members 中，已从解析结果中移除。" },
+    ]);
+  });
+
   test("保留未识别行和曲序异常提示但仍生成可应用草稿", () => {
     // 测试点：解析预览不应因未知行或跳号中断，应该返回 warning 让用户人工确认。
     const result = parseSetlistText("<Roselia>\nMC\nM2. Song A", bands, 1, 1);

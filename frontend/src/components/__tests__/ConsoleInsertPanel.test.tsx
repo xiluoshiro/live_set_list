@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { ConsoleInsertPanel } from "../ConsoleInsertPanel";
+import "../../styles/index.css";
 
 const apiMocks = vi.hoisted(() => ({
   appendConsoleLiveSetlist: vi.fn(),
@@ -1056,6 +1057,36 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getAllByText("2支 / 3人").length).toBeGreaterThan(0);
     expect(screen.queryByText("预览：2 行，提示 0 条")).not.toBeInTheDocument();
     expect(screen.getByText(/请继续点击“查询歌曲”匹配 sid/)).toBeInTheDocument();
+  });
+
+  // 测试点：批量确认框的内容区应独立滚动且操作区不收缩，保证长预览仍可取消或确认。
+  test("批量粘贴长确认内容保留可见操作区", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 8, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["羊宮妃那"] }],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
+
+    const songs = Array.from({ length: 14 }, (_, index) => `M${index + 1}. Song ${index + 1}`).join("\n");
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: `<不存在的成员 from MyGO!!!!!>\n${songs}` },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    expect(screen.getByText("预览：14 行，提示 1 条")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    const dialog = screen.getByRole("dialog", { name: "确认应用到表格" });
+    const body = dialog.querySelector<HTMLElement>(".console-confirm-body");
+    const actions = dialog.querySelector<HTMLElement>(".console-confirm-actions");
+
+    expect(body).not.toBeNull();
+    expect(actions).not.toBeNull();
+    expect(getComputedStyle(body as HTMLElement).overflowY).toBe("auto");
+    expect(getComputedStyle(actions as HTMLElement).flexShrink).toBe("0");
+    expect(within(dialog).getByRole("button", { name: "取消" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "确认提交" })).toBeInTheDocument();
   });
 
   test("批量粘贴长列表可打开完整预览弹窗", async () => {
