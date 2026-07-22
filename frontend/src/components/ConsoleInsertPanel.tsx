@@ -557,7 +557,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     return () => {
       canceled = true;
     };
-  }, [livePage]);
+  }, [livePage, mode]);
 
   useEffect(() => {
     if (!songBandOpen) return;
@@ -1572,8 +1572,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       });
 
       setInsertedLives((prev) => [inserted, ...prev]);
-      setLives((prev) =>
-        sortLivesForConsole(
+      setLives((prev) => {
+        const wasSetlistCandidate = prev.some((live) => live.live_id === inserted.live_id);
+        if (action === "update" && !wasSetlistCandidate) return prev;
+        return sortLivesForConsole(
           [
             {
               live_id: inserted.live_id,
@@ -1585,8 +1587,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
             },
             ...prev.filter((live) => live.live_id !== inserted.live_id),
           ],
-        ),
-      );
+        );
+      });
       setLivePagination((prev) => {
         const total = prev.total + (action === "create" ? 1 : 0);
         return {
@@ -1595,7 +1597,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           total_pages: Math.max(1, Math.ceil(total / prev.page_size)),
         };
       });
-      setSelectedLiveId(inserted.live_id);
+      if (action === "create" || lives.some((live) => live.live_id === inserted.live_id)) {
+        setSelectedLiveId(inserted.live_id);
+      }
       onLiveDataChanged?.();
       if (action === "create") {
         setEditingLiveId(null);
