@@ -360,6 +360,7 @@ class ConsoleTourMutationResponse(BaseModel):
 class ConsoleTourLiveCandidate(BaseModel):
     live_id: int = Field(..., description="live_attrs.id")
     live_date: date = Field(..., description="Live date")
+    start_time: str = Field(..., description="Live start time with timezone")
     live_title: str = Field(..., description="Live title")
     venue: str | None = Field(default=None, description="Venue display name")
     tour_id: int | None = Field(default=None, description="Current tour ID, if assigned")
@@ -378,6 +379,7 @@ class ConsoleTourLiveCandidatesResponse(BaseModel):
 class ConsoleTourEditStop(BaseModel):
     live_id: int = Field(..., description="Associated Live ID")
     live_date: date = Field(..., description="Live date")
+    start_time: str = Field(..., description="Live start time with timezone")
     live_title: str = Field(..., description="Live title")
     venue: str | None = Field(default=None, description="Venue display name")
     stop_label: str | None = Field(default=None, description="Optional stop label")
@@ -388,7 +390,9 @@ class ConsoleTourEditResponse(BaseModel):
     tour_id: int = Field(..., description="Tour ID")
     tour_title: str = Field(..., description="Tour title")
     band_ids: list[int] = Field(default_factory=list, description="Explicit tour band IDs; empty enables fallback")
-    stops: list[ConsoleTourEditStop] = Field(..., min_length=1, description="Stops sorted by date and Live ID")
+    stops: list[ConsoleTourEditStop] = Field(
+        ..., min_length=1, description="Stops sorted by date, start time, and Live ID"
+    )
 
 
 class ConsolePerformanceGroupUpsertRequest(BaseModel):

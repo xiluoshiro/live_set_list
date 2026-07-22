@@ -37,7 +37,7 @@ live_attrs 1 ── N live_setlist N ── 1 song_list
 
 使用关联表而不是直接在 `live_attrs` 增加 `tour_id`，原因是：
 
-- `stop_order` 保留为关系字段，但控制台保存时始终按 Live 日期和 ID 重建，不接受人工排序。
+- `stop_order` 保留为关系字段，但控制台保存时始终按 Live 日期、开演时间和 ID 重建，不接受人工排序。
 - `stop_label` 属于关系本身，但当前前端不展示或维护；公演名由 Live 标题与巡演名计算。
 - 删除巡演时只需删除关系，不改变 Live 主数据。
 - 将来若确认存在多归属需求，可以移除 `live_id` 唯一约束而不重构 Live 表。
@@ -189,7 +189,7 @@ tour: TourRef | None = None
 4. `year` 使用 `EXISTS`，只要任一关联 Live 位于该年份即命中。
 5. `band_id` 匹配 `tour_bands`，不从 setlist 推断。
 6. 聚合 `MIN(live_date)`、`MAX(live_date)` 和 `COUNT(DISTINCT live_id)`。
-7. 默认按 `MAX(live_date) DESC, tour_id DESC`；升序使用 `MIN(live_date) ASC, tour_id ASC`。
+7. 默认按最后一场的 `live_date DESC, start_time DESC, tour_id DESC`；升序按第一场的 `live_date ASC, start_time ASC, tour_id ASC`。
 8. count 查询与 page 查询复用同一筛选条件生成器。
 
 响应：
@@ -210,7 +210,7 @@ tour: TourRef | None = None
 
 - Tour 不存在返回 `404`。
 - 返回 Tour 摘要和完整 `stops`。
-- `stops` 按 `live_date ASC, live_id ASC` 返回；写入时同步生成连续 `stop_order`。
+- `stops` 按 `live_date ASC, start_time ASC, live_id ASC` 返回；写入时同步生成连续 `stop_order`。
 - `has_setlist` 使用 `EXISTS`，不加载 setlist 明细。
 - 登录用户批量查询 stops 对应的收藏状态；匿名统一为 `false`。
 - Tour 意外没有关联 Live 时视为数据异常，返回 `500` 并记录日志，不伪装成正常空详情。
@@ -264,7 +264,7 @@ tours: list[TourSummary]
 - `tour_attrs.url / description` 作为 V13 兼容列保留，但控制台不再录入；读取来源改为日期最早场次的 Live URL，说明固定返回 `null`。
 - `band_ids` 可以为空，最多 100 项，必须全部存在；后端去重校验并按 ID 排序。
 - `band_ids` 非空时，每个 Band 都必须出现在至少一场所选 Live 的有效乐队中。
-- `stops` 至少一项、最多 500 项；`live_id` 不得重复，顺序由服务端按日期和 ID 生成。
+- `stops` 至少一项、最多 500 项；`live_id` 不得重复，顺序由服务端按日期、开演时间和 ID 生成。
 - 所有 Live 必须存在且尚未属于其他 Tour。
 - 在一个事务中写入 Tour、乐队和场次；任一步失败全部回滚。
 - 写一条汇总审计日志，不为每个 stop 单独写日志。
@@ -356,8 +356,8 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 3. 使用分页 Live lookup 搜索场次；候选显示日期、标题和场地。
 4. 已属于任意 Tour 的 Live 在候选查询和分页前直接排除，不在搜索结果中显示。
 5. 支持一次添加当前筛选命中的全部未占用 Live；超过 500 条时要求缩小范围。
-6. 所有场次始终按 `live_date ASC, live_id ASC` 排列；editor 可以移除关联。`stop_label` 作为兼容字段保留，但暂不在前端展示或编辑。
-7. 提交前显示完整确认页；创建和更新复用现有控制台确认交互，确认表列名为 `short_title`，值由 Live 名称精确移除巡演名称前缀计算，不提交派生字段。
+6. 所有场次始终按 `live_date ASC, start_time ASC, live_id ASC` 排列；editor 可以移除关联。`stop_label` 作为兼容字段保留，但暂不在前端展示或编辑。
+7. 提交前显示完整确认页；创建和更新复用现有控制台确认交互，确认表列名为 `short_title`，值由 Live 名称精确移除巡演名称前缀计算，不提交派生字段。新建时若未指定参与乐队，在确认页复用现有提示样式说明将自动聚合乐队且统计包含全部 Setlist，但继续允许提交。
 8. 创建或更新成功后清空编辑区并恢复新建状态；仅创建操作追加到页面底部的会话级新增记录表格。
 
 写接口仍保留服务端 `409` 作为并发和绕过 UI 的最终保护。

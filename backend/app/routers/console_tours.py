@@ -42,7 +42,7 @@ def _validate_tour_relations(
     payload: ConsoleTourUpsertRequest,
     current_tour_id: int | None,
 ) -> list[int]:
-    """Validate relations and return Live IDs in canonical date/ID order."""
+    """Validate relations and return Live IDs in canonical date/start-time/ID order."""
     live_ids = [stop.live_id for stop in payload.stops]
     _raise_missing("Band", _not_found_ids(cur, table="band_attrs", ids=payload.band_ids))
     _raise_missing("Live", _not_found_ids(cur, table="live_attrs", ids=live_ids))
@@ -95,7 +95,7 @@ def _validate_tour_relations(
             END AS band_ids
         FROM live_attrs l
         WHERE l.id = ANY(%s)
-        ORDER BY l.live_date, l.id
+        ORDER BY l.live_date, l.start_time, l.id
         """,
         (live_ids,),
     )
@@ -122,7 +122,7 @@ def _insert_tour_relations(
     payload: ConsoleTourUpsertRequest,
     ordered_live_ids: list[int],
 ) -> None:
-    """Insert bands by ID and stops by canonical Live date/ID order."""
+    """Insert bands by ID and stops by canonical Live date/start-time/ID order."""
     for display_order, band_id in enumerate(payload.band_ids, start=1):
         cur.execute(
             "INSERT INTO tour_bands (tour_id, band_id, display_order) VALUES (%s, %s, %s)",
@@ -208,6 +208,7 @@ def get_tour_live_candidates(
                     SELECT
                         l.id,
                         l.live_date,
+                        l.start_time::text,
                         l.live_title,
                         v.venue,
                         NULL::integer AS tour_id,
@@ -230,7 +231,7 @@ def get_tour_live_candidates(
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     {where_sql}
-                    ORDER BY l.live_date DESC, l.id DESC
+                    ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC
                     LIMIT %s OFFSET %s
                     """,
                     (*params, page_size, (safe_page - 1) * page_size),
@@ -249,11 +250,12 @@ def get_tour_live_candidates(
             {
                 "live_id": int(row[0]),
                 "live_date": row[1],
-                "live_title": str(row[2]),
-                "venue": row[3],
-                "tour_id": int(row[4]) if row[4] is not None else None,
-                "tour_title": str(row[5]) if row[5] is not None else None,
-                "band_ids": list(row[6] or []),
+                "start_time": str(row[2]),
+                "live_title": str(row[3]),
+                "venue": row[4],
+                "tour_id": int(row[5]) if row[5] is not None else None,
+                "tour_title": str(row[6]) if row[6] is not None else None,
+                "band_ids": list(row[7] or []),
             }
             for row in rows
         ],
@@ -268,7 +270,7 @@ def get_tour_live_candidates(
     "/tours/{tour_id}",
     response_model=ConsoleTourEditResponse,
     summary="获取巡演编辑数据",
-    description="返回显式乐队选择和按日期排序的完整场次，供 `editor+` 控制台编辑。",
+    description="返回显式乐队选择和按日期、开演时间、ID 排序的完整场次，供 `editor+` 控制台编辑。",
 )
 def get_console_tour(
     tour_id: int = Path(..., ge=1),
@@ -288,6 +290,7 @@ def get_console_tour(
                     SELECT
                         l.id,
                         l.live_date,
+                        to_jsonb(l) ->> 'start_time' AS start_time,
                         l.live_title,
                         v.venue,
                         tl.stop_label,
@@ -310,7 +313,7 @@ def get_console_tour(
                     JOIN live_attrs l ON l.id = tl.live_id
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     WHERE tl.tour_id = %s
-                    ORDER BY l.live_date, l.id
+                    ORDER BY l.live_date, l.start_time, l.id
                     """,
                     (tour_id,),
                 )
@@ -333,10 +336,11 @@ def get_console_tour(
             {
                 "live_id": int(row[0]),
                 "live_date": row[1],
-                "live_title": str(row[2]),
-                "venue": row[3],
-                "stop_label": row[4],
-                "band_ids": list(row[5] or []),
+                "start_time": row[2],
+                "live_title": str(row[3]),
+                "venue": row[4],
+                "stop_label": row[5],
+                "band_ids": list(row[6] or []),
             }
             for row in stop_rows
         ],

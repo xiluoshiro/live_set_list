@@ -20,7 +20,7 @@ def _build_connection_mock():
     return conn, cursor
 
 
-# 测试点：巡演列表应返回聚合日期、显式乐队、场次标签和统一分页结构。
+# 测试点：巡演列表应返回聚合摘要，并按边界场次日期、开演时间、ID 排序分页。
 def test_get_tours_returns_public_summaries():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (1,)
@@ -68,9 +68,11 @@ def test_get_tours_returns_public_summaries():
         call(count_query, count_params),
         call(page_query, (*page_params, 20, 0)),
     ]
+    assert "ORDER BY boundary_live.live_date DESC, boundary_live.start_time DESC, t.id DESC" in page_query
+    assert "ORDER BY summary.end_date DESC, summary.end_time DESC, summary.tour_id DESC" in page_query
 
 
-# 测试点：巡演筛选必须参数化，并把关键词通配符按字面量转义。
+# 测试点：巡演升序筛选必须参数化，并按第一场日期、开演时间、ID 排序。
 def test_get_tours_binds_keyword_year_and_band_filters():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (0,)
@@ -88,9 +90,12 @@ def test_get_tours_binds_keyword_year_and_band_filters():
     assert str(count_params[3]) == "2026-01-01"
     assert str(count_params[4]) == "2027-01-01"
     assert count_params[5:] == (9, 9, 9)
+    page_query = str(cursor.execute.call_args_list[1].args[0])
+    assert "ORDER BY boundary_live.live_date ASC, boundary_live.start_time ASC, t.id ASC" in page_query
+    assert "ORDER BY summary.start_date ASC, summary.start_time ASC, summary.tour_id ASC" in page_query
 
 
-# 测试点：巡演详情应按人工顺序返回场次，并保留单场 setlist 与收藏语义。
+# 测试点：巡演详情应按日期、开演时间、ID 返回场次，并保留单场 setlist 与收藏语义。
 def test_get_tour_detail_returns_ordered_stops():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (
@@ -124,6 +129,7 @@ def test_get_tour_detail_returns_ordered_stops():
         call(TOUR_DETAIL_BANDS_QUERY, (7, 7, 7, 7)),
         call(TOUR_DETAIL_STOPS_QUERY, (7,)),
     ]
+    assert "ORDER BY l.live_date, l.start_time, l.id" in TOUR_DETAIL_STOPS_QUERY
 
 
 # 测试点：不存在的巡演 ID 应返回 404，而不是伪装成空详情。
