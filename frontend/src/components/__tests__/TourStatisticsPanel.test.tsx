@@ -52,22 +52,27 @@ describe("TourStatisticsPanel", () => {
     const selectors = within(progress).getAllByRole("button", { name: /对比上一场/ });
     expect(selectors).toHaveLength(2);
     expect(selectors[1]).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("region", { name: "歌单变化" })).toHaveTextContent("同位置更换");
+    expect(screen.getByRole("region", { name: "歌单变化" })).toHaveTextContent("新增歌曲");
 
     await user.click(selectors[0]);
 
     expect(selectors[0]).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("region", { name: "歌单变化" })).toHaveTextContent("歌单未发生变化");
+    const region = screen.getByRole("region", { name: "歌单变化" });
+    expect(region).toHaveTextContent("歌单未发生变化");
+    expect(region).not.toHaveTextContent("保留场次节点，不制造额外空白。");
   });
 
-  // 测试点：同位置更换使用可区分的移除/新增行，并隐藏数量为零的摘要项。
-  test("用增删变化流呈现同位置更换", () => {
+  // 测试点：位置相同的曲目替换归入普通新增和移除，不再暴露无意义的“同位置更换”分类。
+  test("把位置相同的替换归入增删变化流", () => {
     render(<TourStatisticsPanel tourTitle="Tour 2026" data={makeStatistics()} loading={false} error={null} onOpenStop={vi.fn()} />);
 
     const region = screen.getByRole("region", { name: "歌单变化" });
     expect(within(region).getByLabelText("移除 旧曲")).toHaveClass("removed");
     expect(within(region).getByLabelText("新增 新曲")).toHaveClass("added");
-    expect(within(region).getByLabelText("变化摘要")).toHaveTextContent("更换 1");
+    expect(within(region).getByLabelText("变化摘要")).toHaveTextContent("新增 1");
+    expect(within(region).getByLabelText("变化摘要")).toHaveTextContent("移除 1");
+    expect(region).not.toHaveTextContent("同位置更换");
+    expect(region).not.toHaveTextContent("更换 1");
     expect(within(region).queryByText("顺序 0")).not.toBeInTheDocument();
   });
 });

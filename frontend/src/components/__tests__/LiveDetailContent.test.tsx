@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import type { LiveDetailResponse } from "../../api";
 import { LiveDetailContent } from "../LiveDetailContent";
@@ -74,5 +74,24 @@ describe("LiveDetailContent event attendees", () => {
     );
 
     expect(screen.queryByText("出演成员：")).not.toBeInTheDocument();
+  });
+
+  // 测试点：演出详情的活动组入口只显示活动组名称，不重复添加“查看活动组”前缀。
+  test("renders the performance group link with its title only", () => {
+    const detail = makeDetail("oneman");
+    detail.performance_group = { group_id: 7, group_title: "示例活动组" };
+
+    render(
+      <LiveDetailContent
+        detailData={detail}
+        detailLoading={false}
+        detailError={null}
+        fallback={{ liveTitle: "Event Detail", liveDate: "2026-08-08", url: null }}
+        onOpenPerformanceGroup={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "示例活动组" })).toBeInTheDocument();
+    expect(screen.queryByText(/查看活动组/)).not.toBeInTheDocument();
   });
 });

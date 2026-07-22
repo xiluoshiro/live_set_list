@@ -22,7 +22,7 @@ const STATUS_LABELS: Record<TourStatisticsSongStatus, string> = {
 };
 
 function getTransitionChangeCount(transition: TourTransition): number {
-  return transition.replacements.length
+  return transition.replacements.length * 2
     + transition.added_songs.length
     + transition.removed_songs.length
     + transition.moved_songs.length;
@@ -52,6 +52,20 @@ function TourTransitionExplorer({ tourTitle, transitions, onOpenStop }: TourTran
   const selectedChangeCount = getTransitionChangeCount(selectedTransition);
   const selectedFromTitle = getTourStopShortTitle(selectedTransition.from_live_title, tourTitle);
   const selectedToTitle = getTourStopShortTitle(selectedTransition.to_live_title, tourTitle);
+  const displayedAddedSongs = [
+    ...selectedTransition.replacements.map((replacement, index) => ({
+      key: `replacement:${index}:${replacement.to_song.song_id}`,
+      song: replacement.to_song,
+    })),
+    ...selectedTransition.added_songs.map((song) => ({ key: `added:${song.song_id}`, song })),
+  ];
+  const displayedRemovedSongs = [
+    ...selectedTransition.replacements.map((replacement, index) => ({
+      key: `replacement:${index}:${replacement.from_song.song_id}`,
+      song: replacement.from_song,
+    })),
+    ...selectedTransition.removed_songs.map((song) => ({ key: `removed:${song.song_id}`, song })),
+  ];
 
   return (
     <div className="tour-transition-explorer">
@@ -117,56 +131,36 @@ function TourTransitionExplorer({ tourTitle, transitions, onOpenStop }: TourTran
             <span className="tour-transition-stream-marker" aria-hidden="true">✓</span>
             <div>
               <strong>歌单未发生变化</strong>
-              <p>保留场次节点，不制造额外空白。</p>
             </div>
           </div>
         ) : (
           <>
             <div className="tour-transition-summary" aria-label="变化摘要">
-              {selectedTransition.replacements.length > 0 && <span>更换 {selectedTransition.replacements.length}</span>}
-              {selectedTransition.added_songs.length > 0 && <span>新增 {selectedTransition.added_songs.length}</span>}
-              {selectedTransition.removed_songs.length > 0 && <span>移除 {selectedTransition.removed_songs.length}</span>}
+              {displayedAddedSongs.length > 0 && <span>新增 {displayedAddedSongs.length}</span>}
+              {displayedRemovedSongs.length > 0 && <span>移除 {displayedRemovedSongs.length}</span>}
               {selectedTransition.moved_songs.length > 0 && <span>顺序 {selectedTransition.moved_songs.length}</span>}
             </div>
             <ol className="tour-transition-stream">
-              {selectedTransition.replacements.length > 0 && (
-                <li className="tour-transition-event">
-                  <span className="tour-transition-stream-marker" aria-hidden="true">⇄</span>
-                  <section className="tour-transition-group">
-                    <h4>同位置更换</h4>
-                    <div className="tour-transition-diff-rows">{selectedTransition.replacements.map((item) => (
-                      <div className="tour-transition-diff-pair" key={`${item.segment_type}:${item.sub_order}`}>
-                        <div className="tour-transition-diff-row removed" aria-label={`移除 ${item.from_song.song_name}`}>
-                          <span aria-hidden="true">－</span><span>{item.from_song.song_name}</span>
-                        </div>
-                        <div className="tour-transition-diff-row added" aria-label={`新增 ${item.to_song.song_name}`}>
-                          <span aria-hidden="true">＋</span><span>{item.to_song.song_name}</span>
-                        </div>
-                      </div>
-                    ))}</div>
-                  </section>
-                </li>
-              )}
-              {selectedTransition.added_songs.length > 0 && (
+              {displayedAddedSongs.length > 0 && (
                 <li className="tour-transition-event">
                   <span className="tour-transition-stream-marker" aria-hidden="true">＋</span>
                   <section className="tour-transition-group">
                     <h4>新增歌曲</h4>
-                    <div className="tour-transition-diff-rows">{selectedTransition.added_songs.map((song) => (
-                      <div className="tour-transition-diff-row added" aria-label={`新增 ${song.song_name}`} key={song.song_id}>
+                    <div className="tour-transition-diff-rows">{displayedAddedSongs.map(({ key, song }) => (
+                      <div className="tour-transition-diff-row added" aria-label={`新增 ${song.song_name}`} key={key}>
                         <span aria-hidden="true">＋</span><span>{song.song_name}</span>
                       </div>
                     ))}</div>
                   </section>
                 </li>
               )}
-              {selectedTransition.removed_songs.length > 0 && (
+              {displayedRemovedSongs.length > 0 && (
                 <li className="tour-transition-event">
                   <span className="tour-transition-stream-marker" aria-hidden="true">－</span>
                   <section className="tour-transition-group">
                     <h4>移除歌曲</h4>
-                    <div className="tour-transition-diff-rows">{selectedTransition.removed_songs.map((song) => (
-                      <div className="tour-transition-diff-row removed" aria-label={`移除 ${song.song_name}`} key={song.song_id}>
+                    <div className="tour-transition-diff-rows">{displayedRemovedSongs.map(({ key, song }) => (
+                      <div className="tour-transition-diff-row removed" aria-label={`移除 ${song.song_name}`} key={key}>
                         <span aria-hidden="true">－</span><span>{song.song_name}</span>
                       </div>
                     ))}</div>
