@@ -649,9 +649,34 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("checkbox", { name: /MyGO/ })).not.toBeChecked();
     expect(onLiveDataChanged).toHaveBeenCalledTimes(1);
 
+    apiMocks.getLives.mockResolvedValue({
+      items: [
+        {
+          live_id: 101,
+          live_date: "2026-03-30",
+          live_title: "春日联合公演",
+          live_type: "oneman",
+          bands: [1, 2],
+          url: "https://example.com/live/101",
+          is_favorite: false,
+        },
+        {
+          live_id: 39,
+          live_date: "2026-03-30",
+          live_title: "Inserted Live",
+          live_type: "oneman",
+          bands: [3],
+          url: "https://example.com/inserted",
+          is_favorite: false,
+        },
+      ],
+      pagination: { page: 1, page_size: 20, total: 2, total_pages: 1 },
+    });
+    const callsBeforeSwitch = apiMocks.getLives.mock.calls.length;
     await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
     expect(screen.getByRole("status")).toHaveTextContent("已新增Live #39（Inserted Live）");
-    expect(screen.getByText("第 1 / 1 页，共 2 条")).toBeInTheDocument();
+    await waitFor(() => expect(apiMocks.getLives.mock.calls.length).toBeGreaterThan(callsBeforeSwitch));
+    expect(await screen.findByText("第 1 / 1 页，共 2 条")).toBeInTheDocument();
   });
 
   // 测试点：关闭清空选项时，新增 Live 成功后应保留当前草稿、Venue 查询和 Venue 选择以便连续录入。
@@ -678,7 +703,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("checkbox", { name: "新增后清空录入数据" })).not.toBeChecked();
   });
 
-  // 测试点：选择既有 Live 后应回填共用表单，只提交差异确认过的完整更新请求。
+  // 测试点：更新已有 Setlist 的 Live 后不得加入新增 Setlist 候选，切回页签时应重新加载候选。
   test("Live管理会加载并更新既有Live", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleLiveCandidates.mockResolvedValue({
@@ -719,6 +744,12 @@ describe("ConsoleInsertPanel", () => {
       "csrf-token",
     ));
     expect(screen.getByText(/已更新Live #55/)).toBeInTheDocument();
+
+    const callsBeforeSwitch = apiMocks.getLives.mock.calls.length;
+    await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
+    await waitFor(() => expect(apiMocks.getLives.mock.calls.length).toBeGreaterThan(callsBeforeSwitch));
+    const liveSelect = screen.getByLabelText("选择 live_id");
+    expect(within(liveSelect).getAllByRole("option").map((option) => option.getAttribute("value"))).toEqual(["101"]);
   });
 
   // 测试点：编辑草稿存在修改时，切换到新建模式必须先确认放弃，不能静默清空。
