@@ -22,6 +22,10 @@ type TourDetailPageProps = {
   tourId: number;
   fallback: TourDetailFallback;
   onBack: () => void;
+  canFavorite?: boolean;
+  isFavorite?: (liveId: number) => boolean;
+  isSyncing?: (liveId: number) => boolean;
+  onToggleFavorite?: (liveId: number) => void;
 };
 
 function formatDateRange(detail: TourDetailResponse): string {
@@ -37,6 +41,10 @@ export function TourDetailPage({
   tourId,
   fallback,
   onBack,
+  canFavorite = false,
+  isFavorite = () => false,
+  isSyncing = () => false,
+  onToggleFavorite,
 }: TourDetailPageProps) {
   const [detail, setDetail] = useState<TourDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -136,20 +144,33 @@ export function TourDetailPage({
           {activeTab === "stops" ? (
             <>
               <nav className="tour-stop-shortcuts" aria-label="巡演场次">
-                {detail.stops.map((stop, index) => (
-                  <span key={stop.live_id} className="tour-stop-shortcut-item">
-                    {index > 0 && <span className="tour-stop-separator" aria-hidden="true" />}
-                    <button
-                      type="button"
-                      className="detail-tour-link tour-stop-shortcut"
-                      title={stop.live_title}
-                      aria-pressed={stop.live_id === selectedLiveId}
-                      onClick={() => setSelectedLiveId(stop.live_id)}
-                    >
-                      {getTourStopShortTitle(stop.live_title, detail.tour_title)}
-                    </button>
-                  </span>
-                ))}
+                {detail.stops.map((stop, index) => {
+                  const shortTitle = getTourStopShortTitle(stop.live_title, detail.tour_title);
+                  const favorite = isFavorite(stop.live_id);
+                  return (
+                    <span key={stop.live_id} className="tour-stop-shortcut-item">
+                      {index > 0 && <span className="tour-stop-separator" aria-hidden="true" />}
+                      <button
+                        type="button"
+                        className="detail-tour-link tour-stop-shortcut"
+                        title={stop.live_title}
+                        aria-pressed={stop.live_id === selectedLiveId}
+                        onClick={() => setSelectedLiveId(stop.live_id)}
+                      >
+                        {shortTitle}
+                      </button>
+                      {canFavorite && onToggleFavorite && (
+                        <button
+                          type="button"
+                          className={`star-btn performance-group-live-star ${favorite ? "is-fav" : ""} ${isSyncing(stop.live_id) ? "is-syncing" : ""}`}
+                          aria-label={`${favorite ? "取消收藏" : "加入收藏"} ${shortTitle}`}
+                          aria-busy={isSyncing(stop.live_id)}
+                          onClick={() => onToggleFavorite(stop.live_id)}
+                        >★</button>
+                      )}
+                    </span>
+                  );
+                })}
               </nav>
               {selectedStop && (
                 <div className="detail-page tour-inline-live-detail">

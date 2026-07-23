@@ -1,15 +1,17 @@
+import type { MutableRefObject } from "react";
+
 import type { TourSummary } from "../api";
 import { BandIconsCell } from "./BandIconsCell";
 
 type TourCardGridProps = {
   tours: TourSummary[];
   loading: boolean;
+  loadingMore: boolean;
   error: string | null;
   total: number;
-  page: number;
-  totalPages: number;
+  hasMore: boolean;
+  sentinelRef: MutableRefObject<HTMLDivElement | null>;
   onOpenTour: (tour: TourSummary) => void;
-  onPageChange: (page: number) => void;
 };
 
 function formatDateRange(tour: TourSummary): string {
@@ -19,22 +21,17 @@ function formatDateRange(tour: TourSummary): string {
 export function TourCardGrid({
   tours,
   loading,
+  loadingMore,
   error,
   total,
-  page,
-  totalPages,
+  hasMore,
+  sentinelRef,
   onOpenTour,
-  onPageChange,
 }: TourCardGridProps) {
   return (
     <>
       <footer className="pager">
         <div className="toolbar"><span>总计 {total} 个巡演</span></div>
-        <div className="pager-controls">
-          <button type="button" disabled={loading || page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>上一页</button>
-          <span className="pager-status">第 {page} / {totalPages} 页</span>
-          <button type="button" disabled={loading || page >= totalPages} onClick={() => onPageChange(Math.min(totalPages, page + 1))}>下一页</button>
-        </div>
       </footer>
       {error && tours.length === 0 ? (
         <p className="live-card-state live-card-state-error">巡演资料加载失败：{error}</p>
@@ -67,6 +64,9 @@ export function TourCardGrid({
           ))}
         </div>
       )}
+      <div ref={sentinelRef} className="live-card-sentinel">
+        {loadingMore ? "加载中..." : hasMore ? "" : tours.length > 0 ? `已加载全部 ${total} 个巡演` : ""}
+      </div>
     </>
   );
 }
