@@ -62,10 +62,10 @@ describe("TourStatisticsPanel", () => {
     ];
     render(<TourStatisticsPanel tourTitle="Tour 2026" data={makeStatistics()} loading={false} error={null} onOpenStop={vi.fn()} stops={stops} />);
 
-    expect(screen.queryByRole("button", { name: "比较这两场" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "比较" })).not.toBeInTheDocument();
   });
 
-  // 测试点：三场以上时只在点击后请求首末场比较，并复用完整的变化明细流。
+  // 测试点：任意比较应替换“对比上一场”的同一详情区域，选择相邻场次后可切回原结果。
   test("按需加载任意两场的完整变化", async () => {
     const user = userEvent.setup();
     const stops: TourStopItem[] = [
@@ -88,11 +88,18 @@ describe("TourStatisticsPanel", () => {
     render(<TourStatisticsPanel tourTitle="Tour 2026" data={makeStatistics()} loading={false} error={null} onOpenStop={vi.fn()} stops={stops} />);
 
     expect(getTourStatisticsComparisonMock).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "比较这两场" }));
+    const detailRegion = screen.getByRole("region", { name: "歌单变化" });
+    await user.click(screen.getByRole("button", { name: "比较" }));
 
     expect(getTourStatisticsComparisonMock).toHaveBeenCalledWith(7, 40, 42);
-    const customRegion = await screen.findByRole("region", { name: "任意场次歌单变化" });
-    expect(within(customRegion).getByLabelText("新增 任意场次新增曲")).toBeInTheDocument();
+    expect(await within(detailRegion).findByLabelText("新增 任意场次新增曲")).toBeInTheDocument();
+    expect(screen.getAllByRole("region", { name: "歌单变化" })).toHaveLength(1);
+    expect(screen.queryByRole("region", { name: "任意场次歌单变化" })).not.toBeInTheDocument();
+
+    const progress = screen.getByRole("navigation", { name: "场次进程" });
+    await user.click(within(progress).getAllByRole("button", { name: /对比上一场/ })[0]);
+    expect(within(detailRegion).getByText("歌单未发生变化")).toBeInTheDocument();
+    expect(within(detailRegion).queryByLabelText("新增 任意场次新增曲")).not.toBeInTheDocument();
   });
 
   // 测试点：时间线默认选中最近一次有变化的场次，并允许切换查看无变化的相邻场次。
