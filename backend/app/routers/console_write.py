@@ -22,6 +22,8 @@ from app.schemas.console import (
     ConsoleSongBatchCreateResponse,
     ConsoleSongCreateRequest,
     ConsoleSongMutationResponse,
+    ConsoleSongUpdateRequest,
+    ConsoleLiveSetlistReplaceResponse,
     ConsoleVenueCreateRequest,
     ConsoleVenueMutationResponse,
 )
@@ -275,6 +277,68 @@ def create_song(
         logger.exception("create_song failed user_id=%s song_name=%s", context.user.id, payload.song_name)
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
+    return {
+        "ok": True,
+        "item": {
+            "song_id": song_id,
+            "song_name": payload.song_name,
+            "band_id": payload.band_id,
+            "cover": payload.cover,
+        },
+    }
+
+
+@router.put(
+    "/songs/{song_id}",
+    response_model=ConsoleSongMutationResponse,
+    summary="更新歌曲",
+    description="`editor+` 用户更新歌曲名称、归属 Band 和翻唱属性。",
+)
+def update_song(
+    payload: ConsoleSongUpdateRequest,
+    request: Request,
+    song_id: int = Path(..., ge=1),
+    _: Any = Depends(require_role("editor")),
+    context: AuthSessionContext = Depends(get_current_auth_context),
+):
+    assert_valid_csrf(request, context)
+    try:
+        with get_write_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM band_attrs WHERE id = %s", (payload.band_id,))
+                if cur.fetchone() is None:
+                    raise HTTPException(status_code=404, detail=f"Band id {payload.band_id} not found")
+                cur.execute(
+                    """
+                    UPDATE song_list
+                    SET song_name = %s, band_id = %s, is_cover = %s
+                    WHERE id = %s
+                    RETURNING id
+                    """,
+                    (payload.song_name, payload.band_id, payload.cover, song_id),
+                )
+                if cur.fetchone() is None:
+                    raise HTTPException(status_code=404, detail=f"Song id {song_id} not found")
+                _write_console_audit_log(
+                    cur,
+                    user_id=context.user.id,
+                    action="song_update",
+                    resource_type="song",
+                    resource_id=str(song_id),
+                    payload_json={"song_name": payload.song_name, "band_id": payload.band_id, "cover": payload.cover},
+                )
+    except HTTPException:
+        raise
+    except UniqueViolation as exc:
+        raise HTTPException(status_code=409, detail=f"Song name already exists for band {payload.band_id}: {payload.song_name}") from exc
+    except QueryCanceled as exc:
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     return {
         "ok": True,
         "item": {
@@ -830,5 +894,97 @@ def append_live_setlist(
             "live_id": live_id,
             "inserted_row_count": len(normalized_rows),
             "total_setlist_row_count": total_setlist_row_count,
+        },
+    }
+
+
+@router.put(
+    "/lives/{live_id}/setlist",
+    response_model=ConsoleLiveSetlistReplaceResponse,
+    summary="更新指定 Live 的 Setlist",
+    description="`editor+` 用户用提交的完整行集合替换指定 Live 的 Setlist。",
+)
+def replace_live_setlist(
+    payload: ConsoleLiveSetlistAppendRequest,
+    request: Request,
+    live_id: int = Path(..., ge=1),
+    _: Any = Depends(require_role("editor")),
+    context: AuthSessionContext = Depends(get_current_auth_context),
+):
+    assert_valid_csrf(request, context)
+    normalized_rows: list[dict[str, Any]] = []
+    seen_absolute_orders: set[int] = set()
+    for row in payload.setlist_rows:
+        if row.absolute_order in seen_absolute_orders:
+            _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Duplicate absolute_order in setlist_rows: {row.absolute_order}")
+        seen_absolute_orders.add(row.absolute_order)
+        normalized_rows.append({
+            "song_id": row.song_id,
+            "absolute_order": row.absolute_order,
+            "segment_type": _normalize_segment_type(row.segment_type),
+            "sub_order": row.sub_order,
+            "is_short": row.is_short,
+            "band_member": _normalize_band_member_payload(row.band_member),
+            "other_member": _normalize_other_member_payload(row.other_member),
+            "comment": row.comment,
+        })
+    try:
+        with get_write_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM live_attrs WHERE id = %s FOR UPDATE", (live_id,))
+                if cur.fetchone() is None:
+                    raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
+                song_ids = list(dict.fromkeys(item["song_id"] for item in normalized_rows))
+                cur.execute("SELECT id FROM song_list WHERE id = ANY(%s)", (song_ids,))
+                existing_song_ids = {int(row[0]) for row in cur.fetchall()}
+                missing_song_ids = [song_id for song_id in song_ids if song_id not in existing_song_ids]
+                if missing_song_ids:
+                    raise HTTPException(status_code=404, detail=f"Song ids not found: {', '.join(map(str, missing_song_ids))}")
+                cur.execute("DELETE FROM live_setlist WHERE live_id = %s", (live_id,))
+                for normalized_row in sorted(normalized_rows, key=lambda item: item["absolute_order"]):
+                    cur.execute(
+                        """
+                        INSERT INTO live_setlist (
+                            live_id, song_id, absolute_order, segment_type, sub_order,
+                            is_short, band_member, other_member, comment
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            live_id,
+                            normalized_row["song_id"],
+                            normalized_row["absolute_order"],
+                            normalized_row["segment_type"],
+                            normalized_row["sub_order"],
+                            normalized_row["is_short"],
+                            Json(normalized_row["band_member"]),
+                            Json(normalized_row["other_member"]) if normalized_row["other_member"] is not None else None,
+                            normalized_row["comment"],
+                        ),
+                    )
+                _write_console_audit_log(
+                    cur,
+                    user_id=context.user.id,
+                    action="live_setlist_update",
+                    resource_type="live",
+                    resource_id=str(live_id),
+                    payload_json={"row_count": len(normalized_rows)},
+                )
+    except HTTPException:
+        raise
+    except QueryCanceled as exc:
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    return {
+        "ok": True,
+        "item": {
+            "live_id": live_id,
+            "inserted_row_count": len(normalized_rows),
+            "total_setlist_row_count": len(normalized_rows),
         },
     }

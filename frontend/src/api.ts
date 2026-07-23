@@ -487,6 +487,16 @@ export type ConsoleLiveSetlistAppendResponse = {
   };
 };
 
+export type ConsoleLiveSetlistEditRow = ConsoleLiveSetlistRowPayload & {
+  row_id: string;
+  song_name: string;
+};
+
+export type ConsoleLiveSetlistEditResponse = {
+  live_id: number;
+  rows: ConsoleLiveSetlistEditRow[];
+};
+
 export type ConsoleTourStopPayload = {
   live_id: number;
   stop_label: string | null;
@@ -643,8 +653,11 @@ type RequestKind =
   | "console_live_create"
   | "console_live_update"
   | "console_song_create"
+  | "console_song_update"
   | "console_song_batch_create"
   | "console_live_setlist_append"
+  | "console_live_setlist_detail"
+  | "console_live_setlist_update"
   | "console_tour_live_candidates"
   | "console_tour_detail"
   | "console_tour_create"
@@ -1204,6 +1217,23 @@ export async function createConsoleSong(
   return expectJsonResponse<ConsoleSongMutationResponse>(response);
 }
 
+export async function updateConsoleSong(
+  songId: number,
+  payload: ConsoleSongCreatePayload,
+  csrfToken: string,
+): Promise<ConsoleSongMutationResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/songs/${songId}`,
+    {
+      method: "PUT",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_song_update", method: "PUT" },
+  );
+  return expectJsonResponse<ConsoleSongMutationResponse>(response);
+}
+
 export async function createConsoleSongsBatch(
   songs: ConsoleSongCreatePayload[],
   csrfToken: string,
@@ -1285,6 +1315,34 @@ export async function appendConsoleLiveSetlist(
   clearLiveCollectionCaches();
   detailCache.delete(detailCacheKey(liveId));
   publishConsoleLiveChange("setlist_appended", liveId);
+  return responsePayload;
+}
+
+export async function getConsoleLiveSetlist(liveId: number): Promise<ConsoleLiveSetlistEditResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/lives/${liveId}/setlist`, undefined, {
+    requestKind: "console_live_setlist_detail",
+  });
+  return expectJsonResponse<ConsoleLiveSetlistEditResponse>(response);
+}
+
+export async function updateConsoleLiveSetlist(
+  liveId: number,
+  payload: ConsoleLiveSetlistAppendPayload,
+  csrfToken: string,
+): Promise<ConsoleLiveSetlistAppendResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/lives/${liveId}/setlist`,
+    {
+      method: "PUT",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_live_setlist_update", method: "PUT" },
+  );
+  const responsePayload = await expectJsonResponse<ConsoleLiveSetlistAppendResponse>(response);
+  clearLiveCollectionCaches();
+  detailCache.delete(detailCacheKey(liveId));
+  publishConsoleLiveChange("updated", liveId);
   return responsePayload;
 }
 
@@ -1397,10 +1455,12 @@ export async function getConsoleLiveCandidates(
   page = 1,
   pageSize = 20,
   liveType = "",
+  hasSetlist?: boolean,
 ): Promise<ConsoleLiveCandidatesResponse> {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (q.trim()) query.set("q", q.trim());
   if (liveType) query.set("live_type", liveType);
+  if (hasSetlist !== undefined) query.set("has_setlist", String(hasSetlist));
   const response = await fetchWithTimeout(
     `${BASE_URL}/api/console/lives?${query.toString()}`,
     undefined,

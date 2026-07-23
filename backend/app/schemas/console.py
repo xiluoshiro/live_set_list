@@ -52,6 +52,9 @@ class ConsoleSongMutationResponse(BaseModel):
     item: ConsoleSongItem = Field(..., description="Created song payload")
 
 
+ConsoleSongUpdateRequest = ConsoleSongCreateRequest
+
+
 class ConsoleSongBatchCreateRequest(BaseModel):
     songs: list[ConsoleSongCreateRequest] = Field(
         ..., min_length=1, max_length=100, description="Songs to create in batch"
@@ -289,6 +292,21 @@ class ConsoleLiveSetlistAppendItem(BaseModel):
 class ConsoleLiveSetlistAppendResponse(BaseModel):
     ok: bool = Field(..., description="Whether the write succeeded")
     item: ConsoleLiveSetlistAppendItem = Field(..., description="Append result payload")
+
+
+class ConsoleLiveSetlistEditRow(ConsoleLiveSetlistRowRequest):
+    row_id: str = Field(..., description="Persisted live_setlist UUID")
+    song_name: str = Field(..., description="Persisted song title")
+
+
+class ConsoleLiveSetlistEditResponse(BaseModel):
+    live_id: int = Field(..., description="Target live ID")
+    rows: list[ConsoleLiveSetlistEditRow] = Field(..., description="Complete editable Setlist rows")
+
+
+class ConsoleLiveSetlistReplaceResponse(BaseModel):
+    ok: bool = Field(..., description="Whether the write succeeded")
+    item: ConsoleLiveSetlistAppendItem = Field(..., description="Replacement result payload")
 
 
 class ConsoleTourStopRequest(BaseModel):
