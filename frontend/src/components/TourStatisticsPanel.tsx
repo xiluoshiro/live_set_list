@@ -41,20 +41,20 @@ type TourTransitionExplorerProps = {
   tourTitle: string;
   transitions: TourTransition[];
   onOpenStop: (liveId: number) => void;
-  showProgress?: boolean;
-  detailLabel?: string;
+  detailTransition?: TourTransition | null;
+  onSelectTransition?: () => void;
 };
 
 function TourTransitionExplorer({
   tourTitle,
   transitions,
   onOpenStop,
-  showProgress = true,
-  detailLabel = "歌单变化",
+  detailTransition = null,
+  onSelectTransition,
 }: TourTransitionExplorerProps) {
   const [selectedIndex, setSelectedIndex] = useState(() => getDefaultTransitionIndex(transitions));
   const resolvedSelectedIndex = transitions[selectedIndex] ? selectedIndex : getDefaultTransitionIndex(transitions);
-  const selectedTransition = transitions[resolvedSelectedIndex];
+  const selectedTransition = detailTransition ?? transitions[resolvedSelectedIndex];
   if (!selectedTransition) return null;
 
   const firstTransition = transitions[0];
@@ -77,8 +77,8 @@ function TourTransitionExplorer({
   ];
 
   return (
-    <div className={`tour-transition-explorer${showProgress ? "" : " detail-only"}`}>
-      {showProgress && <nav className="tour-transition-progress" aria-label="场次进程">
+    <div className="tour-transition-explorer">
+      <nav className="tour-transition-progress" aria-label="场次进程">
         <div className="tour-transition-section-head">
           <h3>场次进程</h3>
           <span>选择相邻场次</span>
@@ -95,7 +95,7 @@ function TourTransitionExplorer({
           </li>
           {transitions.map((transition, index) => {
             const changeCount = getTransitionChangeCount(transition);
-            const isSelected = index === resolvedSelectedIndex;
+            const isSelected = detailTransition === null && index === resolvedSelectedIndex;
             return (
               <li className={`tour-transition-timeline-stop${isSelected ? " selected" : ""}`} key={`${transition.from_live_id}:${transition.to_live_id}`}>
                 <span className="tour-transition-dot" aria-hidden="true" />
@@ -108,7 +108,10 @@ function TourTransitionExplorer({
                     type="button"
                     className="tour-transition-selector"
                     aria-pressed={isSelected}
-                    onClick={() => setSelectedIndex(index)}
+                    onClick={() => {
+                      setSelectedIndex(index);
+                      onSelectTransition?.();
+                    }}
                   >
                     <span><span aria-hidden="true">⇄</span> 对比上一场</span>
                     <strong>{changeCount === 0 ? "无变化" : `${changeCount} 项变化`}</strong>
@@ -118,9 +121,9 @@ function TourTransitionExplorer({
             );
           })}
         </ol>
-      </nav>}
+      </nav>
 
-      <section className="tour-transition-detail" aria-label={detailLabel} aria-live="polite">
+      <section className="tour-transition-detail" aria-label="歌单变化" aria-live="polite">
         <header className="tour-transition-detail-head">
           <div>
             <h3>
@@ -254,25 +257,21 @@ export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenSto
               if (!fromLiveId || !toLiveId) return;
               setCustomLoading(true); setCustomError(null); setCustomTransition(null);
               getTourStatisticsComparison(data.tour_id, fromLiveId, toLiveId).then(setCustomTransition).catch((caught) => setCustomError(caught instanceof Error ? caught.message : "加载失败")).finally(() => setCustomLoading(false));
-            }}>{customLoading ? "比较中..." : "比较这两场"}</button>
+            }}>{customLoading ? "比较中..." : "比较"}</button>
           </div>
         )}
         {customError && <p className="statistics-state error">任意场次比较加载失败：{customError}</p>}
-        {customTransition && (
-          <div className="tour-custom-result">
-            <TourTransitionExplorer
-              tourTitle={tourTitle}
-              transitions={[customTransition]}
-              onOpenStop={onOpenStop}
-              showProgress={false}
-              detailLabel="任意场次歌单变化"
-            />
-          </div>
-        )}
         {data.coverage.comparable_transition_count === 0 ? (
           <p className="statistics-state">没有可比较的相邻 Setlist 场次。</p>
         ) : (
-          <TourTransitionExplorer key={`${data.tour_id}:${data.transitions.length}`} tourTitle={tourTitle} transitions={data.transitions} onOpenStop={onOpenStop} />
+          <TourTransitionExplorer
+            key={`${data.tour_id}:${data.transitions.length}`}
+            tourTitle={tourTitle}
+            transitions={data.transitions}
+            detailTransition={customTransition}
+            onSelectTransition={() => setCustomTransition(null)}
+            onOpenStop={onOpenStop}
+          />
         )}
       </section>
     </div>
