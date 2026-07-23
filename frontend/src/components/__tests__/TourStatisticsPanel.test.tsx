@@ -89,7 +89,10 @@ describe("TourStatisticsPanel", () => {
 
     expect(getTourStatisticsComparisonMock).not.toHaveBeenCalled();
     const detailRegion = screen.getByRole("region", { name: "歌单变化" });
-    await user.click(screen.getByRole("button", { name: "比较" }));
+    const compareButton = screen.getByRole("button", { name: "比较" });
+    expect(compareButton).toHaveClass("console-submit-btn");
+    expect(compareButton).not.toHaveClass("secondary-btn");
+    await user.click(compareButton);
 
     expect(getTourStatisticsComparisonMock).toHaveBeenCalledWith(7, 40, 42);
     expect(await within(detailRegion).findByLabelText("新增 任意场次新增曲")).toBeInTheDocument();

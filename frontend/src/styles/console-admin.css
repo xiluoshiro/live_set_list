@@ -713,11 +713,6 @@
   cursor: pointer;
 }
 
-.console-new-btn {
-  font-weight: 600;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-primary) 24%, transparent);
-}
-
 .console-submit-row {
   margin-top: 10px;
   display: flex;
