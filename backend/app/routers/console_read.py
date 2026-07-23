@@ -73,6 +73,12 @@ def _build_lookup_pattern(value: str) -> str:
     return f"%{escaped}%"
 
 
+def _build_prefix_lookup_pattern(value: str) -> str:
+    """Build a safe ILIKE pattern that only completes text to the right."""
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"{escaped}%"
+
+
 def _build_exact_lookup_pattern(value: str) -> str:
     """Build a safe exact ILIKE pattern for ordering exact lookup hits first."""
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -281,7 +287,7 @@ def get_editable_live(
     },
 )
 def list_songs(
-    q: str | None = Query(default=None, max_length=255, description="Song title keyword"),
+    q: str | None = Query(default=None, max_length=255, description="Song title prefix"),
     limit: int = Query(default=20, ge=1, le=100, description="Maximum number of songs to return"),
     _: Any = Depends(require_role("editor")),
 ):
@@ -347,8 +353,8 @@ def list_songs(
                             SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[1],
                             SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[2],
                             SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[3],
-                            _build_lookup_pattern(query_text),
-                            _build_lookup_pattern(normalized_query_text),
+                            _build_prefix_lookup_pattern(query_text),
+                            _build_prefix_lookup_pattern(normalized_query_text),
                             _build_exact_lookup_pattern(query_text),
                             _build_exact_lookup_pattern(normalized_query_text),
                             limit,
