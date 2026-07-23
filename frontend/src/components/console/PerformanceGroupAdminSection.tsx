@@ -273,7 +273,7 @@ export function PerformanceGroupAdminSection({
         </select>
         <button
           type="button"
-          className="console-submit-btn console-new-btn"
+          className="console-submit-btn"
           onClick={() => {
             resetForm();
             void queryCandidates("");

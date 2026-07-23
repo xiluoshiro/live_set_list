@@ -253,7 +253,7 @@ export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenSto
           <div className="tour-custom-comparison">
             <label className="list-filter-field">起始场<select value={fromLiveId ?? ""} onChange={(event) => { setFromLiveId(Number(event.target.value)); setCustomTransition(null); setCustomError(null); }}>{comparableStops.map((stop) => <option key={stop.live_id} value={stop.live_id}>{stop.live_date} · {getTourStopShortTitle(stop.live_title, tourTitle)}</option>)}</select></label>
             <label className="list-filter-field">目标场<select value={toLiveId ?? ""} onChange={(event) => { setToLiveId(Number(event.target.value)); setCustomTransition(null); setCustomError(null); }}>{comparableStops.map((stop) => <option key={stop.live_id} value={stop.live_id}>{stop.live_date} · {getTourStopShortTitle(stop.live_title, tourTitle)}</option>)}</select></label>
-            <button type="button" className="secondary-btn" disabled={customLoading || !fromLiveId || !toLiveId || fromLiveId === toLiveId} onClick={() => {
+            <button type="button" className="console-submit-btn" disabled={customLoading || !fromLiveId || !toLiveId || fromLiveId === toLiveId} onClick={() => {
               if (!fromLiveId || !toLiveId) return;
               setCustomLoading(true); setCustomError(null); setCustomTransition(null);
               getTourStatisticsComparison(data.tour_id, fromLiveId, toLiveId).then(setCustomTransition).catch((caught) => setCustomError(caught instanceof Error ? caught.message : "加载失败")).finally(() => setCustomLoading(false));

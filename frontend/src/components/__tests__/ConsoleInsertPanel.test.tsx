@@ -1790,6 +1790,8 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel initialMode="tour" />);
     await waitFor(() => expect(apiMocks.getConsoleTourLiveCandidates).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "新建巡演" })).toHaveClass("console-submit-btn");
+    expect(screen.getByRole("button", { name: "新建巡演" })).not.toHaveClass("console-new-btn");
     expect(screen.queryByText("官方来源")).not.toBeInTheDocument();
     expect(screen.queryByText("简短说明")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "上移" })).not.toBeInTheDocument();
