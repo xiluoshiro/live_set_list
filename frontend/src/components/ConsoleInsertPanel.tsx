@@ -529,6 +529,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   }, []);
 
   useEffect(() => {
+    if (mode !== "setlist") {
+      setIsLiveLoading(false);
+      return;
+    }
     let canceled = false;
     setIsLiveLoading(true);
 
@@ -579,17 +583,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       }
       refreshSetlistCandidates();
     };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") refreshSetlistCandidates();
-    };
-
     window.addEventListener("storage", onStorage);
-    window.addEventListener("focus", refreshSetlistCandidates);
-    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", refreshSetlistCandidates);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [mode, selectedLiveId]);
 
@@ -896,8 +892,16 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setEditingLiveId(null);
       setOriginalLivePayload(null);
       resetLiveForm();
+    } else if (nextMode === "setlist" && mode !== "setlist") {
+      setLivePage(1);
+      setSelectedLiveId(0);
     }
     setMode(nextMode);
+  };
+
+  const changeSetlistLivePage = (nextPage: number) => {
+    setSelectedLiveId(0);
+    setLivePage(nextPage);
   };
 
   useEffect(() => {
@@ -1860,6 +1864,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           setEditingLiveId(null);
           setOriginalLivePayload(null);
           resetLiveForm();
+          if (pendingConfirmation.target.mode === "setlist") {
+            setLivePage(1);
+            setSelectedLiveId(0);
+          }
           setMode(pendingConfirmation.target.mode);
         }
       } else if (pendingConfirmation.kind === "song") {
@@ -2218,7 +2226,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           setlistParsePreviewRows={setlistParsePreviewRows}
           setlistParsePreviewOpen={setlistParsePreviewOpen}
           onSelectedLiveIdChange={setSelectedLiveId}
-          onLivePageChange={setLivePage}
+          onLivePageChange={changeSetlistLivePage}
           onSetlistPasteTextChange={updateSetlistPasteText}
           onPreviewSetlistPaste={buildSetlistPastePreview}
           onApplySetlistPaste={applySetlistPastePreview}

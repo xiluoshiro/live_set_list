@@ -182,11 +182,10 @@ describe("ConsoleInsertPanel", () => {
     });
   });
 
-  // 测试点：控制台首次进入应优先新增 Live，聚焦场地查询并显示默认 +9:00 时区。
+  // 测试点：控制台首次进入应优先新增 Live、聚焦场地查询，且不预加载隐藏的 Setlist 候选。
   test("默认渲染新增 Live 并聚焦场地查询", async () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-    await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20, true));
 
     expect(screen.getByRole("tab", { name: "新增Live" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Live管理" })).toBeInTheDocument();
@@ -203,6 +202,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("start_time")).toHaveAttribute("type", "time");
     expect(screen.getByLabelText("timezone")).toHaveValue("+9");
     expect(screen.getByLabelText("timezone minute offset")).toHaveTextContent(":00");
+    expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
   // 测试点：时区分钟后缀按 15 分钟循环，切换普通小时时保留，边界小时强制归零。
@@ -967,8 +967,8 @@ describe("ConsoleInsertPanel", () => {
     }
   });
 
-  test("live_id 候选支持20条分页切换", async () => {
-    // 测试点：live_id 选择器按 20 条一页请求无 setlist 候选，并可切换到下一页。
+  // 测试点：切换候选页或重新进入 Setlist 页时，应回到目标页首条且不保留上次 live_id。
+  test("live_id 候选分页与重新进入Setlist会选择首条", async () => {
     const user = userEvent.setup();
     apiMocks.getLives.mockImplementation(async (page: number) => ({
       items:
@@ -978,6 +978,14 @@ describe("ConsoleInsertPanel", () => {
                 live_id: 44,
                 live_date: "2026-04-20",
                 live_title: "Page One Live",
+                bands: [],
+                url: null,
+                is_favorite: false,
+              },
+              {
+                live_id: 43,
+                live_date: "2026-04-19",
+                live_title: "Page One Second Live",
                 bands: [],
                 url: null,
                 is_favorite: false,
@@ -992,6 +1000,14 @@ describe("ConsoleInsertPanel", () => {
                 url: null,
                 is_favorite: false,
               },
+              {
+                live_id: 23,
+                live_date: "2026-03-19",
+                live_title: "Page Two Second Live",
+                bands: [],
+                url: null,
+                is_favorite: false,
+              },
             ],
       pagination: { page, page_size: 20, total: 21, total_pages: 2 },
     }));
@@ -1001,12 +1017,39 @@ describe("ConsoleInsertPanel", () => {
     expect(await screen.findByText("44 - Page One Live (2026-04-20)")).toBeInTheDocument();
     expect(screen.getByText("第 1 / 2 页，共 21 条")).toBeInTheDocument();
     expect(apiMocks.getLives).toHaveBeenCalledWith(1, 20, true);
+    await user.selectOptions(screen.getByLabelText("选择 live_id"), "43");
 
     await user.click(screen.getByRole("button", { name: "下一页" }));
 
     expect(await screen.findByText("24 - Page Two Live (2026-03-20)")).toBeInTheDocument();
     expect(screen.getByText("第 2 / 2 页，共 21 条")).toBeInTheDocument();
     expect(apiMocks.getLives).toHaveBeenCalledWith(2, 20, true);
+    expect(screen.getByLabelText("选择 live_id")).toHaveValue("24");
+
+    await user.selectOptions(screen.getByLabelText("选择 live_id"), "23");
+    await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
+    await user.click(screen.getByRole("tab", { name: "新增Setlist" }));
+
+    await waitFor(() => expect(screen.getByText("第 1 / 2 页，共 21 条")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("选择 live_id")).toHaveValue("44"));
+  });
+
+  // 测试点：Setlist 与 other_member 输入导致的窗口重新聚焦不能刷新 live_id 候选。
+  test("粘贴录入与窗口重新聚焦不会刷新live_id候选", async () => {
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "M1. Pasted Song" },
+    });
+    fireEvent.click(document.querySelector(".other-member-trigger") as HTMLElement);
+    fireEvent.change(screen.getByPlaceholderText("key"), { target: { value: "Guest" } });
+    fireEvent.change(screen.getByPlaceholderText("value"), { target: { value: "Vocal" } });
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(apiMocks.getLives).toHaveBeenCalledTimes(1);
   });
 
   // 测试点：无 setlist 候选直接开放录入，只有显式点击详情按钮才请求完整 Live 详情。
