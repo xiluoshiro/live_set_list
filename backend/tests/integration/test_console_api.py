@@ -88,7 +88,7 @@ def test_console_lookup_endpoints_return_seeded_options(
         password=TEST_DEFAULT_ADMIN_PASSWORD,
     )
 
-    songs_response = integration_test_client.get("/api/console/songs?q=BanG&limit=10")
+    songs_response = integration_test_client.get("/api/console/songs?q=Yes&limit=10")
     bands_response = integration_test_client.get("/api/console/bands?q=Roselia&limit=10")
     venues_response = integration_test_client.get("/api/console/venues?q=Shinjuku&limit=10")
 
@@ -128,12 +128,12 @@ def test_console_lookup_endpoints_return_seeded_options(
     }
 
 
-# 测试点：歌曲查询结果应把精确命中的歌名排在包含匹配前面，保证短歌名能被 setlist 回填 sid。
+# 测试点：歌曲查询结果应把精确命中的歌名排在右侧补全候选前面，保证短歌名能被 setlist 回填 sid。
 def test_console_song_lookup_prioritizes_exact_title_match(
     integration_test_client,
     integration_admin_connection,
 ):
-    """Verify short exact song names are not hidden behind broader contains matches."""
+    """Verify short exact song names are not hidden behind broader prefix matches."""
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
@@ -153,6 +153,46 @@ def test_console_song_lookup_prioritizes_exact_title_match(
     assert response.status_code == 200
     assert response.json()["items"] == [
         {"song_id": song_id, "song_name": "R", "band_id": 1, "cover": False, "band_name": "Poppin'Party"}
+    ]
+
+
+# 测试点：歌曲查询只允许从歌名开头向右补全，不能用输入命中歌名中段。
+def test_console_song_lookup_only_matches_title_prefix(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s)",
+            ("Sing Alive", 1, False),
+        )
+        cursor.execute(
+            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s) RETURNING id",
+            ("V.I.P MONSTER", 1, False),
+        )
+        prefix_song_id = cursor.fetchone()[0]
+
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    left_match_response = integration_test_client.get("/api/console/songs?q=ALIVE&limit=10")
+    prefix_match_response = integration_test_client.get("/api/console/songs?q=V.I.P&limit=10")
+
+    assert left_match_response.status_code == 200
+    assert all(item["song_name"] != "Sing Alive" for item in left_match_response.json()["items"])
+    assert prefix_match_response.status_code == 200
+    assert prefix_match_response.json()["items"] == [
+        {
+            "song_id": prefix_song_id,
+            "song_name": "V.I.P MONSTER",
+            "band_id": 1,
+            "cover": False,
+            "band_name": "Poppin'Party",
+        }
     ]
 
 

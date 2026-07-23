@@ -1080,13 +1080,19 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
     const resolveCandidates = (normalizedName: string): SongInsertRow[] => {
       const candidates = songCandidatesByQuery.get(normalizedName) ?? [];
-      const exactCandidates = candidates.filter((song) => normalizeSongLookupText(song.song_name) === normalizedName);
-      return exactCandidates.length > 0 ? exactCandidates : candidates;
+      const prefixCandidates = candidates.filter((song) =>
+        normalizeSongLookupText(song.song_name).startsWith(normalizedName)
+      );
+      const exactCandidates = prefixCandidates.filter(
+        (song) => normalizeSongLookupText(song.song_name) === normalizedName
+      );
+      return exactCandidates.length > 0 ? exactCandidates : prefixCandidates;
     };
 
     let matched = 0;
     let pending = 0;
     let missing = 0;
+    const autoCompleted: Array<{ input: string; resolved: string }> = [];
     const nextRows = setlistRows.map((row) => {
       const normalizedName = normalizeSongLookupText(row.song_name);
       if (normalizedName === "") {
@@ -1095,6 +1101,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       const candidates = resolveCandidates(normalizedName);
       if (candidates.length === 1) {
         matched += 1;
+        if (normalizeSongLookupText(candidates[0].song_name) !== normalizedName) {
+          autoCompleted.push({ input: row.song_name.trim(), resolved: candidates[0].song_name });
+        }
         return {
           ...row,
           song_id: String(candidates[0].song_id),
@@ -1112,10 +1121,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
     setSetlistRows(nextRows);
     setDidSongLookup(true);
+    const autoCompleteHint = autoCompleted.length > 0
+      ? `自动补全 ${autoCompleted.length} 行：${autoCompleted
+          .map(({ input, resolved }) => `${input} → ${resolved}`)
+          .join("；")}。`
+      : "";
     if (pending > 0) {
-      setMessage(`查询歌曲完成：匹配 ${matched} 行，待选择 ${pending} 行，未匹配 ${missing} 行。`);
+      setMessage(`查询歌曲完成：匹配 ${matched} 行，待选择 ${pending} 行，未匹配 ${missing} 行。${autoCompleteHint}`);
     } else {
-      setMessage(`查询歌曲完成：匹配 ${matched} 行，未匹配 ${missing} 行。`);
+      setMessage(`查询歌曲完成：匹配 ${matched} 行，未匹配 ${missing} 行。${autoCompleteHint}`);
     }
   };
 

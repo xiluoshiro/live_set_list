@@ -413,8 +413,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("908")).toBeInTheDocument();
   });
 
-  test("查询歌曲唯一模糊候选时自动回填sid", async () => {
-    // 测试点：后端只返回一个包含匹配候选时，setlist 查询应自动采用该候选 sid。
+  test("查询歌曲唯一右侧补全候选时提示并自动回填sid", async () => {
+    // 测试点：唯一的歌名前缀候选会自动回填 sid，并在共享状态区明确提示补全前后的歌名。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 9, band_name: "Roselia", band_abbr: "rsl", band_members: ["湊友希那"] }],
@@ -422,31 +422,53 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
-        items: [{ song_id: 905, song_name: "CORUSCATE -DNA-", band_id: 9, cover: false }],
+        items: [{ song_id: 905, song_name: "V.I.P MONSTER", band_id: 9, cover: false }],
       });
 
     render(<ConsoleInsertPanel />);
 
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
-      target: { value: "<Roselia>\nM1. CORUSCATE -DNA" },
+      target: { value: "<Roselia>\nM1. V.I.P" },
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
 
-    expect(await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。")).toBeInTheDocument();
+    expect(
+      await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。自动补全 1 行：V.I.P → V.I.P MONSTER。")
+    ).toBeInTheDocument();
     expect(screen.getByText("905")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
     const dialog = screen.getByRole("dialog", { name: /确认提交 Setlist/ });
-    expect(within(dialog).getByText("CORUSCATE -DNA-")).toBeInTheDocument();
-    expect(within(dialog).queryByText("CORUSCATE -DNA")).not.toBeInTheDocument();
+    expect(within(dialog).getByText("V.I.P MONSTER")).toBeInTheDocument();
+    expect(within(dialog).queryByText("V.I.P")).not.toBeInTheDocument();
   });
 
-  // 测试点：模糊查询返回多个候选时，弹窗显示所属乐队并允许选择正确 sid。
+  test("查询歌曲不会采用歌名左侧包含候选", async () => {
+    // 测试点：即使接口意外返回歌名中段命中的唯一候选，setlist 仍不会把 ALIVE 回填为 Sing Alive。
+    const user = userEvent.setup();
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({
+        items: [{ song_id: 909, song_name: "Sing Alive", band_id: 9, cover: false }],
+      });
+
+    render(<ConsoleInsertPanel />);
+
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await user.type(screen.getByPlaceholderText("请输入歌曲名"), "ALIVE");
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+
+    expect(await screen.findByText("查询歌曲完成：匹配 0 行，未匹配 1 行。")).toBeInTheDocument();
+    expect(screen.queryByText("909")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "未匹配" })).toBeInTheDocument();
+  });
+
+  // 测试点：前缀查询返回多个候选时，弹窗显示所属乐队并允许选择正确 sid。
   test("查询歌曲多候选时弹窗选择sid", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
