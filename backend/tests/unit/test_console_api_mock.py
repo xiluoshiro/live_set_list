@@ -454,6 +454,31 @@ def test_console_create_song_mock_business_errors():
     assert duplicate_response.json()["detail"] == "Song name already exists: Yes! BanG_Dream!"
 
 
+# 测试点：歌曲管理更新会写入三个可编辑属性，并记录 song_update 审计。
+def test_console_update_song_mock_success_persists_and_audits():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (99,)])
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.put(
+            "/api/console/songs/99",
+            json=_valid_song_payload(song_name="Updated Song", band_id=2, cover=True),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["item"] == {
+        "song_id": 99,
+        "song_name": "Updated Song",
+        "band_id": 2,
+        "cover": True,
+    }
+    assert "UPDATE song_list" in cursor.execute.call_args_list[1].args[0]
+    assert cursor.execute.call_args_list[1].args[1] == ("Updated Song", 2, True, 99)
+    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
+
+
 # 测试点：新增 venue 成功时应只写入 venue_list 的 NOT NULL 业务列 venue，并记录审计日志。
 def test_console_create_venue_mock_success_persists_and_audits():
     _set_authenticated_role("editor")
@@ -825,3 +850,34 @@ def test_console_append_setlist_mock_existing_setlist_rejects_with_409():
     assert response.json()["detail"] == "Live id 1 already has setlist data"
     assert "FOR UPDATE" in str(cursor.execute.call_args_list[0].args[0])
     assert all("INSERT INTO live_setlist" not in execute_call.args[0] for execute_call in cursor.execute.call_args_list)
+
+
+# 测试点：Setlist 管理更新会在同一事务中校验歌曲、替换完整行集合并写审计。
+def test_console_replace_setlist_mock_replaces_complete_collection():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(
+        fetchone_side_effect=[(1,)],
+        fetchall_side_effect=[[(1,)]],
+    )
+    payload = _valid_setlist_payload(song_id=1, absolute_order=1, segment_type="M")
+    payload["setlist_rows"][0]["comment"] = "Encore note"
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.put(
+            "/api/console/lives/1/setlist",
+            json=payload,
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "item": {"live_id": 1, "inserted_row_count": 1, "total_setlist_row_count": 1},
+    }
+    assert any("DELETE FROM live_setlist" in execute_call.args[0] for execute_call in cursor.execute.call_args_list)
+    insert_call = next(
+        execute_call for execute_call in cursor.execute.call_args_list if "INSERT INTO live_setlist" in execute_call.args[0]
+    )
+    assert insert_call.args[1][-1] == "Encore note"
+    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[-1].args[0]

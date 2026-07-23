@@ -68,11 +68,13 @@
 - `GET /api/console/venues`
   - `editor+` 查询控制台场地候选
 - `GET /api/console/lives`
-  - `editor+` 按标题或 ID 分页查询全部可编辑 Live，并可用 `live_type` 精确筛选类型
+  - `editor+` 按标题或 ID 分页查询全部可编辑 Live，并可用 `live_type`、`has_setlist` 筛选
 - `GET /api/console/lives/{live_id}`
   - `editor+` 获取 Live 基础资料、Venue、默认 Band 和计算后的活动出演成员
 - `POST /api/console/songs`
   - `editor+` 新增单首歌曲
+- `PUT /api/console/songs/{song_id}`
+  - `editor+` 更新歌曲名称、归属 Band 和翻唱属性
 - `POST /api/console/songs:batch`
   - 批量新增歌曲，一次写入多条，单项冲突不影响其他项继续写入
 - `POST /api/console/venues`
@@ -82,7 +84,11 @@
 - `PUT /api/console/lives/{live_id}`
   - `editor+` 完整更新 Live 基础资料，不修改 Setlist、巡演、活动组或收藏关系
 - `POST /api/console/lives/{live_id}/setlist`
-  - `editor+` 向指定 Live 追加 setlist 行；当前是 append-only，不修改既有 setlist
+  - `editor+` 为尚无 Setlist 的 Live 新增完整行集合
+- `GET /api/console/lives/{live_id}/setlist`
+  - `editor+` 获取 Setlist 管理所需的原始行、song_id、顺序与成员 JSON
+- `PUT /api/console/lives/{live_id}/setlist`
+  - `editor+` 以请求中的完整行集替换指定 Live 的既有 Setlist
 - `GET /api/console/tours/live-candidates`
   - `editor+` 按 Live 标题或 ID 分页查询尚未关联任何巡演的场次候选，并返回场地
 - `GET /api/console/tours/{tour_id}`
@@ -282,6 +288,9 @@
 - `POST /api/console/songs`
   - 要求 `band_id` 已存在
   - 歌曲唯一键冲突返回 `409`
+- `PUT /api/console/songs/{song_id}`
+  - 与新增歌曲共用字段契约；目标歌曲或 Band 不存在返回 `404`
+  - 成功后写 `song_update` 审计
 - `POST /api/console/songs:batch`
   - 最多一次提交 100 首
   - 单项 band 不存在或歌曲冲突会跳过该项，不回滚其他成功项
@@ -301,6 +310,7 @@
   - 候选包含有无 Setlist 的全部 Live，按 `live_date DESC, live_id DESC` 排序
   - `q` 同时支持标题模糊匹配和精确 Live ID
   - `live_type` 可选值为 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`，与 `q` 按 AND 组合
+  - `has_setlist=true|false` 可按是否已有 Setlist 筛选，与其他条件按 AND 组合
 - `GET /api/console/lives/{live_id}`
   - 返回完整可编辑字段和 `timezone`；活动出演成员的 `mode` 仍为计算值
 - `PUT /api/console/lives/{live_id}`
@@ -315,6 +325,11 @@
   - 所有 `song_id` 都必须存在
   - `band_member` 至少需要包含一个非空乐队和成员列表
   - 后端按 `absolute_order` 升序写入
+- `GET /api/console/lives/{live_id}/setlist`
+  - 返回完整原始可编辑行，包含持久化 UUID、`song_id/song_name`、顺序、成员 JSON 和备注
+- `PUT /api/console/lives/{live_id}/setlist`
+  - 与新增 Setlist 共用行字段和校验；请求集合至少保留一行
+  - 在单一事务内锁定 Live、校验全部歌曲、替换完整行集合并写 `live_setlist_update` 审计
 - `POST /api/console/tours`、`PUT /api/console/tours/{tour_id}`
   - `band_ids` 可为空，最多 100 个已存在且不重复的正数 ID；后端按 Band ID 排序
   - `band_ids` 非空时，每个 Band 必须至少出现在一场所选 Live 中；为空时数据库关系保持空集合

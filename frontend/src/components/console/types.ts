@@ -1,4 +1,4 @@
-export type ConsoleMode = "live_create" | "live_edit" | "setlist" | "song" | "tour" | "performance_group";
+export type ConsoleMode = "live_create" | "live_edit" | "setlist" | "setlist_edit" | "song" | "tour" | "performance_group";
 
 export type Position = {
   top: number;
@@ -68,6 +68,7 @@ export type SetlistDraftRow = {
   is_short: boolean;
   band_member: Record<string, string[]>;
   other_member: OtherMemberDraft[];
+  comment?: string;
 };
 
 export type DerivedSegment = {

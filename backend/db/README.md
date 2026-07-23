@@ -2,7 +2,7 @@
 
 本目录存放当前项目与 PostgreSQL / Flyway / seed 相关的内容。
 
-当前仓库结构基线为 `B1__baseline_schema.sql`，后续 migration 为 V2~V16；V12 增加 `live_attrs.default_band_ids`，V13/V14 增加巡演和演出活动组聚合，V15 增加活动出演成员，V16 允许同一 session 保留多个已签发的 CSRF token hash。目标数据库的实际版本仍应通过 `flyway info` 确认。
+当前仓库结构基线为 `B1__baseline_schema.sql`，后续 migration 为 V2~V17；V12 增加 `live_attrs.default_band_ids`，V13/V14 增加巡演和演出活动组聚合，V15 增加活动出演成员，V16 允许同一 session 保留多个已签发的 CSRF token hash，V17 为控制台 Setlist 完整集合更新授予窄范围删除权限。目标数据库的实际版本仍应通过 `flyway info` 确认。
 
 ## 角色分工
 
@@ -11,7 +11,7 @@
 - `live_project_flyway`：Flyway 迁移账号
 - `live_project_ro`：普通查询账号
 - `live_project_user_rw`：前端普通用户写账号，只授予指定表写权限，当前用于收藏
-- `live_project_super_ro`：高权限业务账号，可查询/插入/更新，当前用于认证与控制台写接口
+- `live_project_super_ro`：高权限业务账号，可查询/插入/更新，并仅对少数完整集合关系表拥有删除权限；当前用于认证与控制台写接口
 - `live_project_test_admin`：测试库专用管理账号，用于 integration 的重置与 seed
 
 数据库 owner 契约由 `postgres/checks/ownership_contract.sql` 统一定义并被 CI、生产 release manager 和恢复流程复用：业务数据库、`public` schema 和业务对象属于 `live_project_owner`，`flyway_schema_history` 属于 `live_project_flyway`。检查输出任意一行都表示存在漂移，发布或恢复必须停止。

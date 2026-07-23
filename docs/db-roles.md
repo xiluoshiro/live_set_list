@@ -218,6 +218,7 @@ schema 级权限：
 
 - `SELECT ON ALL TABLES IN SCHEMA public`
 - `INSERT, UPDATE ON ALL TABLES IN SCHEMA public`
+- `DELETE ON public.live_setlist`（仅用于 Setlist 管理的完整集合替换）
 
 序列权限：
 
@@ -330,10 +331,12 @@ schema 级权限：
   - 收藏 ID 查询
 - [console_write.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/console_write.py)
   - `POST /api/console/songs`
+  - `PUT /api/console/songs/{song_id}`
   - `POST /api/console/songs:batch`
   - `POST /api/console/venues`
   - `POST /api/console/lives`
   - `POST /api/console/lives/{live_id}/setlist`
+  - `PUT /api/console/lives/{live_id}/setlist`
 - [console_tours.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/console_tours.py)
   - 巡演候选、详情、创建和完整集合更新
 - [console_performance_groups.py](/D:/Code/PythonCode/5%20LiveSetList/backend/app/routers/console_performance_groups.py)

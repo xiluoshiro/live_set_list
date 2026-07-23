@@ -6,7 +6,9 @@ import type { ParsedSetlistWarning } from "./setlistParser/types";
 import type { BandOption, DerivedSegment, LiveInsertBundle, LiveInsertRow, Position, SetlistDraftRow } from "./types";
 
 type LiveInsertTabProps = {
+  variant?: "create" | "edit";
   lives: LiveInsertRow[];
+  liveQuery?: string;
   selectedLiveId: number;
   livePage: number;
   liveTotal: number;
@@ -34,6 +36,8 @@ type LiveInsertTabProps = {
   setlistParsePreviewRows: SetlistDraftRow[];
   setlistParsePreviewOpen: boolean;
   onSelectedLiveIdChange: (liveId: number) => void;
+  onLiveQueryChange?: (value: string) => void;
+  onQueryLives?: () => void;
   onLivePageChange: (page: number) => void;
   onSetlistPasteTextChange: (value: string) => void;
   onPreviewSetlistPaste: () => void;
@@ -48,6 +52,7 @@ type LiveInsertTabProps = {
   onUpdateSetlistAbs: (rowKey: number, value: number) => void;
   onUpdateSetlistSub: (rowKey: number, value: number) => void;
   onToggleSetlistShort: (rowKey: number, checked: boolean) => void;
+  onUpdateSetlistComment: (rowKey: number, value: string) => void;
   onOpenBandMemberMenu: (rowKey: number) => void;
   onOpenOtherMemberMenu: (rowKey: number) => void;
   onShowCurrentSetlist: () => void;
@@ -76,7 +81,9 @@ type LiveInsertTabProps = {
 };
 
 export function LiveInsertTab({
+  variant = "create",
   lives,
+  liveQuery = "",
   selectedLiveId,
   livePage,
   liveTotal,
@@ -104,6 +111,8 @@ export function LiveInsertTab({
   setlistParsePreviewRows,
   setlistParsePreviewOpen,
   onSelectedLiveIdChange,
+  onLiveQueryChange,
+  onQueryLives,
   onLivePageChange,
   onSetlistPasteTextChange,
   onPreviewSetlistPaste,
@@ -118,6 +127,7 @@ export function LiveInsertTab({
   onUpdateSetlistAbs,
   onUpdateSetlistSub,
   onToggleSetlistShort,
+  onUpdateSetlistComment,
   onOpenBandMemberMenu,
   onOpenOtherMemberMenu,
   onShowCurrentSetlist,
@@ -182,7 +192,34 @@ export function LiveInsertTab({
 
   return (
     <>
-      <div className="live-id-selector">
+      {variant === "edit" && (
+        <div className="tour-admin-toolbar live-admin-toolbar">
+          <label className="live-management-label" htmlFor="setlist-admin-query">已有 Setlist</label>
+          <input
+            id="setlist-admin-query"
+            className="venue-query-input live-management-primary-control"
+            value={liveQuery}
+            onChange={(event) => onLiveQueryChange?.(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") onQueryLives?.(); }}
+            placeholder="输入 Live ID 或标题"
+          />
+          <button type="button" className="console-ghost-btn" onClick={onQueryLives}>查询</button>
+          <select
+            className="console-entity-select"
+            aria-label="选择要编辑的 Setlist"
+            value={selectedLiveId || ""}
+            onChange={(event) => onSelectedLiveIdChange(Number(event.target.value))}
+          >
+            <option value="">选择要编辑的 Setlist</option>
+            {lives.map((live) => (
+              <option key={live.live_id} value={live.live_id}>
+                #{live.live_id} {live.live_date} {live.live_title}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {variant === "create" && <div className="live-id-selector">
         <label htmlFor="live-id-select">选择 live_id</label>
         <select
           id="live-id-select"
@@ -228,12 +265,12 @@ export function LiveInsertTab({
         <button type="button" className="console-ghost-btn" onClick={onShowCurrentSetlist}>
           显示详细信息
         </button>
-      </div>
+      </div>}
 
-      {hasExistingSetlist && (
+      {variant === "create" && hasExistingSetlist && (
         <p className="console-admin-hint">此 Live 已有 setlist 数据，无法新增。</p>
       )}
-      {!hasExistingSetlist && (
+      {(variant === "edit" || !hasExistingSetlist) && (
         <>
           <section className="setlist-paste-panel" aria-label="批量粘贴 Setlist">
         <div className="setlist-paste-head">
@@ -307,7 +344,7 @@ export function LiveInsertTab({
       </section>
 
       <div className="console-table-wrap setlist-input-wrap">
-        <table className="console-admin-table setlist-table">
+        <table className={`console-admin-table setlist-table${variant === "edit" ? " setlist-management-table" : ""}`}>
           <thead>
             <tr>
               <th>song_name</th>
@@ -318,6 +355,7 @@ export function LiveInsertTab({
               <th>short</th>
               <th>band_member</th>
               <th>other_member</th>
+              {variant === "edit" && <th>comment</th>}
             </tr>
           </thead>
           <tbody>
@@ -466,6 +504,16 @@ export function LiveInsertTab({
                     {summarizeOtherMember(row)}
                   </button>
                 </td>
+                {variant === "edit" && (
+                  <td>
+                    <input
+                      aria-label={`comment-${row.row_key}`}
+                      value={row.comment ?? ""}
+                      onChange={(event) => onUpdateSetlistComment(row.row_key, event.target.value)}
+                      placeholder="可选备注"
+                    />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -491,7 +539,7 @@ export function LiveInsertTab({
           查询歌曲
         </button>
         <button type="button" onClick={onSubmitLiveWithSetlist} className="console-submit-btn" disabled={submitDisabled}>
-          提交插入
+          {variant === "create" ? "提交插入" : "保存修改"}
         </button>
       </div>
         </>
@@ -512,7 +560,9 @@ export function LiveInsertTab({
           <tbody>
             {submittedBundles.length === 0 ? (
               <tr>
-                <td colSpan={6} className="empty-cell">暂无插入记录</td>
+                <td colSpan={6} className="empty-cell">
+                  {variant === "create" ? "暂无插入记录" : "暂无 Setlist 操作记录"}
+                </td>
               </tr>
             ) : (
               submittedBundles.map((bundle) => (

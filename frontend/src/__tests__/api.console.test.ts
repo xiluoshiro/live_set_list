@@ -123,6 +123,58 @@ describe("console lookup api", () => {
     }));
   });
 
+  // 测试点：歌曲管理更新封装应使用目标 song_id 发起带 CSRF 的 PUT。
+  test("updateConsoleSong 通过 PUT 更新歌曲属性", async () => {
+    fetchMock.mockResolvedValueOnce(makeJsonResponse({
+      ok: true,
+      item: { song_id: 903, song_name: "改名曲", band_id: 2, cover: true },
+    }));
+    const { updateConsoleSong } = await import("../api");
+    const requestPayload = { song_name: "改名曲", band_id: 2, cover: true };
+
+    await updateConsoleSong(903, requestPayload, "csrf-token");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs/903");
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      body: JSON.stringify(requestPayload),
+    }));
+  });
+
+  // 测试点：Setlist 管理封装会读取原始行，并使用完整集合 PUT 覆盖目标 Live。
+  test("Setlist 编辑 API 会读取并更新完整行集合", async () => {
+    fetchMock
+      .mockResolvedValueOnce(makeJsonResponse({ live_id: 55, rows: [] }))
+      .mockResolvedValueOnce(makeJsonResponse({
+        ok: true,
+        item: { live_id: 55, inserted_row_count: 1, total_setlist_row_count: 1 },
+      }));
+    const { getConsoleLiveSetlist, updateConsoleLiveSetlist } = await import("../api");
+    const requestPayload = {
+      setlist_rows: [{
+        song_id: 1,
+        absolute_order: 1,
+        segment_type: "M",
+        sub_order: 1,
+        is_short: false,
+        band_member: { Roselia: ["湊友希那"] },
+        other_member: null,
+        comment: null,
+      }],
+    };
+
+    await getConsoleLiveSetlist(55);
+    await updateConsoleLiveSetlist(55, requestPayload, "csrf-token");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/lives/55/setlist");
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/console/lives/55/setlist");
+    expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({
+      method: "PUT",
+      body: JSON.stringify(requestPayload),
+    }));
+  });
+
   test("createConsoleLive 会携带 CSRF 写入 live 并透传后端自增 id", async () => {
     // 测试点：新增 Live 封装不生成 live_id，应使用后端返回的自增 id。
     fetchMock.mockResolvedValueOnce(

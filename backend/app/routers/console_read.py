@@ -16,6 +16,7 @@ from app.schemas.console import (
     ConsoleLiveCandidatesResponse,
     ConsoleLiveEditResponse,
     ConsoleSongListResponse,
+    ConsoleLiveSetlistEditResponse,
     ConsoleVenueListResponse,
 )
 from app.song_lookup import (
@@ -133,6 +134,7 @@ def list_editable_lives(
         default=None,
         description="Optional exact Live type filter",
     ),
+    has_setlist: bool | None = Query(default=None, description="Optional Setlist existence filter"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     _: Any = Depends(require_role("editor")),
@@ -147,6 +149,10 @@ def list_editable_lives(
     if live_type is not None:
         conditions.append("l.live_type = %s")
         params.append(live_type)
+    if has_setlist is True:
+        conditions.append("EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id)")
+    elif has_setlist is False:
+        conditions.append("NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id)")
     where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     try:
         with get_db_connection() as conn:
@@ -270,6 +276,73 @@ def get_editable_live(
             "default_band_ids": list(row[9] or []),
             "event_attendees": _normalize_console_event_attendees(row[10]),
         }
+    }
+
+
+@router.get(
+    "/lives/{live_id}/setlist",
+    response_model=ConsoleLiveSetlistEditResponse,
+    summary="获取 Setlist 编辑数据",
+    description="`editor+` 用户读取一个 Live 的完整原始 Setlist 数据。",
+)
+def get_editable_live_setlist(
+    live_id: int = Path(..., ge=1),
+    _: Any = Depends(require_role("editor")),
+):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM live_attrs WHERE id = %s", (live_id,))
+                if cur.fetchone() is None:
+                    raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
+                cur.execute(
+                    """
+                    SELECT
+                        ls.id::text,
+                        ls.song_id,
+                        s.song_name,
+                        ls.absolute_order,
+                        ls.segment_type,
+                        ls.sub_order,
+                        ls.is_short,
+                        ls.band_member,
+                        ls.other_member,
+                        ls.comment
+                    FROM live_setlist AS ls
+                    JOIN song_list AS s ON s.id = ls.song_id
+                    WHERE ls.live_id = %s
+                    ORDER BY ls.absolute_order, ls.id
+                    """,
+                    (live_id,),
+                )
+                rows = cur.fetchall()
+    except HTTPException:
+        raise
+    except QueryCanceled as exc:
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    return {
+        "live_id": live_id,
+        "rows": [
+            {
+                "row_id": row[0],
+                "song_id": int(row[1]),
+                "song_name": str(row[2]),
+                "absolute_order": int(row[3]),
+                "segment_type": str(row[4]),
+                "sub_order": int(row[5]),
+                "is_short": bool(row[6]),
+                "band_member": row[7],
+                "other_member": row[8],
+                "comment": row[9],
+            }
+            for row in rows
+        ],
     }
 
 
