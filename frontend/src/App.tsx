@@ -239,7 +239,6 @@ function App() {
   const [detailGroupLiveId, setDetailGroupLiveId] = useState<number | null>(null);
   const [groupFallback, setGroupFallback] = useState<{ groupTitle: string } | null>(null);
   const [tourFilters, setTourFilters] = useState<TourFilters>({ ...DEFAULT_TOUR_FILTERS });
-  const [tourPage, setTourPage] = useState(1);
   const [items, setItems] = useState<DisplayRow[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(1);
@@ -943,7 +942,6 @@ function App() {
 
   const handleTourFiltersChange = (nextFilters: TourFilters) => {
     setTourFilters(nextFilters);
-    setTourPage(1);
   };
 
   const handleConsoleLiveDataChanged = () => {
@@ -1409,6 +1407,10 @@ function App() {
             tourId={detailTourId}
             fallback={tourFallback}
             onBack={handleBackFromTourDetail}
+            canFavorite={canUseFavoriteFeatures}
+            isFavorite={isFavorite}
+            isSyncing={favorites.isFavoriteSyncing}
+            onToggleFavorite={(liveId) => void toggleFavorite(liveId)}
           />
         ) : showPerformanceGroupDetailPanel && detailGroupId !== null && groupFallback !== null ? (
           <PerformanceGroupDetailPage
@@ -1490,11 +1492,9 @@ function App() {
             </header>
             <TourArchivePage
               filters={tourFilters}
-              page={tourPage}
               years={catalogStats?.years ?? []}
               bands={listFilterBands}
               onFiltersChange={handleTourFiltersChange}
-              onPageChange={setTourPage}
               onOpenTour={openTourDetail}
             />
           </>

@@ -1071,7 +1071,7 @@ describe("App", () => {
     expect(within(card).queryByText("2026-08-01 ~ 2026-08-01")).not.toBeInTheDocument();
   });
 
-  // 测试点：巡演资料复用演出列表的筛选、总计、内容顺序和 pager 间距容器。
+  // 测试点：巡演资料复用演出卡片流的筛选、总计和单页布局，不再暴露翻页控件。
   test("巡演资料页签展示聚合资料并支持独立筛选", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -1091,6 +1091,9 @@ describe("App", () => {
     const filterPanel = screen.getByRole("region", { name: "巡演列表筛选" });
     const totalText = screen.getByText("总计 1 个巡演");
     expect(totalText.closest("footer")).toHaveClass("pager");
+    expect(screen.queryByRole("button", { name: "上一页" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "下一页" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/第 1 \/ 1 页/)).not.toBeInTheDocument();
     expect(filterPanel.compareDocumentPosition(totalText) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(totalText.compareDocumentPosition(tourCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(tourCard).toHaveClass("live-card");
@@ -1107,6 +1110,67 @@ describe("App", () => {
       bandId: undefined,
       sort: "date_desc",
     }));
+  });
+
+  // 测试点：巡演卡片流滚动到末尾时自动预加载下一批，并把结果追加在同一页面。
+  test("巡演资料自动预加载下一批卡片", async () => {
+    const firstPage = makeToursResponse();
+    firstPage.pagination = { page: 1, page_size: 20, total: 2, total_pages: 2 };
+    const secondTour = {
+      ...firstPage.items[0],
+      tour_id: 8,
+      tour_title: "MyGO!!!!! ZEPP TOUR 2026",
+    };
+    getToursMock.mockImplementation((requestedPage) => Promise.resolve(
+      requestedPage === 2
+        ? {
+            items: [secondTour],
+            pagination: { page: 2, page_size: 20, total: 2, total_pages: 2 },
+          }
+        : firstPage,
+    ));
+
+    let observerCallback: IntersectionObserverCallback | undefined;
+    const originalObserver = Object.getOwnPropertyDescriptor(globalThis, "IntersectionObserver");
+    Object.defineProperty(globalThis, "IntersectionObserver", {
+      value: class {
+        constructor(callback: IntersectionObserverCallback) {
+          observerCallback = callback;
+        }
+
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      const user = userEvent.setup();
+      renderApp();
+      await user.click(await screen.findByRole("button", { name: "巡演资料" }));
+      await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus");
+
+      await act(async () => {
+        observerCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+      });
+
+      await waitFor(() => expect(getToursMock).toHaveBeenCalledWith(2, 20, {
+        q: undefined,
+        year: undefined,
+        bandId: undefined,
+        sort: "date_desc",
+      }));
+      expect(await screen.findByText("MyGO!!!!! ZEPP TOUR 2026")).toBeInTheDocument();
+      expect(screen.getByText("已加载全部 2 个巡演")).toBeInTheDocument();
+    } finally {
+      if (originalObserver) {
+        Object.defineProperty(globalThis, "IntersectionObserver", originalObserver);
+      } else {
+        Reflect.deleteProperty(globalThis, "IntersectionObserver");
+      }
+    }
   });
 
   // 测试点：巡演场次导航只保留用竖向分隔条分开的缩写，点击后在当前页内切换 Live 详情。
@@ -1136,6 +1200,25 @@ describe("App", () => {
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
     expect(getTourDetailMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  // 测试点：已登录用户可以直接在巡演详情中逐场收藏子 Live。
+  test("巡演详情提供逐场收藏操作", async () => {
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "viewer", display_name: "Viewer", role: "viewer" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: [41],
+    });
+    const user = userEvent.setup();
+    renderApp({ withAuthProvider: true });
+
+    await user.click(await screen.findByRole("button", { name: "巡演资料" }));
+    await user.click(await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus"));
+
+    expect(await screen.findByRole("button", { name: "取消收藏 東京公演" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "加入收藏 FINAL" }));
+    await waitFor(() => expect(favoriteLiveMock).toHaveBeenCalledWith(42, "csrf-token"));
   });
 
   // 测试点：巡演统计按需加载时间线差异，把替换归入新增和移除，并可切回对应 Live 详情。
