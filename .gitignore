@@ -4,6 +4,7 @@ AGENTS.md
 .opencode/
 .agents/
 .codex/
+.workbuddy/
 .mypy_cache*/
 .pytest_cache/
 *.log
