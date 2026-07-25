@@ -16,6 +16,8 @@
 .tour-stop-shortcut-item { display: inline-flex; align-items: center; white-space: nowrap; }
 .tour-stop-separator { width: 2px; height: 1.1em; margin: 0 10px; border-radius: var(--radius-pill); background: var(--border-strong); }
 .tour-stop-shortcut[aria-pressed="true"] { color: var(--text-heading); font-weight: 700; text-decoration: underline; }
+.tour-stop-shortcut-item.is-cancelled .tour-stop-shortcut { color: var(--accent-danger); }
+.tour-stop-shortcut-item.is-cancelled .cancelled-static-title { cursor: default; }
 .performance-group-live-star { margin-left: 5px; }
 .tour-detail-state { text-align: center; color: var(--text-muted); padding: 28px; }
 .tour-inline-live-detail { margin: 18px 0 0; }

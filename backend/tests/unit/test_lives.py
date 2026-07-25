@@ -85,6 +85,9 @@ def test_get_lives_success_returns_items_and_pagination():
             "is_favorite": False,
             "tour": None,
             "performance_group": {"group_id": 7, "group_title": "Group 7"},
+            "event_status": "scheduled",
+            "date_phase": "past",
+            "was_rescheduled": False,
         },
         {
             "live_id": 2,
@@ -96,6 +99,9 @@ def test_get_lives_success_returns_items_and_pagination():
             "is_favorite": False,
             "tour": None,
             "performance_group": None,
+            "event_status": "scheduled",
+            "date_phase": "past",
+            "was_rescheduled": False,
         },
     ]
     assert cursor.execute.call_count == 2

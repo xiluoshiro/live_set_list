@@ -15,6 +15,7 @@ from app.live_list_filters import (
     effective_band_ids_sql,
     normalize_list_query,
 )
+from app.live_status import build_public_live_status
 from app.logging_config import get_logger
 from app.routers.lives import ALLOWED_PAGE_SIZE
 from app.schemas import ErrorResponse, LivesResponse
@@ -40,7 +41,13 @@ SELECT
     tour.id AS tour_id,
     tour.tour_title,
     pg.id AS performance_group_id,
-    pg.group_title
+    pg.group_title,
+    l.start_time,
+    l.event_status,
+    EXISTS (
+        SELECT 1 FROM live_schedule_history history
+        WHERE history.live_id = l.id
+    ) AS was_rescheduled
 FROM user_live_favorites f
 JOIN live_attrs l
     ON l.id = f.live_id
@@ -61,7 +68,8 @@ LEFT JOIN LATERAL (
 LEFT JOIN band_attrs b
     ON b.band_name = t.key
 WHERE f.user_id = %s
-GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids, tour.id, tour.tour_title, pg.id, pg.group_title
+GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids,
+         l.start_time, l.event_status, tour.id, tour.tour_title, pg.id, pg.group_title
 """
 
 FAVORITE_LIVES_COUNT_QUERY = f"""
@@ -231,6 +239,12 @@ def get_my_favorite_lives(
             "is_favorite": True,
             "tour": build_tour_ref_from_row(row, tour_id_index=6, tour_title_index=7),
             "performance_group": build_performance_group_ref_from_row(row, group_id_index=8, group_title_index=9),
+            **build_public_live_status(
+                event_status=str(row[11]) if len(row) > 11 else "scheduled",
+                live_date=row[1],
+                start_time=row[10] if len(row) > 10 else "00:00:00+00:00",
+                was_rescheduled=bool(row[12]) if len(row) > 12 else False,
+            ),
         }
         for row in rows
     ]

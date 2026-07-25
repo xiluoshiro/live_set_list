@@ -17,6 +17,7 @@ from app.live_list_filters import (
     normalize_list_query,
 )
 from app.logging_config import get_logger
+from app.live_status import build_public_live_status
 from app.schemas import (
     ErrorResponse,
     LiveDetailBatchRequest,
@@ -84,7 +85,13 @@ SELECT
     tour.id AS tour_id,
     tour.tour_title,
     pg.id AS performance_group_id,
-    pg.group_title
+    pg.group_title,
+    l.start_time,
+    l.event_status,
+    EXISTS (
+        SELECT 1 FROM live_schedule_history history
+        WHERE history.live_id = l.id
+    ) AS was_rescheduled
 FROM live_attrs l
 LEFT JOIN tour_lives tour_live
     ON tour_live.live_id = l.id
@@ -102,7 +109,8 @@ LEFT JOIN LATERAL (
 ) t ON true
 LEFT JOIN band_attrs b
     ON b.band_name = t.key
-GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids, tour.id, tour.tour_title, pg.id, pg.group_title
+GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids,
+         l.start_time, l.event_status, tour.id, tour.tour_title, pg.id, pg.group_title
 """
 
 LIVES_COUNT_QUERY = f"""
@@ -128,7 +136,13 @@ SELECT
     tour.id AS tour_id,
     tour.tour_title,
     pg.id AS performance_group_id,
-    pg.group_title
+    pg.group_title,
+    l.start_time,
+    l.event_status,
+    EXISTS (
+        SELECT 1 FROM live_schedule_history history
+        WHERE history.live_id = l.id
+    ) AS was_rescheduled
 FROM live_attrs l
 LEFT JOIN tour_lives tour_live
     ON tour_live.live_id = l.id
@@ -216,7 +230,29 @@ SELECT
     tour.tour_title,
     pg.id AS performance_group_id,
     pg.group_title,
-    {EVENT_ATTENDEES_SQL} AS event_attendees
+    {EVENT_ATTENDEES_SQL} AS event_attendees,
+    l.event_status,
+    l.status_note,
+    COALESCE(
+        (
+            SELECT jsonb_agg(
+                jsonb_build_object(
+                    'previous_live_date', history.previous_live_date,
+                    'previous_opening_time', history.previous_opening_time::text,
+                    'previous_start_time', history.previous_start_time::text,
+                    'previous_venue_id', history.previous_venue_id,
+                    'previous_venue', history_venue.venue,
+                    'changed_at', history.changed_at,
+                    'note', history.note
+                )
+                ORDER BY history.changed_at, history.id
+            )
+            FROM live_schedule_history history
+            LEFT JOIN venue_list history_venue ON history_venue.id = history.previous_venue_id
+            WHERE history.live_id = l.id
+        ),
+        '[]'::jsonb
+    ) AS schedule_history
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -309,7 +345,29 @@ SELECT
     tour.tour_title,
     pg.id AS performance_group_id,
     pg.group_title,
-    {EVENT_ATTENDEES_SQL} AS event_attendees
+    {EVENT_ATTENDEES_SQL} AS event_attendees,
+    l.event_status,
+    l.status_note,
+    COALESCE(
+        (
+            SELECT jsonb_agg(
+                jsonb_build_object(
+                    'previous_live_date', history.previous_live_date,
+                    'previous_opening_time', history.previous_opening_time::text,
+                    'previous_start_time', history.previous_start_time::text,
+                    'previous_venue_id', history.previous_venue_id,
+                    'previous_venue', history_venue.venue,
+                    'changed_at', history.changed_at,
+                    'note', history.note
+                )
+                ORDER BY history.changed_at, history.id
+            )
+            FROM live_schedule_history history
+            LEFT JOIN venue_list history_venue ON history_venue.id = history.previous_venue_id
+            WHERE history.live_id = l.id
+        ),
+        '[]'::jsonb
+    ) AS schedule_history
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -644,6 +702,14 @@ def _build_live_detail_payload(
 
     live_type = str(header_row[9])
     event_attendees_raw = header_row[14] if len(header_row) > 14 else []
+    event_status = str(header_row[15]) if len(header_row) > 15 else "scheduled"
+    schedule_history = list(header_row[17] or []) if len(header_row) > 17 else []
+    public_status = build_public_live_status(
+        event_status=event_status,
+        live_date=header_row[1],
+        start_time=header_row[5] if len(header_row) > 15 else "00:00:00+00:00",
+        was_rescheduled=bool(schedule_history),
+    )
     return {
         "live_id": int(header_row[0]),
         "live_date": header_row[1],
@@ -658,6 +724,13 @@ def _build_live_detail_payload(
         "tour": build_tour_ref_from_row(header_row, tour_id_index=10, tour_title_index=11),
         "performance_group": build_performance_group_ref_from_row(header_row, group_id_index=12, group_title_index=13),
         "event_attendees": _normalize_event_attendees(event_attendees_raw, live_type),
+        **public_status,
+        "status_note": (
+            header_row[16]
+            if len(header_row) > 16 and event_status in {"postponed", "cancelled"}
+            else None
+        ),
+        "schedule_history": schedule_history,
         "detail_rows": detail_rows,
     }
 
@@ -837,6 +910,12 @@ def get_lives(
             "is_favorite": int(row[0]) in favorite_live_ids if current_user is not None else False,
             "tour": build_tour_ref_from_row(row, tour_id_index=6, tour_title_index=7),
             "performance_group": build_performance_group_ref_from_row(row, group_id_index=8, group_title_index=9),
+            **build_public_live_status(
+                event_status=str(row[11]) if len(row) > 11 else "scheduled",
+                live_date=row[1],
+                start_time=row[10] if len(row) > 10 else "00:00:00+00:00",
+                was_rescheduled=bool(row[12]) if len(row) > 12 else False,
+            ),
         }
         for row in rows
     ]
@@ -1000,6 +1079,8 @@ def get_live_details_batch(
 
                     live_type = str(header_row[9])
                     event_attendees_raw = header_row[14] if len(header_row) > 14 else []
+                    event_status = str(header_row[15]) if len(header_row) > 15 else "scheduled"
+                    schedule_history = list(header_row[17] or []) if len(header_row) > 17 else []
                     detail = {
                         "live_id": int(header_row[0]),
                         "live_date": header_row[1],
@@ -1019,6 +1100,18 @@ def get_live_details_batch(
                         "tour": build_tour_ref_from_row(header_row, tour_id_index=10, tour_title_index=11),
                         "performance_group": build_performance_group_ref_from_row(header_row, group_id_index=12, group_title_index=13),
                         "event_attendees": _normalize_event_attendees(event_attendees_raw, live_type),
+                        **build_public_live_status(
+                            event_status=event_status,
+                            live_date=header_row[1],
+                            start_time=header_row[5] if len(header_row) > 15 else "00:00:00+00:00",
+                            was_rescheduled=bool(schedule_history),
+                        ),
+                        "status_note": (
+                            header_row[16]
+                            if len(header_row) > 16 and event_status in {"postponed", "cancelled"}
+                            else None
+                        ),
+                        "schedule_history": schedule_history,
                         "detail_rows": detail_rows,
                     }
                     items.append(detail)

@@ -130,7 +130,7 @@ describe("PerformanceGroupDetailPage", () => {
     });
   });
 
-  // 测试点：成功加载后显示活动组标题
+  // 测试点：成功加载后显示活动组标题，并按聚合日期范围展示活动状态。
   test("displays group title after successful load", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
@@ -139,6 +139,7 @@ describe("PerformanceGroupDetailPage", () => {
     await waitFor(() => {
       expect(screen.getByText("BanG Dream! 12th LIVE")).toBeInTheDocument();
     });
+    expect(screen.getByRole("region", { name: "活动状态" })).toHaveTextContent("已结束");
   });
 
   // 测试点：活动组概览不重复显示日期范围，日期只保留在选中 Live 自身详情中。

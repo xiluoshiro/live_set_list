@@ -11,13 +11,16 @@ from psycopg2.extras import Json
 from app.auth import AuthSessionContext, assert_valid_csrf, get_current_auth_context, require_role
 from app.db import get_write_db_connection
 from app.logging_config import get_logger
+from app.live_status import build_public_live_status
 from app.schemas import ErrorResponse, ValidationErrorResponse
 from app.schemas.auth import AuthErrorResponse
 from app.schemas.console import (
     ConsoleLiveMutationResponse,
+    ConsoleLiveBaseRequest,
+    ConsoleLiveCreateRequest,
+    ConsoleLiveUpdateRequest,
     ConsoleLiveSetlistAppendRequest,
     ConsoleLiveSetlistAppendResponse,
-    ConsoleLiveUpsertRequest,
     ConsoleSongBatchCreateRequest,
     ConsoleSongBatchCreateResponse,
     ConsoleSongCreateRequest,
@@ -33,6 +36,7 @@ logger = get_logger(__name__)
 
 TIME_PATTERN = re.compile(r"^\d{2}:\d{2}(?::\d{2})?$")
 TIMEZONE_PATTERN = re.compile(r"^[+-]\d{2}:\d{2}$")
+SHORT_TIMEZONE_SUFFIX_PATTERN = re.compile(r"([+-]\d{2})$")
 
 
 def _write_console_audit_log(
@@ -76,6 +80,11 @@ def _normalize_time_with_timezone(value: str, timezone: str) -> str:
         _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid timezone value: {timezone}")
     normalized_time = value if len(value) == 8 else f"{value}:00"
     return f"{normalized_time}{timezone}"
+
+
+def _normalize_persisted_time_with_timezone(value: Any) -> str:
+    """Normalize PostgreSQL JSON's whole-hour offset before field comparison."""
+    return SHORT_TIMEZONE_SUFFIX_PATTERN.sub(r"\1:00", str(value))
 
 
 def _normalize_segment_type(value: str) -> str:
@@ -139,7 +148,7 @@ def _format_date(value: date) -> str:
 
 def _validate_and_normalize_live_relations(
     cur: Any,
-    payload: ConsoleLiveUpsertRequest,
+    payload: ConsoleLiveBaseRequest,
 ) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
     """Validate Live foreign keys and normalize event attendance for create and update."""
     cur.execute("SELECT 1 FROM venue_list WHERE id = %s", (payload.venue_id,))
@@ -187,7 +196,7 @@ def _validate_and_normalize_live_relations(
 def _build_live_mutation_item(
     *,
     live_id: int,
-    payload: ConsoleLiveUpsertRequest,
+    payload: ConsoleLiveBaseRequest,
     opening_time: str,
     start_time: str,
     normalized_event_attendees: list[dict[str, Any]],
@@ -204,6 +213,14 @@ def _build_live_mutation_item(
         "venue_id": payload.venue_id,
         "default_band_ids": payload.default_band_ids,
         "event_attendees": normalized_event_attendees,
+        "event_status": payload.event_status,
+        "status_note": payload.status_note,
+        "date_phase": build_public_live_status(
+            event_status=payload.event_status,
+            live_date=payload.live_date,
+            start_time=start_time,
+            was_rescheduled=False,
+        )["date_phase"],
     }
 
 
@@ -531,7 +548,7 @@ def create_venue(
     },
 )
 def create_live(
-    payload: ConsoleLiveUpsertRequest,
+    payload: ConsoleLiveCreateRequest,
     request: Request,
     _: Any = Depends(require_role("editor")),
     context: AuthSessionContext = Depends(get_current_auth_context),
@@ -562,9 +579,11 @@ def create_live(
                         start_time,
                         venue_id,
                         default_band_ids,
-                        event_attendees
+                        event_attendees,
+                        event_status,
+                        status_note
                     )
-                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -577,6 +596,8 @@ def create_live(
                         payload.venue_id,
                         payload.default_band_ids,
                         Json(persisted_event_attendees),
+                        payload.event_status,
+                        payload.status_note,
                     ),
                 )
                 created_row = cur.fetchone()
@@ -590,6 +611,8 @@ def create_live(
                     "live_type": payload.live_type,
                     "default_band_ids": payload.default_band_ids,
                     "event_attendees": normalized_event_attendees,
+                    "event_status": payload.event_status,
+                    "status_note": payload.status_note,
                 }
 
                 _write_console_audit_log(
@@ -642,7 +665,7 @@ def create_live(
     },
 )
 def update_live(
-    payload: ConsoleLiveUpsertRequest,
+    payload: ConsoleLiveUpdateRequest,
     request: Request,
     live_id: int = Path(..., ge=1, description="Target live_id"),
     _: Any = Depends(require_role("editor")),
@@ -660,6 +683,10 @@ def update_live(
                 if existing_row is None:
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
                 existing = dict(existing_row[0])
+                existing.setdefault("event_status", "scheduled")
+                existing.setdefault("status_note", None)
+                existing["opening_time"] = _normalize_persisted_time_with_timezone(existing["opening_time"])
+                existing["start_time"] = _normalize_persisted_time_with_timezone(existing["start_time"])
                 normalized_event_attendees, persisted_event_attendees = _validate_and_normalize_live_relations(
                     cur,
                     payload,
@@ -674,13 +701,51 @@ def update_live(
                     "venue_id": payload.venue_id,
                     "default_band_ids": payload.default_band_ids,
                     "event_attendees": persisted_event_attendees,
+                    "event_status": payload.event_status,
+                    "status_note": payload.status_note,
                 }
                 changes = {
                     field: {"before": existing.get(field), "after": value}
                     for field, value in target.items()
                     if existing.get(field) != value
                 }
+                schedule_fields = {"live_date", "opening_time", "start_time", "venue_id"}
+                changed_schedule_fields = schedule_fields.intersection(changes)
+                if changed_schedule_fields and payload.schedule_change_kind is None:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="schedule_change_kind is required when schedule fields change",
+                    )
+                if not changed_schedule_fields and payload.schedule_change_kind is not None:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="schedule_change_kind is only allowed when schedule fields change",
+                    )
                 if changes:
+                    if payload.schedule_change_kind == "reschedule":
+                        cur.execute(
+                            """
+                            INSERT INTO live_schedule_history (
+                                live_id,
+                                previous_live_date,
+                                previous_opening_time,
+                                previous_start_time,
+                                previous_venue_id,
+                                changed_by,
+                                note
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (
+                                live_id,
+                                existing["live_date"],
+                                existing["opening_time"],
+                                existing["start_time"],
+                                existing["venue_id"],
+                                context.user.id,
+                                payload.schedule_change_note,
+                            ),
+                        )
                     cur.execute(
                         """
                         UPDATE live_attrs
@@ -693,7 +758,9 @@ def update_live(
                             start_time = %s,
                             venue_id = %s,
                             default_band_ids = %s,
-                            event_attendees = %s
+                            event_attendees = %s,
+                            event_status = %s,
+                            status_note = %s
                         WHERE id = %s
                         """,
                         (
@@ -706,6 +773,8 @@ def update_live(
                             payload.venue_id,
                             payload.default_band_ids,
                             Json(persisted_event_attendees),
+                            payload.event_status,
+                            payload.status_note,
                             live_id,
                         ),
                     )
@@ -715,7 +784,11 @@ def update_live(
                         action="live_update",
                         resource_type="live",
                         resource_id=str(live_id),
-                        payload_json={"changes": changes},
+                        payload_json={
+                            "changes": changes,
+                            "schedule_change_kind": payload.schedule_change_kind,
+                            "schedule_change_note": payload.schedule_change_note,
+                        },
                     )
     except HTTPException:
         raise

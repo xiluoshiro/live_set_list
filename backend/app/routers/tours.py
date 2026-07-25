@@ -10,6 +10,7 @@ from app.auth import AuthUser, get_current_user_optional
 from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set
 from app.logging_config import get_logger
+from app.live_status import build_public_live_status
 from app.schemas import (
     ErrorResponse,
     TourDetailResponse,
@@ -171,6 +172,7 @@ def _build_tour_list_queries(
                 (array_agg(l.start_time ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC))[1] AS start_time,
                 (array_agg(l.start_time ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC))[1] AS end_time,
                 COUNT(*)::int AS collected_live_count,
+                COUNT(*) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count,
                 COALESCE(
                     (
                         SELECT jsonb_agg(
@@ -236,6 +238,7 @@ def _build_tour_list_queries(
             summary.start_date,
             summary.end_date,
             summary.collected_live_count,
+            summary.cancelled_live_count,
             summary.stop_labels
         FROM summary
         ORDER BY {result_order}
@@ -259,6 +262,7 @@ SELECT
     MIN(l.live_date) AS start_date,
     MAX(l.live_date) AS end_date,
     COUNT(*)::int AS collected_live_count,
+    COUNT(*) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count,
     COALESCE(
         array_agg(tl.stop_label ORDER BY l.live_date, l.start_time, l.id)
             FILTER (WHERE tl.stop_label IS NOT NULL),
@@ -305,36 +309,79 @@ ORDER BY selected.id
 """
 
 TOUR_DETAIL_STOPS_QUERY = """
+WITH stop_base AS (
+    SELECT
+        tl.stop_label,
+        l.id,
+        l.live_date,
+        l.live_title,
+        l.live_type,
+        COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
+        CASE
+            WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
+            THEN COALESCE(
+                (
+                    SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
+                    FROM live_setlist stop_setlist
+                    JOIN LATERAL jsonb_object_keys(stop_setlist.band_member) k(band_name)
+                        ON jsonb_typeof(stop_setlist.band_member) = 'object'
+                    JOIN band_attrs ba ON ba.band_name = k.band_name
+                    WHERE stop_setlist.live_id = l.id
+                ),
+                ARRAY[]::int[]
+            )
+            ELSE l.default_band_ids
+        END AS bands,
+        l.url,
+        EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id) AS has_setlist,
+        l.event_status,
+        l.start_time,
+        EXISTS (
+            SELECT 1 FROM live_schedule_history history
+            WHERE history.live_id = l.id
+        ) AS was_rescheduled,
+        CASE
+            WHEN pgl.group_id IS NULL THEN l.live_date
+            ELSE MIN(l.live_date) OVER (PARTITION BY pgl.group_id)
+        END AS block_date,
+        CASE
+            WHEN pgl.group_id IS NULL THEN l.start_time
+            ELSE FIRST_VALUE(l.start_time) OVER (
+                PARTITION BY pgl.group_id
+                ORDER BY l.live_date, l.start_time, l.id
+            )
+        END AS block_time,
+        CASE
+            WHEN pgl.group_id IS NULL THEN l.id
+            ELSE FIRST_VALUE(l.id) OVER (
+                PARTITION BY pgl.group_id
+                ORDER BY l.live_date, l.start_time, l.id
+            )
+        END AS block_id
+    FROM tour_lives tl
+    JOIN live_attrs l ON l.id = tl.live_id
+    LEFT JOIN venue_list v ON v.id = l.venue_id
+    LEFT JOIN performance_group_lives pgl ON pgl.live_id = l.id
+    WHERE tl.tour_id = %s
+)
 SELECT
-    ROW_NUMBER() OVER (ORDER BY l.live_date, l.start_time, l.id)::int AS stop_order,
-    tl.stop_label,
-    l.id,
-    l.live_date,
-    l.live_title,
-    l.live_type,
-    COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
-    CASE
-        WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
-        THEN COALESCE(
-            (
-                SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-                FROM live_setlist stop_setlist
-                JOIN LATERAL jsonb_object_keys(stop_setlist.band_member) k(band_name)
-                    ON jsonb_typeof(stop_setlist.band_member) = 'object'
-                JOIN band_attrs ba ON ba.band_name = k.band_name
-                WHERE stop_setlist.live_id = l.id
-            ),
-            ARRAY[]::int[]
-        )
-        ELSE l.default_band_ids
-    END AS bands,
-    l.url,
-    EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id) AS has_setlist
-FROM tour_lives tl
-JOIN live_attrs l ON l.id = tl.live_id
-LEFT JOIN venue_list v ON v.id = l.venue_id
-WHERE tl.tour_id = %s
-ORDER BY l.live_date, l.start_time, l.id
+    ROW_NUMBER() OVER (
+        ORDER BY block_date, block_time, block_id, live_date, start_time, id
+    )::int AS stop_order,
+    stop_label,
+    id,
+    live_date,
+    live_title,
+    live_type,
+    venue,
+    bands,
+    url,
+    has_setlist,
+    event_status,
+    start_time,
+    was_rescheduled
+FROM stop_base
+ORDER BY block_date, block_time, block_id, live_date, start_time, id
 """
 
 TOUR_STATISTICS_QUERY = """
@@ -549,6 +596,8 @@ def _build_tour_statistics(tour_id: int, rows: list[tuple[Any, ...]]) -> dict[st
 
 
 def _tour_summary_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
+    has_cancelled_count = len(row) > 9
+    stop_labels = row[9] if has_cancelled_count else row[8]
     return {
         "tour_id": int(row[0]),
         "tour_title": str(row[1]),
@@ -558,7 +607,8 @@ def _tour_summary_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
         "start_date": row[5],
         "end_date": row[6],
         "collected_live_count": int(row[7]),
-        "stop_labels": list(row[8] or []),
+        "cancelled_live_count": int(row[8]) if has_cancelled_count else 0,
+        "stop_labels": list(stop_labels or []),
     }
 
 
@@ -780,7 +830,8 @@ def get_tour_detail(
         "start_date": header_row[4],
         "end_date": header_row[5],
         "collected_live_count": int(header_row[6]),
-        "stop_labels": list(header_row[7] or []),
+        "cancelled_live_count": int(header_row[7]) if len(header_row) > 8 else 0,
+        "stop_labels": list((header_row[8] if len(header_row) > 8 else header_row[7]) or []),
         "stops": [
             {
                 "stop_order": int(row[0]),
@@ -794,6 +845,12 @@ def get_tour_detail(
                 "url": row[8],
                 "is_favorite": int(row[2]) in favorite_live_ids,
                 "has_setlist": bool(row[9]),
+                **build_public_live_status(
+                    event_status=str(row[10]) if len(row) > 10 else "scheduled",
+                    live_date=row[3],
+                    start_time=row[11] if len(row) > 11 else "00:00:00+00:00",
+                    was_rescheduled=bool(row[12]) if len(row) > 12 else False,
+                ),
             }
             for row in stop_rows
         ],

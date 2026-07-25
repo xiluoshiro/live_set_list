@@ -59,7 +59,12 @@ export function TourCardGrid({
               >
                 <span className="live-card-head">
                   <span className="live-card-date">{formatDateRange(tour)}</span>
-                  <span className="live-card-count">已收录 {tour.collected_live_count} 场</span>
+                  <span className="live-card-count">
+                    已收录 {tour.collected_live_count} 场
+                    {(tour.cancelled_live_count ?? 0) > 0 && (
+                      <span className="live-cancelled-count"> · 取消 {tour.cancelled_live_count ?? 0} 场</span>
+                    )}
+                  </span>
                 </span>
                 <span className="live-card-title">{tour.tour_title}</span>
               </button>

@@ -1,5 +1,6 @@
 ﻿from datetime import date
 from typing import Literal
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -7,6 +8,8 @@ from app.schemas.performance_groups import PerformanceGroupRef
 from app.schemas.tours import TourRef
 
 MAX_BATCH_LIVE_IDS = 100
+EventStatus = Literal["scheduled", "postponed", "cancelled"]
+DatePhase = Literal["upcoming", "today", "past"]
 
 
 class LiveItem(BaseModel):
@@ -24,6 +27,19 @@ class LiveItem(BaseModel):
     performance_group: PerformanceGroupRef | None = Field(
         default=None, description='Performance group reference when this live belongs to an activity group'
     )
+    event_status: EventStatus = Field(..., description="Persisted event status")
+    date_phase: DatePhase = Field(..., description="Date phase computed in the Live UTC offset")
+    was_rescheduled: bool = Field(..., description="Whether a formal schedule history row exists")
+
+
+class LiveScheduleHistoryItem(BaseModel):
+    previous_live_date: date
+    previous_opening_time: str
+    previous_start_time: str
+    previous_venue_id: int
+    previous_venue: str | None = None
+    changed_at: datetime
+    note: str | None = None
 
 
 class LivesPagination(BaseModel):
@@ -98,6 +114,14 @@ class LiveDetailResponse(BaseModel):
     event_attendees: list[LiveDetailEventAttendee] = Field(
         default_factory=list,
         description='Event-only attendance grouped by Band; empty for non-event Lives',
+    )
+    event_status: EventStatus = Field(..., description="Persisted event status")
+    date_phase: DatePhase = Field(..., description="Date phase computed in the Live UTC offset")
+    status_note: str | None = Field(default=None, description="Explanation for postponed or cancelled Lives")
+    was_rescheduled: bool = Field(..., description="Whether a formal schedule history row exists")
+    schedule_history: list[LiveScheduleHistoryItem] = Field(
+        default_factory=list,
+        description="Formal schedule changes only; console data corrections are excluded",
     )
     detail_rows: list[LiveDetailRow] = Field(..., description='Detailed song rows for the live')
 

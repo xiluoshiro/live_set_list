@@ -5,6 +5,9 @@ from pydantic import BaseModel, Field
 
 from app.schemas.tours import TourRef
 
+EventStatus = Literal["scheduled", "postponed", "cancelled"]
+DatePhase = Literal["upcoming", "today", "past"]
+
 
 class PerformanceGroupRef(BaseModel):
     group_id: int = Field(..., description="Performance group primary key ID")
@@ -28,6 +31,9 @@ class PerformanceGroupLiveItem(BaseModel):
     url: str | None = Field(default=None, description="Live source URL")
     is_favorite: bool = Field(..., description="Whether the current user has favorited this live")
     has_setlist: bool = Field(..., description="Whether at least one setlist row exists")
+    event_status: EventStatus = Field(..., description="Persisted event status")
+    date_phase: DatePhase = Field(..., description="Date phase computed in the Live UTC offset")
+    was_rescheduled: bool = Field(..., description="Whether a formal schedule history row exists")
 
 
 class PerformanceGroupDetailResponse(BaseModel):
@@ -37,6 +43,7 @@ class PerformanceGroupDetailResponse(BaseModel):
     end_date: date = Field(..., description="Latest live date within the group")
     day_count: int = Field(..., ge=1, description="Number of distinct dates across group lives")
     live_count: int = Field(..., ge=1, description="Number of lives in the group")
+    cancelled_live_count: int = Field(..., ge=0, description="Number of cancelled Lives in the group")
     display_type: Literal["single_day_multi_show", "multi_day"] = Field(
         ..., description="Dynamically computed display category"
     )
@@ -52,6 +59,7 @@ class CatalogPerformanceGroupSummary(BaseModel):
     end_date: date = Field(..., description="Latest live date within the group")
     day_count: int = Field(..., ge=1, description="Number of distinct dates across group lives")
     live_count: int = Field(..., ge=2, description="Number of lives in the group")
+    cancelled_live_count: int = Field(..., ge=0, description="Number of cancelled Lives in the group")
     display_type: Literal["single_day_multi_show", "multi_day"] = Field(
         ..., description="Dynamically computed display category"
     )
@@ -71,6 +79,9 @@ class CatalogPerformanceLiveItem(BaseModel):
     performance_group: PerformanceGroupRef | None = Field(
         default=None, description="Performance group reference when this live belongs to an activity group"
     )
+    event_status: EventStatus = Field(..., description="Persisted event status")
+    date_phase: DatePhase = Field(..., description="Date phase computed in the Live UTC offset")
+    was_rescheduled: bool = Field(..., description="Whether a formal schedule history row exists")
 
 
 class CatalogLiveResult(BaseModel):

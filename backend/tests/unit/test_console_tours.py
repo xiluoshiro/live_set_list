@@ -119,6 +119,30 @@ def test_create_console_tour_persists_complete_collection_and_audit():
     assert any("ORDER BY l.live_date, l.start_time, l.id" in sql for sql in executed_sql)
 
 
+# 测试点：取消场次的显式巡演乐队校验应把 default_band_ids 与已有 Setlist 乐队合并，避免取消资料被误拦截。
+def test_cancelled_tour_stop_validation_includes_default_bands():
+    _authenticate_editor()
+    conn, cursor = _connection_mock()
+    cursor.fetchall.side_effect = [[(3,)], [(41,)], [], [(41, [3])]]
+    cursor.fetchone.return_value = (7,)
+
+    with patch("app.routers.console_tours.get_write_db_connection", return_value=conn):
+        response = TestClient(app).post(
+            "/api/console/tours",
+            json=_payload(band_ids=[3]),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 201
+    validation_sql = next(
+        str(call.args[0])
+        for call in cursor.execute.call_args_list
+        if "ORDER BY l.live_date, l.start_time, l.id" in str(call.args[0])
+    )
+    assert "WHEN l.event_status = 'cancelled'" in validation_sql
+    assert "l.default_band_ids" in validation_sql
+
+
 # 测试点：请求中的重复 Band 或 Live 应在写库前由 schema 拒绝。
 @pytest.mark.parametrize(
     "overrides",

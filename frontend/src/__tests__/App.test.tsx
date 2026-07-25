@@ -8,7 +8,7 @@ import App from "../App";
 import { AuthProvider } from "../auth/AuthProvider";
 import { FavoriteProvider } from "../favorites/FavoriteProvider";
 import {
-  clearLivesCache,
+  clearLiveDataCaches,
   clearMyFavoriteLivesCache,
   favoriteLive,
   favoriteLivesBatch,
@@ -63,7 +63,7 @@ vi.mock("../api", () => ({
   getTourDetail: vi.fn(),
   getTourStatistics: vi.fn(),
   peekMyFavoriteLives: vi.fn(),
-  clearLivesCache: vi.fn(),
+  clearLiveDataCaches: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
   favoriteLive: vi.fn(),
   favoriteLivesBatch: vi.fn(),
@@ -111,7 +111,7 @@ const getToursMock = vi.mocked(getTours);
 const getTourDetailMock = vi.mocked(getTourDetail);
 const getTourStatisticsMock = vi.mocked(getTourStatistics);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
-const clearLivesCacheMock = vi.mocked(clearLivesCache);
+const clearLiveDataCachesMock = vi.mocked(clearLiveDataCaches);
 const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
 const favoriteLiveMock = vi.mocked(favoriteLive);
 const favoriteLivesBatchMock = vi.mocked(favoriteLivesBatch);
@@ -443,7 +443,7 @@ describe("App", () => {
     getTourDetailMock.mockReset();
     getTourStatisticsMock.mockReset();
     peekMyFavoriteLivesMock.mockReset();
-    clearLivesCacheMock.mockReset();
+    clearLiveDataCachesMock.mockReset();
     clearMyFavoriteLivesCacheMock.mockReset();
     favoriteLiveMock.mockReset();
     favoriteLivesBatchMock.mockReset();
@@ -1197,7 +1197,7 @@ describe("App", () => {
     }
   });
 
-  // 测试点：巡演场次导航只保留用竖向分隔条分开的缩写，点击后在当前页内切换 Live 详情。
+  // 测试点：巡演场次导航用竖向分隔条组织带状态的缩写，点击后在当前页内切换 Live 详情。
   test("巡演详情在页内切换缩写后的 Live 场次", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -1206,8 +1206,11 @@ describe("App", () => {
 
     await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
     const stopNavigation = screen.getByRole("navigation", { name: "巡演场次" });
-    expect(within(stopNavigation).getAllByRole("button").map((button) => button.textContent)).toEqual(["東京公演", "FINAL"]);
-    expect(stopNavigation).toHaveTextContent("東京公演FINAL");
+    expect(within(stopNavigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "東京公演（已结束）",
+      "FINAL（已结束）",
+    ]);
+    expect(stopNavigation).toHaveTextContent("東京公演（已结束）FINAL（已结束）");
     expect(stopNavigation.querySelectorAll(".tour-stop-separator")).toHaveLength(1);
     expect(within(stopNavigation).queryByText("/")).not.toBeInTheDocument();
     expect(within(stopNavigation).queryByText("2026-05-30")).not.toBeInTheDocument();
@@ -1220,7 +1223,7 @@ describe("App", () => {
 
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(41));
     expect(screen.getByText("曲目名称")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "FINAL" }));
+    await user.click(screen.getByRole("button", { name: "FINAL（已结束）" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
     expect(getTourDetailMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
@@ -1240,8 +1243,8 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "巡演资料" }));
     await user.click(await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus"));
 
-    expect(await screen.findByRole("button", { name: "取消收藏 東京公演" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "加入收藏 FINAL" }));
+    expect(await screen.findByRole("button", { name: "取消收藏 東京公演（已结束）" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "加入收藏 FINAL（已结束）" }));
     await waitFor(() => expect(favoriteLiveMock).toHaveBeenCalledWith(42, "csrf-token"));
   });
 
@@ -2172,7 +2175,7 @@ describe("App", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument();
     expect(screen.getByText("2026-03-02")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "查看《示例 Live 名称 1》详情" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /查看《示例 Live 名称 1》详情，状态：/ })).toBeInTheDocument();
     const favoriteAction = screen.getAllByRole("button", { name: "加入收藏" })[0];
     const sourceAction = screen.getAllByRole("link", { name: /打开《.*》的资料来源/ })[0];
     expect(favoriteAction).toHaveClass("live-card-action");
@@ -2237,6 +2240,22 @@ describe("App", () => {
     expect(screen.getByRole("option", { name: "2026" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Roselia" })).toBeInTheDocument();
     expect(screen.queryByText(/（\d+）/)).not.toBeInTheDocument();
+  });
+
+  // 测试点：窗口重新获得焦点时清空 Live 列表与详情缓存，并重新请求当前公开页面的数据。
+  test("重新聚焦页面会失效 Live 缓存并刷新当前数据", async () => {
+    renderApp();
+    await waitFor(() => expect(getLivesMock).toHaveBeenCalled());
+    const requestCount = getLivesMock.mock.calls.length;
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await waitFor(() => {
+      expect(clearLiveDataCachesMock).toHaveBeenCalledTimes(1);
+      expect(getLivesMock.mock.calls.length).toBeGreaterThan(requestCount);
+    });
   });
 
 });

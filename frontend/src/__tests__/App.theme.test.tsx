@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import App from "../App";
 import {
-  clearLivesCache,
+  clearLiveDataCaches,
   clearMyFavoriteLivesCache,
   getLiveDetail,
   getLiveDetailsBatch,
@@ -32,7 +32,7 @@ vi.mock("../api", () => ({
   getLiveDetailsBatch: vi.fn(),
   getPerformances: vi.fn(),
   peekMyFavoriteLives: vi.fn(),
-  clearLivesCache: vi.fn(),
+  clearLiveDataCaches: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
   createConsoleVenue: vi.fn().mockResolvedValue({ ok: true, item: { venue_id: 1, venue_name: "Mock Venue" } }),
   getConsoleSongs: vi.fn().mockResolvedValue({ items: [] }),
@@ -45,7 +45,7 @@ const getPerformancesThemeMock = vi.mocked(getPerformances);
 const getLiveDetailMock = vi.mocked(getLiveDetail);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
-const clearLivesCacheMock = vi.mocked(clearLivesCache);
+const clearLiveDataCachesMock = vi.mocked(clearLiveDataCaches);
 const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
 
 type MatchMediaController = {
@@ -172,7 +172,7 @@ describe("App dark mode", () => {
     getLiveDetailMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
     peekMyFavoriteLivesMock.mockReset();
-    clearLivesCacheMock.mockReset();
+    clearLiveDataCachesMock.mockReset();
     clearMyFavoriteLivesCacheMock.mockReset();
 
     getLivesMock.mockResolvedValue(makeResponse());

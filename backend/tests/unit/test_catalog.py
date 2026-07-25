@@ -50,6 +50,9 @@ def test_search_catalog_returns_grouped_public_results():
         "is_favorite": False,
         "tour": None,
         "performance_group": {"group_id": 5, "group_title": "Party Weekend"},
+        "event_status": "scheduled",
+        "date_phase": "past",
+        "was_rescheduled": False,
     }
     assert payload["bands"] == [{"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "band_members": ["Kasumi"], "live_count": 12}]
     assert payload["songs"] == [

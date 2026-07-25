@@ -27,6 +27,52 @@
   text-align: center;
 }
 
+.live-status-panel {
+  --live-status-bg: var(--live-status-past-bg);
+  --live-status-text: var(--live-status-past-text);
+  display: grid;
+  gap: 4px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-left: 4px solid var(--live-status-text);
+  border-radius: var(--radius-control);
+  background: var(--live-status-bg);
+  color: var(--live-status-text);
+}
+
+.live-status-panel > strong {
+  font-size: 16px;
+}
+
+.live-status-panel > span {
+  font-size: 14px;
+}
+
+.live-status-panel[data-status-tone="upcoming"] {
+  --live-status-bg: var(--live-status-upcoming-bg);
+  --live-status-text: var(--live-status-upcoming-text);
+}
+
+.live-status-panel[data-status-tone="today"] {
+  --live-status-bg: var(--live-status-today-bg);
+  --live-status-text: var(--live-status-today-text);
+}
+
+.live-status-panel[data-status-tone="postponed"] {
+  --live-status-bg: var(--live-status-postponed-bg);
+  --live-status-text: var(--live-status-postponed-text);
+}
+
+.live-status-panel[data-status-tone="cancelled"] {
+  --live-status-bg: var(--live-status-cancelled-bg);
+  --live-status-text: var(--live-status-cancelled-text);
+}
+
+.live-schedule-history ul {
+  margin: 4px 0 0 1.2em;
+  padding: 0;
+}
+
 .detail-back-btn {
   position: absolute;
   left: 0;

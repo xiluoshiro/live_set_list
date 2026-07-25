@@ -3,6 +3,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+EventStatus = Literal["scheduled", "postponed", "cancelled"]
+DatePhase = Literal["upcoming", "today", "past"]
+
 
 class TourRef(BaseModel):
     tour_id: int = Field(..., description="Tour primary key ID")
@@ -24,6 +27,7 @@ class TourSummary(BaseModel):
     start_date: date = Field(..., description="Earliest live date currently collected for the tour")
     end_date: date = Field(..., description="Latest live date currently collected for the tour")
     collected_live_count: int = Field(..., ge=1, description="Number of live rows currently collected")
+    cancelled_live_count: int = Field(..., ge=0, description="Number of cancelled Live rows in the tour")
     stop_labels: list[str] = Field(..., description="Non-empty stop labels in stop order")
 
 
@@ -51,6 +55,9 @@ class TourStopItem(BaseModel):
     url: str | None = Field(default=None, description="Live source URL")
     is_favorite: bool = Field(..., description="Whether the current user has favorited this live")
     has_setlist: bool = Field(..., description="Whether at least one setlist row exists")
+    event_status: EventStatus = Field(..., description="Persisted event status")
+    date_phase: DatePhase = Field(..., description="Date phase computed in the Live UTC offset")
+    was_rescheduled: bool = Field(..., description="Whether a formal schedule history row exists")
 
 
 class TourDetailResponse(TourSummary):

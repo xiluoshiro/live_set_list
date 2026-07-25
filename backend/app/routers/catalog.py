@@ -10,6 +10,7 @@ from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set
 from app.live_list_filters import effective_band_ids_sql
 from app.logging_config import get_logger
+from app.live_status import build_public_live_status
 from app.schemas import (
     CatalogBandListResponse,
     CatalogBandLivesResponse,
@@ -48,6 +49,12 @@ def _normalize_total_count(raw: Any) -> int:
 
 def _live_item_from_row(row: tuple[Any, ...], favorite_live_ids: set[int]) -> dict[str, Any]:
     live_id = int(row[0])
+    status = build_public_live_status(
+        event_status=str(row[11]) if len(row) > 11 else "scheduled",
+        live_date=row[1],
+        start_time=row[10] if len(row) > 10 else "00:00:00+00:00",
+        was_rescheduled=bool(row[12]) if len(row) > 12 else False,
+    )
     return {
         "live_id": live_id,
         "live_date": row[1],
@@ -58,6 +65,7 @@ def _live_item_from_row(row: tuple[Any, ...], favorite_live_ids: set[int]) -> di
         "is_favorite": live_id in favorite_live_ids,
         "tour": build_tour_ref_from_row(row, tour_id_index=6, tour_title_index=7),
         "performance_group": build_performance_group_ref_from_row(row, group_id_index=8, group_title_index=9),
+        **status,
     }
 
 
@@ -98,7 +106,13 @@ live_rows AS (
         tour.id AS tour_id,
         tour.tour_title,
         pg.id AS performance_group_id,
-        pg.group_title
+        pg.group_title,
+        l.start_time,
+        l.event_status,
+        EXISTS (
+            SELECT 1 FROM live_schedule_history history
+            WHERE history.live_id = l.id
+        ) AS was_rescheduled
     FROM live_attrs l
     JOIN matched_live_ids m
         ON m.id = l.id
@@ -118,9 +132,11 @@ live_rows AS (
     ) bm ON true
     LEFT JOIN band_attrs b
         ON b.band_name = bm.band_name
-    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, tour.id, tour.tour_title, pg.id, pg.group_title
+    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, l.start_time, l.event_status,
+             tour.id, tour.tour_title, pg.id, pg.group_title
 )
-SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title, performance_group_id, group_title
+SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title,
+       performance_group_id, group_title, start_time, event_status, was_rescheduled
 FROM live_rows
 ORDER BY live_date DESC, id DESC
 LIMIT %s
@@ -264,7 +280,13 @@ live_rows AS (
         tour.id AS tour_id,
         tour.tour_title,
         pg.id AS performance_group_id,
-        pg.group_title
+        pg.group_title,
+        l.start_time,
+        l.event_status,
+        EXISTS (
+            SELECT 1 FROM live_schedule_history history
+            WHERE history.live_id = l.id
+        ) AS was_rescheduled
     FROM live_attrs l
     JOIN matched_live_ids m
         ON m.id = l.id
@@ -284,9 +306,11 @@ live_rows AS (
     ) bm ON true
     LEFT JOIN band_attrs b
         ON b.band_name = bm.band_name
-    GROUP BY l.id, l.live_date, l.live_title, l.default_band_ids, l.url, l.live_type, tour.id, tour.tour_title, pg.id, pg.group_title
+    GROUP BY l.id, l.live_date, l.live_title, l.default_band_ids, l.url, l.live_type,
+             l.start_time, l.event_status, tour.id, tour.tour_title, pg.id, pg.group_title
 )
-SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title, performance_group_id, group_title
+SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title,
+       performance_group_id, group_title, start_time, event_status, was_rescheduled
 FROM live_rows
 ORDER BY live_date DESC, id DESC
 LIMIT %s OFFSET %s

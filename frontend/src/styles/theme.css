@@ -72,6 +72,16 @@
   --live-type-group-text: #31579d;
   --live-type-other-bg: #edf0f6;
   --live-type-other-text: #4e5f7e;
+  --live-status-past-bg: #f1f4f9;
+  --live-status-past-text: #42516d;
+  --live-status-upcoming-bg: #e8f2ff;
+  --live-status-upcoming-text: #245b9b;
+  --live-status-today-bg: #e5f7ee;
+  --live-status-today-text: #20734b;
+  --live-status-postponed-bg: #fff4d8;
+  --live-status-postponed-text: #74500a;
+  --live-status-cancelled-bg: #ffe9e9;
+  --live-status-cancelled-text: #b23a3a;
 
   --radius-card: 12px;
   --radius-control: 8px;
@@ -163,6 +173,16 @@
   --live-type-group-text: #a9c5ff;
   --live-type-other-bg: #2d3b55;
   --live-type-other-text: #b8c8e8;
+  --live-status-past-bg: #202c43;
+  --live-status-past-text: #b6c7ea;
+  --live-status-upcoming-bg: #203653;
+  --live-status-upcoming-text: #9ac7ff;
+  --live-status-today-bg: #203c32;
+  --live-status-today-text: #8ed9b4;
+  --live-status-postponed-bg: #3b301d;
+  --live-status-postponed-text: #ffd17a;
+  --live-status-cancelled-bg: #4b2329;
+  --live-status-cancelled-text: #ff8c8c;
 
   --overlay-mask: rgba(4, 8, 15, 0.72);
   --overlay-soft-mask: rgba(4, 8, 15, 0.58);

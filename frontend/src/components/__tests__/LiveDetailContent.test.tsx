@@ -94,4 +94,41 @@ describe("LiveDetailContent event attendees", () => {
     expect(screen.getByRole("button", { name: "示例活动组" })).toBeInTheDocument();
     expect(screen.queryByText(/查看活动组/)).not.toBeInTheDocument();
   });
+
+  // 测试点：公开详情只展示正式改期历史及其原开场、开演、Venue，不出现内部“资料修正”语义。
+  test("renders formal reschedule history without correction wording", () => {
+    const detail = makeDetail("oneman");
+    detail.event_status = "postponed";
+    detail.date_phase = "upcoming";
+    detail.was_rescheduled = true;
+    detail.status_note = "主办方公告延期";
+    detail.schedule_history = [{
+      previous_live_date: "2026-08-01",
+      previous_opening_time: "17:00:00+09:00",
+      previous_start_time: "18:00:00+09:00",
+      previous_venue_id: 2,
+      previous_venue: "Old Venue",
+      changed_at: "2026-07-01T10:00:00+00:00",
+      note: "主办方正式改期",
+    }];
+
+    render(
+      <LiveDetailContent
+        detailData={detail}
+        detailLoading={false}
+        detailError={null}
+        fallback={{ liveTitle: "Event Detail", liveDate: "2026-08-08", url: null }}
+      />,
+    );
+
+    const statusPanel = screen.getByRole("region", { name: "演出状态" });
+    expect(statusPanel).toHaveAttribute("data-status-tone", "postponed");
+    expect(within(statusPanel).getByText("延期")).toBeInTheDocument();
+    expect(within(statusPanel).getByText("延期说明：主办方公告延期")).toBeInTheDocument();
+    expect(statusPanel.compareDocumentPosition(screen.getByText("日期：").closest(".detail-meta-line") as Node)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByText(/主办方公告延期/)).toHaveLength(1);
+    expect(screen.getByText(/开场 17:00\(JP\) · 开演 18:00\(JP\) · Old Venue/)).toBeInTheDocument();
+    expect(screen.queryByText(/资料修正/)).not.toBeInTheDocument();
+  });
 });

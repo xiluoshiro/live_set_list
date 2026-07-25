@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.schemas.lives import DatePhase, EventStatus, LiveScheduleHistoryItem
+
 LIVE_TYPE_VALUES = ("oneman", "taiban", "multi_act", "festival", "event", "other")
 
 
@@ -136,7 +138,7 @@ class ConsoleEventAttendee(BaseModel):
     members: list[str] = Field(..., description="Complete recorded attendee list")
 
 
-class ConsoleLiveUpsertRequest(BaseModel):
+class ConsoleLiveBaseRequest(BaseModel):
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., min_length=1, max_length=255, description="Live title")
     url: str = Field(..., min_length=1, max_length=2048, description="Live URL")
@@ -160,6 +162,8 @@ class ConsoleLiveUpsertRequest(BaseModel):
         max_length=100,
         description="Event-only Band member attendance; mode is computed and is not accepted as input.",
     )
+    event_status: EventStatus = Field(default="scheduled", description="Persisted event status")
+    status_note: str | None = Field(default=None, max_length=2000, description="Optional status explanation")
 
     @field_validator("live_title", "url")
     @classmethod
@@ -181,9 +185,20 @@ class ConsoleLiveUpsertRequest(BaseModel):
             raise ValueError("default_band_ids must contain only positive band IDs")
         return sorted(set(value))
 
+    @field_validator("status_note")
+    @classmethod
+    def normalize_status_note(cls, value: str | None) -> str | None:
+        """Trim the public status explanation and normalize blank input to null."""
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
     @model_validator(mode="after")
-    def validate_event_attendees(self) -> "ConsoleLiveUpsertRequest":
-        """Keep event attendance scoped to event Lives and selected default Bands."""
+    def validate_status_and_event_attendees(self) -> "ConsoleLiveBaseRequest":
+        """Keep status notes and event attendance aligned with their owning fields."""
+        if self.event_status == "scheduled":
+            self.status_note = None
         if self.live_type != "event" and self.event_attendees:
             raise ValueError("event_attendees are only allowed when live_type is event")
         attendee_band_ids = [attendee.band_id for attendee in self.event_attendees]
@@ -196,7 +211,20 @@ class ConsoleLiveUpsertRequest(BaseModel):
         return self
 
 
-ConsoleLiveCreateRequest = ConsoleLiveUpsertRequest
+class ConsoleLiveCreateRequest(ConsoleLiveBaseRequest):
+    pass
+
+
+class ConsoleLiveUpdateRequest(ConsoleLiveBaseRequest):
+    schedule_change_kind: Literal["correction", "reschedule"] | None = Field(
+        default=None,
+        description="Required only when date, opening time, start time, or Venue changes",
+    )
+    schedule_change_note: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="Optional internal correction note or public formal reschedule note",
+    )
 
 
 class ConsoleLiveItem(BaseModel):
@@ -213,6 +241,9 @@ class ConsoleLiveItem(BaseModel):
         default_factory=list,
         description="Event attendance with mode computed from the complete persisted member list",
     )
+    event_status: EventStatus
+    status_note: str | None = None
+    date_phase: DatePhase
 
 
 class ConsoleLiveCandidate(BaseModel):
@@ -221,6 +252,8 @@ class ConsoleLiveCandidate(BaseModel):
     live_title: str = Field(..., description="Live title")
     live_type: str = Field(..., description="Stable live type code")
     venue_name: str = Field(..., description="Venue display name")
+    event_status: EventStatus
+    date_phase: DatePhase
 
 
 class ConsoleLiveCandidatesResponse(BaseModel):
@@ -234,6 +267,8 @@ class ConsoleLiveCandidatesResponse(BaseModel):
 class ConsoleLiveEditItem(ConsoleLiveItem):
     timezone: str = Field(..., min_length=6, max_length=6, description="UTC offset used by both times")
     venue_name: str = Field(..., description="Venue display name")
+    schedule_history: list[LiveScheduleHistoryItem] = Field(default_factory=list)
+    has_setlist: bool = Field(..., description="Whether this Live already has Setlist rows")
 
 
 class ConsoleLiveEditResponse(BaseModel):

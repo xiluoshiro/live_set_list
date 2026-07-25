@@ -7,7 +7,7 @@ import { AuthProvider } from "../auth/AuthProvider";
 import { FavoriteProvider } from "../favorites/FavoriteProvider";
 import {
   ApiError,
-  clearLivesCache,
+  clearLiveDataCaches,
   favoriteLive,
   favoriteLivesBatch,
   getAuthMe,
@@ -45,7 +45,7 @@ vi.mock("../api", () => ({
   getMyFavoriteLives: vi.fn(),
   getPerformances: vi.fn(),
   peekMyFavoriteLives: vi.fn(),
-  clearLivesCache: vi.fn(),
+  clearLiveDataCaches: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
   favoriteLive: vi.fn(),
   favoriteLivesBatch: vi.fn(),
@@ -82,7 +82,7 @@ const logoutMock = vi.mocked(logout);
 const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
 const getPerformancesSyncMock = vi.mocked(getPerformances);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
-const clearLivesCacheMock = vi.mocked(clearLivesCache);
+const clearLiveDataCachesMock = vi.mocked(clearLiveDataCaches);
 const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
 const favoriteLiveMock = vi.mocked(favoriteLive);
 const favoriteLivesBatchMock = vi.mocked(favoriteLivesBatch);
@@ -221,7 +221,7 @@ describe("App optimistic favorite sync", () => {
     getMyFavoriteLivesMock.mockReset();
     getPerformancesSyncMock.mockReset();
     peekMyFavoriteLivesMock.mockReset();
-    clearLivesCacheMock.mockReset();
+    clearLiveDataCachesMock.mockReset();
     clearMyFavoriteLivesCacheMock.mockReset();
     favoriteLiveMock.mockReset();
     favoriteLivesBatchMock.mockReset();
