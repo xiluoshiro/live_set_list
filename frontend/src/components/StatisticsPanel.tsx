@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   CatalogBandItem,
   CatalogStatisticsFilters,
@@ -7,7 +8,16 @@ import type {
 import { ContentState } from "./ContentState";
 import { LiveTypeBadge } from "./LiveTypeBadge";
 import { PageTitle } from "./PageTitle";
+import { SectionTabs } from "./SectionTabs";
 import { formatLiveType, LIVE_TYPE_OPTIONS } from "./console/constants";
+
+type StaleSongKind = "all" | "original" | "cover";
+
+const STALE_SONG_TABS = [
+  { value: "all", label: "全部" },
+  { value: "original", label: "原创" },
+  { value: "cover", label: "翻唱" },
+] as const;
 
 type StatisticsPanelProps = {
   scope: StatisticsScope;
@@ -25,10 +35,16 @@ type StatisticsPanelProps = {
 
 export function StatisticsPanel(props: StatisticsPanelProps) {
   const { data, filters } = props;
+  const [staleSongKind, setStaleSongKind] = useState<StaleSongKind>("all");
   const maxYearCount = Math.max(1, ...(data?.years.map((item) => item.live_count) ?? [1]));
   const setlistCoverage = data && data.overview.live_count > 0
     ? Math.round(data.overview.setlist_live_count / data.overview.live_count * 100)
     : 0;
+  const staleSongs = data
+    ? staleSongKind === "all"
+      ? data.stale_songs
+      : data.stale_songs_by_kind[staleSongKind]
+    : [];
   return (
     <section className="statistics-panel">
       <PageTitle kicker="Archive insights" title="数据统计" description="从资料库收录记录观察 Live 与歌曲演出轨迹。" />
@@ -91,11 +107,13 @@ export function StatisticsPanel(props: StatisticsPanelProps) {
         </section>
         <section className="statistics-card">
           <h2>久未演唱</h2>
-          {filters.bandId === undefined ? <ContentState kind="empty" title="选择乐队后查看久未演唱歌曲。" description="该指标会比较歌曲上次演唱后的后续 Live。" layout="rows" compact /> : data.stale_songs.length === 0 ? <ContentState kind="empty" title="当前条件下没有符合条件的久未演唱歌曲。" layout="rows" compact /> : <ol className="statistics-song-list stale">{data.stale_songs.map((song) => <li key={song.song_id}>
+          {filters.bandId === undefined ? <ContentState kind="empty" title="选择乐队后查看久未演唱歌曲。" description="该指标会比较歌曲上次演唱后的后续 Live。" layout="rows" compact /> : data.stale_songs.length === 0 ? <ContentState kind="empty" title="当前条件下没有符合条件的久未演唱歌曲。" layout="rows" compact /> : <>
+            <SectionTabs label="久未演唱歌曲类型" value={staleSongKind} options={STALE_SONG_TABS} onChange={setStaleSongKind} />
+            {staleSongs.length === 0 ? <ContentState kind="empty" title={`当前条件下没有久未演唱的${staleSongKind === "cover" ? "翻唱" : "原创"}歌曲。`} layout="rows" compact /> : <ol className="statistics-song-list stale">{staleSongs.map((song) => <li key={song.song_id}>
             <div><strong>{song.song_name}</strong><span>上次演唱后又收录 {song.missed_live_count} 场该乐队 Live</span></div>
             <b>{song.stale_days} 天</b>
             <button onClick={() => props.onOpenLive({ liveId: song.latest_live_id, liveDate: song.latest_live_date, liveTitle: song.latest_live_title })}>上次：{song.latest_live_date}</button>
-          </li>)}</ol>}
+          </li>)}</ol>}</>}
         </section>
       </> : null}
     </section>

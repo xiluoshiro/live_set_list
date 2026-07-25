@@ -506,11 +506,17 @@ describe("App", () => {
       years: [{ key: "2026", label: "2026 年", live_count: 4 }],
       live_types: [{ key: "oneman", label: "oneman", live_count: 1 }],
       top_songs: [{ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, band_name: "Poppin'Party", is_cover: false, live_count: 2, performance_count: 2, first_live_id: 38, first_live_date: "2026-01-03", first_live_title: "New Year", latest_live_id: 1, latest_live_date: "2026-03-28", latest_live_title: "Unit Live" }],
-      stale_songs: [],
+      stale_songs: [
+        { song_id: 2, song_name: "BLACK SHOUT", band_name: "Roselia", is_cover: false, live_count: 1, latest_live_id: 38, latest_live_date: "2026-01-03", latest_live_title: "New Year", reference_live_date: "2026-03-28", stale_days: 84, missed_live_count: 1 },
+      ],
+      stale_songs_by_kind: {
+        original: [{ song_id: 2, song_name: "BLACK SHOUT", band_name: "Roselia", is_cover: false, live_count: 1, latest_live_id: 38, latest_live_date: "2026-01-03", latest_live_title: "New Year", reference_live_date: "2026-03-28", stale_days: 84, missed_live_count: 1 }],
+        cover: [{ song_id: 70, song_name: "Cover Song", band_name: "Roselia", is_cover: true, live_count: 1, latest_live_id: 38, latest_live_date: "2026-01-03", latest_live_title: "New Year", reference_live_date: "2026-03-28", stale_days: 84, missed_live_count: 1 }],
+      },
     });
   });
 
-  // 测试点：统计页把同款范围切换收进筛选卡，并在指定年份后用收录情况替代年份分布。
+  // 测试点：久未演唱的全部、原创和翻唱页签使用各自独立的榜单窗口。
   test("数据统计页展示概览与高频歌曲", async () => {
     getLivesMock.mockResolvedValue(makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }));
     const user = userEvent.setup();
@@ -525,6 +531,17 @@ describe("App", () => {
     expect(within(scope).getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
     expect(within(scope).getByRole("button", { name: "仅收藏" })).toBeInTheDocument();
     expect(scope.closest(".list-filter-panel")).toHaveAttribute("aria-label", "统计筛选");
+
+    await user.selectOptions(screen.getByLabelText("乐队"), "2");
+    expect(await screen.findByText("BLACK SHOUT")).toBeInTheDocument();
+    expect(screen.queryByText("Cover Song")).not.toBeInTheDocument();
+    const staleTabs = screen.getByRole("tablist", { name: "久未演唱歌曲类型" });
+    expect(within(staleTabs).getByRole("tab", { name: "全部" })).toHaveAttribute("aria-selected", "true");
+
+    await user.click(within(staleTabs).getByRole("tab", { name: "翻唱" }));
+    expect(screen.queryByText("BLACK SHOUT")).not.toBeInTheDocument();
+    expect(screen.getByText("Cover Song")).toBeInTheDocument();
+    expect(within(staleTabs).getByRole("tab", { name: "翻唱" })).toHaveAttribute("aria-selected", "true");
 
     await user.selectOptions(screen.getByLabelText("年份"), "2026");
     expect(await screen.findByRole("heading", { name: "2026 年收录情况" })).toBeInTheDocument();

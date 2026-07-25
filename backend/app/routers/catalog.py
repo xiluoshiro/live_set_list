@@ -693,17 +693,27 @@ def get_catalog_statistics(
                 )
                 song_rows = cur.fetchall()
 
-                stale_rows: list[tuple[Any, ...]] = []
+                stale_rows_by_kind: dict[str, list[tuple[Any, ...]]] = {
+                    "all": [],
+                    "original": [],
+                    "cover": [],
+                }
                 if band_id is not None:
-                    cur.execute(
-                        f"""WITH candidate_lives AS ({candidate_sql}), band_lives AS (
+                    for stale_kind, cover_filter in (
+                        ("all", None),
+                        ("original", False),
+                        ("cover", True),
+                    ):
+                        cover_condition = "" if cover_filter is None else "AND l.is_cover = %s"
+                        cur.execute(
+                            f"""WITH candidate_lives AS ({candidate_sql}), band_lives AS (
                           SELECT cl.* FROM candidate_lives cl JOIN band_attrs b ON b.id = %s
                           WHERE EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = cl.id
                             AND jsonb_typeof(ls.band_member) = 'object' AND ls.band_member ? b.band_name)
                              OR (NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = cl.id)
                                  AND b.id = ANY(cl.default_band_ids))
                         ), song_plays AS (
-                          SELECT s.id, s.song_name, b.band_name, bl.id AS live_id,
+                          SELECT s.id, s.song_name, s.is_cover, b.band_name, bl.id AS live_id,
                                  bl.live_date, bl.live_title
                           FROM band_lives bl
                           JOIN band_attrs b ON b.id = %s
@@ -717,15 +727,18 @@ def get_catalog_statistics(
                                  ROW_NUMBER() OVER (PARTITION BY sp.id ORDER BY sp.live_date DESC, sp.live_id DESC) AS rn
                           FROM song_plays sp JOIN play_counts pc ON pc.id = sp.id
                         ), reference AS (SELECT MAX(live_date) AS live_date FROM band_lives)
-                        SELECT l.id, l.song_name, l.band_name, l.live_count, l.live_id, l.live_date, l.live_title,
+                        SELECT l.id, l.song_name, l.band_name, l.is_cover, l.live_count, l.live_id, l.live_date, l.live_title,
                                r.live_date, (r.live_date - l.live_date),
                                (SELECT COUNT(*) FROM band_lives later WHERE later.live_date > l.live_date)
                         FROM latest l CROSS JOIN reference r
-                        WHERE l.rn = 1 AND l.live_count >= 2 AND r.live_date > l.live_date
+                        WHERE l.rn = 1 AND r.live_date > l.live_date {cover_condition}
                         ORDER BY r.live_date - l.live_date DESC, l.song_name, l.id LIMIT %s""",
-                        candidate_params + [band_id, band_id, limit],
-                    )
-                    stale_rows = cur.fetchall()
+                            candidate_params
+                            + [band_id, band_id]
+                            + ([] if cover_filter is None else [cover_filter])
+                            + [limit],
+                        )
+                        stale_rows_by_kind[stale_kind] = cur.fetchall()
     except QueryCanceled as exc:
         raise HTTPException(status_code=504, detail="Database query timeout") from exc
     except OperationalError as exc:
@@ -737,6 +750,14 @@ def get_catalog_statistics(
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
     overview = overview_row or (0, 0, 0, 0, 0, None, None)
+    def serialize_stale_rows(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
+        return [{
+            "song_id": int(r[0]), "song_name": r[1], "band_name": r[2], "is_cover": bool(r[3]),
+            "live_count": int(r[4]), "latest_live_id": int(r[5]), "latest_live_date": r[6],
+            "latest_live_title": r[7], "reference_live_date": r[8],
+            "stale_days": int(r[9]), "missed_live_count": int(r[10]),
+        } for r in rows]
+
     return {
         "scope": scope,
         "filters": {"year": year, "live_type": live_type, "band_id": band_id},
@@ -753,9 +774,9 @@ def get_catalog_statistics(
             "first_live_id": int(r[7]), "first_live_date": r[8], "first_live_title": r[9],
             "latest_live_id": int(r[10]), "latest_live_date": r[11], "latest_live_title": r[12],
         } for r in song_rows],
-        "stale_songs": [{
-            "song_id": int(r[0]), "song_name": r[1], "band_name": r[2], "live_count": int(r[3]),
-            "latest_live_id": int(r[4]), "latest_live_date": r[5], "latest_live_title": r[6],
-            "reference_live_date": r[7], "stale_days": int(r[8]), "missed_live_count": int(r[9]),
-        } for r in stale_rows],
+        "stale_songs": serialize_stale_rows(stale_rows_by_kind["all"]),
+        "stale_songs_by_kind": {
+            "original": serialize_stale_rows(stale_rows_by_kind["original"]),
+            "cover": serialize_stale_rows(stale_rows_by_kind["cover"]),
+        },
     }

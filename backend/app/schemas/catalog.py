@@ -95,6 +95,7 @@ class StatisticsStaleSongItem(BaseModel):
     song_id: int
     song_name: str
     band_name: str | None = None
+    is_cover: bool
     live_count: int
     latest_live_id: int
     latest_live_date: date
@@ -102,6 +103,11 @@ class StatisticsStaleSongItem(BaseModel):
     reference_live_date: date
     stale_days: int
     missed_live_count: int
+
+
+class StatisticsStaleSongsByKind(BaseModel):
+    original: list[StatisticsStaleSongItem]
+    cover: list[StatisticsStaleSongItem]
 
 
 class CatalogStatisticsResponse(BaseModel):
@@ -112,3 +118,4 @@ class CatalogStatisticsResponse(BaseModel):
     live_types: list[StatisticsDimensionItem]
     top_songs: list[StatisticsSongItem]
     stale_songs: list[StatisticsStaleSongItem]
+    stale_songs_by_kind: StatisticsStaleSongsByKind
