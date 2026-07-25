@@ -24,6 +24,7 @@
 - [Live 更新实现设计](design/live-update.md)：控制台候选、完整更新接口、共用表单与审计规则。
 - [Live 状态与日期阶段实现设计](design/live-status.md)：人工状态、按 Live 时区计算的日期阶段、正式改期历史与资料修正边界。
 - [公共端 UI 精修](design/public-ui-refresh.md)
+- [公共端视觉走查报告（2026-07）](design/public-ui-visual-audit-2026-07.md)：基于真实浏览器渲染的走查证据、新发现问题清单与修改范围。
 - [E2E 测试设计](design/e2e.md)
 - [首页阶段 1 开发设计](design/homepage-community-database-phase1.md)：历史阶段设计，当前状态以产品需求文档为准。
 

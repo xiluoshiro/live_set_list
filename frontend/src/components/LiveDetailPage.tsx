@@ -58,7 +58,7 @@ export function LiveDetailPage({ liveId, fallback, onBack, onOpenTour, onOpenPer
         fallback={fallback}
         onOpenTour={onOpenTour}
         onOpenPerformanceGroup={onOpenPerformanceGroup}
-        headerAction={<button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回"><span className="modal-action-glyph close">✕</span></button>}
+        headerAction={<button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回"><span className="modal-action-glyph" aria-hidden="true">←</span></button>}
       />
     </div>
   );

@@ -9,6 +9,7 @@ import {
   type TourStatisticsResponse,
 } from "../api";
 import { logError } from "../logger";
+import { ContentState } from "./ContentState";
 import { DetailTitleLink } from "./DetailTitleLink";
 import { LiveDetailContent } from "./LiveDetailContent";
 import { SectionTabs } from "./SectionTabs";
@@ -124,10 +125,10 @@ export function TourDetailPage({
     <div className="tour-detail-page">
       <div className="detail-page-head tour-detail-head">
         <h2>{detail?.url ? <DetailTitleLink href={detail.url}>{detail.tour_title}</DetailTitleLink> : detail?.tour_title ?? fallback.tourTitle}</h2>
-        <button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回"><span className="modal-action-glyph close">✕</span></button>
+        <button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回"><span className="modal-action-glyph" aria-hidden="true">←</span></button>
       </div>
-      {loading && <p className="tour-detail-state">加载巡演详情...</p>}
-      {error && <p className="tour-detail-state tour-list-error">巡演详情加载失败：{error}</p>}
+      {loading && <ContentState kind="loading" title="加载巡演详情..." layout="detail" />}
+      {error && <ContentState kind="error" title="巡演详情加载失败" description={error} layout="detail" />}
       {detail && (
         <>
           <div className="detail-meta-line">

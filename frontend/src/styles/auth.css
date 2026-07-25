@@ -21,7 +21,7 @@
 
 .auth-role-chip {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-chip-soft);
   color: var(--text-tab);
   border: 1px solid var(--border-normal);
@@ -30,7 +30,7 @@
 
 .primary-btn,
 .secondary-btn {
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 8px 14px;
   font-size: 14px;
   cursor: pointer;
@@ -43,7 +43,7 @@
 }
 
 .primary-btn:hover {
-  background: #d41558;
+  background: var(--accent-primary-hover);
 }
 
 .secondary-btn {
@@ -62,7 +62,7 @@
   color: var(--text-tab);
   width: 40px;
   height: 40px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -77,7 +77,7 @@
 .user-avatar-img {
   width: 32px;
   height: 32px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   display: block;
 }
 
@@ -87,11 +87,11 @@
   right: 0;
   width: 220px;
   border: 1px solid var(--border-normal);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--surface-1);
   box-shadow: var(--shadow-panel);
   padding: 10px;
-  z-index: 30;
+  z-index: var(--z-dropdown);
 }
 
 .user-menu-row {
@@ -152,17 +152,6 @@
   font-size: 13px;
 }
 
-.modal.login-modal {
-  width: min(392px, calc(100vw - 20px));
-  height: auto;
-  max-height: calc(100vh - 20px);
-  padding: 0;
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid var(--border-normal);
-  display: block;
-}
-
 .modal.login-modal .modal-head {
   justify-content: center;
   padding: 10px 12px;
@@ -218,7 +207,7 @@
 
 .login-field input {
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 8px 10px;
   background: var(--surface-input);
   color: var(--text-main);
@@ -245,7 +234,7 @@
   width: 24px;
   height: 24px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   padding: 0;
@@ -271,7 +260,7 @@
 .login-field input:focus-visible {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(91, 124, 250, 0.2);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
 .login-error {
@@ -289,7 +278,7 @@
 
 .login-actions .primary-btn,
 .login-actions .secondary-btn {
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 5px 10px;
   font-size: 13px;
 }

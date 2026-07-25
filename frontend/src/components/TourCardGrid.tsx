@@ -2,6 +2,7 @@ import type { MutableRefObject } from "react";
 
 import type { TourSummary } from "../api";
 import { BandIconsCell } from "./BandIconsCell";
+import { ContentState } from "./ContentState";
 
 type TourCardGridProps = {
   tours: TourSummary[];
@@ -34,18 +35,34 @@ export function TourCardGrid({
         <div className="toolbar"><span>总计 {total} 个巡演</span></div>
       </footer>
       {error && tours.length === 0 ? (
-        <p className="live-card-state live-card-state-error">巡演资料加载失败：{error}</p>
+        <ContentState kind="error" title="巡演资料加载失败" description={error} layout="cards" />
       ) : tours.length === 0 ? (
-        <p className="live-card-state">{loading ? "加载中..." : total === 0 ? "当前还没有已整理的巡演资料" : "没有符合当前条件的巡演"}</p>
+        loading ? (
+          <ContentState kind="loading" title="加载中..." description="正在整理巡演资料。" layout="cards" />
+        ) : (
+          <ContentState
+            kind="empty"
+            title={total === 0 ? "当前还没有已整理的巡演资料" : "没有符合当前条件的巡演"}
+            description="可以调整筛选条件后再试。"
+            layout="cards"
+          />
+        )
       ) : (
         <div className="live-card-grid">
           {tours.map((tour) => (
-            <article className="live-card" key={tour.tour_id} onClick={() => onOpenTour(tour)}>
-              <div className="live-card-head">
-                <span className="live-card-date">{formatDateRange(tour)}</span>
-                <span className="live-card-type">已收录 {tour.collected_live_count} 场</span>
-              </div>
-              <span className="live-card-title">{tour.tour_title}</span>
+            <article className="live-card" key={tour.tour_id}>
+              <button
+                type="button"
+                className="live-card-main"
+                aria-label={`查看巡演《${tour.tour_title}》详情`}
+                onClick={() => onOpenTour(tour)}
+              >
+                <span className="live-card-head">
+                  <span className="live-card-date">{formatDateRange(tour)}</span>
+                  <span className="live-card-count">已收录 {tour.collected_live_count} 场</span>
+                </span>
+                <span className="live-card-title">{tour.tour_title}</span>
+              </button>
               <div className="live-card-footer">
                 <BandIconsCell icons={tour.bands.map((band) => band.band_id)} rowId={tour.tour_id} />
                 {tour.url ? (
@@ -54,7 +71,7 @@ export function TourCardGrid({
                     target="_blank"
                     rel="noreferrer"
                     className="live-card-url"
-                    onClick={(event) => event.stopPropagation()}
+                    aria-label={`打开《${tour.tour_title}》的资料来源`}
                   >
                     🔗
                   </a>

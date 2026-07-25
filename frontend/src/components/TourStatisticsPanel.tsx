@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { getTourStatisticsComparison, type TourStatisticsResponse, type TourStatisticsSongStatus, type TourStatisticsTransition, type TourStopItem } from "../api";
+import { ContentState } from "./ContentState";
 import { getTourStopShortTitle } from "./tourHelpers";
 
 type TourStatisticsPanelProps = {
@@ -220,8 +221,12 @@ export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenSto
     setCustomError(null);
   }, [comparableStopKey, comparableStops]);
 
-  if (loading) return <p className="statistics-state">统计中...</p>;
-  if (error) return <p className="statistics-state error">巡演统计加载失败：{error}</p>;
+  if (loading) {
+    return <ContentState kind="loading" title="统计中..." description="正在汇总巡演场次。" layout="statistics" />;
+  }
+  if (error) {
+    return <ContentState kind="error" title="巡演统计加载失败" description={error} layout="statistics" />;
+  }
   if (!data) return null;
 
   return (
@@ -235,7 +240,9 @@ export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenSto
 
       <section className="statistics-card">
         <h2>歌曲覆盖</h2>
-        {data.songs.length === 0 ? <p className="statistics-state">当前巡演还没有 Setlist 数据。</p> : (
+        {data.songs.length === 0 ? (
+          <ContentState kind="empty" title="当前巡演还没有 Setlist 数据" compact />
+        ) : (
           <div className="console-table-wrap">
             <table className="console-table tour-statistics-table">
               <thead><tr><th>歌曲</th><th>场次</th><th>状态</th></tr></thead>
@@ -262,7 +269,7 @@ export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenSto
         )}
         {customError && <p className="statistics-state error">任意场次比较加载失败：{customError}</p>}
         {data.coverage.comparable_transition_count === 0 ? (
-          <p className="statistics-state">没有可比较的相邻 Setlist 场次。</p>
+          <ContentState kind="empty" title="没有可比较的相邻 Setlist 场次" compact />
         ) : (
           <TourTransitionExplorer
             key={`${data.tour_id}:${data.transitions.length}`}

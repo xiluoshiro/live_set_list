@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { CatalogStatsResponse } from "../api";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
+import { ContentState } from "./ContentState";
 import { PageTitle } from "./PageTitle";
 
 export type HomeLiveRow = {
@@ -57,8 +58,8 @@ export function HomeDashboard({
         <div className="home-intro-copy">
           <PageTitle
             kicker="Community live database"
-            title="BanG Dream! Live 资料库"
-            description="浏览和整理 Live、setlist、出演成员与来源链接。"
+            title="查找 Live、曲目与出演记录"
+            description="可搜索 Live、乐队、歌曲和场地。"
             id="home-title"
           />
         </div>
@@ -98,16 +99,22 @@ export function HomeDashboard({
           <span className="home-metric-label">已收录 Live</span>
         </div>
         <div className="home-metric">
-          <span className="home-metric-value">
-            {stats ? `${stats.song_count} / ${stats.venue_count}` : "..."}
-          </span>
-          <span className="home-metric-label">歌曲 / 场地统计</span>
+          <span className="home-metric-value">{stats?.band_count ?? "..."}</span>
+          <span className="home-metric-label">乐队</span>
         </div>
         <div className="home-metric">
-          <span className="home-metric-value">{stats?.latest_live_date ?? "..."}</span>
-          <span className="home-metric-label">最近更新</span>
+          <span className="home-metric-value">{stats?.song_count ?? "..."}</span>
+          <span className="home-metric-label">歌曲</span>
+        </div>
+        <div className="home-metric">
+          <span className="home-metric-value">{stats?.venue_count ?? "..."}</span>
+          <span className="home-metric-label">场地</span>
         </div>
       </section>
+      <p className="home-latest-live">
+        <span className="home-latest-live-label">最新 Live 日期</span>
+        <span className="home-latest-live-value">{stats?.latest_live_date ?? "..."}</span>
+      </p>
 
       <div className="home-grid">
         <section className="home-section home-recent" aria-labelledby="home-recent-title">
@@ -123,11 +130,29 @@ export function HomeDashboard({
           </div>
 
           {error ? (
-            <p className="home-state home-state-error">最近 Live 加载失败: {error}</p>
+            <ContentState
+              kind="error"
+              title="最近 Live 加载失败"
+              description={error}
+              layout="rows"
+              compact
+            />
           ) : loading ? (
-            <p className="home-state">最近 Live 加载中...</p>
+            <ContentState
+              kind="loading"
+              title="最近 Live 加载中..."
+              description="正在读取最新收录。"
+              layout="rows"
+              compact
+            />
           ) : recentRows.length === 0 ? (
-            <p className="home-state">当前没有可展示的 Live。</p>
+            <ContentState
+              kind="empty"
+              title="当前没有可展示的 Live。"
+              description="完成资料收录后会显示在这里。"
+              layout="rows"
+              compact
+            />
           ) : (
             <ol className="home-recent-list">
               {recentRows.slice(0, 6).map((row) => (

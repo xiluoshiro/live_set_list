@@ -1,5 +1,7 @@
 import { type MutableRefObject } from "react";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
+import { ContentState } from "./ContentState";
+import { LiveTypeBadge } from "./LiveTypeBadge";
 import { formatLiveType } from "./console/constants";
 
 export type LiveRow = {
@@ -61,11 +63,22 @@ export function LiveCardGrid({
   total,
 }: LiveCardGridProps) {
   if (loadError && rows.length === 0) {
-    return <p className="live-card-state live-card-state-error">数据加载失败: {loadError}</p>;
+    return (
+      <ContentState
+        kind="error"
+        title="数据加载失败"
+        description={loadError}
+        layout="cards"
+      />
+    );
   }
 
   if (rows.length === 0) {
-    return <p className="live-card-state">{loading ? "加载中..." : "当前没有可展示的数据"}</p>;
+    return loading ? (
+      <ContentState kind="loading" title="加载中..." description="正在整理演出资料。" layout="cards" />
+    ) : (
+      <ContentState kind="empty" title="当前没有可展示的数据" description="可以调整筛选条件后再试。" layout="cards" />
+    );
   }
 
   return (
@@ -76,15 +89,21 @@ export function LiveCardGrid({
             <article
               key={`group-${row.groupId}`}
               className="live-card"
-              onClick={() => row.groupId !== null && row.groupTitle !== null && onOpenGroup?.(row.groupId, row.groupTitle)}
             >
-              <div className="live-card-head">
-                <span className="live-card-date">
-                  {formatPerformanceDate(row.groupStartDate, row.groupEndDate, row.liveDate)}
+              <button
+                type="button"
+                className="live-card-main"
+                aria-label={`查看活动组《${row.liveTitle}》详情`}
+                onClick={() => row.groupId !== null && row.groupTitle !== null && onOpenGroup?.(row.groupId, row.groupTitle)}
+              >
+                <span className="live-card-head">
+                  <span className="live-card-date">
+                    {formatPerformanceDate(row.groupStartDate, row.groupEndDate, row.liveDate)}
+                  </span>
+                  <LiveTypeBadge value="performance_group" label={row.liveType} />
                 </span>
-                <span className="live-card-type">{row.liveType}</span>
-              </div>
-              <span className="live-card-title">{row.liveTitle}</span>
+                <span className="live-card-title">{row.liveTitle}</span>
+              </button>
               <div className="live-card-footer">
                 <BandIconsCell icons={row.groupIcons} rowId={row.groupId ?? 0} />
                 <span className="live-card-count">
@@ -100,37 +119,46 @@ export function LiveCardGrid({
             <article
               key={row.liveId}
               className="live-card"
-              onClick={() => onOpenLive(row)}
             >
-              <div className="live-card-head">
-                {showStar && (
-                  <button
-                    className={`star-btn ${isFavorite(row.liveId) ? "is-fav" : ""} ${isSyncing(row.liveId) ? "is-syncing" : ""}`}
-                    onClick={(e) => { e.stopPropagation(); onToggleStar(row.liveId); }}
-                    title={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
-                    aria-label={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
-                    aria-busy={isSyncing(row.liveId)}
-                  >
-                    ★
-                  </button>
-                )}
-                <span className="live-card-date">{row.liveDate}</span>
-                <span className="live-card-type">{formatLiveType(row.liveType)}</span>
-              </div>
-              <span className="live-card-title">{row.liveTitle}</span>
+              <button
+                type="button"
+                className="live-card-main"
+                aria-label={`查看《${row.liveTitle}》详情`}
+                onClick={() => onOpenLive(row)}
+              >
+                <span className="live-card-head">
+                  <span className="live-card-date">{row.liveDate}</span>
+                  <LiveTypeBadge value={row.liveType} label={formatLiveType(row.liveType)} />
+                </span>
+                <span className="live-card-title">{row.liveTitle}</span>
+              </button>
               <div className="live-card-footer">
                 <BandIconsCell icons={row.icons} rowId={row.liveId} />
-                {row.url ? (
-                  <a
-                    href={row.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="live-card-url"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    🔗
-                  </a>
-                ) : null}
+                <span className="live-card-actions">
+                  {showStar && (
+                    <button
+                      type="button"
+                      className={`star-btn ${isFavorite(row.liveId) ? "is-fav" : ""} ${isSyncing(row.liveId) ? "is-syncing" : ""}`}
+                      onClick={() => onToggleStar(row.liveId)}
+                      title={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
+                      aria-label={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
+                      aria-busy={isSyncing(row.liveId)}
+                    >
+                      ★
+                    </button>
+                  )}
+                  {row.url ? (
+                    <a
+                      href={row.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="live-card-url"
+                      aria-label={`打开《${row.liveTitle}》的资料来源`}
+                    >
+                      🔗
+                    </a>
+                  ) : null}
+                </span>
               </div>
             </article>
           )

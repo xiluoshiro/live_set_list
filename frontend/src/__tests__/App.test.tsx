@@ -538,7 +538,7 @@ describe("App", () => {
     );
     renderApp();
     expect(screen.getByRole("button", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "查找 Live、曲目与出演记录" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "我的收藏" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("47")).toBeInTheDocument());
@@ -555,7 +555,7 @@ describe("App", () => {
     const mainNavigation = screen.getByRole("navigation", { name: "主导航" });
 
     expect(screen.getByText("Community live database")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "查找 Live、曲目与出演记录" })).toBeInTheDocument();
 
     await user.click(within(mainNavigation).getByRole("button", { name: "演出资料" }));
     expect(screen.getByText("Live archive")).toBeInTheDocument();
@@ -571,17 +571,21 @@ describe("App", () => {
   });
 
   test("首页数据概览展示真实指标数据", async () => {
-    // 测试点：首页指标卡片应在加载完成后展示歌曲/场地统计和最近更新日期。
+    // 测试点：首页指标卡片应展示 Live/乐队/歌曲/场地四项及最新 Live 日期。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     renderApp();
-    await waitFor(() => expect(screen.getByText("47")).toBeInTheDocument());
-    expect(screen.getByText("已收录 Live")).toBeInTheDocument();
-    expect(screen.getByText("17 / 3")).toBeInTheDocument();
-    expect(screen.getByText("歌曲 / 场地统计")).toBeInTheDocument();
+    const metrics = screen.getByRole("region", { name: "数据概览" });
+    await waitFor(() => expect(within(metrics).getByText("47")).toBeInTheDocument());
+    expect(within(metrics).getByText("已收录 Live")).toBeInTheDocument();
+    expect(within(metrics).getByText("乐队")).toBeInTheDocument();
+    expect(within(metrics).getByText("歌曲")).toBeInTheDocument();
+    expect(within(metrics).getByText("场地")).toBeInTheDocument();
+    expect(within(metrics).getByText("17")).toBeInTheDocument();
+    expect(within(metrics).getAllByText("3")).toHaveLength(2);
     expect(screen.getByText("2026-05-30")).toBeInTheDocument();
-    expect(screen.getByText("最近更新")).toBeInTheDocument();
+    expect(screen.getByText("最新 Live 日期")).toBeInTheDocument();
     expect(getCatalogStatsMock).toHaveBeenCalled();
   });
 
@@ -1065,7 +1069,7 @@ describe("App", () => {
     expect(within(tableRow).getByText("2026-08-01")).toBeInTheDocument();
     expect(within(tableRow).queryByText("2026-08-01 ~ 2026-08-01")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "切换为卡片模式" }));
+    await user.click(screen.getByRole("button", { name: "卡片" }));
     const card = screen.getByText("示例单日多场").closest("article") as HTMLElement;
     expect(within(card).getByText("2026-08-01")).toBeInTheDocument();
     expect(within(card).queryByText("2026-08-01 ~ 2026-08-01")).not.toBeInTheDocument();
@@ -1257,7 +1261,7 @@ describe("App", () => {
     const titleLink = screen.getByRole("link", { name: "Ave Mujica LIVE TOUR 2026 Exitus" });
     expect(titleLink.querySelector(".detail-title-link-icon svg")).not.toBeNull();
     expect(screen.queryByText("↗")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "🔗" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /打开《.*》的资料来源/ })).not.toBeInTheDocument();
   });
 
   test("匿名用户点击仅收藏会打开登录弹窗", async () => {
@@ -1649,8 +1653,9 @@ describe("App", () => {
     const backBtn = screen.getByRole("button", { name: "返回" });
     expect(backBtn).toHaveClass("detail-back-btn");
 
-    const backGlyph = within(backBtn).getByText("✕");
-    expect(backGlyph).toHaveClass("modal-action-glyph", "close");
+    const backGlyph = within(backBtn).getByText("←");
+    expect(backGlyph).toHaveClass("modal-action-glyph");
+    expect(backGlyph).not.toHaveClass("close");
   });
 
   test("详情弹窗在 url 为空时标题不渲染超链接", async () => {
@@ -1680,7 +1685,7 @@ describe("App", () => {
     renderApp();
     await openAllContent(user);
     await waitFor(() => {
-      const firstLink = screen.getAllByRole("link", { name: "🔗" })[0];
+      const firstLink = screen.getAllByRole("link", { name: /打开《.*》的资料来源/ })[0];
       expect(firstLink.getAttribute("href")).toMatch(/^https:\/\/example\.com\/live\/\d+$/);
     });
   });
@@ -1964,7 +1969,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(screen.getAllByText("-").length).toBeGreaterThan(0);
-      expect(screen.queryByRole("link", { name: "🔗" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /打开《.*》的资料来源/ })).not.toBeInTheDocument();
     });
   });
 
@@ -1987,8 +1992,8 @@ describe("App", () => {
     });
   });
 
+  // 测试点：接口异常时页面不崩溃，结构化错误状态与分页区域同时保留。
   test("请求失败时显示错误提示且分页区域可见", async () => {
-    // 测试点：接口异常时页面不崩溃，显示错误文案并保留分页区域。
     getLivesMock
       .mockResolvedValueOnce(makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }));
     getPerformancesMock
@@ -1998,7 +2003,9 @@ describe("App", () => {
     await openAllContent(user);
 
     await waitFor(() => {
-      expect(screen.getByText("数据加载失败: Request failed: 500")).toBeInTheDocument();
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent("数据加载失败");
+      expect(alert).toHaveTextContent("Request failed: 500");
       expect(screen.getByText(/第 \d+ \/ \d+ 页/)).toBeInTheDocument();
     });
   });
@@ -2124,8 +2131,8 @@ describe("App", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 
-  test("卡片模式下渲染 live-card-grid 而非表格", async () => {
-    // 测试点：切换到卡片模式后应展示卡片 grid，不渲染表格元素。
+  // 测试点：卡片模式使用独立详情按钮，并让详情、收藏和资料来源保持为分离操作。
+  test("卡片模式下渲染可访问的独立操作入口", async () => {
     localStorage.setItem("live-view-mode", "cards");
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
@@ -2139,11 +2146,12 @@ describe("App", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument();
     expect(screen.getByText("2026-03-02")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "🔗" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "查看《示例 Live 名称 1》详情" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /打开《.*》的资料来源/ }).length).toBeGreaterThan(0);
   });
 
+  // 测试点：分段控件明确展示两种视图，当前项状态和本地偏好随切换同步。
   test("视图切换按钮可在卡片与表格模式间切换", async () => {
-    // 测试点：点击单按钮可在卡片/表格间切换，localStorage 跟随更新。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -2152,16 +2160,18 @@ describe("App", () => {
     await openAllContent(user);
 
     expect(document.querySelector(".table-wrap")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "切换为卡片模式" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "视图模式" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "表格" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "卡片" })).toHaveAttribute("aria-pressed", "false");
 
-    await user.click(screen.getByRole("button", { name: "切换为卡片模式" }));
+    await user.click(screen.getByRole("button", { name: "卡片" }));
     expect(document.querySelector(".live-card-grid")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "切换为表格模式" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "卡片" })).toHaveAttribute("aria-pressed", "true");
     expect(localStorage.getItem("live-view-mode")).toBe("cards");
 
-    await user.click(screen.getByRole("button", { name: "切换为表格模式" }));
+    await user.click(screen.getByRole("button", { name: "表格" }));
     await waitFor(() => expect(document.querySelector(".table-wrap")).not.toBeNull());
-    expect(screen.getByRole("button", { name: "切换为卡片模式" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "表格" })).toHaveAttribute("aria-pressed", "true");
     expect(localStorage.getItem("live-view-mode")).toBe("table");
   });
 
@@ -2197,4 +2207,3 @@ describe("App", () => {
   });
 
 });
-

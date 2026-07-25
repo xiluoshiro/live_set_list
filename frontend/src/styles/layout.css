@@ -13,7 +13,7 @@
 .site-topbar {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: var(--z-sticky);
   display: flex;
   align-items: center;
   gap: 16px;
@@ -60,7 +60,7 @@
 
 .toolbar select {
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 4px 8px;
   background: var(--surface-input);
   color: var(--text-main);
@@ -94,7 +94,7 @@
   width: 34px;
   height: 34px;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   font-size: 16px;
@@ -156,7 +156,7 @@
   position: fixed;
   right: 24px;
   bottom: 24px;
-  z-index: 15;
+  z-index: var(--z-dropdown);
   display: inline-flex;
   width: 44px;
   height: 44px;
@@ -190,7 +190,7 @@
 .nav-drawer-mask {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-drawer);
   display: flex;
   justify-content: flex-end;
   background: var(--overlay-soft-mask);
@@ -217,6 +217,7 @@
   width: 32px;
   height: 32px;
   border: none;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   font-size: 22px;
@@ -237,6 +238,7 @@
 .nav-drawer-item {
   border: none;
   border-left: 3px solid transparent;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   padding: 10px 12px;
@@ -260,7 +262,7 @@
 .batch-favorite-btn {
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -311,7 +313,7 @@
 .pager-jump input {
   width: 40px;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 4px 8px;
   background: var(--surface-input);
   color: var(--text-main);
@@ -320,11 +322,17 @@
 .pager button {
   border: none;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--accent-primary);
   color: var(--text-on-primary);
   cursor: pointer;
   font-size: 14px;
+}
+
+.pager button:disabled {
+  background: var(--surface-chip-soft);
+  color: var(--text-muted);
+  opacity: 1;
 }
 
 .section-tabs {
@@ -337,7 +345,7 @@
   border: 1px solid var(--border-normal);
   background: var(--surface-chip-soft);
   color: var(--text-tab);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   padding: 6px 14px;
   cursor: pointer;
 }
@@ -348,7 +356,7 @@
   border-color: var(--accent-primary);
 }
 
-@media (max-width: 800px) {
+@media (max-width: 720px) {
   .site-topbar {
     gap: 10px;
     min-height: 52px;
@@ -364,7 +372,7 @@
   }
 
   .tabs {
-    gap: 4px;
+    display: none;
   }
 
   .tab-btn {

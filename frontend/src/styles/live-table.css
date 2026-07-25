@@ -2,7 +2,7 @@
   margin: 0 24px 0;
   overflow-x: auto;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: var(--surface-1);
 }
 
@@ -45,8 +45,8 @@ tbody tr:hover {
 
 .table-with-fav th:nth-child(2),
 .table-with-fav td:nth-child(2) {
-  width: 110px;
-  white-space: nowrap;
+  width: 140px;
+  white-space: normal;
 }
 
 .table-with-fav th:nth-child(3),
@@ -76,8 +76,8 @@ tbody tr:hover {
 
 .table-no-fav th:nth-child(1),
 .table-no-fav td:nth-child(1) {
-  width: 110px;
-  white-space: nowrap;
+  width: 140px;
+  white-space: normal;
 }
 
 .table-no-fav th:nth-child(2),
@@ -197,7 +197,7 @@ tbody tr:hover {
 
 .icons-cell::-webkit-scrollbar-thumb {
   background: transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .icons-cell-wrap.has-overflow .icons-cell:hover::-webkit-scrollbar-thumb {
@@ -257,33 +257,31 @@ tbody tr:hover {
 
 .view-toggle {
   display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.view-toggle-btn {
+  padding: 3px;
   border: 1px solid var(--border-normal);
+  border-radius: var(--radius-control);
   background: var(--surface-chip-soft);
-  color: var(--text-muted);
-  border-radius: 4px;
-  width: 30px;
-  height: 28px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
+}
+
+.view-toggle button {
+  min-width: 64px;
+  border: 0;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 7px 12px;
   cursor: pointer;
-  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+  font: inherit;
+  transition: background-color 0.16s, color 0.16s;
 }
 
-.view-toggle-btn[data-active="true"] {
-  background: var(--surface-chip-hover);
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
+.view-toggle button.active {
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
 }
 
-.view-toggle-btn:hover {
+.view-toggle button:not(.active):hover {
   color: var(--accent-primary);
 }
 
@@ -296,18 +294,30 @@ tbody tr:hover {
 
 .live-card {
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: var(--surface-1);
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  cursor: pointer;
-  transition: border-color 0.12s;
+  transition: border-color 0.16s, background-color 0.16s;
 }
 
 .live-card:hover {
   border-color: var(--accent-primary);
+}
+
+.live-card-main {
+  display: grid;
+  width: 100%;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .live-card-head {
@@ -316,39 +326,68 @@ tbody tr:hover {
   gap: 8px;
 }
 
-.live-card-head .star-btn {
-  flex-shrink: 0;
-  margin-top: -1px;
-}
-
 .live-card-date {
   color: var(--text-secondary);
   font-size: 16px;
 }
 
-.live-card-type {
+.live-type-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--live-type-other-bg);
+  color: var(--live-type-other-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.live-card-head .live-type-badge,
+.live-card-head .live-card-count {
   margin-left: auto;
+}
+
+.live-card-count {
   color: var(--text-muted);
   font-size: 13px;
 }
 
+.live-type-badge[data-tone="oneman"] {
+  background: var(--live-type-oneman-bg);
+  color: var(--live-type-oneman-text);
+}
+
+.live-type-badge[data-tone="multi"] {
+  background: var(--live-type-multi-bg);
+  color: var(--live-type-multi-text);
+}
+
+.live-type-badge[data-tone="festival"] {
+  background: var(--live-type-festival-bg);
+  color: var(--live-type-festival-text);
+}
+
+.live-type-badge[data-tone="event"] {
+  background: var(--live-type-event-bg);
+  color: var(--live-type-event-text);
+}
+
+.live-type-badge[data-tone="group"] {
+  background: var(--live-type-group-bg);
+  color: var(--live-type-group-text);
+}
+
 .live-card-title {
-  border: none;
-  background: none;
   color: var(--text-link);
-  padding: 0;
-  cursor: pointer;
-  font: inherit;
   font-size: 18px;
   font-weight: 600;
-  text-align: left;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.live-card-title:hover {
+.live-card-main:hover .live-card-title {
   text-decoration: underline;
 }
 
@@ -377,15 +416,10 @@ tbody tr:hover {
   text-decoration: none;
 }
 
-.live-card-state {
-  margin: 24px 24px 0;
-  padding: 28px 16px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.live-card-state-error {
-  color: var(--accent-danger);
+.live-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 @media (max-width: 620px) {
@@ -419,7 +453,7 @@ tbody tr:hover {
   margin: 18px 24px 0;
   padding: 16px;
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   background: var(--surface-1);
 }
 
@@ -435,14 +469,14 @@ tbody tr:hover {
   justify-self: start;
   padding: 3px;
   border: 1px solid var(--border-normal);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--surface-chip-soft);
 }
 
 .list-scope-toggle button {
   min-width: 72px;
   border: 0;
-  border-radius: 6px;
+  border-radius: calc(var(--radius-control) - 2px);
   background: transparent;
   color: var(--text-secondary);
   padding: 7px 14px;
@@ -473,7 +507,7 @@ tbody tr:hover {
   min-width: 0;
   height: 38px;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 6px 10px;
   background: var(--surface-input);
   color: var(--text-main);
@@ -490,12 +524,26 @@ tbody tr:hover {
 .list-filter-mobile-toggle,
 .list-active-filters button {
   border: 1px solid var(--border-normal);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--surface-chip-soft);
   color: var(--text-main);
   padding: 7px 12px;
   cursor: pointer;
   font: inherit;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .live-card-grid,
+  .table-wrap {
+    animation: public-view-fade 0.18s ease-out;
+  }
+
+  @keyframes public-view-fade {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+  }
 }
 
 .list-filter-query-row button,

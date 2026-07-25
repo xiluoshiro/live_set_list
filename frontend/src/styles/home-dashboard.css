@@ -12,7 +12,7 @@
   align-items: end;
   padding: 20px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: var(--surface-2);
 }
 
@@ -42,7 +42,7 @@
   flex: 1;
   min-width: 0;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 10px 12px;
   background: var(--surface-input);
   color: var(--text-main);
@@ -50,13 +50,18 @@
 }
 
 .home-search-row button {
-  border: 1px solid var(--border-normal);
-  border-radius: 8px;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-control);
   padding: 9px 14px;
-  background: var(--surface-chip);
-  color: var(--text-tab);
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
   font: inherit;
   cursor: pointer;
+}
+
+.home-search-row button:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
 }
 
 .action-link {
@@ -103,14 +108,14 @@
 
 .home-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
 .home-metric {
   padding: 16px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: var(--surface-1);
 }
 
@@ -136,6 +141,28 @@
   color: var(--text-muted);
 }
 
+.home-latest-live {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.home-latest-live-label {
+  font-weight: 600;
+}
+
+.home-latest-live-label::after {
+  content: "：";
+}
+
+.home-latest-live-value {
+  color: var(--text-heading);
+  font-weight: 700;
+}
+
 .home-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
@@ -144,7 +171,7 @@
 
 .home-section {
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: var(--surface-1);
   padding: 16px;
 }
@@ -258,7 +285,7 @@
   gap: 12px;
   padding: 16px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: var(--surface-1);
 }
 
@@ -293,7 +320,7 @@
   }
 
   .home-metrics {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

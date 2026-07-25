@@ -13,6 +13,7 @@ import {
   getBandRepresentativeColor,
   type BandIconInput,
 } from "./BandIconsCell";
+import { ContentState } from "./ContentState";
 
 export type CatalogLiveRow = {
   liveId: number;
@@ -94,7 +95,9 @@ function LiveResultList({
   rows: CatalogLiveRow[];
   onOpenLive: (row: CatalogLiveRow) => void;
 }) {
-  if (rows.length === 0) return <p className="catalog-empty">没有匹配的 Live。</p>;
+  if (rows.length === 0) {
+    return <ContentState kind="empty" title="没有匹配的 Live。" layout="rows" compact />;
+  }
   return (
     <ol className="catalog-live-list">
       {rows.map((row) => (
@@ -139,11 +142,16 @@ export function SearchResultsPanel({
       </div>
       <SearchForm query={query} onSearch={onSearch} />
       {error ? (
-        <p className="catalog-state catalog-error">搜索失败: {error}</p>
+        <ContentState kind="error" title="搜索失败" description={error} layout="cards" />
       ) : loading ? (
-        <p className="catalog-state">搜索中...</p>
+        <ContentState kind="loading" title="搜索中..." description="正在查询 Live、乐队、歌曲和场地。" layout="cards" />
       ) : result && !hasAnyResult ? (
-        <p className="catalog-state">没有找到与“{result.query}”匹配的资料。</p>
+        <ContentState
+          kind="empty"
+          title={`没有找到与“${result.query}”匹配的资料。`}
+          description="可以缩短关键词或换一种写法后再试。"
+          layout="cards"
+        />
       ) : (
         <div className="catalog-grid">
           <section className="catalog-section" aria-labelledby="catalog-live-results">
@@ -163,7 +171,7 @@ export function SearchResultsPanel({
                 ))}
               </div>
             ) : (
-              <p className="catalog-empty">没有匹配的乐队。</p>
+              <ContentState kind="empty" title="没有匹配的乐队。" layout="rows" compact />
             )}
           </section>
 
@@ -179,7 +187,7 @@ export function SearchResultsPanel({
                 ))}
               </ul>
             ) : (
-              <p className="catalog-empty">没有匹配的歌曲。</p>
+              <ContentState kind="empty" title="没有匹配的歌曲。" layout="rows" compact />
             )}
           </section>
 
@@ -195,7 +203,7 @@ export function SearchResultsPanel({
                 ))}
               </ul>
             ) : (
-              <p className="catalog-empty">没有匹配的场地。</p>
+              <ContentState kind="empty" title="没有匹配的场地。" layout="rows" compact />
             )}
           </section>
         </div>
@@ -226,13 +234,13 @@ export function BandBrowsePanel({
         <PageTitle kicker="Browse" title="乐队浏览" description="选择乐队后查看已收录的相关 Live。" />
       </div>
 
-      {error && <p className="catalog-state catalog-error">浏览加载失败: {error}</p>}
+      {error && <ContentState kind="error" title="浏览加载失败" description={error} layout="rows" />}
       <div className="catalog-browse-layout">
         <aside className="catalog-band-list" aria-label="乐队列表">
           {loadingBands ? (
-            <p className="catalog-state">乐队加载中...</p>
+            <ContentState kind="loading" title="乐队加载中..." layout="rows" compact />
           ) : bands.length === 0 ? (
-            <p className="catalog-empty">当前没有可浏览的乐队。</p>
+            <ContentState kind="empty" title="当前没有可浏览的乐队。" layout="rows" compact />
           ) : (
             bands.map((band) => {
               const backgroundIconSrc = getBandIconSrc(band.band_id);
@@ -267,9 +275,15 @@ export function BandBrowsePanel({
           <h3 id="catalog-band-lives-title">{bandLives?.band.band_name ?? "选择一个乐队"}</h3>
           {bandLives && <p className="catalog-band-members">默认成员：{bandLives.band.band_members?.join(" / ") || "暂无资料"}</p>}
           {loadingLives ? (
-            <p className="catalog-state">Live 加载中...</p>
+            <ContentState kind="loading" title="Live 加载中..." layout="rows" compact />
           ) : !selectedBandId ? (
-            <p className="catalog-empty">从左侧选择乐队后查看相关 Live。</p>
+            <ContentState
+              kind="empty"
+              title="选择一个乐队查看相关 Live。"
+              description="乐队列表会保留当前选中状态。"
+              layout="rows"
+              compact
+            />
           ) : (
             <>
               <LiveResultList rows={liveRows} onOpenLive={onOpenLive} />
