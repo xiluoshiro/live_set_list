@@ -1,8 +1,7 @@
 .statistics-panel { padding: 24px; display: flex; flex-direction: column; gap: 18px; }
-.statistics-scope-row { display: flex; }
-.statistics-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-1); }
-.statistics-controls label { display: grid; gap: 5px; color: var(--text-secondary); font-size: 13px; font-weight: 700; }
-.statistics-controls select { min-width: 130px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-input); color: var(--text-main); }
+.statistics-panel .statistics-filter-panel { margin: 0; }
+.statistics-controls { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)) auto; align-items: end; gap: 12px; }
+.statistics-controls .secondary-btn { min-height: 38px; font: inherit; }
 .statistics-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .statistics-overview article { padding: 18px; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-1); }
 .statistics-overview strong { display: block; color: var(--text-heading); font-size: 28px; }
@@ -25,9 +24,14 @@
 .statistics-state.error { color: var(--accent-danger); }
 @media (max-width: 720px) {
   .statistics-panel { padding: 16px; }
+  .statistics-controls { grid-template-columns: 1fr 1fr; }
+  .statistics-controls .secondary-btn { align-self: end; }
   .statistics-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .statistics-grid { grid-template-columns: 1fr; }
-  .statistics-controls label, .statistics-controls select { flex: 1; min-width: 120px; }
   .statistics-song-list li { grid-template-columns: 24px minmax(0, 1fr) 56px; }
   .statistics-song-list button { grid-column: 2 / -1; text-align: left; }
+}
+
+@media (max-width: 420px) {
+  .statistics-controls { grid-template-columns: 1fr; }
 }

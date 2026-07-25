@@ -1,4 +1,5 @@
 import { type MutableRefObject } from "react";
+import { ExternalLinkIcon, FavoriteIcon } from "./ActionIcons";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
 import { ContentState } from "./ContentState";
 import { LiveTypeBadge } from "./LiveTypeBadge";
@@ -138,13 +139,13 @@ export function LiveCardGrid({
                   {showStar && (
                     <button
                       type="button"
-                      className={`star-btn ${isFavorite(row.liveId) ? "is-fav" : ""} ${isSyncing(row.liveId) ? "is-syncing" : ""}`}
+                      className={`star-btn live-card-action ${isFavorite(row.liveId) ? "is-fav" : ""} ${isSyncing(row.liveId) ? "is-syncing" : ""}`}
                       onClick={() => onToggleStar(row.liveId)}
                       title={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
                       aria-label={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
                       aria-busy={isSyncing(row.liveId)}
                     >
-                      ★
+                      <FavoriteIcon filled={isFavorite(row.liveId)} />
                     </button>
                   )}
                   {row.url ? (
@@ -152,10 +153,10 @@ export function LiveCardGrid({
                       href={row.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="live-card-url"
+                      className="live-card-url live-card-action"
                       aria-label={`打开《${row.liveTitle}》的资料来源`}
                     >
-                      🔗
+                      <ExternalLinkIcon />
                     </a>
                   ) : null}
                 </span>

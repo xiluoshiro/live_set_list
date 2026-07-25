@@ -32,24 +32,24 @@ export function StatisticsPanel(props: StatisticsPanelProps) {
   return (
     <section className="statistics-panel">
       <PageTitle kicker="Archive insights" title="数据统计" description="从资料库收录记录观察 Live 与歌曲演出轨迹。" />
-      <div className="statistics-scope-row">
+      <section className="list-filter-panel statistics-filter-panel" aria-label="统计筛选">
         <div className="list-scope-toggle" role="group" aria-label="统计范围">
           <button type="button" className={props.scope === "all" ? "active" : ""} aria-pressed={props.scope === "all"} onClick={() => props.onScopeChange("all")}>全部</button>
-          <button type="button" className={props.scope === "favorites" ? "active" : ""} aria-pressed={props.scope === "favorites"} onClick={() => props.onScopeChange("favorites")}>已收藏</button>
+          <button type="button" className={props.scope === "favorites" ? "active" : ""} aria-pressed={props.scope === "favorites"} onClick={() => props.onScopeChange("favorites")}>仅收藏</button>
         </div>
-      </div>
-      <div className="statistics-controls" aria-label="统计条件">
-        <label>年份<select value={filters.year ?? ""} onChange={(event) => props.onFiltersChange({ ...filters, year: event.target.value ? Number(event.target.value) : undefined })}>
-          <option value="">全部年份</option>{props.years.map((year) => <option key={year} value={year}>{year}</option>)}
-        </select></label>
-        <label>乐队<select value={filters.bandId ?? ""} onChange={(event) => props.onFiltersChange({ ...filters, bandId: event.target.value ? Number(event.target.value) : undefined })}>
-          <option value="">全部乐队</option>{props.bands.map((band) => <option key={band.band_id} value={band.band_id}>{band.band_name}</option>)}
-        </select></label>
-        <label>Live 类型<select value={filters.liveType ?? ""} onChange={(event) => props.onFiltersChange({ ...filters, liveType: event.target.value || undefined })}>
-          <option value="">全部类型</option>{LIVE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select></label>
-        <button className="secondary-btn" onClick={() => props.onFiltersChange({})}>重置</button>
-      </div>
+        <div className="statistics-controls" aria-label="统计条件">
+          <label className="list-filter-field">年份<select value={filters.year ?? ""} onChange={(event) => props.onFiltersChange({ ...filters, year: event.target.value ? Number(event.target.value) : undefined })}>
+            <option value="">全部年份</option>{props.years.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select></label>
+          <label className="list-filter-field">乐队<select value={filters.bandId ?? ""} onChange={(event) => props.onFiltersChange({ ...filters, bandId: event.target.value ? Number(event.target.value) : undefined })}>
+            <option value="">全部乐队</option>{props.bands.map((band) => <option key={band.band_id} value={band.band_id}>{band.band_name}</option>)}
+          </select></label>
+          <label className="list-filter-field">Live 类型<select value={filters.liveType ?? ""} onChange={(event) => props.onFiltersChange({ ...filters, liveType: event.target.value || undefined })}>
+            <option value="">全部类型</option>{LIVE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select></label>
+          <button type="button" className="secondary-btn" onClick={() => props.onFiltersChange({})}>重置</button>
+        </div>
+      </section>
 
       {props.scope === "favorites" && !props.isAuthenticated ? (
         <ContentState

@@ -34,6 +34,47 @@ def test_catalog_stats_response_structure(integration_test_client):
     assert isinstance(body["years"], list)
 
 
+# 测试点：乐队浏览右侧的无 Setlist 活动应返回全部 default_band_ids，供前端渲染 Band SVG。
+def test_catalog_band_lives_uses_default_bands_for_event_without_setlist(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO live_attrs (
+                id,
+                live_date,
+                live_title,
+                url,
+                opening_time,
+                start_time,
+                venue_id,
+                live_type,
+                default_band_ids
+            )
+            VALUES (
+                901,
+                DATE '2026-06-01',
+                'Default Band Event',
+                'https://example.com/lives/default-band-event',
+                TIME WITH TIME ZONE '17:00:00+09',
+                TIME WITH TIME ZONE '18:00:00+09',
+                1,
+                'event',
+                ARRAY[1, 3]
+            )
+            """
+        )
+
+    response = integration_test_client.get("/api/catalog/bands/1/lives")
+
+    assert response.status_code == 200
+    item = next(item for item in response.json()["items"] if item["live_id"] == 901)
+    assert item["bands"] == [1, 3]
+
+
 # 测试点：未选乐队时每队只返回内部第一名，并按 band_id 升序稳定展示。
 def test_catalog_statistics_returns_all_scope(integration_test_client):
     response = integration_test_client.get("/api/catalog/statistics")

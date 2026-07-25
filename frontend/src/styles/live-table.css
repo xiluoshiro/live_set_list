@@ -399,27 +399,87 @@ tbody tr:hover {
   margin-top: auto;
 }
 
-.live-card-url {
+.live-card-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
   text-decoration: none;
-  font-size: 16px;
+  cursor: pointer;
   flex-shrink: 0;
+  transition: border-color 0.16s, color 0.16s, transform 0.16s;
 }
 
-.live-card-url:hover {
-  background: var(--surface-chip-hover);
+.live-card-action:hover {
+  border-color: color-mix(in srgb, var(--accent-primary) 58%, var(--border-normal));
+  color: var(--accent-primary);
   text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.live-card-action:active {
+  transform: scale(0.96);
+}
+
+.action-icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  background-color: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
+.action-icon-star {
+  mask-image: url("/icons/ui/phosphor-star.svg");
+  -webkit-mask-image: url("/icons/ui/phosphor-star.svg");
+}
+
+.action-icon-star-filled {
+  mask-image: url("/icons/ui/phosphor-star-fill.svg");
+  -webkit-mask-image: url("/icons/ui/phosphor-star-fill.svg");
+}
+
+.action-icon-external {
+  mask-image: url("/icons/ui/phosphor-arrow-square-out.svg");
+  -webkit-mask-image: url("/icons/ui/phosphor-arrow-square-out.svg");
+}
+
+.star-btn.live-card-action {
+  text-shadow: none;
+}
+
+.live-card-action:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 .live-card-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-card-action {
+    transition: none;
+  }
+
+  .live-card-action:hover,
+  .live-card-action:active {
+    transform: none;
+  }
 }
 
 @media (max-width: 620px) {

@@ -8,6 +8,7 @@ from psycopg2.errors import QueryCanceled
 from app.auth import AuthUser, get_current_user_optional
 from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set
+from app.live_list_filters import effective_band_ids_sql
 from app.logging_config import get_logger
 from app.schemas import (
     CatalogBandListResponse,
@@ -241,7 +242,9 @@ WHERE EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id AND jsonb_ty
    OR (NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id) AND b.id = ANY(l.default_band_ids))
 """
 
-BAND_LIVES_PAGE_QUERY = """
+BAND_LIVES_BAND_IDS_SQL = effective_band_ids_sql(live_alias="l", setlist_alias="ls", band_alias="b")
+
+BAND_LIVES_PAGE_QUERY = f"""
 WITH matched_live_ids AS (
     SELECT DISTINCT l.id
     FROM live_attrs l
@@ -255,11 +258,7 @@ live_rows AS (
         l.id,
         l.live_date,
         l.live_title,
-        COALESCE(
-            array_agg(DISTINCT b.id ORDER BY b.id)
-                FILTER (WHERE b.id IS NOT NULL),
-            ARRAY[]::int[]
-        ) AS band_ids,
+        {BAND_LIVES_BAND_IDS_SQL} AS band_ids,
         l.url,
         l.live_type,
         tour.id AS tour_id,
@@ -285,7 +284,7 @@ live_rows AS (
     ) bm ON true
     LEFT JOIN band_attrs b
         ON b.band_name = bm.band_name
-    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, tour.id, tour.tour_title, pg.id, pg.group_title
+    GROUP BY l.id, l.live_date, l.live_title, l.default_band_ids, l.url, l.live_type, tour.id, tour.tour_title, pg.id, pg.group_title
 )
 SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title, performance_group_id, group_title
 FROM live_rows
