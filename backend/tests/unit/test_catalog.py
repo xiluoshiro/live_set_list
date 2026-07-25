@@ -95,6 +95,7 @@ def test_list_catalog_bands_uses_public_band_query():
     assert "NOT EXISTS (SELECT 1 FROM live_setlist" in BAND_LIST_QUERY
     assert "b.id = ANY(l.default_band_ids)" in BAND_LIST_QUERY
     assert "selected_band.id = ANY(l.default_band_ids)" in BAND_LIVES_PAGE_QUERY
+    assert "WHEN COUNT(ls.id) = 0 THEN l.default_band_ids" in BAND_LIVES_PAGE_QUERY
     assert cursor.execute.call_args_list == [call(BAND_LIST_QUERY, (30,))]
 
 

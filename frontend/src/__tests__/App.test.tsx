@@ -510,7 +510,7 @@ describe("App", () => {
     });
   });
 
-  // 测试点：统计页复用演出资料范围切换，并在指定年份后用收录情况替代年份分布。
+  // 测试点：统计页把同款范围切换收进筛选卡，并在指定年份后用收录情况替代年份分布。
   test("数据统计页展示概览与高频歌曲", async () => {
     getLivesMock.mockResolvedValue(makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }));
     const user = userEvent.setup();
@@ -523,7 +523,8 @@ describe("App", () => {
     expect(screen.getByText("高频歌曲")).toBeInTheDocument();
     const scope = screen.getByRole("group", { name: "统计范围" });
     expect(within(scope).getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(scope).getByRole("button", { name: "已收藏" })).toBeInTheDocument();
+    expect(within(scope).getByRole("button", { name: "仅收藏" })).toBeInTheDocument();
+    expect(scope.closest(".list-filter-panel")).toHaveAttribute("aria-label", "统计筛选");
 
     await user.selectOptions(screen.getByLabelText("年份"), "2026");
     expect(await screen.findByRole("heading", { name: "2026 年收录情况" })).toBeInTheDocument();
@@ -775,7 +776,7 @@ describe("App", () => {
     expect(await screen.findByText("没有找到与“不存在”匹配的资料。")).toBeInTheDocument();
   });
 
-  // 测试点：乐队浏览显示默认成员，仅为有 SVG 的 Band 渲染图案，并保持关联 Live 可打开。
+  // 测试点：乐队浏览保留左侧背景图案，并把接口返回的有效 Band SVG 展示在右侧关联 Live。
   test("乐队浏览页可加载乐队 Live 并打开详情", async () => {
     getCatalogBandsMock.mockResolvedValue({
       items: [
@@ -802,6 +803,8 @@ describe("App", () => {
     expect(bandWithoutIcon.querySelector(".catalog-band-btn-art")).toBeNull();
     expect(bandWithoutIcon.style.getPropertyValue("--band-color")).toBe("");
     expect(await screen.findByText("默认成员：Kasumi / Tae")).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: "Band 1" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("img", { name: "Band 2" }).length).toBeGreaterThan(0);
     await user.click(await screen.findByRole("button", { name: "Poppin'Party Browse Live" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(201));
   });
@@ -1250,7 +1253,7 @@ describe("App", () => {
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
   });
 
-  // 测试点：巡演及页内 Live 详情继续复用既有 SVG 外链图标，精简场次导航不再重复来源链接。
+  // 测试点：巡演及页内 Live 详情复用统一的 Phosphor 外链图标，精简场次导航不再重复来源链接。
   test("巡演详情复用既有外链样式", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -1259,7 +1262,7 @@ describe("App", () => {
 
     await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
     const titleLink = screen.getByRole("link", { name: "Ave Mujica LIVE TOUR 2026 Exitus" });
-    expect(titleLink.querySelector(".detail-title-link-icon svg")).not.toBeNull();
+    expect(titleLink.querySelector(".detail-title-link-icon .action-icon-external")).not.toBeNull();
     expect(screen.queryByText("↗")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /打开《.*》的资料来源/ })).not.toBeInTheDocument();
   });
@@ -2131,14 +2134,20 @@ describe("App", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 
-  // 测试点：卡片模式使用独立详情按钮，并让详情、收藏和资料来源保持为分离操作。
+  // 测试点：卡片模式的收藏与外链入口必须复用同一套 Phosphor 图标语言，不再混用字符和手写 SVG。
   test("卡片模式下渲染可访问的独立操作入口", async () => {
     localStorage.setItem("live-view-mode", "cards");
+    getAuthMeMock.mockResolvedValue({
+      authenticated: true,
+      user: { id: 1, username: "viewer", display_name: "Viewer", role: "viewer" },
+      csrf_token: "csrf-token",
+      favorite_live_ids: [],
+    });
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     const user = userEvent.setup();
-    renderApp();
+    renderApp({ withAuthProvider: true });
     await openAllContent(user);
 
     expect(document.querySelector(".live-card-grid")).not.toBeNull();
@@ -2147,7 +2156,14 @@ describe("App", () => {
     expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument();
     expect(screen.getByText("2026-03-02")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看《示例 Live 名称 1》详情" })).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /打开《.*》的资料来源/ }).length).toBeGreaterThan(0);
+    const favoriteAction = screen.getAllByRole("button", { name: "加入收藏" })[0];
+    const sourceAction = screen.getAllByRole("link", { name: /打开《.*》的资料来源/ })[0];
+    expect(favoriteAction).toHaveClass("live-card-action");
+    expect(favoriteAction.querySelector(".action-icon-star")).not.toBeNull();
+    expect(sourceAction).toHaveClass("live-card-action");
+    expect(sourceAction.querySelector(".action-icon-external")).not.toBeNull();
+    expect(favoriteAction.querySelector(".action-icon")).not.toBeNull();
+    expect(sourceAction.querySelector(".action-icon")).not.toBeNull();
   });
 
   // 测试点：分段控件明确展示两种视图，当前项状态和本地偏好随切换同步。
