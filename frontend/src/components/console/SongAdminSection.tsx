@@ -7,6 +7,10 @@ type SongAdminSectionProps = {
   insertedSongs: SongInsertRow[];
   songCandidates: SongInsertRow[];
   songQuery: string;
+  songPage: number;
+  songTotal: number;
+  songTotalPages: number;
+  songLoading: boolean;
   editingSongId: number | null;
   songName: string;
   songBandId: number | null;
@@ -18,6 +22,7 @@ type SongAdminSectionProps = {
   onSongNameChange: (value: string) => void;
   onSongQueryChange: (value: string) => void;
   onQuerySongs: () => void;
+  onSongPageChange: (page: number) => void;
   onSelectSong: (songId: number) => void;
   onCreateNewSong: () => void;
   onSongCoverChange: (checked: boolean) => void;
@@ -33,6 +38,10 @@ export function SongAdminSection({
   insertedSongs,
   songCandidates,
   songQuery,
+  songPage,
+  songTotal,
+  songTotalPages,
+  songLoading,
   editingSongId,
   songName,
   songBandId,
@@ -44,6 +53,7 @@ export function SongAdminSection({
   onSongNameChange,
   onSongQueryChange,
   onQuerySongs,
+  onSongPageChange,
   onSelectSong,
   onCreateNewSong,
   onSongCoverChange,
@@ -60,19 +70,11 @@ export function SongAdminSection({
   })();
 
   return (
-    <>
-      <div className="tour-admin-toolbar live-admin-toolbar">
-        <label className="live-management-label" htmlFor="song-admin-query">已有歌曲</label>
-        <input
-          id="song-admin-query"
-          className="venue-query-input live-management-primary-control"
-          value={songQuery}
-          onChange={(event) => onSongQueryChange(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") onQuerySongs(); }}
-          placeholder="输入歌曲名"
-        />
-        <button type="button" className="console-ghost-btn" onClick={onQuerySongs}>查询</button>
+    <section className="tour-admin-section" aria-label="歌曲管理">
+      <div className="tour-admin-toolbar">
+        <label htmlFor="song-admin-select">已有歌曲</label>
         <select
+          id="song-admin-select"
           className="console-entity-select"
           aria-label="选择要编辑的歌曲"
           value={editingSongId ?? ""}
@@ -88,47 +90,39 @@ export function SongAdminSection({
         <button type="button" className="console-submit-btn" onClick={onCreateNewSong}>新建歌曲</button>
       </div>
 
-      <div className="console-table-wrap">
-        <table className="console-admin-table song-admin-form-table">
-          <thead>
-            <tr>
-              <th>song_name</th>
-              <th>band_id</th>
-              <th>cover</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <input
-                  value={songName}
-                  onChange={(e) => onSongNameChange(e.target.value)}
-                  placeholder="请输入歌曲名"
-                />
-              </td>
-              <td>
-                <button
-                  ref={songBandTriggerRef}
-                  type="button"
-                  className="bands-picker-trigger song-band-trigger"
-                  onClick={onOpenSongBandMenu}
-                  title={selectedBandText}
-                >
-                  {selectedBandText}
-                </button>
-              </td>
-              <td>
-                <input
-                  className="is-short-check"
-                  aria-label="song-cover"
-                  type="checkbox"
-                  checked={songCover}
-                  onChange={(e) => onSongCoverChange(e.target.checked)}
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div className="tour-admin-fields song-admin-fields">
+        <label>
+          歌曲名称
+          <input
+            value={songName}
+            onChange={(event) => onSongNameChange(event.target.value)}
+            placeholder="请输入歌曲名"
+          />
+        </label>
+        <fieldset className="tour-band-field">
+          <legend>归属 Band</legend>
+          <button
+            ref={songBandTriggerRef}
+            type="button"
+            className="bands-picker-trigger tour-band-trigger song-band-trigger"
+            onClick={onOpenSongBandMenu}
+            title={selectedBandText}
+          >
+            {selectedBandText}
+          </button>
+        </fieldset>
+        <label className="song-cover-field">
+          <span>翻唱</span>
+          <span className="song-cover-control">
+            <input
+              aria-label="song-cover"
+              type="checkbox"
+              checked={songCover}
+              onChange={(event) => onSongCoverChange(event.target.checked)}
+            />
+            是
+          </span>
+        </label>
       </div>
 
       {songBandOpen && songBandMenuPos && (
@@ -155,9 +149,87 @@ export function SongAdminSection({
         </div>
       )}
 
+      <div className="tour-admin-block">
+        <h3>搜索歌曲</h3>
+        <div className="tour-candidate-search">
+          <input
+            id="song-admin-query"
+            value={songQuery}
+            onChange={(event) => onSongQueryChange(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") onQuerySongs(); }}
+            placeholder="输入歌曲名"
+          />
+          <button type="button" className="console-ghost-btn" onClick={onQuerySongs}>查询</button>
+        </div>
+        <div className="console-table-wrap">
+          <table className="console-admin-table tour-candidate-table song-candidate-table" aria-label="歌曲搜索结果">
+            <colgroup>
+              <col className="song-candidate-col-id" />
+              <col />
+              <col className="song-candidate-col-band" />
+              <col className="song-candidate-col-cover" />
+              <col className="tour-candidate-col-action" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>song_id</th>
+                <th>song_name</th>
+                <th>Band</th>
+                <th>翻唱</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {songCandidates.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="empty-cell">没有符合条件的歌曲</td>
+                </tr>
+              ) : (
+                songCandidates.map((song) => (
+                  <tr key={song.song_id}>
+                    <td>{song.song_id}</td>
+                    <td>{song.song_name}</td>
+                    <td>{song.band_name ?? song.band_id}</td>
+                    <td>{song.cover ? "是" : "否"}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="console-submit-btn"
+                        onClick={() => onSelectSong(song.song_id)}
+                      >
+                        {editingSongId === song.song_id ? "编辑中" : "编辑"}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="tour-candidate-pager">
+          <button
+            type="button"
+            className="console-ghost-btn"
+            onClick={() => onSongPageChange(Math.max(1, songPage - 1))}
+            disabled={songLoading || songPage <= 1}
+          >
+            上一页
+          </button>
+          <span>第 {songPage} / {songTotalPages} 页 · 每页 20 首 · 共 {songTotal} 首</span>
+          <button
+            type="button"
+            className="console-ghost-btn"
+            onClick={() => onSongPageChange(Math.min(songTotalPages, songPage + 1))}
+            disabled={songLoading || songPage >= songTotalPages}
+          >
+            下一页
+          </button>
+        </div>
+      </div>
+
       <div className="console-submit-row song-submit-row">
         <button type="button" onClick={onClearSong} className="console-ghost-btn">
-          清空数据
+          清空
         </button>
         <button type="button" onClick={onSubmitSong} className="console-submit-btn" disabled={submitDisabled}>
           {editingSongId === null ? "创建歌曲" : "保存修改"}
@@ -165,7 +237,10 @@ export function SongAdminSection({
       </div>
 
       <div className="console-table-wrap live-history-wrap">
-        <table className="console-admin-table song-result-table live-history-table">
+        <table
+          className="console-admin-table song-result-table live-history-table"
+          aria-label="歌曲操作记录"
+        >
           <thead>
             <tr>
               <th>song_id</th>
@@ -188,6 +263,6 @@ export function SongAdminSection({
           </tbody>
         </table>
       </div>
-    </>
+    </section>
   );
 }

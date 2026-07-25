@@ -130,10 +130,11 @@ def test_console_lookup_mock_requires_authenticated_editor_role():
     assert viewer_response.json()["detail"]["code"] == "AUTH_FORBIDDEN"
 
 
-# 测试点：console 只读查询接口不需要 CSRF，并应返回稳定的 items 响应结构。
+# 测试点：console 只读查询接口不需要 CSRF，歌曲结果应同时返回服务端分页信息。
 def test_console_lookup_mock_returns_items_without_csrf_for_editor():
     _set_authenticated_role("editor")
     songs_conn, _ = _build_connection_mock(
+        fetchone_side_effect=[(1,)],
         fetchall_side_effect=[[(1, "Yes! BanG_Dream!", 1, False, "Poppin'Party")]],
     )
     bands_conn, _ = _build_connection_mock(
@@ -145,7 +146,7 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
 
     with patch("app.routers.console_read.get_db_connection", side_effect=[songs_conn, bands_conn, venues_conn]):
         client = TestClient(app)
-        songs_response = client.get("/api/console/songs?q=BanG&limit=10")
+        songs_response = client.get("/api/console/songs?q=BanG&limit=10&page=1")
         bands_response = client.get("/api/console/bands?q=rsl&limit=10")
         venues_response = client.get("/api/console/venues?q=Zepp&limit=10")
 
@@ -159,7 +160,11 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
                 "cover": False,
                 "band_name": "Poppin'Party",
             }
-        ]
+        ],
+        "page": 1,
+        "page_size": 10,
+        "total": 1,
+        "total_pages": 1,
     }
     assert bands_response.status_code == 200
     assert bands_response.json() == {
@@ -232,7 +237,7 @@ def test_console_live_edit_reads_candidates_and_detail():
     ]
 
 
-# 测试点：console 只读查询接口应拒绝非法 limit，避免一次性返回过多数据。
+# 测试点：console 只读查询接口应拒绝非法 limit 或页码，避免无界或无效查询。
 @pytest.mark.parametrize(
     "path",
     [
@@ -240,6 +245,7 @@ def test_console_live_edit_reads_candidates_and_detail():
         "/api/console/bands?limit=-1",
         "/api/console/venues?limit=101",
         "/api/console/songs?limit=abc",
+        "/api/console/songs?page=0",
     ],
 )
 def test_console_lookup_mock_rejects_invalid_limit(path: str):

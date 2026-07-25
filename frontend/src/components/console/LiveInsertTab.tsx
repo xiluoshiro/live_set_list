@@ -619,7 +619,7 @@ export function LiveInsertTab({
           onWheel={(event) => event.stopPropagation()}
           style={{ top: bandMemberMenuPos.top, left: bandMemberMenuPos.left, width: bandMemberMenuPos.width }}
         >
-          {bandOptions.map((band) => {
+          {bandOptions.filter((band) => band.band_id > 0).map((band) => {
             const selected = editingBandRow.band_member[band.band_name] ?? [];
             const bandChecked = selected.length > 0;
             const memberOptions =

@@ -77,7 +77,7 @@ def _count_rows(
     return int(row[0])
 
 
-# 测试点：`editor+` 只读查询接口应返回前端控制台下拉与搜索所需的 seed 数据。
+# 测试点：`editor+` 只读查询接口应返回前端控制台下拉、搜索和歌曲分页所需的 seed 数据。
 def test_console_lookup_endpoints_return_seeded_options(
     integration_test_client,
 ):
@@ -88,7 +88,7 @@ def test_console_lookup_endpoints_return_seeded_options(
         password=TEST_DEFAULT_ADMIN_PASSWORD,
     )
 
-    songs_response = integration_test_client.get("/api/console/songs?q=Yes&limit=10")
+    songs_response = integration_test_client.get("/api/console/songs?q=Yes&limit=10&page=1")
     bands_response = integration_test_client.get("/api/console/bands?q=Roselia&limit=10")
     venues_response = integration_test_client.get("/api/console/venues?q=Shinjuku&limit=10")
 
@@ -102,7 +102,11 @@ def test_console_lookup_endpoints_return_seeded_options(
                 "cover": False,
                 "band_name": "Poppin'Party",
             }
-        ]
+        ],
+        "page": 1,
+        "page_size": 10,
+        "total": 1,
+        "total_pages": 1,
     }
 
     assert bands_response.status_code == 200
@@ -154,6 +158,50 @@ def test_console_song_lookup_prioritizes_exact_title_match(
     assert response.json()["items"] == [
         {"song_id": song_id, "song_name": "R", "band_id": 1, "cover": False, "band_name": "Poppin'Party"}
     ]
+
+
+# 测试点：歌曲候选分页应在服务端按稳定歌名顺序切页，并返回总数与总页数。
+def test_console_song_lookup_supports_server_side_pagination(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO song_list (song_name, band_id, is_cover)
+            VALUES
+                ('Pagination Probe A', 1, false),
+                ('Pagination Probe B', 1, false)
+            RETURNING id
+            """
+        )
+        inserted_ids = [int(row[0]) for row in cursor.fetchall()]
+
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    response = integration_test_client.get("/api/console/songs?q=Pagination Probe&limit=1&page=2")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "song_id": inserted_ids[1],
+                "song_name": "Pagination Probe B",
+                "band_id": 1,
+                "cover": False,
+                "band_name": "Poppin'Party",
+            }
+        ],
+        "page": 2,
+        "page_size": 1,
+        "total": 2,
+        "total_pages": 2,
+    }
 
 
 # 测试点：歌曲查询只允许从歌名开头向右补全，不能用输入命中歌名中段。

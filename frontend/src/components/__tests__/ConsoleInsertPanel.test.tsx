@@ -388,6 +388,13 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
+        items: [],
+        page: 1,
+        page_size: 20,
+        total: 0,
+        total_pages: 1,
+      })
+      .mockResolvedValueOnce({
         items: [{ song_id: 901, song_name: "春日序曲", band_id: 9, cover: false }],
       })
       .mockResolvedValueOnce({
@@ -616,7 +623,8 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.click(screen.getByRole("button", { name: "请选择 band_id" }));
-    const bandOptions = screen.getAllByText(/Band$/).map((node) => node.textContent);
+    const bandMenu = screen.getByText("9 - Later Band").closest(".bands-floating-menu") as HTMLElement;
+    const bandOptions = within(bandMenu).getAllByText(/Band$/).map((node) => node.textContent);
     expect(bandOptions).toEqual(["2 - Early Band", "9 - Later Band"]);
 
     await user.click(screen.getByRole("tab", { name: "新增Live" }));
@@ -977,8 +985,9 @@ describe("ConsoleInsertPanel", () => {
       "csrf-token",
     ));
     expect(screen.getByText("已新增歌曲 #903")).toBeInTheDocument();
-    expect(screen.getByText("903")).toBeInTheDocument();
-    expect(screen.getByText("新曲")).toBeInTheDocument();
+    const operationTable = screen.getByRole("table", { name: "歌曲操作记录" });
+    expect(within(operationTable).getByText("903")).toBeInTheDocument();
+    expect(within(operationTable).getByText("新曲")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("");
     expect(screen.getByRole("button", { name: "请选择 band_id" })).toBeInTheDocument();
   });
@@ -1009,6 +1018,57 @@ describe("ConsoleInsertPanel", () => {
       "csrf-token",
     ));
     expect(screen.getByText("已更新歌曲 #901")).toBeInTheDocument();
+  });
+
+  // 测试点：歌曲搜索固定每页 20 首，查询回到第一页并可保留查询词翻到下一页。
+  test("歌曲管理搜索、分页并从结果表加载歌曲", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({
+        items: [],
+        page: 1,
+        page_size: 20,
+        total: 0,
+        total_pages: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [{ song_id: 902, song_name: "搜索命中曲", band_id: 2, cover: true, band_name: "Roselia" }],
+        page: 1,
+        page_size: 20,
+        total: 21,
+        total_pages: 2,
+      })
+      .mockResolvedValueOnce({
+        items: [{ song_id: 903, song_name: "搜索命中曲 第二页", band_id: 2, cover: false, band_name: "Roselia" }],
+        page: 2,
+        page_size: 20,
+        total: 21,
+        total_pages: 2,
+      });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("", 20, 1));
+    await user.type(screen.getByPlaceholderText("输入歌曲名"), "搜索命中");
+    await user.click(screen.getByRole("button", { name: "查询" }));
+
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("搜索命中", 20, 1));
+    const resultTable = screen.getByRole("table", { name: "歌曲搜索结果" });
+    expect(within(resultTable).getByText("搜索命中曲")).toBeInTheDocument();
+    expect(screen.getByText("第 1 / 2 页 · 每页 20 首 · 共 21 首")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("");
+
+    await user.click(within(resultTable).getByRole("button", { name: "编辑" }));
+
+    expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("搜索命中曲");
+    expect(screen.getByLabelText("song-cover")).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("搜索命中", 20, 2));
+    expect(within(resultTable).getByText("搜索命中曲 第二页")).toBeInTheDocument();
+    expect(screen.getByText("第 2 / 2 页 · 每页 20 首 · 共 21 首")).toBeInTheDocument();
   });
 
   // 测试点：Setlist 管理只查询已有歌单的 Live，加载原始行后可整表保存修改。
@@ -1338,8 +1398,8 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLiveDetail).not.toHaveBeenCalled();
   });
 
-  // 测试点：批量确认框的内容区应独立滚动且操作区不收缩，保证长预览仍可取消或确认。
-  test("批量粘贴长确认内容保留可见操作区", async () => {
+  // 测试点：批量确认框应限制高度，标题和操作区不收缩，超长内容只在中部滚动。
+  test("批量粘贴长确认内容保留可见标题和操作区", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 8, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["羊宮妃那"] }],
@@ -1357,13 +1417,18 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
     const dialog = screen.getByRole("dialog", { name: "确认应用到表格" });
+    const head = dialog.querySelector<HTMLElement>(".modal-head");
     const body = dialog.querySelector<HTMLElement>(".console-confirm-body");
     const actions = dialog.querySelector<HTMLElement>(".console-confirm-actions");
 
+    expect(dialog).toHaveClass("setlist-paste-confirm");
+    expect(head).not.toBeNull();
     expect(body).not.toBeNull();
     expect(actions).not.toBeNull();
+    expect(getComputedStyle(head as HTMLElement).flexShrink).toBe("0");
     expect(getComputedStyle(body as HTMLElement).overflowY).toBe("auto");
     expect(getComputedStyle(actions as HTMLElement).flexShrink).toBe("0");
+    expect(within(dialog).getByRole("heading", { name: "确认应用到表格" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "取消" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "确认提交" })).toBeInTheDocument();
   });
@@ -1808,6 +1873,25 @@ describe("ConsoleInsertPanel", () => {
     expect(menuTop).toBeLessThan(750 - estimatedHeight + 10);
 
     rectSpy.mockRestore();
+  });
+
+  // 测试点：band_id=0 的 Other bands 不是实际 Band，不应出现在新增 Setlist 的 band_member 选择器。
+  test("新增Setlist的band_member不展示Other bands", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [
+        { band_id: 0, band_name: "Other bands", band_abbr: "", band_members: [] },
+        { band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] },
+      ],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
+    await user.click(document.querySelector(".band-member-trigger") as HTMLElement);
+
+    const menu = document.querySelector(".band-member-floating-menu") as HTMLElement;
+    expect(within(menu).queryByText("Other bands")).not.toBeInTheDocument();
+    expect(within(menu).getByText("Roselia")).toBeInTheDocument();
   });
 
   test("页面滚动时band_member浮层跟随触发按钮重新定位", async () => {

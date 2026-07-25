@@ -319,6 +319,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [insertedSongs, setInsertedSongs] = useState<SongInsertRow[]>([]);
   const [songQuery, setSongQuery] = useState("");
   const [songCandidates, setSongCandidates] = useState<SongInsertRow[]>([]);
+  const [songPage, setSongPage] = useState(1);
+  const [songPagination, setSongPagination] = useState({ page: 1, page_size: 20, total: 0, total_pages: 1 });
+  const [songLoading, setSongLoading] = useState(false);
   const [editingSongId, setEditingSongId] = useState<number | null>(null);
 
   const [liveDate, setLiveDate] = useState(() => getTodayDateInputValue());
@@ -509,8 +512,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
       if (songResult.status === "fulfilled") {
         const loadedSongs = songResult.value.items.map(toSongInsertRow);
+        const totalSongs = songResult.value.total ?? loadedSongs.length;
         setSongs((prev) => mergeSongs(prev, loadedSongs));
-        setSongCandidates(loadedSongs);
+        setSongCandidates(loadedSongs.slice(0, 20));
+        setSongPagination({
+          page: 1,
+          page_size: 20,
+          total: totalSongs,
+          total_pages: Math.max(1, Math.ceil(totalSongs / 20)),
+        });
       }
       if (bandResult.status === "fulfilled" && bandResult.value.items.length > 0) {
         setBands(sortById(bandResult.value.items.map(toBandOption), (band) => band.band_id));
@@ -1018,18 +1028,41 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setMessage(`已加载歌曲 #${song.song_id}。`);
   };
 
-  const querySongCandidates = async () => {
+  const loadSongCandidatePage = async (query: string, page: number) => {
+    setSongLoading(true);
     try {
-      const response = await getConsoleSongs(songQuery, 100);
+      const response = await getConsoleSongs(query, 20, page);
       const candidates = response.items.map(toSongInsertRow);
+      const responsePage = response.page ?? page;
+      const responsePageSize = response.page_size ?? 20;
+      const responseTotal = response.total ?? candidates.length;
+      const responseTotalPages = response.total_pages ?? Math.max(1, Math.ceil(responseTotal / responsePageSize));
       setSongCandidates(candidates);
-      if (candidates[0]) selectSongForEditFromItem(candidates[0]);
-      else setMessage("没有符合条件的歌曲。");
+      setSongPage(responsePage);
+      setSongPagination({
+        page: responsePage,
+        page_size: responsePageSize,
+        total: responseTotal,
+        total_pages: responseTotalPages,
+      });
+      if (candidates.length === 0) setMessage("没有符合条件的歌曲。");
     } catch (error) {
       setSongCandidates([]);
       setMessage(`查询歌曲失败：${errorMessage(error)}`);
+    } finally {
+      setSongLoading(false);
     }
   };
+
+  const querySongCandidates = async () => {
+    setSongPage(1);
+    await loadSongCandidatePage(songQuery, 1);
+  };
+
+  useEffect(() => {
+    if (mode !== "song") return;
+    void loadSongCandidatePage(songQuery, songPage);
+  }, [mode, songPage]);
 
   const selectSongForEditFromItem = (song: SongInsertRow) => {
     setEditingSongId(song.song_id);
@@ -2235,6 +2268,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       insertedSongs={insertedSongs}
       songCandidates={songCandidates}
       songQuery={songQuery}
+      songPage={songPagination.page}
+      songTotal={songPagination.total}
+      songTotalPages={songPagination.total_pages}
+      songLoading={songLoading}
       editingSongId={editingSongId}
       songName={songName}
       songBandId={songBandId}
@@ -2246,6 +2283,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       onSongNameChange={setSongName}
       onSongQueryChange={setSongQuery}
       onQuerySongs={querySongCandidates}
+      onSongPageChange={setSongPage}
       onSelectSong={selectSongForEdit}
       onCreateNewSong={resetSongForm}
       onSongCoverChange={setSongCover}
