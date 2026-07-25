@@ -51,6 +51,8 @@
   - 公共巡演详情和已收录场次，匿名可用
 - `GET /api/catalog/tours/{tour_id}/statistics`
   - 公共巡演 Setlist 覆盖与相邻场次变化统计，匿名可用；显式指定参与乐队时仅统计指定乐队
+- `GET /api/catalog/tours/{tour_id}/statistics/comparison`
+  - 按需比较同一巡演内任意两场已有 Setlist 的场次，匿名可用
 - `GET /api/catalog/search`
   - 公共资料库搜索，匿名可用，按 Live、乐队 / 艺人、歌曲、场地分组返回结果
 - `GET /api/catalog/bands`
@@ -160,7 +162,8 @@
 - `other_members` 会统一归一化为 `{key, value: string[]}`
 - `other_members` 的 `value` 允许源数据是数组、单个字符串、JSON 字符串数组、JSON 字符串字面量
 - `other_members` 最终按 `key` 升序排列
-- `comments` 由详情行规则生成：`live_setlist.is_short = true` 时包含 `"短版"`，`song_list.is_cover = true` 时包含 `"翻唱"`
+- `comments` 由详情行规则生成：`live_setlist.is_short = true` 时包含 `"短版"`；`song_list.is_cover = true` 或歌曲目录归属 Band 不在实际演唱乐队中时包含 `"翻唱"`
+- `cover_band` 只在后端根据“歌曲目录归属 Band 不属于实际演唱乐队”推导翻唱时返回该归属 Band；歌曲自身 `is_cover=true` 的手工标签不返回 `cover_band`
 - `is_favorite` 会按当前登录用户的 `user_live_favorites` 计算；匿名请求统一返回 `false`
 - 无 Setlist 时，单条与批量详情的 `bands/band_names` 会回退 `default_band_ids`，与列表有效 Band 规则一致
 - `event_attendees` 只在 `live_type=event` 时返回内容；每项包含 `band_id/band_name/mode/members`
@@ -199,7 +202,7 @@
 
 ### 5. 公共 catalog 接口
 
-`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/performances`、`GET /api/catalog/performance-groups/{group_id}`、`GET /api/catalog/tours`、`GET /api/catalog/tours/{tour_id}`、`GET /api/catalog/tours/{tour_id}/statistics`、`GET /api/catalog/stats`、`GET /api/catalog/statistics?scope=all` 用于匿名可访问的公共资料库搜索、浏览与统计。
+`GET /api/catalog/search`、`GET /api/catalog/bands`、`GET /api/catalog/bands/{band_id}/lives`、`GET /api/catalog/performances`、`GET /api/catalog/performance-groups/{group_id}`、`GET /api/catalog/tours`、`GET /api/catalog/tours/{tour_id}`、`GET /api/catalog/tours/{tour_id}/statistics`、`GET /api/catalog/tours/{tour_id}/statistics/comparison`、`GET /api/catalog/stats`、`GET /api/catalog/statistics?scope=all` 用于匿名可访问的公共资料库搜索、浏览与统计。
 
 - 上述公共读取默认不要求登录；`GET /api/catalog/statistics?scope=favorites` 与 `GET /api/catalog/performances?scope=favorites` 要求当前 session 已登录。
 - 登录用户访问搜索结果或乐队 Live 列表时，Live 项的 `is_favorite` 会按当前用户收藏计算；匿名请求统一返回 `false`。
@@ -214,17 +217,20 @@
   - 场地分组匹配 `venue`
   - Live 结果按 `live_date DESC, id DESC` 排序
   - 乐队、歌曲、场地分组优先按关联 Live 数降序排序
+  - 乐队结果额外返回 `band_members`；`live_count` 与 Live 列表使用同一有效 Band 规则：存在 Setlist 时按 `live_setlist.band_member`，完全没有 Setlist 时回退 `default_band_ids`
 - `GET /api/catalog/bands`
   - `limit` 范围是 `1..100`，默认 `20`
   - 当前只返回 `band_attrs.id > 0` 的乐队
-  - `live_count` 按 `live_setlist.band_member` 中的乐队名匹配统计
-  - 当前公共乐队浏览统计不使用 `live_attrs.default_band_ids` 回退；该字段只影响通用 Live 列表、收藏列表及其 `band_id` 筛选
+  - 返回默认成员目录 `band_members`
+  - `live_count` 与 Live 列表使用同一有效 Band 规则：存在 Setlist 时按 `live_setlist.band_member`，完全没有 Setlist 时回退 `live_attrs.default_band_ids`
   - 当前列表按 `band_attrs.id` 排序
 - `GET /api/catalog/bands/{band_id}/lives`
   - `band_id` 必须大于等于 `1`
   - `page_size` 当前只允许 `15` 或 `20`
   - 页码超过最后一页时会自动钳制到最后一页
   - 未找到乐队时返回 `404`
+  - `band` 返回 `band_members`；页面可展示该乐队的默认成员目录
+  - Live 匹配与 `live_count` 使用同一有效 Band 规则：存在 Setlist 时按 `live_setlist.band_member`，完全没有 Setlist 时回退 `default_band_ids`
   - Live 结果按 `live_date DESC, id DESC` 排序
 - `GET /api/catalog/performances`
   - `scope` 只允许 `all` 或 `favorites`，默认 `all`；`favorites` 要求当前 session 已登录
@@ -253,7 +259,15 @@
   - `has_setlist` 只表示是否至少存在一行 setlist，不加载 setlist 明细
   - 登录用户的场次带当前用户 `is_favorite`；匿名统一为 `false`
   - 页面文案应使用“已收录 N 场”，不能把当前关联数描述成官方总场数
+- `GET /api/catalog/tours/{tour_id}/statistics`
+  - 返回巡演覆盖、歌曲状态和相邻且均有可纳入 Setlist 的场次差异
+  - 显式指定 `tour_bands` 时只统计命中指定乐队的 Setlist；未指定时统计全部 Setlist
+- `GET /api/catalog/tours/{tour_id}/statistics/comparison`
+  - 必填查询参数为 `from_live_id` 与 `to_live_id`，两者必须不同且大于等于 1
+  - 两场都必须属于该巡演且存在可纳入统计的 Setlist；否则返回 `422`
+  - 成功时返回与相邻场次 `transitions[]` 单项相同的差异结构，不改变默认相邻比较结果
 - `GET /api/catalog/stats`
+  - 返回 `band_count/song_count/venue_count/latest_live_date/years`
   - `years` 返回数据库实际存在的 Live 年份，按降序排列
   - 前端年份筛选只显示年份本身，不显示命中数量
 - `GET /api/catalog/statistics`

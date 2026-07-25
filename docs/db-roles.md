@@ -218,7 +218,8 @@ schema 级权限：
 
 - `SELECT ON ALL TABLES IN SCHEMA public`
 - `INSERT, UPDATE ON ALL TABLES IN SCHEMA public`
-- `DELETE ON public.live_setlist`（仅用于 Setlist 管理的完整集合替换）
+- `DELETE ON public.tour_bands, public.tour_lives, public.performance_group_lives`（V13/V14，仅用于聚合关系的完整集合替换）
+- `DELETE ON public.live_setlist`（V17，仅用于 Setlist 管理的完整集合替换）
 
 序列权限：
 
@@ -230,7 +231,7 @@ schema 级权限：
 
 当前限制：
 
-- 初始化脚本不授予全局 `DELETE`；V13/V14 仅对集合替换所需的 `tour_bands`、`tour_lives` 和 `performance_group_lives` 显式授予 `DELETE`
+- 初始化脚本不授予全局 `DELETE`；V13/V14/V17 仅对集合替换所需的 `tour_bands`、`tour_lives`、`performance_group_lives` 和 `live_setlist` 显式授予 `DELETE`
 - 也没有给它 `CREATE TABLE` / `ALTER TABLE` 这类 DDL 权限
 
 当前职责：
@@ -518,7 +519,7 @@ PostgreSQL 的默认行为意味着：
 
 - `DELETE`
 
-V13/V14 migration 仅为完整集合替换显式授予 `tour_bands`、`tour_lives` 和 `performance_group_lives` 的 `DELETE`。主实体 `tour_attrs`、`performance_group_attrs` 仍不可删除，也没有删除接口。后续新增删除型业务仍需逐表核对角色设计和权限 SQL。
+V13/V14/V17 migration 仅为完整集合替换显式授予 `tour_bands`、`tour_lives`、`performance_group_lives` 和 `live_setlist` 的 `DELETE`。主实体 `tour_attrs`、`performance_group_attrs` 仍不可删除，也没有删除接口。后续新增删除型业务仍需逐表核对角色设计和权限 SQL。
 
 ## 7. 建议的阅读顺序
 

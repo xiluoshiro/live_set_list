@@ -408,7 +408,7 @@ python scripts/run_checks.py functional
 git diff --check
 ```
 
-阶段 1 开发设计单独维护在 [docs/design/homepage-community-database-phase1.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/homepage-community-database-phase1.md)。
+阶段 1 开发设计已完成并归档在 [首页阶段 1 开发设计](../archive/completed-design/homepage-community-database-phase1.md)。
 
 ### 阶段 1.5：站点基础支持与可信度说明
 
@@ -578,8 +578,8 @@ python scripts/run_checks.py functional
 | 阶段 2：公共搜索与浏览 | DONE | 已新增只读公共搜索 API，首页搜索可按 Live、乐队、歌曲、场地返回分组结果 |
 | 阶段 2B：内容范围与列表筛选 | DONE | 收藏已合并为“演出资料”内的“全部 / 仅收藏”范围切换，并复用关键词、年份、Live 类型、乐队 / 艺人和日期排序；选项不显示数量 |
 | 阶段 3：登录后个人首页 | TODO | 当前只有收藏数量和收藏入口；最近查看、收藏更新提醒、关注更新仍未做 |
-| 阶段 3A：公开乐队浏览 | DONE | 已新增乐队浏览和相关 Live 列表；Band 1~12 的按钮使用 SVG 主色与半透明图案，无 SVG 时保持普通样式 |
-| 阶段 3B：巡演聚合 | DONE | 已完成[巡演聚合产品需求](tour-aggregation.md)和[实现设计](../design/tour-aggregation.md)中的数据结构、控制台、公共列表/详情、反向入口与统计；公共搜索分组和发布批次验收作为剩余项单列 |
+| 阶段 3A：公开乐队浏览 | DONE | 已新增乐队浏览、默认成员目录和相关 Live 列表；Band 1~12 的按钮使用 SVG 主色与半透明图案，无 SVG 时保持普通样式 |
+| 阶段 3B：巡演聚合 | DONE | 已完成[巡演聚合产品需求](tour-aggregation.md)和[实现设计](../design/tour-aggregation.md)中的数据结构、控制台、无限滚动列表、公共详情、逐场 Live 收藏、反向入口与相邻/任意场次统计；公共搜索分组和发布批次验收作为剩余项单列 |
 | 阶段 3C：演出活动组 | DONE | Flyway V14、活动组控制台、统一演出投影、多日/单日多场聚合、逐场收藏与页内 Live 详情已落地，见[演出活动组聚合设计](../design/performance-group-aggregation.md) |
 | 阶段 4：贡献工作台 | DEFERRED | 近期不升级后台维护体系，先复用现有控制台 |
 | 阶段 5：数据可信度与社区治理 | DEFERRED | 来源系统、反馈工单、审核流和数据质量字段暂缓 |
@@ -587,7 +587,7 @@ python scripts/run_checks.py functional
 
 ### 阶段 1 TODO
 
-- [x] 完成阶段 1 开发方案和开发边界设计，详见 [docs/design/homepage-community-database-phase1.md](D:/Code/PythonCode/5%20LiveSetList/docs/design/homepage-community-database-phase1.md)。
+- [x] 完成阶段 1 开发方案和开发边界设计，详见已归档的[首页阶段 1 开发设计](../archive/completed-design/homepage-community-database-phase1.md)。
 - [x] 新增“首页”视图，并将默认视图从“演出资料”调整为“首页”。
 - [x] 首页首屏展示站点名称、数据库定位说明和搜索入口 UI 壳。
 - [x] 首页搜索入口已从 UI 壳升级为真实公共搜索入口。
@@ -638,7 +638,7 @@ python scripts/run_checks.py functional
 - [x] 搜索结果按 Live、乐队 / 艺人、歌曲、场地分组展示。
 - [x] 搜索结果中的 Live 可打开现有独立详情视图。
 - [x] 新增乐队浏览入口。
-- [x] 乐队浏览展示乐队摘要、收录 Live 数和相关 Live 列表。
+- [x] 乐队浏览展示乐队摘要、默认成员目录、收录 Live 数和相关 Live 列表；有 Setlist 时按实际演唱乐队统计，无 Setlist 时回退默认 Band。
 - [x] 有 SVG 的乐队按钮使用从 SVG 主填充色提取的半透明代表色，并在右侧显示透明图案；无 SVG 时不改变原按钮背景。
 - [x] 我的收藏合并为“演出资料”页内的“全部 / 仅收藏”范围切换，并复用其他筛选条件。
 - [x] 年份与乐队筛选项只显示名称，不附带命中数量。

@@ -1,8 +1,10 @@
-# 活动出演成员需求
+# 活动出演成员需求（已完成）
 
 ## 文档定位
 
-本文定义 `live_type=event` 时记录和展示出演成员的产品需求，不规定数据库字段、接口 JSON 或组件实现。实现方式见 [活动出演成员实现设计](../design/event-attendees.md)。
+状态：已完成并归档。当前接口字段与行为以代码、OpenAPI 和 [API 补充说明](../../api.md) 为准。
+
+本文定义 `live_type=event` 时记录和展示出演成员的产品需求，不规定数据库字段、接口 JSON 或组件实现。实现方式见 [活动出演成员实现设计](../completed-design/event-attendees.md)。
 
 ## 背景
 

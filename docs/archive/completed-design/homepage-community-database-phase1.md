@@ -1,8 +1,10 @@
-# 社区 Live 数据库首页阶段 1 开发设计
+# 社区 Live 数据库首页阶段 1 开发设计（已完成）
 
 ## 对应需求
 
-需求文档：[docs/product/homepage-community-database.md](D:/Code/PythonCode/5%20LiveSetList/docs/product/homepage-community-database.md)
+状态：阶段 1 已完成并归档；当前产品状态以活动需求文档为准。
+
+需求文档：[社区 Live 数据库首页与个人工作台需求](../../product/homepage-community-database.md)
 
 本文只描述阶段 1“首页壳与信息架构”的开发设计和实现边界。产品定位、用户视角、阶段路线和 TODO 仍由需求文档维护。
 
@@ -18,7 +20,7 @@
 - 页面外层已取消居中框，首页、资料库、控制台等主内容直接占满视口宽度。
 - 样式入口已统一到 `frontend/src/styles/index.css`，旧的 `frontend/src/styles.css` 已移除。
 
-因此，本文后续章节保留为阶段 1 的设计背景和回归参考；当前实现状态与剩余 TODO 以 [docs/product/homepage-community-database.md](D:/Code/PythonCode/5%20LiveSetList/docs/product/homepage-community-database.md) 为准。
+因此，本文后续章节保留为阶段 1 的设计背景和回归参考；当前实现状态与剩余 TODO 以 [社区 Live 数据库首页与个人工作台需求](../../product/homepage-community-database.md) 为准。
 
 ## 当前实现背景
 
