@@ -1,8 +1,10 @@
-# 活动出演成员实现设计
+# 活动出演成员实现设计（已完成）
 
 ## 范围
 
-本设计实现 [活动出演成员需求](../product/event-attendees.md)。字段只补充活动详情，不参与列表、筛选、Setlist 或统计。
+状态：已完成并归档。当前接口字段与行为以代码、OpenAPI 和 [API 补充说明](../../api.md) 为准。
+
+本设计实现 [活动出演成员需求](../completed-product/event-attendees.md)。字段只补充活动详情，不参与列表、筛选、Setlist 或统计。
 
 ## 数据结构
 

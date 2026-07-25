@@ -1,8 +1,10 @@
-# Live 更新实现设计
+# Live 更新实现设计（已完成）
 
 ## 范围
 
-本设计实现 [Live 更新需求](../product/live-update.md)。复用现有 Live 新增表单、Venue 选择、默认 Band 和活动出演成员控件，不提供 Setlist 或关联关系编辑。
+状态：已完成并归档。当前接口字段与行为以代码、OpenAPI 和 [API 补充说明](../../api.md) 为准。
+
+本设计实现 [Live 更新需求](../completed-product/live-update.md)。复用现有 Live 新增表单、Venue 选择、默认 Band 和活动出演成员控件，不提供 Setlist 或关联关系编辑。
 
 ## 接口
 

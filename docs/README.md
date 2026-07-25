@@ -9,24 +9,17 @@
 - [产品需求与 TODO](product/homepage-community-database.md)：当前产品阶段、已完成能力和下一轮优先项。
 - [公共 Live 与收藏 Live 统计需求](product/public-statistics.md)：当前 S1 口径、全部 / 收藏通用统计、按乐队划分的年度歌曲排行、久未演唱和后续歌曲生命周期方向。
 - [巡演聚合产品需求](product/tour-aggregation.md)：巡演与单场 Live 的产品边界、用户页面、资料口径、阶段范围和验收标准。
-- [活动出演成员需求](product/event-attendees.md)：活动类型的默认 Band、具体出演成员与详情展示规则。
-- [Live 更新需求](product/live-update.md)：控制台编辑既有 Live 基础资料、确认差异与关系保持规则。
-- [Flyway 落地说明](design/flyway.md)：仓库 migration、角色和日常迁移流程；当前仓库已到 V16。
+- [Flyway 落地说明](design/flyway.md)：仓库 migration、角色和日常迁移流程；当前仓库已到 V17。
 - [生产部署设计](design/production-deployment.md)：目标架构、安全边界和未完成的运维项。
 - [生产部署实录](production-deployment-runbook.md)：已执行步骤、发布流程、验收和排障；生产状态以此处的已确认记录为准。
 
 ## 当前设计
 
-- [公共统计 S1 实现设计](design/public-statistics-s1.md)
 - [巡演聚合实现设计](design/tour-aggregation.md)
 - [演出活动组聚合实现设计](design/performance-group-aggregation.md)：统一支持多日 Live、单日午场 / 晚场、演出资料列表聚合和完整收藏聚合。
-- [活动出演成员实现设计](design/event-attendees.md)：活动专用成员数据、计算 mode、控制台选择与详情内联 SVG 展示。
-- [Live 更新实现设计](design/live-update.md)：控制台候选、完整更新接口、共用表单与审计规则。
 - [Live 状态与日期阶段实现设计](design/live-status.md)：人工状态、按 Live 时区计算的日期阶段、正式改期历史与资料修正边界。
 - [公共端 UI 精修](design/public-ui-refresh.md)
-- [公共端视觉走查报告（2026-07）](design/public-ui-visual-audit-2026-07.md)：基于真实浏览器渲染的走查证据、新发现问题清单与修改范围。
 - [E2E 测试设计](design/e2e.md)
-- [首页阶段 1 开发设计](design/homepage-community-database-phase1.md)：历史阶段设计，当前状态以产品需求文档为准。
 
 ## 开发与运维
 
@@ -41,7 +34,9 @@
 ## 复盘与归档
 
 - `fails/`：已发生问题、原因、规避方式和仍需补齐的看护能力。
-- `archive/completed-design/`：已完成方案的设计与实施历史；只用于理解背景，不作为当前 API、UI 或部署状态的唯一依据。
+- [归档索引](archive/README.md)：已完成需求、设计和视觉走查的统一入口。
+- [已完成需求](archive/completed-product/)：已验收并退出活动路线图的需求历史。
+- [已完成设计与走查](archive/completed-design/)：已落地方案、阶段设计和视觉验收历史；只用于理解背景，不作为当前 API、UI 或部署状态的唯一依据。
 
 ## 维护规则
 
