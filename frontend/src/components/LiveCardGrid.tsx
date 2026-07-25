@@ -4,6 +4,7 @@ import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
 import { ContentState } from "./ContentState";
 import { LiveTypeBadge } from "./LiveTypeBadge";
 import { formatLiveType } from "./console/constants";
+import { formatCompactDate, formatCompactDateRange } from "../dateFormat";
 import {
   formatLiveStatusText,
   getLiveStatusPresentation,
@@ -56,6 +57,14 @@ export function formatPerformanceDate(
   if (!startDate) return fallbackDate;
   if (!endDate || startDate === endDate) return startDate;
   return `${startDate} ~ ${endDate}`;
+}
+
+export function formatCompactPerformanceDate(
+  startDate: string | null,
+  endDate: string | null,
+  fallbackDate: string,
+): string {
+  return formatCompactDateRange(startDate, endDate, fallbackDate);
 }
 
 function getCardStatus(row: LiveRow): { text: string; tone: string } {
@@ -135,7 +144,7 @@ export function LiveCardGrid({
               >
                 <span className="live-card-head">
                   <span className="live-card-date">
-                    {formatPerformanceDate(row.groupStartDate, row.groupEndDate, row.liveDate)}
+                    {formatCompactPerformanceDate(row.groupStartDate, row.groupEndDate, row.liveDate)}
                   </span>
                   <span className="live-card-badges">
                     <LiveTypeBadge value="performance_group" label={row.liveType} />
@@ -168,7 +177,7 @@ export function LiveCardGrid({
                 onClick={() => onOpenLive(row)}
               >
                 <span className="live-card-head">
-                  <span className="live-card-date">{row.liveDate}</span>
+                  <span className="live-card-date">{formatCompactDate(row.liveDate)}</span>
                   <span className="live-card-badges">
                     <LiveTypeBadge value={row.liveType} label={formatLiveType(row.liveType)} />
                     <span className="live-status-pill">{status.text}</span>
@@ -179,7 +188,7 @@ export function LiveCardGrid({
               <div className="live-card-footer">
                 <BandIconsCell icons={row.icons} rowId={row.liveId} />
                 <span className="live-card-actions">
-                  {showStar && (
+                  {showStar && row.eventStatus !== "cancelled" && (
                     <button
                       type="button"
                       className={`star-btn live-card-action ${isFavorite(row.liveId) ? "is-fav" : ""} ${isSyncing(row.liveId) ? "is-syncing" : ""}`}

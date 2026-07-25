@@ -69,8 +69,20 @@
 }
 
 .live-schedule-history ul {
-  margin: 4px 0 0 1.2em;
+  margin: 0;
   padding: 0;
+  list-style: none;
+}
+
+.live-schedule-history li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.live-schedule-history-prefix {
+  flex: 0 0 auto;
+  font-weight: 600;
 }
 
 .detail-back-btn {

@@ -8,7 +8,7 @@ from psycopg2.extras import Json
 
 from app.auth import AuthSessionContext, AuthUser, assert_valid_csrf, get_current_auth_context, get_current_user
 from app.db import get_db_connection, get_user_write_db_connection
-from app.favorites import apply_favorites_batch, live_exists
+from app.favorites import apply_favorites_batch, get_live_event_status, live_exists
 from app.live_list_filters import (
     LiveListFilters,
     build_filtered_live_queries,
@@ -51,6 +51,7 @@ SELECT
 FROM user_live_favorites f
 JOIN live_attrs l
     ON l.id = f.live_id
+   AND l.event_status <> 'cancelled'
 LEFT JOIN tour_lives tour_live
     ON tour_live.live_id = l.id
 LEFT JOIN tour_attrs tour
@@ -392,8 +393,11 @@ def favorite_live(
     try:
         with get_user_write_db_connection() as conn:
             with conn.cursor() as cur:
-                if not live_exists(cur, live_id):
+                event_status = get_live_event_status(cur, live_id)
+                if event_status is None:
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
+                if event_status == "cancelled":
+                    raise HTTPException(status_code=409, detail="Cancelled Live cannot be favorited")
 
                 cur.execute(
                     """

@@ -177,6 +177,7 @@ export type EventStatus = "scheduled" | "postponed" | "cancelled";
 export type DatePhase = "upcoming" | "today" | "past";
 
 export type LiveScheduleHistoryItem = {
+  previous_live_title: string | null;
   previous_live_date: string;
   previous_opening_time: string;
   previous_start_time: string;

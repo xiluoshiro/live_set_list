@@ -9,7 +9,6 @@ import {
   type TourStatisticsResponse,
 } from "../api";
 import { logError } from "../logger";
-import { formatLiveStatusText } from "../liveStatus";
 import { ContentState } from "./ContentState";
 import { DetailTitleLink } from "./DetailTitleLink";
 import { LiveDetailContent } from "./LiveDetailContent";
@@ -158,11 +157,7 @@ export function TourDetailPage({
               <nav className="tour-stop-shortcuts" aria-label="巡演场次">
                 {detail.stops.map((stop, index) => {
                   const shortTitle = getTourStopShortTitle(stop.live_title, detail.tour_title);
-                  const displayTitle = `${shortTitle}（${formatLiveStatusText(
-                    stop.event_status ?? "scheduled",
-                    stop.date_phase ?? "past",
-                    stop.was_rescheduled ?? false,
-                  )}）`;
+                  const displayTitle = shortTitle;
                   const favorite = isFavorite(stop.live_id);
                   const canOpenStop = stop.event_status !== "cancelled" || stop.has_setlist;
                   return (
@@ -186,7 +181,7 @@ export function TourDetailPage({
                           {displayTitle}
                         </span>
                       )}
-                      {canFavorite && onToggleFavorite && (
+                      {canFavorite && onToggleFavorite && stop.event_status !== "cancelled" && (
                         <button
                           type="button"
                           className={`star-btn performance-group-live-star ${favorite ? "is-fav" : ""} ${isSyncing(stop.live_id) ? "is-syncing" : ""}`}

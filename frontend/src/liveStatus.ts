@@ -57,7 +57,11 @@ export function getLiveStatusPresentation(
     return { primary: EVENT_STATUS_LABELS.cancelled, secondary: null, tone: "cancelled" };
   }
   if (eventStatus === "postponed") {
-    return { primary: EVENT_STATUS_LABELS.postponed, secondary: null, tone: "postponed" };
+    return {
+      primary: DATE_PHASE_LABELS[datePhase],
+      secondary: EVENT_STATUS_LABELS.postponed,
+      tone: "postponed",
+    };
   }
   return {
     primary: DATE_PHASE_LABELS[datePhase],

@@ -19,10 +19,12 @@ class FavoriteBatchResult:
 def get_favorite_live_ids(cur: Any, user_id: int) -> list[int]:
     cur.execute(
         """
-        SELECT live_id
-        FROM user_live_favorites
-        WHERE user_id = %s
-        ORDER BY live_id
+        SELECT favorite.live_id
+        FROM user_live_favorites favorite
+        JOIN live_attrs live ON live.id = favorite.live_id
+        WHERE favorite.user_id = %s
+          AND live.event_status <> 'cancelled'
+        ORDER BY favorite.live_id
         """,
         (user_id,),
     )
@@ -82,6 +84,28 @@ def get_existing_live_id_set(cur: Any, live_ids: Sequence[int]) -> set[int]:
     return {int(row[0]) for row in cur.fetchall() if row and isinstance(row[0], int)}
 
 
+def get_favoritable_live_id_set(cur: Any, live_ids: Sequence[int]) -> set[int]:
+    if not live_ids:
+        return set()
+
+    cur.execute(
+        """
+        SELECT id
+        FROM live_attrs
+        WHERE id = ANY(%s)
+          AND event_status <> 'cancelled'
+        """,
+        (list(live_ids),),
+    )
+    return {int(row[0]) for row in cur.fetchall() if row and isinstance(row[0], int)}
+
+
+def get_live_event_status(cur: Any, live_id: int) -> str | None:
+    cur.execute("SELECT event_status FROM live_attrs WHERE id = %s", (live_id,))
+    row = cur.fetchone()
+    return str(row[0]) if row else None
+
+
 def apply_favorites_batch(
     cur: Any,
     *,
@@ -113,7 +137,12 @@ def apply_favorites_batch(
 
     favorite_live_id_set = get_favorite_live_id_set(cur, user_id, existing_live_ids)
     if action == "favorite":
-        target_live_ids = [live_id for live_id in existing_live_ids if live_id not in favorite_live_id_set]
+        favoritable_live_id_set = get_favoritable_live_id_set(cur, existing_live_ids)
+        target_live_ids = [
+            live_id
+            for live_id in existing_live_ids
+            if live_id in favoritable_live_id_set and live_id not in favorite_live_id_set
+        ]
         if target_live_ids:
             cur.execute(
                 """

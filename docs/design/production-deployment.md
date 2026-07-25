@@ -9,7 +9,7 @@
 - 生产 VM、同源入口、私有 PostgreSQL、备份、Nginx 和 HTTPS/公开访问基线已经落地；首次生产数据迁移也已完成。
 - tag 驱动的 GitHub Actions 已验证可完成隔离 CI、白名单出包、`production` 审批、SSH 上传、服务器端备份/切换/回滚和公网 smoke test。
 - 生产数据库已通过 `v2026-07-18-001` 完成 V12/V13 migration、应用切换与 health 验收；迁移前已修复历史业务表 owner 漂移。
-- 当前仓库 migration 已到 V19，但本文没有生产 V14~V19 的 `flyway info` 或发布验收证据，因此生产确认状态仍停留在 V13。
+- 当前仓库 migration 已到 V20，但本文没有生产 V14~V20 的 `flyway info` 或发布验收证据，因此生产确认状态仍停留在 V13。
 - 两阶段 migration 发布代码、VM root-owned 入口、sudoers 和 GitHub 配置已完成：tag 自动分类，migration 与 deploy 由两个显式人工阶段控制，服务器端使用 root-only attestation 和共享 owner 契约约束数据库迁移与应用切换。
 - 剩余重点从“能否上线”转为 staging、监控告警、安全头、Host 限制、备份异地保存和 migration 自动化前的安全设计。
 - 推荐采用同源部署：公网只暴露 `https://<domain>`，静态前端由反向代理托管，`/api/*` 反代到后端，PostgreSQL 只允许后端内网访问。
@@ -202,7 +202,7 @@ PostgreSQL: private network only
 - [ ] 增加 staging 环境，先在 staging 完成真实域名、HTTPS、迁移、备份演练。
 - [x] 在生产 VM 安装两阶段 migration 入口，完成 sudoers 和 GitHub repository secrets/variables/Environments 配置。
 - [x] 已通过 `v2026-07-18-001` 核对 V12/V13 的 prepare、attestation、应用切换、health 与公网结果，并写回 runbook。
-- [ ] 为 V14~V19 安排 migration release，并在 runbook 记录生产 `flyway info`、owner 契约、应用切换和公网 smoke 证据。
+- [ ] 为 V14~V20 安排 migration release，并在 runbook 记录生产 `flyway info`、owner 契约、应用切换和公网 smoke 证据。
 - [ ] 在 staging 完成 app-only、migration 成功、migration 失败、attestation 篡改、重复执行、应用切换失败六类场景演练。
 - [ ] 对公共搜索、列表、详情批量接口增加流量保护策略。
 - [x] 补充生产部署 runbook、`infra/production/README.md` 和 GitHub Actions 配置说明。

@@ -198,7 +198,7 @@ export function PerformanceGroupDetailPage({
                       {displayTitle}
                     </span>
                   )}
-                  {canFavorite && onToggleFavorite && (
+                  {canFavorite && onToggleFavorite && live.event_status !== "cancelled" && (
                     <button
                       type="button"
                       className={`star-btn performance-group-live-star ${favorite ? "is-fav" : ""} ${isSyncing(live.live_id) ? "is-syncing" : ""}`}

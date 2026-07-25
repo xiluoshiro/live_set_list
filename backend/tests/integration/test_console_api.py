@@ -831,6 +831,7 @@ def test_console_live_schedule_change_separates_correction_from_reschedule(
     reschedule_payload = {
         **correction_payload,
         "live_date": "2026-03-02",
+        "live_title": "BanG Dream! Unit Live 改期公演",
         "opening_time": "18:30",
         "start_time": "19:30",
         "schedule_change_kind": "reschedule",
@@ -847,7 +848,7 @@ def test_console_live_schedule_change_separates_correction_from_reschedule(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT previous_live_date::text, previous_opening_time::text,
+            SELECT previous_live_title, previous_live_date::text, previous_opening_time::text,
                    previous_start_time::text, previous_venue_id, note
             FROM live_schedule_history
             WHERE live_id = %s
@@ -856,6 +857,7 @@ def test_console_live_schedule_change_separates_correction_from_reschedule(
         )
         history = cursor.fetchone()
     assert history == (
+        original["live_title"],
         original["live_date"],
         "18:01:00+09",
         original["start_time"].replace(":00+09:00", ":00+09"),
@@ -866,6 +868,7 @@ def test_console_live_schedule_change_separates_correction_from_reschedule(
     public_detail = integration_test_client.get(f"/api/lives/{live_id}").json()
     assert public_detail["was_rescheduled"] is True
     assert len(public_detail["schedule_history"]) == 1
+    assert public_detail["schedule_history"][0]["previous_live_title"] == original["live_title"]
     assert public_detail["schedule_history"][0]["note"] == "主办方正式改期"
 
 

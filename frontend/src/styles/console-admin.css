@@ -32,8 +32,13 @@
 }
 
 .live-schedule-change-editor {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .live-schedule-change-editor input[aria-label="排期变化说明"] {
