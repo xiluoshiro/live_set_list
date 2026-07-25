@@ -28,6 +28,9 @@ import {
   type ConsoleLiveSetlistAppendPayload,
   type ConsoleLiveSetlistRowPayload,
   type ConsoleLiveUpsertPayload,
+  type ConsoleLiveUpdatePayload,
+  type DatePhase,
+  type EventStatus,
   type ConsoleSongItem,
   type ConsoleSongCreatePayload,
   type ConsoleVenueItem,
@@ -83,6 +86,8 @@ type LiveInsertDraft = {
   venue_id: number;
   default_band_ids: number[];
   event_attendees: ConsoleEventAttendee[];
+  event_status: EventStatus;
+  status_note: string | null;
 };
 
 type ConsoleInsertPanelProps = {
@@ -116,6 +121,8 @@ type PendingConfirmation =
       payload: ConsoleLiveUpsertPayload;
       venueName: string;
       changes: Array<{ field: string; before: string; after: string }>;
+      scheduleChangeKind: "correction" | "reschedule" | null;
+      scheduleChangeNote: string | null;
     }
   | {
       kind: "live_discard";
@@ -259,6 +266,17 @@ function getTodayDateInputValue(): string {
   return `${year}-${month}-${day}`;
 }
 
+function deriveDatePhaseForOffset(liveDate: string, timezone: string): DatePhase {
+  const match = timezone.match(/^([+-])(\d{2}):(\d{2})$/);
+  if (!match) return "today";
+  const direction = match[1] === "-" ? -1 : 1;
+  const offsetMinutes = direction * (Number(match[2]) * 60 + Number(match[3]));
+  const localToday = new Date(Date.now() + offsetMinutes * 60_000).toISOString().slice(0, 10);
+  if (liveDate < localToday) return "past";
+  if (liveDate > localToday) return "upcoming";
+  return "today";
+}
+
 function getClockValue(value: string): string {
   return value.slice(0, 5);
 }
@@ -268,6 +286,8 @@ function normalizeLivePayload(payload: ConsoleLiveUpsertPayload): ConsoleLiveUps
     ...payload,
     live_title: payload.live_title.trim(),
     url: payload.url.trim(),
+    status_note: payload.status_note?.trim() || null,
+    event_status: payload.event_status ?? "scheduled",
     default_band_ids: [...payload.default_band_ids].sort((left, right) => left - right),
     event_attendees: [...payload.event_attendees]
       .sort((left, right) => left.band_id - right.band_id)
@@ -334,6 +354,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [selectedVenueId, setSelectedVenueId] = useState<number>(0);
   const [defaultBandIds, setDefaultBandIds] = useState<number[]>([]);
   const [eventAttendees, setEventAttendees] = useState<Record<number, string[]>>({});
+  const [eventStatus, setEventStatus] = useState<EventStatus>("scheduled");
+  const [statusNote, setStatusNote] = useState("");
+  const [scheduleChangeKind, setScheduleChangeKind] = useState<"correction" | "reschedule" | null>(null);
+  const [scheduleChangeNote, setScheduleChangeNote] = useState("");
   const [defaultBandOpen, setDefaultBandOpen] = useState(false);
   const [defaultBandMenuPos, setDefaultBandMenuPos] = useState<Position | null>(null);
   const [venueQueryText, setVenueQueryText] = useState("");
@@ -344,12 +368,14 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [liveCandidates, setLiveCandidates] = useState<ConsoleLiveCandidate[]>([]);
   const [liveCandidateQuery, setLiveCandidateQuery] = useState("");
   const [liveCandidateType, setLiveCandidateType] = useState("");
+  const [liveCandidateEventStatus, setLiveCandidateEventStatus] = useState("");
   const [liveCandidatePage, setLiveCandidatePage] = useState(1);
   const [liveCandidatePagination, setLiveCandidatePagination] = useState({ page: 1, page_size: 20, total: 0, total_pages: 1 });
   const [liveCandidateLoading, setLiveCandidateLoading] = useState(false);
   const selectFirstLiveCandidateAfterQueryRef = useRef(false);
   const [editingLiveId, setEditingLiveId] = useState<number | null>(null);
   const [originalLivePayload, setOriginalLivePayload] = useState<ConsoleLiveUpsertPayload | null>(null);
+  const [editingLiveHasSetlist, setEditingLiveHasSetlist] = useState(false);
   const [clearLiveAfterCreate, setClearLiveAfterCreate] = useState(true);
   const [setlistDetailOpen, setSetlistDetailOpen] = useState(false);
   const [setlistDetailData, setSetlistDetailData] = useState<LiveDetailResponse | null>(null);
@@ -407,9 +433,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           return members.length > 0 ? [{ band_id: bandId, members }] : [];
         })
       : [],
+    event_status: eventStatus,
+    status_note: statusNote.trim() || null,
   }), [
     defaultBandIds,
     eventAttendees,
+    eventStatus,
     liveDate,
     liveTitle,
     liveType,
@@ -417,9 +446,23 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     openingTime,
     selectedVenueId,
     startTime,
+    statusNote,
     timezone,
   ]);
   const isLiveDirty = editingLiveId !== null && !livePayloadEquals(originalLivePayload, currentLivePayload);
+  const scheduleFields = new Set<keyof ConsoleLiveUpsertPayload>([
+    "live_date",
+    "opening_time",
+    "start_time",
+    "timezone",
+    "venue_id",
+  ]);
+  const hasScheduleChanges = editingLiveId !== null && originalLivePayload !== null
+    && [...scheduleFields].some((field) => (
+      formatLivePayloadValue(field, originalLivePayload[field])
+      !== formatLivePayloadValue(field, currentLivePayload[field])
+    ));
+  const currentDatePhase = deriveDatePhaseForOffset(liveDate, timezone);
 
   const changeTimezoneHour = (hourValue: string) => {
     const minuteSuffix = hourValue === "-12" || hourValue === "+14" ? ":00" : timezoneMinute;
@@ -463,6 +506,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     startTime.trim() === "" ||
     timezone.trim() === "" ||
     (mode === "live_edit" && (editingLiveId === null || !isLiveDirty));
+  const isLiveSubmitBlocked = isLiveSubmitDisabled
+    || (mode === "live_edit" && hasScheduleChanges && scheduleChangeKind === null);
   const hasExistingSetlist = (setlistDetailData?.detail_rows ?? []).length > 0;
   // 校验规则 3：新增 Setlist 的“提交插入”要求每一行 song_name/sid/band_member 均非空。
   const isSetlistSubmitDisabled =
@@ -744,6 +789,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setSelectedVenueId(0);
     setDefaultBandIds([]);
     setEventAttendees({});
+    setEventStatus("scheduled");
+    setStatusNote("");
+    setScheduleChangeKind(null);
+    setScheduleChangeNote("");
+    setEditingLiveHasSetlist(false);
     setVenueQueryText("");
     setVenueOpen(false);
     setVenueMenuPos(null);
@@ -762,6 +812,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setSelectedVenueId(payload.venue_id);
     setDefaultBandIds([...payload.default_band_ids]);
     setEventAttendees(Object.fromEntries(payload.event_attendees.map((attendee) => [attendee.band_id, [...attendee.members]])));
+    setEventStatus(payload.event_status ?? "scheduled");
+    setStatusNote(payload.status_note ?? "");
+    setScheduleChangeKind(null);
+    setScheduleChangeNote("");
     setDefaultBandOpen(false);
     setDefaultBandMenuPos(null);
   };
@@ -811,10 +865,17 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     restoreLiveForm();
   };
 
-  const loadLiveCandidatePage = async (query: string, page: number, candidateType = liveCandidateType) => {
+  const loadLiveCandidatePage = async (
+    query: string,
+    page: number,
+    candidateType = liveCandidateType,
+    candidateEventStatus = liveCandidateEventStatus,
+  ) => {
     setLiveCandidateLoading(true);
     try {
-      const response = await getConsoleLiveCandidates(query, page, 20, candidateType);
+      const response = candidateEventStatus
+        ? await getConsoleLiveCandidates(query, page, 20, candidateType, undefined, candidateEventStatus)
+        : await getConsoleLiveCandidates(query, page, 20, candidateType);
       setLiveCandidates(response.items);
       setLiveCandidatePage(response.page);
       setLiveCandidatePagination(response);
@@ -837,7 +898,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const queryLiveCandidates = () => {
     selectFirstLiveCandidateAfterQueryRef.current = true;
     if (liveCandidatePage === 1) {
-      void loadLiveCandidatePage(liveCandidateQuery, 1, liveCandidateType);
+      void loadLiveCandidatePage(liveCandidateQuery, 1, liveCandidateType, liveCandidateEventStatus);
     } else {
       setLiveCandidatePage(1);
     }
@@ -936,12 +997,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           band_id: attendee.band_id,
           members: attendee.members,
         })),
+        event_status: item.event_status,
+        status_note: item.status_note,
       });
       setVenues((current) => current.some((venue) => venue.venue_id === item.venue_id)
         ? current
         : sortById([...current, { venue_id: item.venue_id, venue_name: item.venue_name }], (venue) => venue.venue_id));
       setEditingLiveId(item.live_id);
       setOriginalLivePayload(payload);
+      setEditingLiveHasSetlist(item.has_setlist ?? false);
       applyLivePayloadToForm(payload);
       setMessage(`已加载 Live #${item.live_id}。`);
     } catch (error) {
@@ -996,8 +1060,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
   useEffect(() => {
     if (mode !== "live_edit") return;
-    void loadLiveCandidatePage(liveCandidateQuery, liveCandidatePage, liveCandidateType);
-  }, [liveCandidatePage, liveCandidateType, mode]);
+    void loadLiveCandidatePage(
+      liveCandidateQuery,
+      liveCandidatePage,
+      liveCandidateType,
+      liveCandidateEventStatus,
+    );
+  }, [liveCandidatePage, liveCandidateType, liveCandidateEventStatus, mode]);
 
   useEffect(() => {
     if (mode !== "setlist_edit") return;
@@ -1725,6 +1794,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setMessage("更新Live失败：请先选择要编辑的 Live。");
       return;
     }
+    if (action === "update" && hasScheduleChanges && scheduleChangeKind === null) {
+      setMessage("更新Live失败：排期变化必须选择资料修正或主办方正式改期。");
+      return;
+    }
 
     const selectedVenue = venues.find((venue) => venue.venue_id === selectedVenueId);
     const normalizedPayload = normalizeLivePayload(currentLivePayload);
@@ -1744,6 +1817,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       payload: normalizedPayload,
       venueName: selectedVenue?.venue_name ?? "-",
       changes,
+      scheduleChangeKind,
+      scheduleChangeNote: scheduleChangeNote.trim() || null,
     });
   };
 
@@ -1776,12 +1851,19 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     action: "create" | "update",
     liveId: number | null,
     payload: ConsoleLiveUpsertPayload,
+    scheduleKind: "correction" | "reschedule" | null,
+    scheduleNote: string | null,
     csrfToken: string,
   ) => {
     try {
+      const updatePayload: ConsoleLiveUpdatePayload = {
+        ...payload,
+        schedule_change_kind: scheduleKind,
+        schedule_change_note: scheduleNote,
+      };
       const response = action === "create"
         ? await createConsoleLive(payload, csrfToken)
-        : await updateConsoleLive(liveId as number, payload, csrfToken);
+        : await updateConsoleLive(liveId as number, updatePayload, csrfToken);
       const historyEntryId = liveHistoryEntryIdRef.current + 1;
       liveHistoryEntryIdRef.current = historyEntryId;
       const inserted: LiveInsertDraft = {
@@ -1798,6 +1880,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         venue_id: response.item.venue_id,
         default_band_ids: response.item.default_band_ids ?? [],
         event_attendees: response.item.event_attendees ?? [],
+        event_status: response.item.event_status ?? "scheduled",
+        status_note: response.item.status_note ?? null,
       };
       const savedPayload = normalizeLivePayload({
         live_date: response.item.live_date,
@@ -1813,6 +1897,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           band_id: attendee.band_id,
           members: attendee.members,
         })),
+        event_status: response.item.event_status ?? "scheduled",
+        status_note: response.item.status_note ?? null,
       });
 
       setInsertedLives((prev) => [inserted, ...prev]);
@@ -1862,7 +1948,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         applyLivePayloadToForm(savedPayload);
       }
       if (action === "update") {
-        await loadLiveCandidatePage(liveCandidateQuery, liveCandidatePage, liveCandidateType);
+        await loadLiveCandidatePage(
+          liveCandidateQuery,
+          liveCandidatePage,
+          liveCandidateType,
+          liveCandidateEventStatus,
+        );
       }
       setMessage(`已${action === "create" ? "新增" : "更新"}Live #${inserted.live_id}（${inserted.live_title}）`);
     } catch (error) {
@@ -2042,6 +2133,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           pendingConfirmation.action,
           pendingConfirmation.liveId,
           pendingConfirmation.payload,
+          pendingConfirmation.scheduleChangeKind,
+          pendingConfirmation.scheduleChangeNote,
           auth.csrfToken,
         );
       } else if (pendingConfirmation.kind === "live_discard") {
@@ -2142,6 +2235,21 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           {shouldWarnMissingEventBands && (
             <p className="console-admin-hint" role="status">
               提示：当前 Live 类型为活动，且未选择默认 Band，请确认是否需要补充。
+            </p>
+          )}
+          {pendingConfirmation.scheduleChangeKind && (
+            <p className="console-admin-hint" role="status">
+              本次排期变化：
+              {pendingConfirmation.scheduleChangeKind === "correction" ? "资料修正" : "主办方正式改期"}
+              {pendingConfirmation.scheduleChangeNote ? `（${pendingConfirmation.scheduleChangeNote}）` : ""}
+            </p>
+          )}
+          {(payload.event_status === "cancelled" || payload.event_status === "postponed")
+            && (editingLiveHasSetlist || hasExistingSetlist) && (
+            <p className="console-admin-hint console-admin-warning" role="alert">
+              警告：当前 Live 已有 Setlist。保存
+              {payload.event_status === "cancelled" ? "取消" : "延期"}
+              状态不会删除已有歌曲资料。
             </p>
           )}
         </>
@@ -2330,6 +2438,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           liveDate={liveDate}
           liveTitle={liveTitle}
           liveType={liveType}
+          eventStatus={eventStatus}
+          statusNote={statusNote}
+          datePhase={currentDatePhase}
+          hasScheduleChanges={hasScheduleChanges}
+          scheduleChangeKind={scheduleChangeKind}
+          scheduleChangeNote={scheduleChangeNote}
           liveUrl={liveUrl}
           openingTime={openingTime}
           startTime={startTime}
@@ -2343,6 +2457,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           venueQueryText={venueQueryText}
           liveCandidateQuery={liveCandidateQuery}
           liveCandidateType={liveCandidateType}
+          liveCandidateEventStatus={liveCandidateEventStatus}
           liveCandidates={liveCandidates}
           liveCandidatePage={liveCandidatePagination.page}
           liveCandidateTotal={liveCandidatePagination.total}
@@ -2370,6 +2485,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
             setLiveType(value);
             if (value !== "event") setEventAttendees({});
           }}
+          onEventStatusChange={(value) => {
+            setEventStatus(value as EventStatus);
+            if (value === "scheduled") setStatusNote("");
+          }}
+          onStatusNoteChange={setStatusNote}
+          onScheduleChangeKindChange={setScheduleChangeKind}
+          onScheduleChangeNoteChange={setScheduleChangeNote}
           onLiveUrlChange={setLiveUrl}
           onOpeningTimeChange={setOpeningTime}
           onStartTimeChange={setStartTime}
@@ -2378,6 +2500,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onVenueQueryTextChange={setVenueQueryText}
           onLiveCandidateQueryChange={setLiveCandidateQuery}
           onLiveCandidateTypeChange={changeLiveCandidateType}
+          onLiveCandidateEventStatusChange={(value) => {
+            setLiveCandidateEventStatus(value);
+            setLiveCandidatePage(1);
+          }}
           onQueryLiveCandidates={queryLiveCandidates}
           onLiveCandidatePageChange={setLiveCandidatePage}
           onSelectLiveForEdit={requestLiveForEdit}
@@ -2395,7 +2521,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onClearInsertLive={clearLiveForm}
           onSubmitInsertLive={submitInsertLive}
           queryInsertDisabled={isVenueQuickInsertDisabled}
-          submitInsertDisabled={isLiveSubmitDisabled}
+          submitInsertDisabled={isLiveSubmitBlocked}
         />
       )}
 

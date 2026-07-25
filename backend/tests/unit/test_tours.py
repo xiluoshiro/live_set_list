@@ -59,6 +59,7 @@ def test_get_tours_returns_public_summaries():
                 "start_date": "2026-04-17",
                 "end_date": "2026-06-20",
                 "collected_live_count": 6,
+                "cancelled_live_count": 0,
                 "stop_labels": ["福冈公演", "FINAL DAY2"],
             }
         ],

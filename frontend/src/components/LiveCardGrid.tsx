@@ -4,6 +4,12 @@ import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
 import { ContentState } from "./ContentState";
 import { LiveTypeBadge } from "./LiveTypeBadge";
 import { formatLiveType } from "./console/constants";
+import {
+  formatLiveStatusText,
+  getLiveStatusPresentation,
+  getPerformanceGroupStatusPresentation,
+} from "../liveStatus";
+import type { DatePhase, EventStatus } from "../api";
 
 export type LiveRow = {
   kind: "live" | "performance_group";
@@ -19,7 +25,11 @@ export type LiveRow = {
   groupEndDate: string | null;
   groupDayCount: number | null;
   groupLiveCount: number | null;
+  groupCancelledLiveCount: number | null;
   groupIcons: BandIconInput[];
+  eventStatus: EventStatus | null;
+  datePhase: DatePhase | null;
+  wasRescheduled: boolean;
 };
 
 interface LiveCardGridProps {
@@ -46,6 +56,30 @@ export function formatPerformanceDate(
   if (!startDate) return fallbackDate;
   if (!endDate || startDate === endDate) return startDate;
   return `${startDate} ~ ${endDate}`;
+}
+
+function getCardStatus(row: LiveRow): { text: string; tone: string } {
+  if (row.kind === "performance_group") {
+    const status = getPerformanceGroupStatusPresentation(
+      row.groupStartDate,
+      row.groupEndDate,
+      row.groupCancelledLiveCount ?? 0,
+      row.groupLiveCount ?? 0,
+    );
+    return { text: status.primary, tone: status.tone };
+  }
+  return {
+    text: formatLiveStatusText(
+      row.eventStatus ?? "scheduled",
+      row.datePhase ?? "past",
+      row.wasRescheduled,
+    ),
+    tone: getLiveStatusPresentation(
+      row.eventStatus ?? "scheduled",
+      row.datePhase ?? "past",
+      row.wasRescheduled,
+    ).tone,
+  };
 }
 
 export function LiveCardGrid({
@@ -85,23 +119,28 @@ export function LiveCardGrid({
   return (
     <>
       <div className="live-card-grid">
-        {rows.map((row) =>
-          row.kind === "performance_group" ? (
+        {rows.map((row) => {
+          const status = getCardStatus(row);
+          return row.kind === "performance_group" ? (
             <article
               key={`group-${row.groupId}`}
               className="live-card"
+              data-status-tone={status.tone}
             >
               <button
                 type="button"
                 className="live-card-main"
-                aria-label={`查看活动组《${row.liveTitle}》详情`}
+                aria-label={`查看活动组《${row.liveTitle}》详情，状态：${status.text}`}
                 onClick={() => row.groupId !== null && row.groupTitle !== null && onOpenGroup?.(row.groupId, row.groupTitle)}
               >
                 <span className="live-card-head">
                   <span className="live-card-date">
                     {formatPerformanceDate(row.groupStartDate, row.groupEndDate, row.liveDate)}
                   </span>
-                  <LiveTypeBadge value="performance_group" label={row.liveType} />
+                  <span className="live-card-badges">
+                    <LiveTypeBadge value="performance_group" label={row.liveType} />
+                    <span className="live-status-pill">{status.text}</span>
+                  </span>
                 </span>
                 <span className="live-card-title">{row.liveTitle}</span>
               </button>
@@ -110,8 +149,8 @@ export function LiveCardGrid({
                 <span className="live-card-count">
                   {row.groupLiveCount !== null
                     ? row.groupDayCount === 1
-                      ? `已收录 ${row.groupLiveCount} 场`
-                      : `已收录 ${row.groupDayCount} 日 · ${row.groupLiveCount} 场`
+                      ? `已收录 ${row.groupLiveCount} 场${row.groupCancelledLiveCount ? ` · 取消 ${row.groupCancelledLiveCount} 场` : ""}`
+                      : `已收录 ${row.groupDayCount} 日 · ${row.groupLiveCount} 场${row.groupCancelledLiveCount ? ` · 取消 ${row.groupCancelledLiveCount} 场` : ""}`
                     : ""}
                 </span>
               </div>
@@ -120,16 +159,20 @@ export function LiveCardGrid({
             <article
               key={row.liveId}
               className="live-card"
+              data-status-tone={status.tone}
             >
               <button
                 type="button"
                 className="live-card-main"
-                aria-label={`查看《${row.liveTitle}》详情`}
+                aria-label={`查看《${row.liveTitle}》详情，状态：${status.text}`}
                 onClick={() => onOpenLive(row)}
               >
                 <span className="live-card-head">
                   <span className="live-card-date">{row.liveDate}</span>
-                  <LiveTypeBadge value={row.liveType} label={formatLiveType(row.liveType)} />
+                  <span className="live-card-badges">
+                    <LiveTypeBadge value={row.liveType} label={formatLiveType(row.liveType)} />
+                    <span className="live-status-pill">{status.text}</span>
+                  </span>
                 </span>
                 <span className="live-card-title">{row.liveTitle}</span>
               </button>
@@ -162,8 +205,8 @@ export function LiveCardGrid({
                 </span>
               </div>
             </article>
-          )
-        )}
+          );
+        })}
       </div>
       <div ref={sentinelRef} className="live-card-sentinel">
         {loadingMore ? "加载中..." : hasMore ? "" : `已加载全部 ${total} 条`}

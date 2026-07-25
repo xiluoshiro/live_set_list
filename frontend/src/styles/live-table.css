@@ -36,6 +36,30 @@ tbody tr:hover {
   background: var(--surface-table-hover);
 }
 
+tbody tr[data-status-tone] > td:first-child {
+  box-shadow: inset 3px 0 var(--live-row-status-color);
+}
+
+tbody tr[data-status-tone="past"] {
+  --live-row-status-color: var(--live-status-past-text);
+}
+
+tbody tr[data-status-tone="upcoming"] {
+  --live-row-status-color: var(--live-status-upcoming-text);
+}
+
+tbody tr[data-status-tone="today"] {
+  --live-row-status-color: var(--live-status-today-text);
+}
+
+tbody tr[data-status-tone="postponed"] {
+  --live-row-status-color: var(--live-status-postponed-text);
+}
+
+tbody tr[data-status-tone="cancelled"] {
+  --live-row-status-color: var(--live-status-cancelled-text);
+}
+
 .table-with-fav th:nth-child(1),
 .table-with-fav td:nth-child(1) {
   width: 80px;
@@ -293,9 +317,11 @@ tbody tr:hover {
 }
 
 .live-card {
+  --live-status-bg: var(--surface-1);
+  --live-status-text: var(--text-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
-  background: var(--surface-1);
+  background: var(--live-status-bg);
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -304,7 +330,7 @@ tbody tr:hover {
 }
 
 .live-card:hover {
-  border-color: var(--accent-primary);
+  border-color: var(--live-status-text);
 }
 
 .live-card-main {
@@ -318,6 +344,94 @@ tbody tr:hover {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.live-card-main:disabled {
+  cursor: default;
+}
+
+.live-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--live-status-text) 34%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--live-status-text) 10%, transparent);
+  color: var(--live-status-text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.live-card[data-status-tone] {
+  position: relative;
+  overflow: hidden;
+}
+
+.live-card[data-status-tone]::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--live-status-text);
+}
+
+.live-card[data-status-tone="past"] {
+  --live-status-bg: var(--live-status-past-bg);
+  --live-status-text: var(--live-status-past-text);
+}
+
+.live-card[data-status-tone="upcoming"] {
+  --live-status-bg: var(--live-status-upcoming-bg);
+  --live-status-text: var(--live-status-upcoming-text);
+}
+
+.live-card[data-status-tone="today"] {
+  --live-status-bg: var(--live-status-today-bg);
+  --live-status-text: var(--live-status-today-text);
+}
+
+.live-card[data-status-tone="postponed"] {
+  --live-status-bg: var(--live-status-postponed-bg);
+  --live-status-text: var(--live-status-postponed-text);
+}
+
+.live-card[data-status-tone="cancelled"] {
+  --live-status-bg: var(--live-status-cancelled-bg);
+  --live-status-text: var(--live-status-cancelled-text);
+}
+
+.live-card.is-cancelled,
+tr.is-cancelled {
+  border-color: var(--accent-danger-soft-border);
+  background: var(--accent-danger-soft);
+  color: var(--accent-danger);
+}
+
+.live-card.is-cancelled {
+  cursor: default;
+}
+
+.live-card.is-cancelled:hover {
+  border-color: var(--accent-danger-soft-border);
+}
+
+.live-card.is-cancelled .live-card-title,
+.cancelled-static-title,
+.live-cancelled-count,
+.live-status-cancelled,
+.live-status-postponed {
+  color: var(--accent-danger);
+}
+
+.live-card.is-cancelled .live-card-title {
+  cursor: default;
+}
+
+.live-card.is-cancelled .live-card-main:hover .live-card-title {
+  text-decoration: none;
 }
 
 .live-card-head {
@@ -342,9 +456,14 @@ tbody tr:hover {
   white-space: nowrap;
 }
 
-.live-card-head .live-type-badge,
-.live-card-head .live-card-count {
+.live-card-badges {
   margin-left: auto;
+}
+
+.live-card-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .live-card-count {

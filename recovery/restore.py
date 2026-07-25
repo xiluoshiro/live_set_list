@@ -484,6 +484,12 @@ GRANT USAGE, CREATE ON SCHEMA public TO {flyway_user};
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO {readonly_user};
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO {super_user};
 GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO {super_user};
+GRANT DELETE ON TABLE
+    public.tour_bands,
+    public.tour_lives,
+    public.performance_group_lives,
+    public.live_setlist
+TO {super_user};
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.flyway_schema_history TO {flyway_user};
 GRANT SELECT ON TABLE public.live_attrs TO {user_rw_user};
 GRANT SELECT, INSERT, DELETE ON TABLE public.user_live_favorites TO {user_rw_user};

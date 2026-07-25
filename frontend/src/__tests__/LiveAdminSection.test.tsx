@@ -16,6 +16,11 @@ function renderSection(
     isLiveDirty?: boolean;
     variant?: "create" | "edit";
     insertedLives?: InsertedLiveHistory;
+    hasScheduleChanges?: boolean;
+    datePhase?: "upcoming" | "today" | "past";
+    eventStatus?: "scheduled" | "postponed" | "cancelled";
+    scheduleChangeKind?: "correction" | "reschedule" | null;
+    onScheduleChangeKindChange?: ReturnType<typeof vi.fn>;
   } = {},
 ) {
   const onToggleEventAttendee = options.onToggleEventAttendee ?? vi.fn();
@@ -25,6 +30,10 @@ function renderSection(
       liveDate="2026-07-17"
       liveTitle="Draft Live"
       liveType={options.liveType ?? "other"}
+      eventStatus={options.eventStatus ?? "scheduled"}
+      datePhase={options.datePhase ?? "past"}
+      hasScheduleChanges={options.hasScheduleChanges ?? false}
+      scheduleChangeKind={options.scheduleChangeKind ?? null}
       liveUrl="https://example.com/live"
       openingTime="18:00"
       startTime="19:00"
@@ -66,6 +75,7 @@ function renderSection(
       onLiveDateChange={vi.fn()}
       onLiveTitleChange={vi.fn()}
       onLiveTypeChange={vi.fn()}
+      onScheduleChangeKindChange={options.onScheduleChangeKindChange ?? vi.fn()}
       onLiveUrlChange={vi.fn()}
       onOpeningTimeChange={vi.fn()}
       onStartTimeChange={vi.fn()}
@@ -134,6 +144,36 @@ describe("LiveAdminSection", () => {
     expect(screen.getByRole("button", { name: "恢复原值" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存修改" })).toBeInTheDocument();
     expect(screen.getByText("Live #55 有未保存修改")).toBeInTheDocument();
+  });
+
+  // 测试点：日期阶段保持只读；只有编辑排期发生变化时才要求选择资料修正或正式改期。
+  test("shows read-only date phase and schedule change choices only after schedule edits", () => {
+    const onScheduleChangeKindChange = vi.fn();
+    renderSection(vi.fn(), {
+      variant: "edit",
+      editingLiveId: 55,
+      datePhase: "today",
+      hasScheduleChanges: true,
+      onScheduleChangeKindChange,
+    });
+
+    expect(screen.getByLabelText("日期阶段：进行中（只读）")).toHaveTextContent("进行中");
+    expect(screen.getByRole("radio", { name: "资料修正" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "主办方正式改期" }));
+    expect(onScheduleChangeKindChange).toHaveBeenCalledWith("reschedule");
+  });
+
+  // 测试点：按计划的 Live 不显示无效的延期或取消说明输入框。
+  test("hides the public status note for scheduled Lives", () => {
+    renderSection(vi.fn(), { eventStatus: "scheduled" });
+    expect(screen.queryByLabelText("状态说明")).not.toBeInTheDocument();
+  });
+
+  // 测试点：延期或取消说明明确告知管理员其内容会展示在公开详情中。
+  test("explains where the postponed status note is published", () => {
+    renderSection(vi.fn(), { eventStatus: "postponed" });
+    expect(screen.getByLabelText("状态说明")).toBeInTheDocument();
+    expect(screen.getByText("将显示在公开演出详情的状态栏中")).toBeInTheDocument();
   });
 
   // 测试点：新增 Live 页只显示录入控件和提交后清空选项，不混入既有 Live 查询。

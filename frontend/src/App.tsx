@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
-  clearLivesCache,
+  clearLiveDataCaches,
   clearMyFavoriteLivesCache,
   getCatalogBandLives,
   getCatalogBands,
@@ -23,6 +23,8 @@ import {
   type PerformanceItem,
   type TourRef,
   type TourSummary,
+  type DatePhase,
+  type EventStatus,
 } from "./api";
 import { useAuth } from "./auth/AuthProvider";
 import { BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
@@ -57,6 +59,12 @@ import {
 } from "./liveListFilters";
 import { logError } from "./logger";
 import {
+  formatLiveStatusText,
+  getLiveStatusPresentation,
+  getPerformanceGroupStatusPresentation,
+} from "./liveStatus";
+import { CONSOLE_LIVE_CHANGE_STORAGE_KEY } from "./consoleLiveSync";
+import {
   prefetchCurrentPageDetails,
   scheduleIdleFavoritePagePrefetch,
   scheduleIdleNextPagePrefetch,
@@ -78,9 +86,13 @@ type DisplayRow = {
   groupEndDate: string | null;
   groupDayCount: number | null;
   groupLiveCount: number | null;
+  groupCancelledLiveCount: number | null;
   groupDisplayType: "single_day_multi_show" | "multi_day" | null;
   groupIcons: BandIconInput[];
   groupVenues: string[];
+  eventStatus: EventStatus | null;
+  datePhase: DatePhase | null;
+  wasRescheduled: boolean;
 };
 
 type LiveDetailFallback = {
@@ -252,6 +264,7 @@ function App() {
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeError, setHomeError] = useState<string | null>(null);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
+  const [liveDataRevision, setLiveDataRevision] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResult, setSearchResult] = useState<CatalogSearchResponse | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -446,9 +459,13 @@ function App() {
     groupEndDate: null,
     groupDayCount: null,
     groupLiveCount: null,
+    groupCancelledLiveCount: null,
     groupDisplayType: null,
     groupIcons: [],
     groupVenues: [],
+    eventStatus: item.event_status ?? "scheduled",
+    datePhase: item.date_phase ?? "past",
+    wasRescheduled: item.was_rescheduled ?? false,
   });
 
   const performancesToDisplayRows = (pageItems: PerformanceItem[]): DisplayRow[] =>
@@ -469,9 +486,13 @@ function App() {
           groupEndDate: null,
           groupDayCount: null,
           groupLiveCount: null,
+          groupCancelledLiveCount: null,
           groupDisplayType: null,
           groupIcons: [],
           groupVenues: [],
+          eventStatus: live.event_status ?? "scheduled",
+          datePhase: live.date_phase ?? "past",
+          wasRescheduled: live.was_rescheduled ?? false,
         };
       }
       const pg = item.performance_group;
@@ -489,9 +510,13 @@ function App() {
         groupEndDate: pg.end_date,
         groupDayCount: pg.day_count,
         groupLiveCount: pg.live_count,
+        groupCancelledLiveCount: pg.cancelled_live_count ?? 0,
         groupDisplayType: pg.display_type,
         groupIcons: pg.bands.map((b) => b.band_id),
         groupVenues: pg.venues,
+        eventStatus: null,
+        datePhase: null,
+        wasRescheduled: false,
       };
     });
 
@@ -610,7 +635,7 @@ function App() {
     return () => {
       canceled = true;
     };
-  }, [searchQuery, tab]);
+  }, [liveDataRevision, searchQuery, tab]);
 
   useEffect(() => {
     if (tab !== "browse") return;
@@ -677,7 +702,7 @@ function App() {
     return () => {
       canceled = true;
     };
-  }, [catalogBandPage, pageSize, selectedCatalogBandId, tab]);
+  }, [catalogBandPage, liveDataRevision, pageSize, selectedCatalogBandId, tab]);
 
   useEffect(() => {
     if (tab !== "home" && tab !== "all" && tab !== "favorites" && tab !== "statistics") return;
@@ -844,6 +869,7 @@ function App() {
     listEnabled,
     listFilters,
     listFiltersActive,
+    liveDataRevision,
     page,
     pageSize,
     tab,
@@ -947,16 +973,38 @@ function App() {
     setTourFilters(nextFilters);
   };
 
-  const handleConsoleLiveDataChanged = () => {
+  const handleConsoleLiveDataChanged = useCallback(() => {
     listSnapshotsRef.current = {};
     cardSessionsRef.current = {};
-    clearLivesCache();
-    clearMyFavoriteLivesCache();
+    clearLiveDataCaches();
     setHomeRecentRows([]);
     setHomeLiveTotal(0);
     setHomeError(null);
     setHomeRefreshKey((key) => key + 1);
-  };
+    setLiveDataRevision((revision) => revision + 1);
+  }, []);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === CONSOLE_LIVE_CHANGE_STORAGE_KEY) {
+        handleConsoleLiveDataChanged();
+      }
+    };
+    const handleFocus = () => handleConsoleLiveDataChanged();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        handleConsoleLiveDataChanged();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [handleConsoleLiveDataChanged]);
 
   const handleCatalogSearch = (query: string) => {
     navigateToTab("search", { searchQuery: query });
@@ -1404,9 +1452,10 @@ function App() {
         {favorites.favoriteSyncWarning && <p className="favorite-sync-warning">{favorites.favoriteSyncWarning}</p>}
 
         {tab === "detail" && detailLiveId !== null && detailFallback !== null ? (
-          <LiveDetailPage liveId={detailLiveId} fallback={detailFallback} onBack={handleBackFromDetail} onOpenTour={openTourDetail} onOpenPerformanceGroup={openPerformanceGroupDetail} />
+          <LiveDetailPage key={`live-${detailLiveId}-${liveDataRevision}`} liveId={detailLiveId} fallback={detailFallback} onBack={handleBackFromDetail} onOpenTour={openTourDetail} onOpenPerformanceGroup={openPerformanceGroupDetail} />
         ) : showTourDetailPanel && detailTourId !== null && tourFallback !== null ? (
           <TourDetailPage
+            key={`tour-${detailTourId}-${liveDataRevision}`}
             tourId={detailTourId}
             fallback={tourFallback}
             onBack={handleBackFromTourDetail}
@@ -1417,6 +1466,7 @@ function App() {
           />
         ) : showPerformanceGroupDetailPanel && detailGroupId !== null && groupFallback !== null ? (
           <PerformanceGroupDetailPage
+            key={`group-${detailGroupId}-${liveDataRevision}`}
             groupId={detailGroupId}
             initialLiveId={detailGroupLiveId}
             onBack={handleBackFromPerformanceGroupDetail}
@@ -1484,7 +1534,15 @@ function App() {
             isAuthenticated={auth.isAuthenticated}
             onScopeChange={handleStatisticsScopeChange}
             onFiltersChange={setStatisticsFilters}
-            onOpenLive={(live) => openLiveDetail({ ...live, url: null, liveType: "other", icons: [] }, "statistics")}
+            onOpenLive={(live) => openLiveDetail({
+              ...live,
+              url: null,
+              liveType: "other",
+              icons: [],
+              eventStatus: "scheduled",
+              datePhase: "past",
+              wasRescheduled: false,
+            }, "statistics")}
           />
         ) : showAboutPanel ? (
           <AboutPanel />
@@ -1577,7 +1635,7 @@ function App() {
                 isFavorite={isFavorite}
                 isSyncing={(id) => favorites.isFavoriteSyncing(id)}
                 onToggleStar={(id) => void toggleFavorite(id)}
-                onOpenLive={openLiveDetail}
+                onOpenLive={(row) => openLiveDetail(row as DisplayRow)}
                 onOpenGroup={(groupId, groupTitle) => openPerformanceGroupDetail({ group_id: groupId, group_title: groupTitle })}
                 loading={loading}
                 loadError={loadError}
@@ -1620,7 +1678,15 @@ function App() {
                 <tbody>
                   {pagedRows.map((row) => (
                     row.kind === "performance_group" ? (
-                      <tr key={`group-${row.groupId}`}>
+                      <tr
+                        key={`group-${row.groupId}`}
+                        data-status-tone={getPerformanceGroupStatusPresentation(
+                          row.groupStartDate,
+                          row.groupEndDate,
+                          row.groupCancelledLiveCount ?? 0,
+                          row.groupLiveCount ?? 0,
+                        ).tone}
+                      >
                         {showFavoriteColumn && <td className="fav-col-cell"></td>}
                         <td>{formatPerformanceDate(row.groupStartDate, row.groupEndDate, row.liveDate)}</td>
                         <td>
@@ -1637,14 +1703,34 @@ function App() {
                             value="performance_group"
                             label={row.groupDisplayType === "single_day_multi_show" ? "单日多场" : "多日活动"}
                           />
+                          {" · "}
+                          {getPerformanceGroupStatusPresentation(
+                            row.groupStartDate,
+                            row.groupEndDate,
+                            row.groupCancelledLiveCount ?? 0,
+                            row.groupLiveCount ?? 0,
+                          ).primary}
                         </td>
                         <td className="band-cell" title={`${row.groupIcons.length} 支乐队`}>
                           <BandIconsCell icons={row.groupIcons} rowId={row.groupId ?? 0} />
                         </td>
-                        <td><span>{row.groupLiveCount !== null ? `${row.groupDayCount} 日 · ${row.groupLiveCount} 场` : "-"}</span></td>
+                        <td>
+                          <span>
+                            {row.groupLiveCount !== null
+                              ? `${row.groupDayCount} 日 · ${row.groupLiveCount} 场${row.groupCancelledLiveCount ? ` · 取消 ${row.groupCancelledLiveCount} 场` : ""}`
+                              : "-"}
+                          </span>
+                        </td>
                       </tr>
                     ) : (
-                    <tr key={row.liveId}>
+                    <tr
+                      key={row.liveId}
+                      data-status-tone={getLiveStatusPresentation(
+                        row.eventStatus ?? "scheduled",
+                        row.datePhase ?? "past",
+                        row.wasRescheduled,
+                      ).tone}
+                    >
                       {showFavoriteColumn && (
                         <td className="fav-col-cell">
                           <button
@@ -1668,7 +1754,14 @@ function App() {
                           {row.liveTitle}
                         </button>
                       </td>
-                      <td><LiveTypeBadge value={row.liveType} label={formatLiveType(row.liveType)} /></td>
+                      <td>
+                        <LiveTypeBadge value={row.liveType} label={formatLiveType(row.liveType)} />
+                        {` · ${formatLiveStatusText(
+                          row.eventStatus ?? "scheduled",
+                          row.datePhase ?? "past",
+                          row.wasRescheduled,
+                        )}`}
+                      </td>
                       <td className="band-cell" title={`${row.icons.length} 支乐队`}>
                         <BandIconsCell icons={row.icons} rowId={row.liveId} />
                       </td>

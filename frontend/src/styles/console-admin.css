@@ -26,6 +26,106 @@
   font-size: 13px;
 }
 
+.console-admin-warning {
+  color: var(--accent-danger);
+  font-weight: 600;
+}
+
+.live-schedule-change-editor {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.live-schedule-change-editor input[aria-label="排期变化说明"] {
+  min-width: min(360px, 100%);
+}
+
+.live-admin-status-section {
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+}
+
+.live-admin-status-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.live-admin-status-head h3 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: 14px;
+}
+
+.live-admin-status-head span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.live-admin-status-fields {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(160px, 220px) minmax(280px, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.live-admin-status-fields label,
+.live-admin-readonly-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.live-admin-status-fields select,
+.live-admin-status-fields input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: var(--surface-input);
+  color: var(--text-main);
+  font: inherit;
+}
+
+.live-admin-readonly-field {
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-muted);
+}
+
+.live-admin-readonly-field > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.live-admin-readonly-field strong {
+  color: var(--text-main);
+}
+
+.live-admin-status-fields small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+@media (max-width: 900px) {
+  .live-admin-status-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 .console-toast {
   position: fixed;
   top: 24px;

@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 
-import type { ConsoleLiveCandidate } from "../../api";
+import type { ConsoleLiveCandidate, DatePhase, EventStatus } from "../../api";
+import { DATE_PHASE_LABELS } from "../../liveStatus";
 import { formatLiveType } from "./constants";
 import type { BandOption, Position, VenueOption } from "./types";
 
@@ -9,6 +10,12 @@ type LiveAdminSectionProps = {
   liveDate: string;
   liveTitle: string;
   liveType: string;
+  eventStatus?: EventStatus;
+  statusNote?: string;
+  datePhase?: DatePhase;
+  hasScheduleChanges?: boolean;
+  scheduleChangeKind?: "correction" | "reschedule" | null;
+  scheduleChangeNote?: string;
   liveUrl: string;
   openingTime: string;
   startTime: string;
@@ -22,6 +29,7 @@ type LiveAdminSectionProps = {
   venueQueryText: string;
   liveCandidateQuery: string;
   liveCandidateType: string;
+  liveCandidateEventStatus?: string;
   liveCandidates: ConsoleLiveCandidate[];
   liveCandidatePage: number;
   liveCandidateTotal: number;
@@ -56,10 +64,16 @@ type LiveAdminSectionProps = {
     venue_id: number;
     default_band_ids: number[];
     event_attendees: Array<{ band_id: number; mode: "partial" | "full"; members: string[] }>;
+    event_status?: EventStatus;
+    status_note?: string | null;
   }>;
   onLiveDateChange: (value: string) => void;
   onLiveTitleChange: (value: string) => void;
   onLiveTypeChange: (value: string) => void;
+  onEventStatusChange?: (value: EventStatus) => void;
+  onStatusNoteChange?: (value: string) => void;
+  onScheduleChangeKindChange?: (value: "correction" | "reschedule" | null) => void;
+  onScheduleChangeNoteChange?: (value: string) => void;
   onLiveUrlChange: (value: string) => void;
   onOpeningTimeChange: (value: string) => void;
   onStartTimeChange: (value: string) => void;
@@ -68,6 +82,7 @@ type LiveAdminSectionProps = {
   onVenueQueryTextChange: (value: string) => void;
   onLiveCandidateQueryChange: (value: string) => void;
   onLiveCandidateTypeChange: (value: string) => void;
+  onLiveCandidateEventStatusChange?: (value: string) => void;
   onQueryLiveCandidates: () => void;
   onLiveCandidatePageChange: (page: number) => void;
   onSelectLiveForEdit: (liveId: number) => void;
@@ -90,6 +105,12 @@ export function LiveAdminSection({
   liveDate,
   liveTitle,
   liveType,
+  eventStatus = "scheduled",
+  statusNote = "",
+  datePhase = "past",
+  hasScheduleChanges = false,
+  scheduleChangeKind = null,
+  scheduleChangeNote = "",
   liveUrl,
   openingTime,
   startTime,
@@ -103,6 +124,7 @@ export function LiveAdminSection({
   venueQueryText,
   liveCandidateQuery,
   liveCandidateType,
+  liveCandidateEventStatus = "",
   liveCandidates,
   liveCandidatePage,
   liveCandidateTotal,
@@ -127,6 +149,10 @@ export function LiveAdminSection({
   onLiveDateChange,
   onLiveTitleChange,
   onLiveTypeChange,
+  onEventStatusChange = () => undefined,
+  onStatusNoteChange = () => undefined,
+  onScheduleChangeKindChange = () => undefined,
+  onScheduleChangeNoteChange = () => undefined,
   onLiveUrlChange,
   onOpeningTimeChange,
   onStartTimeChange,
@@ -135,6 +161,7 @@ export function LiveAdminSection({
   onVenueQueryTextChange,
   onLiveCandidateQueryChange,
   onLiveCandidateTypeChange,
+  onLiveCandidateEventStatusChange = () => undefined,
   onQueryLiveCandidates,
   onLiveCandidatePageChange,
   onSelectLiveForEdit,
@@ -191,6 +218,17 @@ export function LiveAdminSection({
             {liveTypeOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
+          </select>
+          <select
+            className="live-type-filter"
+            aria-label="按演出状态筛选"
+            value={liveCandidateEventStatus}
+            onChange={(event) => onLiveCandidateEventStatusChange(event.target.value)}
+          >
+            <option value="">全部状态</option>
+            <option value="scheduled">按计划</option>
+            <option value="postponed">延期</option>
+            <option value="cancelled">已取消</option>
           </select>
           <select
             aria-label="选择要编辑的 Live"
@@ -339,6 +377,74 @@ export function LiveAdminSection({
         </table>
       </div>
 
+      <section className="live-admin-status-section" aria-labelledby="live-admin-status-title">
+        <div className="live-admin-status-head">
+          <h3 id="live-admin-status-title">演出状态</h3>
+          <span>人工状态与日期进度分开维护</span>
+        </div>
+        <div className="live-admin-status-fields">
+          <label htmlFor="live-event-status">
+            <span>人工状态</span>
+            <select
+              id="live-event-status"
+              value={eventStatus}
+              onChange={(event) => onEventStatusChange(event.target.value as EventStatus)}
+            >
+              <option value="scheduled">按计划</option>
+              <option value="postponed">延期</option>
+              <option value="cancelled">已取消</option>
+            </select>
+          </label>
+          <div className="live-admin-readonly-field" aria-label={`日期阶段：${DATE_PHASE_LABELS[datePhase]}（只读）`}>
+            <span>日期阶段</span>
+            <strong>{DATE_PHASE_LABELS[datePhase]}</strong>
+            <small>按演出日期自动判断</small>
+          </div>
+          {eventStatus !== "scheduled" && (
+            <label className="live-admin-status-note">
+              <span>{eventStatus === "cancelled" ? "取消说明" : "延期说明"}</span>
+              <input
+                aria-label="状态说明"
+                value={statusNote}
+                onChange={(event) => onStatusNoteChange(event.target.value)}
+                placeholder="填写对外说明（可选）"
+              />
+              <small>将显示在公开演出详情的状态栏中</small>
+            </label>
+          )}
+        </div>
+      </section>
+
+      {variant === "edit" && hasScheduleChanges && (
+        <div className="live-id-selector live-schedule-change-editor">
+          <span className="live-management-label">本次排期变化</span>
+          <label>
+            <input
+              type="radio"
+              name="schedule-change-kind"
+              checked={scheduleChangeKind === "correction"}
+              onChange={() => onScheduleChangeKindChange("correction")}
+            />
+            资料修正
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="schedule-change-kind"
+              checked={scheduleChangeKind === "reschedule"}
+              onChange={() => onScheduleChangeKindChange("reschedule")}
+            />
+            主办方正式改期
+          </label>
+          <input
+            aria-label="排期变化说明"
+            value={scheduleChangeNote}
+            onChange={(event) => onScheduleChangeNoteChange(event.target.value)}
+            placeholder="说明（可选）"
+          />
+        </div>
+      )}
+
       <div className="console-submit-row live-admin-insert-row">
         {variant === "create" && (
           <label className="live-clear-after-create-option">
@@ -458,12 +564,14 @@ export function LiveAdminSection({
               <th>venue_id</th>
               <th>default_band_ids</th>
               <th>event_attendees</th>
+              <th>event_status</th>
+              <th>status_note</th>
             </tr>
           </thead>
           <tbody>
             {visibleHistory.length === 0 ? (
               <tr>
-                <td colSpan={12} className="empty-cell">暂无 Live {variant === "create" ? "新增" : "更新"}记录</td>
+                <td colSpan={14} className="empty-cell">暂无 Live {variant === "create" ? "新增" : "更新"}记录</td>
               </tr>
             ) : (
               visibleHistory.map((row) => (
@@ -480,6 +588,8 @@ export function LiveAdminSection({
                   <td>{row.venue_id}</td>
                   <td>{(row.default_band_ids ?? []).join(", ") || "-"}</td>
                   <td>{row.event_attendees.map((item) => `${item.band_id}:${item.mode}(${item.members.join("/")})`).join("; ") || "-"}</td>
+                  <td>{!row.event_status || row.event_status === "scheduled" ? "按计划" : row.event_status === "postponed" ? "延期" : "已取消"}</td>
+                  <td>{row.status_note ?? "-"}</td>
                 </tr>
               ))
             )}

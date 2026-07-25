@@ -82,8 +82,9 @@ def test_tours_list_returns_seeded_summary_and_filters(integration_test_client):
                 ],
                 "start_date": "2026-03-28",
                 "end_date": "2026-04-05",
-                "collected_live_count": 2,
-                "stop_labels": ["Tokyo Opening", "Tokyo Finale"],
+                    "collected_live_count": 2,
+                    "cancelled_live_count": 0,
+                    "stop_labels": ["Tokyo Opening", "Tokyo Finale"],
             }
         ],
         "pagination": {"page": 1, "page_size": 20, "total": 1, "total_pages": 1},

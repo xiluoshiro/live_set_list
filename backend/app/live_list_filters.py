@@ -206,7 +206,13 @@ def build_filtered_live_queries(
                 tour.id AS tour_id,
                 tour.tour_title,
                 pg.id AS performance_group_id,
-                pg.group_title
+                pg.group_title,
+                l.start_time,
+                l.event_status,
+                EXISTS (
+                    SELECT 1 FROM live_schedule_history history
+                    WHERE history.live_id = l.id
+                ) AS was_rescheduled
             FROM live_attrs l
             {favorite_join}
             LEFT JOIN tour_lives tour_live
@@ -231,7 +237,10 @@ def build_filtered_live_queries(
             matched.tour_id,
             matched.tour_title,
             matched.performance_group_id,
-            matched.group_title
+            matched.group_title,
+            matched.start_time,
+            matched.event_status,
+            matched.was_rescheduled
         FROM matched_lives matched
         LEFT JOIN live_setlist setlist
             ON setlist.live_id = matched.id
@@ -251,7 +260,10 @@ def build_filtered_live_queries(
             matched.tour_id,
             matched.tour_title,
             matched.performance_group_id,
-            matched.group_title
+            matched.group_title,
+            matched.start_time,
+            matched.event_status,
+            matched.was_rescheduled
         ORDER BY {result_order_sql}
     """
     return count_query, matched_params, page_query, matched_params

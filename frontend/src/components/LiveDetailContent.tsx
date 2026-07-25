@@ -5,6 +5,7 @@ import { getBandIconSrc } from "./BandIconsCell";
 import { MemberStatusTable } from "./DetailMemberTable";
 import { DetailTitleLink } from "./DetailTitleLink";
 import { formatLiveType } from "./console/constants";
+import { getLiveStatusPresentation } from "../liveStatus";
 
 export type LiveDetailFallback = {
   liveTitle: string;
@@ -85,6 +86,13 @@ export function LiveDetailContent({
     ? detailData.band_names.filter((name) => name.trim() !== "").join(" / ") || "-"
     : detailLoading ? "加载中..." : "-";
   const detailUrl = detailData?.url ?? fallback.url ?? null;
+  const status = detailData
+    ? getLiveStatusPresentation(
+        detailData.event_status ?? "scheduled",
+        detailData.date_phase ?? "past",
+        detailData.was_rescheduled ?? false,
+      )
+    : null;
 
   return (
     <>
@@ -96,6 +104,17 @@ export function LiveDetailContent({
         </h2>
         {headerAction}
       </div>
+      {status && (
+        <section className="live-status-panel" data-status-tone={status.tone} aria-label="演出状态">
+          <strong>{status.secondary ? `${status.secondary} · ${status.primary}` : status.primary}</strong>
+          {detailData?.status_note && (
+            <span>
+              {detailData.event_status === "cancelled" ? "取消说明：" : "延期说明："}
+              {detailData.status_note}
+            </span>
+          )}
+        </section>
+      )}
       <div className="detail-meta-line">
         <p className="detail-inline-item detail-inline-item-date"><strong>日期：</strong><span>{detailData?.live_date ?? fallback.liveDate}</span></p>
         <p className="detail-inline-item"><strong>开场：</strong><span>{formatTimedLabel(detailData?.opening_time)}</span></p>
@@ -104,6 +123,22 @@ export function LiveDetailContent({
         <p className="detail-inline-item detail-inline-item-type"><strong>类型：</strong><span>{formatLiveType(detailData?.live_type ?? "")}</span></p>
       </div>
       <p className="detail-row"><strong>乐队：</strong><span>{bandNamesText}</span></p>
+      {detailData && (detailData.schedule_history?.length ?? 0) > 0 && (
+        <div className="detail-row live-schedule-history">
+          <strong>排期记录：</strong>
+          <ul>
+            {(detailData.schedule_history ?? []).map((history, index) => (
+              <li key={`${history.changed_at}-${index}`}>
+                原定 {history.previous_live_date}
+                {" · "}开场 {formatTimedLabel(history.previous_opening_time)}
+                {" · "}开演 {formatTimedLabel(history.previous_start_time)}
+                {history.previous_venue ? ` · ${history.previous_venue}` : ""}
+                {history.note ? ` · ${history.note}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {detailData?.live_type === "event" && (
         <EventAttendeesLine attendees={detailData.event_attendees ?? []} />
       )}

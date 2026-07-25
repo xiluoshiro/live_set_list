@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import type { CatalogStatsResponse } from "../api";
+import type { CatalogStatsResponse, DatePhase, EventStatus } from "../api";
+import { formatLiveStatusText } from "../liveStatus";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
 import { ContentState } from "./ContentState";
 import { PageTitle } from "./PageTitle";
@@ -10,6 +11,9 @@ export type HomeLiveRow = {
   liveDate: string;
   liveTitle: string;
   icons: BandIconInput[];
+  eventStatus: EventStatus | null;
+  datePhase: DatePhase | null;
+  wasRescheduled: boolean;
 };
 
 type HomeDashboardProps = {
@@ -157,7 +161,14 @@ export function HomeDashboard({
             <ol className="home-recent-list">
               {recentRows.slice(0, 6).map((row) => (
                 <li key={row.liveId} className="home-recent-item">
-                  <span className="home-recent-date">{row.liveDate}</span>
+                  <span className="home-recent-date">
+                    {row.liveDate}
+                    {` · ${formatLiveStatusText(
+                      row.eventStatus ?? "scheduled",
+                      row.datePhase ?? "past",
+                      row.wasRescheduled,
+                    )}`}
+                  </span>
                   <button type="button" className="home-recent-title" onClick={() => onOpenLive(row)}>
                     {row.liveTitle}
                   </button>

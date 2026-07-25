@@ -9,6 +9,7 @@ from psycopg2.errors import QueryCanceled
 from app.auth import require_role
 from app.db import get_db_connection
 from app.logging_config import get_logger
+from app.live_status import build_public_live_status
 from app.schemas import ErrorResponse, ValidationErrorResponse
 from app.schemas.auth import AuthErrorResponse
 from app.schemas.console import (
@@ -135,6 +136,10 @@ def list_editable_lives(
         description="Optional exact Live type filter",
     ),
     has_setlist: bool | None = Query(default=None, description="Optional Setlist existence filter"),
+    event_status: Literal["scheduled", "postponed", "cancelled"] | None = Query(
+        default=None,
+        description="Optional exact event status filter",
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     _: Any = Depends(require_role("editor")),
@@ -153,6 +158,9 @@ def list_editable_lives(
         conditions.append("EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id)")
     elif has_setlist is False:
         conditions.append("NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id)")
+    if event_status is not None:
+        conditions.append("l.event_status = %s")
+        params.append(event_status)
     where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     try:
         with get_db_connection() as conn:
@@ -164,7 +172,8 @@ def list_editable_lives(
                 safe_page = min(page, total_pages)
                 cur.execute(
                     f"""
-                    SELECT l.id, l.live_date, l.live_title, l.live_type, v.venue
+                    SELECT l.id, l.live_date, l.live_title, l.live_type, v.venue,
+                           l.start_time, l.event_status
                     FROM live_attrs l
                     JOIN venue_list v ON v.id = l.venue_id
                     {where_sql}
@@ -193,6 +202,12 @@ def list_editable_lives(
                 "live_title": str(row[2]),
                 "live_type": str(row[3]),
                 "venue_name": str(row[4]),
+                **build_public_live_status(
+                    event_status=str(row[6]) if len(row) > 6 else "scheduled",
+                    live_date=row[1],
+                    start_time=row[5] if len(row) > 5 else "00:00:00+00:00",
+                    was_rescheduled=False,
+                ),
             }
             for row in rows
         ],
@@ -238,7 +253,33 @@ def get_editable_live(
                         l.venue_id,
                         v.venue,
                         l.default_band_ids,
-                        {CONSOLE_EVENT_ATTENDEES_SQL} AS event_attendees
+                        {CONSOLE_EVENT_ATTENDEES_SQL} AS event_attendees,
+                        l.event_status,
+                        l.status_note,
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'previous_live_date', history.previous_live_date,
+                                        'previous_opening_time', history.previous_opening_time::text,
+                                        'previous_start_time', history.previous_start_time::text,
+                                        'previous_venue_id', history.previous_venue_id,
+                                        'previous_venue', history_venue.venue,
+                                        'changed_at', history.changed_at,
+                                        'note', history.note
+                                    )
+                                    ORDER BY history.changed_at, history.id
+                                )
+                                FROM live_schedule_history history
+                                LEFT JOIN venue_list history_venue ON history_venue.id = history.previous_venue_id
+                                WHERE history.live_id = l.id
+                            ),
+                            '[]'::jsonb
+                        ) AS schedule_history,
+                        EXISTS (
+                            SELECT 1 FROM live_setlist existing_setlist
+                            WHERE existing_setlist.live_id = l.id
+                        ) AS has_setlist
                     FROM live_attrs l
                     JOIN venue_list v ON v.id = l.venue_id
                     WHERE l.id = %s
@@ -275,6 +316,16 @@ def get_editable_live(
             "venue_name": str(row[8]),
             "default_band_ids": list(row[9] or []),
             "event_attendees": _normalize_console_event_attendees(row[10]),
+            "event_status": str(row[11]) if len(row) > 11 else "scheduled",
+            "status_note": row[12] if len(row) > 12 else None,
+            "date_phase": build_public_live_status(
+                event_status=str(row[11]) if len(row) > 11 else "scheduled",
+                live_date=row[1],
+                start_time=row[6],
+                was_rescheduled=bool(row[13]) if len(row) > 13 else False,
+            )["date_phase"],
+            "schedule_history": list(row[13] or []) if len(row) > 13 else [],
+            "has_setlist": bool(row[14]) if len(row) > 14 else False,
         }
     }
 

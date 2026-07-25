@@ -223,6 +223,8 @@ def test_console_live_edit_reads_candidates_and_detail():
             "live_title": "Event Live",
             "live_type": "event",
             "venue_name": "Mock Venue",
+            "event_status": "scheduled",
+            "date_phase": "past",
         }],
         "page": 1,
         "page_size": 20,
@@ -534,6 +536,9 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         "venue_id": 2,
         "default_band_ids": [],
         "event_attendees": [],
+        "event_status": "scheduled",
+        "status_note": None,
+        "date_phase": "past",
     }
     assert "INSERT INTO live_attrs" in cursor.execute.call_args_list[1].args[0]
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
@@ -558,7 +563,7 @@ def test_console_create_live_mock_validates_and_persists_default_bands():
     assert response.status_code == 201
     assert response.json()["item"]["default_band_ids"] == [1, 3]
     assert cursor.execute.call_args_list[1].args[1] == ([1, 3],)
-    assert cursor.execute.call_args_list[2].args[1][-2] == [1, 3]
+    assert cursor.execute.call_args_list[2].args[1][-4] == [1, 3]
 
 
 # 测试点：活动出席成员应按 Band 目录顺序持久化完整名单，并仅在响应中计算 partial/full。
@@ -594,7 +599,7 @@ def test_console_create_event_persists_members_and_computes_modes():
         {"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]},
         {"band_id": 8, "mode": "partial", "members": ["若葉睦"]},
     ]
-    persisted_json = cursor.execute.call_args_list[2].args[1][-1]
+    persisted_json = cursor.execute.call_args_list[2].args[1][-3]
     assert persisted_json.adapted == {"3": ["高松燈", "千早愛音"], "8": ["若葉睦"]}
 
 

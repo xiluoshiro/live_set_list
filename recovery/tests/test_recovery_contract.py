@@ -159,7 +159,7 @@ def test_database_ownership_contract_rejects_drift(monkeypatch, tmp_path) -> Non
         )
 
 
-# 测试点：主库恢复权限收口必须把业务表交给 app owner，同时保留 Flyway 历史表的独立 owner。
+# 测试点：主库恢复权限收口必须保留完整集合替换的窄范围 DELETE，并维持 Flyway 历史表独立 owner。
 def test_apply_app_permissions_preserves_flyway_history_owner(monkeypatch) -> None:
     captured_sql: list[str] = []
 
@@ -182,6 +182,11 @@ def test_apply_app_permissions_preserves_flyway_history_owner(monkeypatch) -> No
         "ALTER TABLE public.flyway_schema_history OWNER TO live_project_flyway;"
         in permission_sql
     )
+    assert "public.tour_bands," in permission_sql
+    assert "public.tour_lives," in permission_sql
+    assert "public.performance_group_lives," in permission_sql
+    assert "public.live_setlist" in permission_sql
+    assert "TO live_project_super_ro;" in permission_sql
 
 
 def test_recover_main_database_uses_snapshot_backup_and_rolls_back_on_check_failure(monkeypatch, tmp_path) -> None:

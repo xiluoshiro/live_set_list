@@ -61,6 +61,9 @@ export type LiveItem = {
   is_favorite: boolean;
   tour?: TourRef | null;
   performance_group?: PerformanceGroupRef | null;
+  event_status?: EventStatus;
+  date_phase?: DatePhase;
+  was_rescheduled?: boolean;
 };
 
 export type LivesResponse = {
@@ -170,6 +173,19 @@ export type LiveDetailOtherMember = {
   value: string[];
 };
 
+export type EventStatus = "scheduled" | "postponed" | "cancelled";
+export type DatePhase = "upcoming" | "today" | "past";
+
+export type LiveScheduleHistoryItem = {
+  previous_live_date: string;
+  previous_opening_time: string;
+  previous_start_time: string;
+  previous_venue_id: number;
+  previous_venue: string | null;
+  changed_at: string;
+  note: string | null;
+};
+
 export type LiveDetailCoverBand = {
   band_id: number;
   band_name: string;
@@ -208,6 +224,11 @@ export type LiveDetailResponse = {
   tour?: TourRef | null;
   performance_group?: PerformanceGroupRef | null;
   event_attendees: LiveDetailEventAttendee[];
+  event_status?: EventStatus;
+  date_phase?: DatePhase;
+  status_note?: string | null;
+  was_rescheduled?: boolean;
+  schedule_history?: LiveScheduleHistoryItem[];
   detail_rows: LiveDetailRow[];
 };
 
@@ -226,6 +247,7 @@ export type TourSummary = {
   start_date: string;
   end_date: string;
   collected_live_count: number;
+  cancelled_live_count?: number;
   stop_labels: string[];
 };
 
@@ -241,6 +263,9 @@ export type TourStopItem = {
   url: string | null;
   is_favorite: boolean;
   has_setlist: boolean;
+  event_status?: EventStatus;
+  date_phase?: DatePhase;
+  was_rescheduled?: boolean;
 };
 
 export type ToursResponse = {
@@ -269,6 +294,9 @@ export type PerformanceGroupLiveItem = {
   url: string | null;
   is_favorite: boolean;
   has_setlist: boolean;
+  event_status?: EventStatus;
+  date_phase?: DatePhase;
+  was_rescheduled?: boolean;
 };
 
 export type PerformanceGroupDetailResponse = {
@@ -278,6 +306,7 @@ export type PerformanceGroupDetailResponse = {
   end_date: string;
   day_count: number;
   live_count: number;
+  cancelled_live_count?: number;
   display_type: "single_day_multi_show" | "multi_day";
   bands: PerformanceGroupBandItem[];
   venues: string[];
@@ -292,6 +321,7 @@ export type PerformanceGroupSummary = {
   end_date: string;
   day_count: number;
   live_count: number;
+  cancelled_live_count?: number;
   display_type: "single_day_multi_show" | "multi_day";
   bands: PerformanceGroupBandItem[];
   venues: string[];
@@ -441,11 +471,17 @@ export type ConsoleLiveUpsertPayload = {
   venue_id: number;
   default_band_ids: number[];
   event_attendees: Array<{ band_id: number; members: string[] }>;
+  event_status?: EventStatus;
+  status_note?: string | null;
 };
 
 export type TourStatisticsTransition = TourStatisticsResponse["transitions"][number];
 
 export type ConsoleLiveCreatePayload = ConsoleLiveUpsertPayload;
+export type ConsoleLiveUpdatePayload = ConsoleLiveUpsertPayload & {
+  schedule_change_kind?: "correction" | "reschedule" | null;
+  schedule_change_note?: string | null;
+};
 
 export type ConsoleEventAttendee = {
   band_id: number;
@@ -464,6 +500,9 @@ export type ConsoleLiveMutationItem = {
   venue_id: number;
   default_band_ids: number[];
   event_attendees: ConsoleEventAttendee[];
+  event_status?: EventStatus;
+  status_note?: string | null;
+  date_phase?: DatePhase;
 };
 
 export type ConsoleLiveMutationResponse = {
@@ -575,6 +614,8 @@ export type ConsoleLiveCandidate = {
   live_title: string;
   live_type: string;
   venue_name: string;
+  event_status?: EventStatus;
+  date_phase?: DatePhase;
 };
 
 export type ConsoleLiveCandidatesResponse = {
@@ -589,6 +630,8 @@ export type ConsoleLiveEditResponse = {
   item: ConsoleLiveMutationItem & {
     timezone: string;
     venue_name: string;
+    schedule_history?: LiveScheduleHistoryItem[];
+    has_setlist?: boolean;
   };
 };
 
@@ -913,6 +956,11 @@ export function clearLivesCache(): void {
 function clearLiveCollectionCaches(): void {
   clearLivesCache();
   clearMyFavoriteLivesCache();
+}
+
+export function clearLiveDataCaches(): void {
+  clearLiveCollectionCaches();
+  detailCache.clear();
 }
 
 export async function getMyFavoriteLives(
@@ -1467,11 +1515,13 @@ export async function getConsoleLiveCandidates(
   pageSize = 20,
   liveType = "",
   hasSetlist?: boolean,
+  eventStatus = "",
 ): Promise<ConsoleLiveCandidatesResponse> {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (q.trim()) query.set("q", q.trim());
   if (liveType) query.set("live_type", liveType);
   if (hasSetlist !== undefined) query.set("has_setlist", String(hasSetlist));
+  if (eventStatus) query.set("event_status", eventStatus);
   const response = await fetchWithTimeout(
     `${BASE_URL}/api/console/lives?${query.toString()}`,
     undefined,
@@ -1489,7 +1539,7 @@ export async function getConsoleLive(liveId: number): Promise<ConsoleLiveEditRes
 
 export async function updateConsoleLive(
   liveId: number,
-  payload: ConsoleLiveUpsertPayload,
+  payload: ConsoleLiveUpdatePayload,
   csrfToken: string,
 ): Promise<ConsoleLiveMutationResponse> {
   const response = await fetchWithTimeout(

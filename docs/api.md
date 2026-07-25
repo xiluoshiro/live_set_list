@@ -138,6 +138,7 @@
 - `year` 范围为 `1900..2100`
 - `live_type` 只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
 - Live 列表项、收藏列表项、乐队 Live、catalog 搜索 Live、单详情和批量详情都会返回 `tour` 与 `performance_group` 反向引用；未归属时为 `null`，已归属时分别返回 `{tour_id, tour_title}` 与 `{group_id, group_title}`
+- 所有公开 Live 列表项都会返回人工状态 `event_status`、按 Live 当地日期计算的 `date_phase`，以及是否存在正式改期历史的 `was_rescheduled`
 - `band_id` 必须大于等于 `1`；有 setlist 时按 `live_setlist.band_member` 判断，无 setlist 时按 `live_attrs.default_band_ids` 判断
 - `sort` 只允许 `date_desc` 或 `date_asc`，默认 `date_desc`
 - 多个筛选条件按 AND 组合；文本值使用参数绑定并转义 `%`、`_`、`\`
@@ -168,6 +169,7 @@
 - 无 Setlist 时，单条与批量详情的 `bands/band_names` 会回退 `default_band_ids`，与列表有效 Band 规则一致
 - `event_attendees` 只在 `live_type=event` 时返回内容；每项包含 `band_id/band_name/mode/members`
 - `mode=full|partial` 是查询时根据完整 `members` 与 `band_attrs.band_members` 计算的值，不在数据库中持久化
+- 详情返回 `event_status/date_phase/status_note/was_rescheduled`；`schedule_history` 只包含正式改期前的排期快照，不包含资料修正
 
 ### 3. `POST /api/lives/details:batch`
 
@@ -323,15 +325,20 @@
   - 成功响应会原样返回后端已经验证并保存的 `default_band_ids`
   - `event_attendees` 只允许活动类型提交；每项 Band 必须属于 `default_band_ids`，成员必须属于对应 Band
   - `event_attendees[].members` 始终保存完整名单；响应额外返回计算得到的 `mode=partial|full`
+  - `event_status` 可为 `scheduled/postponed/cancelled`；`status_note` 仅在延期或取消时保留
 - `GET /api/console/lives`
   - 候选包含有无 Setlist 的全部 Live，按 `live_date DESC, live_id DESC` 排序
   - `q` 同时支持标题模糊匹配和精确 Live ID
   - `live_type` 可选值为 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`，与 `q` 按 AND 组合
   - `has_setlist=true|false` 可按是否已有 Setlist 筛选，与其他条件按 AND 组合
+  - `event_status` 可按人工状态精确筛选；候选同时返回 `event_status/date_phase`
 - `GET /api/console/lives/{live_id}`
-  - 返回完整可编辑字段和 `timezone`；活动出演成员的 `mode` 仍为计算值
+  - 返回完整可编辑字段、`timezone` 和正式改期 `schedule_history`；活动出演成员的 `mode` 仍为计算值
 - `PUT /api/console/lives/{live_id}`
-  - 请求体与新增 Live 共用完整字段契约，不接受出演成员 `mode`
+  - 基本字段与新增 Live 共用契约，不接受出演成员 `mode`；排期变化时额外要求 `schedule_change_kind=correction|reschedule`
+  - `reschedule` 会保存更新前的日期、开场、开演和 Venue 快照，`correction` 不写公开排期历史
+  - 正式改期可附 `schedule_change_note`；没有排期字段变化时不得提交改期类型
+  - `status_note` 只在 `postponed/cancelled` 时保存，并显示在公开详情状态栏；`scheduled` 请求中的空白或遗留说明会归一化为 `null`
   - 使用行锁并在单一事务中校验、更新；无实际变化时不写审计日志
   - 有变化时写 `live_update` 审计，payload 记录变化字段的前后值
   - 不修改 `live_setlist`、`tour_lives`、`performance_group_lives` 或收藏关系
@@ -350,6 +357,7 @@
 - `POST /api/console/tours`、`PUT /api/console/tours/{tour_id}`
   - `band_ids` 可为空，最多 100 个已存在且不重复的正数 ID；后端按 Band ID 排序
   - `band_ids` 非空时，每个 Band 必须至少出现在一场所选 Live 中；为空时数据库关系保持空集合
+  - 取消场次校验参与乐队时，会合并该 Live 的 Setlist 乐队与 `default_band_ids`
   - `stops` 要求 1~500 项且 `live_id` 不得重复；不接收人工 `stop_order`
   - 服务端按关联 Live 的 `live_date ASC, start_time ASC, live_id ASC` 生成连续 `stop_order`
   - 所有关联 Live 必须存在；Live 已属于其他巡演时返回 `409`，detail 包含冲突的 `live_id / tour_id / tour_title`

@@ -55,6 +55,9 @@ def test_get_lives_includes_seeded_live_without_setlist(integration_test_client)
         "is_favorite": False,
         "tour": None,
         "performance_group": None,
+        "event_status": "scheduled",
+        "date_phase": "past",
+        "was_rescheduled": False,
     }
 
 

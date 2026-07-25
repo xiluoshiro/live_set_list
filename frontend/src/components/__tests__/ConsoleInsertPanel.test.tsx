@@ -139,6 +139,8 @@ describe("ConsoleInsertPanel", () => {
         venue_id: 88,
         default_band_ids: [3],
         event_attendees: [],
+        event_status: "scheduled",
+        status_note: null,
       },
     });
     apiMocks.updateConsoleLive.mockResolvedValue({
@@ -704,6 +706,8 @@ describe("ConsoleInsertPanel", () => {
         venue_id: 88,
         default_band_ids: [3],
         event_attendees: [],
+        event_status: "scheduled",
+        status_note: null,
       },
       "csrf-token",
     ));

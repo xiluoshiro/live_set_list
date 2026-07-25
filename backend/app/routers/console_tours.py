@@ -79,6 +79,25 @@ def _validate_tour_relations(
         SELECT
             l.id,
             CASE
+                WHEN l.event_status = 'cancelled'
+                THEN ARRAY(
+                    SELECT DISTINCT effective_band_id
+                    FROM unnest(
+                        l.default_band_ids
+                        || COALESCE(
+                            (
+                                SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
+                                FROM live_setlist stop_setlist
+                                JOIN LATERAL jsonb_object_keys(stop_setlist.band_member) k(band_name)
+                                    ON jsonb_typeof(stop_setlist.band_member) = 'object'
+                                JOIN band_attrs ba ON ba.band_name = k.band_name
+                                WHERE stop_setlist.live_id = l.id
+                            ),
+                            ARRAY[]::int[]
+                        )
+                    ) AS effective_band_id
+                    ORDER BY effective_band_id
+                )
                 WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
                 THEN COALESCE(
                     (

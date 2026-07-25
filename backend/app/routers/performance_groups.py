@@ -9,6 +9,7 @@ from app.auth import AuthUser, get_current_user_optional
 from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set
 from app.logging_config import get_logger
+from app.live_status import build_public_live_status
 from app.live_list_filters import LiveListFilters, LiveType, build_live_where, build_lookup_pattern
 from app.schemas import (
     CatalogPerformancesResponse,
@@ -29,7 +30,8 @@ SELECT
     MIN(l.live_date) AS start_date,
     MAX(l.live_date) AS end_date,
     COUNT(DISTINCT l.live_date)::int AS day_count,
-    COUNT(DISTINCT l.id)::int AS live_count
+    COUNT(DISTINCT l.id)::int AS live_count,
+    COUNT(DISTINCT l.id) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count
 FROM performance_group_attrs pg
 JOIN performance_group_lives pgl ON pgl.group_id = pg.id
 JOIN live_attrs l ON l.id = pgl.live_id
@@ -96,7 +98,12 @@ SELECT
         ELSE l.default_band_ids
     END AS bands,
     l.url,
-    EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id) AS has_setlist
+    EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id) AS has_setlist,
+    l.event_status,
+    EXISTS (
+        SELECT 1 FROM live_schedule_history history
+        WHERE history.live_id = l.id
+    ) AS was_rescheduled
 FROM performance_group_lives pgl
 JOIN live_attrs l ON l.id = pgl.live_id
 LEFT JOIN venue_list v ON v.id = l.venue_id
@@ -173,6 +180,7 @@ def get_performance_group_detail(
 
     day_count = int(header_row[4])
     live_count = int(header_row[5])
+    cancelled_live_count = int(header_row[6]) if len(header_row) > 6 else 0
 
     return {
         "group_id": int(header_row[0]),
@@ -181,6 +189,7 @@ def get_performance_group_detail(
         "end_date": header_row[3],
         "day_count": day_count,
         "live_count": live_count,
+        "cancelled_live_count": cancelled_live_count,
         "display_type": _compute_display_type(day_count, live_count),
         "bands": [
             {"band_id": int(row[0]), "band_name": str(row[1]), "band_abbr": str(row[2])}
@@ -199,6 +208,12 @@ def get_performance_group_detail(
                 "url": row[7],
                 "is_favorite": int(row[0]) in favorite_live_ids,
                 "has_setlist": bool(row[8]),
+                **build_public_live_status(
+                    event_status=str(row[9]) if len(row) > 9 else "scheduled",
+                    live_date=row[1],
+                    start_time=row[4],
+                    was_rescheduled=bool(row[10]) if len(row) > 10 else False,
+                ),
             }
             for row in live_rows
         ],
@@ -353,7 +368,12 @@ def _build_all_scope_queries(
                 tour.id AS tour_id,
                 tour.tour_title,
                 NULL::int AS performance_group_id,
-                NULL::text AS group_title
+                NULL::text AS group_title,
+                l.event_status,
+                EXISTS (
+                    SELECT 1 FROM live_schedule_history history
+                    WHERE history.live_id = l.id
+                ) AS was_rescheduled
             FROM live_attrs l
             LEFT JOIN tour_lives tour_live ON tour_live.live_id = l.id
             LEFT JOIN tour_attrs tour ON tour.id = tour_live.tour_id
@@ -371,7 +391,9 @@ def _build_all_scope_queries(
                 sl.tour_id,
                 sl.tour_title,
                 sl.performance_group_id,
-                sl.group_title
+                sl.group_title,
+                sl.event_status,
+                sl.was_rescheduled
             FROM standalone_lives sl
             LEFT JOIN live_setlist ls ON ls.live_id = sl.id
             LEFT JOIN LATERAL (
@@ -380,7 +402,8 @@ def _build_all_scope_queries(
             ) bm ON true
             LEFT JOIN band_attrs ba ON ba.band_name = bm.band_name
             GROUP BY sl.id, sl.live_date, sl.start_time, sl.live_title, sl.url, sl.live_type, sl.default_band_ids,
-                     sl.tour_id, sl.tour_title, sl.performance_group_id, sl.group_title
+                     sl.tour_id, sl.tour_title, sl.performance_group_id, sl.group_title,
+                     sl.event_status, sl.was_rescheduled
         ),
         valid_groups AS (
             SELECT
@@ -391,7 +414,8 @@ def _build_all_scope_queries(
                 (array_agg(l.start_time ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC))[1] AS start_time,
                 (array_agg(l.start_time ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC))[1] AS end_time,
                 COUNT(DISTINCT l.live_date)::int AS day_count,
-                COUNT(DISTINCT l.id)::int AS live_count
+                COUNT(DISTINCT l.id)::int AS live_count,
+                COUNT(DISTINCT l.id) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count
             FROM performance_group_attrs pg
             JOIN performance_group_lives pgl ON pgl.group_id = pg.id
             JOIN live_attrs l ON l.id = pgl.live_id
@@ -400,7 +424,7 @@ def _build_all_scope_queries(
         ),
         matched_groups AS (
             SELECT vg.group_id, vg.group_title, vg.start_date, vg.end_date,
-                   vg.start_time, vg.end_time, vg.day_count, vg.live_count
+                   vg.start_time, vg.end_time, vg.day_count, vg.live_count, vg.cancelled_live_count
             FROM valid_groups vg
             WHERE ({group_exists_where} {group_q_condition})
         ),
@@ -445,6 +469,7 @@ def _build_all_scope_queries(
                 mg.end_time,
                 mg.day_count,
                 mg.live_count,
+                mg.cancelled_live_count,
                 CASE WHEN mg.day_count = 1 THEN 'single_day_multi_show' ELSE 'multi_day' END AS display_type,
                 COALESCE(
                     (SELECT jsonb_agg(
@@ -479,9 +504,13 @@ def _build_all_scope_queries(
                 NULL::date AS group_end_date,
                 NULL::int AS group_day_count,
                 NULL::int AS group_live_count,
+                NULL::int AS group_cancelled_live_count,
                 NULL::text AS group_display_type,
                 NULL::jsonb AS group_bands,
                 NULL::jsonb AS group_venues,
+                slw.event_status AS live_event_status,
+                slw.start_time AS live_start_time,
+                slw.was_rescheduled AS live_was_rescheduled,
                 slw.live_date AS sort_date,
                 slw.start_time AS sort_time,
                 slw.id AS sort_id
@@ -505,9 +534,13 @@ def _build_all_scope_queries(
                 gs.end_date AS group_end_date,
                 gs.day_count AS group_day_count,
                 gs.live_count AS group_live_count,
+                gs.cancelled_live_count AS group_cancelled_live_count,
                 gs.display_type AS group_display_type,
                 gs.bands AS group_bands,
                 gs.venues AS group_venues,
+                NULL::text AS live_event_status,
+                NULL::timetz AS live_start_time,
+                NULL::boolean AS live_was_rescheduled,
                 gs.{sort_group_date} AS sort_date,
                 gs.{sort_group_time} AS sort_time,
                 gs.group_id AS sort_id
@@ -517,7 +550,9 @@ def _build_all_scope_queries(
             kind, id, live_date, live_title, url, live_type, band_ids,
             tour_id, tour_title, performance_group_id, live_group_title,
             group_result_id, group_result_title, group_start_date, group_end_date,
-            group_day_count, group_live_count, group_display_type, group_bands, group_venues
+            group_day_count, group_live_count, group_cancelled_live_count,
+            group_display_type, group_bands, group_venues,
+            live_event_status, live_start_time, live_was_rescheduled
         FROM merged
         ORDER BY sort_date {sort_dir}, sort_time {sort_dir}, sort_id {sort_dir}
         LIMIT %s OFFSET %s
@@ -643,7 +678,12 @@ def _build_favorites_scope_queries(
                 tour.id AS tour_id,
                 tour.tour_title,
                 NULL::int AS performance_group_id,
-                NULL::text AS group_title
+                NULL::text AS group_title,
+                l.event_status,
+                EXISTS (
+                    SELECT 1 FROM live_schedule_history history
+                    WHERE history.live_id = l.id
+                ) AS was_rescheduled
             FROM live_attrs l
             LEFT JOIN tour_lives tour_live ON tour_live.live_id = l.id
             LEFT JOIN tour_attrs tour ON tour.id = tour_live.tour_id
@@ -661,7 +701,9 @@ def _build_favorites_scope_queries(
                 sl.tour_id,
                 sl.tour_title,
                 sl.performance_group_id,
-                sl.group_title
+                sl.group_title,
+                sl.event_status,
+                sl.was_rescheduled
             FROM standalone_lives sl
             LEFT JOIN live_setlist ls ON ls.live_id = sl.id
             LEFT JOIN LATERAL (
@@ -670,7 +712,8 @@ def _build_favorites_scope_queries(
             ) bm ON true
             LEFT JOIN band_attrs ba ON ba.band_name = bm.band_name
             GROUP BY sl.id, sl.live_date, sl.start_time, sl.live_title, sl.url, sl.live_type, sl.default_band_ids,
-                     sl.tour_id, sl.tour_title, sl.performance_group_id, sl.group_title
+                     sl.tour_id, sl.tour_title, sl.performance_group_id, sl.group_title,
+                     sl.event_status, sl.was_rescheduled
         ),
         all_groups AS (
             SELECT
@@ -681,7 +724,8 @@ def _build_favorites_scope_queries(
                 (array_agg(l.start_time ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC))[1] AS start_time,
                 (array_agg(l.start_time ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC))[1] AS end_time,
                 COUNT(DISTINCT l.live_date)::int AS day_count,
-                COUNT(DISTINCT l.id)::int AS live_count
+                COUNT(DISTINCT l.id)::int AS live_count,
+                COUNT(DISTINCT l.id) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count
             FROM performance_group_attrs pg
             JOIN performance_group_lives pgl ON pgl.group_id = pg.id
             JOIN live_attrs l ON l.id = pgl.live_id
@@ -698,13 +742,14 @@ def _build_favorites_scope_queries(
                 ag.end_time,
                 ag.day_count,
                 ag.live_count,
+                ag.cancelled_live_count,
                 COUNT(DISTINCT fav.live_id)::int AS favorite_live_count
             FROM all_groups ag
             JOIN performance_group_lives pgl ON pgl.group_id = ag.group_id
             LEFT JOIN user_live_favorites fav
                 ON fav.live_id = pgl.live_id AND fav.user_id = %s
             GROUP BY ag.group_id, ag.group_title, ag.start_date, ag.end_date,
-                     ag.start_time, ag.end_time, ag.day_count, ag.live_count
+                     ag.start_time, ag.end_time, ag.day_count, ag.live_count, ag.cancelled_live_count
         ),
         full_groups AS (
             SELECT gfc.*
@@ -714,7 +759,7 @@ def _build_favorites_scope_queries(
         ),
         matched_full_groups AS (
             SELECT fg.group_id, fg.group_title, fg.start_date, fg.end_date,
-                   fg.start_time, fg.end_time, fg.day_count, fg.live_count
+                   fg.start_time, fg.end_time, fg.day_count, fg.live_count, fg.cancelled_live_count
             FROM full_groups fg
             WHERE ({fav_group_where} {fav_group_q_condition})
         ),
@@ -730,7 +775,12 @@ def _build_favorites_scope_queries(
                 tour.id AS tour_id,
                 tour.tour_title,
                 pg_partial.id AS performance_group_id,
-                pg_partial.group_title
+                pg_partial.group_title,
+                l.event_status,
+                EXISTS (
+                    SELECT 1 FROM live_schedule_history history
+                    WHERE history.live_id = l.id
+                ) AS was_rescheduled
             FROM user_live_favorites fav
             JOIN live_attrs l ON l.id = fav.live_id
             JOIN performance_group_lives pgl ON pgl.live_id = l.id
@@ -763,7 +813,9 @@ def _build_favorites_scope_queries(
                 pfl.tour_id,
                 pfl.tour_title,
                 pfl.performance_group_id,
-                pfl.group_title
+                pfl.group_title,
+                pfl.event_status,
+                pfl.was_rescheduled
             FROM partial_fav_lives pfl
             LEFT JOIN live_setlist ls ON ls.live_id = pfl.id
             LEFT JOIN LATERAL (
@@ -772,7 +824,8 @@ def _build_favorites_scope_queries(
             ) bm ON true
             LEFT JOIN band_attrs ba ON ba.band_name = bm.band_name
             GROUP BY pfl.id, pfl.live_date, pfl.start_time, pfl.live_title, pfl.url, pfl.live_type, pfl.default_band_ids,
-                     pfl.tour_id, pfl.tour_title, pfl.performance_group_id, pfl.group_title
+                     pfl.tour_id, pfl.tour_title, pfl.performance_group_id, pfl.group_title,
+                     pfl.event_status, pfl.was_rescheduled
         ),
         group_bands AS (
             SELECT bg.group_id, ba.id AS band_id, ba.band_name, ba.band_abbr
@@ -815,6 +868,7 @@ def _build_favorites_scope_queries(
                 mg.end_time,
                 mg.day_count,
                 mg.live_count,
+                mg.cancelled_live_count,
                 CASE WHEN mg.day_count = 1 THEN 'single_day_multi_show' ELSE 'multi_day' END AS display_type,
                 COALESCE(
                     (SELECT jsonb_agg(
@@ -849,9 +903,13 @@ def _build_favorites_scope_queries(
                 NULL::date AS group_end_date,
                 NULL::int AS group_day_count,
                 NULL::int AS group_live_count,
+                NULL::int AS group_cancelled_live_count,
                 NULL::text AS group_display_type,
                 NULL::jsonb AS group_bands,
                 NULL::jsonb AS group_venues,
+                slw.event_status AS live_event_status,
+                slw.start_time AS live_start_time,
+                slw.was_rescheduled AS live_was_rescheduled,
                 slw.live_date AS sort_date,
                 slw.start_time AS sort_time,
                 slw.id AS sort_id
@@ -875,9 +933,13 @@ def _build_favorites_scope_queries(
                 NULL::date AS group_end_date,
                 NULL::int AS group_day_count,
                 NULL::int AS group_live_count,
+                NULL::int AS group_cancelled_live_count,
                 NULL::text AS group_display_type,
                 NULL::jsonb AS group_bands,
                 NULL::jsonb AS group_venues,
+                pflw.event_status AS live_event_status,
+                pflw.start_time AS live_start_time,
+                pflw.was_rescheduled AS live_was_rescheduled,
                 pflw.live_date AS sort_date,
                 pflw.start_time AS sort_time,
                 pflw.id AS sort_id
@@ -901,9 +963,13 @@ def _build_favorites_scope_queries(
                 gs.end_date AS group_end_date,
                 gs.day_count AS group_day_count,
                 gs.live_count AS group_live_count,
+                gs.cancelled_live_count AS group_cancelled_live_count,
                 gs.display_type AS group_display_type,
                 gs.bands AS group_bands,
                 gs.venues AS group_venues,
+                NULL::text AS live_event_status,
+                NULL::timetz AS live_start_time,
+                NULL::boolean AS live_was_rescheduled,
                 gs.{sort_group_date} AS sort_date,
                 gs.{sort_group_time} AS sort_time,
                 gs.group_id AS sort_id
@@ -913,7 +979,9 @@ def _build_favorites_scope_queries(
             kind, id, live_date, live_title, url, live_type, band_ids,
             tour_id, tour_title, performance_group_id, live_group_title,
             group_result_id, group_result_title, group_start_date, group_end_date,
-            group_day_count, group_live_count, group_display_type, group_bands, group_venues
+            group_day_count, group_live_count, group_cancelled_live_count,
+            group_display_type, group_bands, group_venues,
+            live_event_status, live_start_time, live_was_rescheduled
         FROM merged
         ORDER BY sort_date {sort_dir}, sort_time {sort_dir}, sort_id {sort_dir}
         LIMIT %s OFFSET %s
@@ -940,6 +1008,7 @@ def _parse_performances_row(
     kind = str(row[0])
     if kind == "live":
         live_id = int(row[1])
+        has_status_columns = len(row) > 23
         return {
             "kind": "live",
             "live": {
@@ -954,15 +1023,22 @@ def _parse_performances_row(
                 "performance_group": build_performance_group_ref_from_row(
                     row, group_id_index=9, group_title_index=10
                 ),
+                **build_public_live_status(
+                    event_status=str(row[21]) if has_status_columns else "scheduled",
+                    live_date=row[2],
+                    start_time=row[22] if has_status_columns else "00:00:00+00:00",
+                    was_rescheduled=bool(row[23]) if has_status_columns else False,
+                ),
             },
         }
     else:
-        band_rows_raw = row[18] or []
+        has_cancelled_count = len(row) > 20
+        band_rows_raw = (row[19] if has_cancelled_count else row[18]) or []
         bands = [
             {"band_id": int(b["band_id"]), "band_name": str(b["band_name"]), "band_abbr": str(b["band_abbr"])}
             for b in band_rows_raw
         ]
-        venue_rows_raw = row[19] or []
+        venue_rows_raw = (row[20] if has_cancelled_count else row[19]) or []
         venues = [str(v) for v in venue_rows_raw]
         return {
             "kind": "performance_group",
@@ -973,7 +1049,8 @@ def _parse_performances_row(
                 "end_date": row[14],
                 "day_count": int(row[15]),
                 "live_count": int(row[16]),
-                "display_type": str(row[17]),
+                "cancelled_live_count": int(row[17]) if has_cancelled_count else 0,
+                "display_type": str(row[18] if has_cancelled_count else row[17]),
                 "bands": bands,
                 "venues": venues,
             },

@@ -9,6 +9,7 @@ import {
   type TourStatisticsResponse,
 } from "../api";
 import { logError } from "../logger";
+import { formatLiveStatusText } from "../liveStatus";
 import { ContentState } from "./ContentState";
 import { DetailTitleLink } from "./DetailTitleLink";
 import { LiveDetailContent } from "./LiveDetailContent";
@@ -72,7 +73,9 @@ export function TourDetailPage({
       .then((data) => {
         if (canceled) return;
         setDetail(data);
-        setSelectedLiveId(data.stops[0]?.live_id ?? null);
+        setSelectedLiveId(
+          data.stops.find((stop) => stop.event_status !== "cancelled" || stop.has_setlist)?.live_id ?? null,
+        );
       })
       .catch((caught) => {
         if (canceled) return;
@@ -133,7 +136,15 @@ export function TourDetailPage({
         <>
           <div className="detail-meta-line">
             <p className="detail-inline-item detail-inline-item-date"><strong>已收录日期：</strong><span>{formatDateRange(detail)}</span></p>
-            <p className="detail-inline-item"><strong>场次：</strong><span>{detail.collected_live_count}</span></p>
+            <p className="detail-inline-item">
+              <strong>场次：</strong>
+              <span>
+                {detail.collected_live_count}
+                {(detail.cancelled_live_count ?? 0) > 0 && (
+                  <span className="live-cancelled-count"> · 取消 {detail.cancelled_live_count ?? 0} 场</span>
+                )}
+              </span>
+            </p>
             <p className="detail-inline-item"><strong>参与乐队：</strong><span>{detail.bands.map((band) => band.band_name).join(" / ") || "-"}</span></p>
           </div>
           <SectionTabs
@@ -147,24 +158,39 @@ export function TourDetailPage({
               <nav className="tour-stop-shortcuts" aria-label="巡演场次">
                 {detail.stops.map((stop, index) => {
                   const shortTitle = getTourStopShortTitle(stop.live_title, detail.tour_title);
+                  const displayTitle = `${shortTitle}（${formatLiveStatusText(
+                    stop.event_status ?? "scheduled",
+                    stop.date_phase ?? "past",
+                    stop.was_rescheduled ?? false,
+                  )}）`;
                   const favorite = isFavorite(stop.live_id);
+                  const canOpenStop = stop.event_status !== "cancelled" || stop.has_setlist;
                   return (
-                    <span key={stop.live_id} className="tour-stop-shortcut-item">
+                    <span
+                      key={stop.live_id}
+                      className={`tour-stop-shortcut-item ${stop.event_status === "cancelled" ? "is-cancelled" : ""}`}
+                    >
                       {index > 0 && <span className="tour-stop-separator" aria-hidden="true" />}
-                      <button
-                        type="button"
-                        className="detail-tour-link tour-stop-shortcut"
-                        title={stop.live_title}
-                        aria-pressed={stop.live_id === selectedLiveId}
-                        onClick={() => setSelectedLiveId(stop.live_id)}
-                      >
-                        {shortTitle}
-                      </button>
+                      {canOpenStop ? (
+                        <button
+                          type="button"
+                          className="detail-tour-link tour-stop-shortcut"
+                          title={stop.live_title}
+                          aria-pressed={stop.live_id === selectedLiveId}
+                          onClick={() => setSelectedLiveId(stop.live_id)}
+                        >
+                          {displayTitle}
+                        </button>
+                      ) : (
+                        <span className="tour-stop-shortcut cancelled-static-title" title={stop.live_title}>
+                          {displayTitle}
+                        </span>
+                      )}
                       {canFavorite && onToggleFavorite && (
                         <button
                           type="button"
                           className={`star-btn performance-group-live-star ${favorite ? "is-fav" : ""} ${isSyncing(stop.live_id) ? "is-syncing" : ""}`}
-                          aria-label={`${favorite ? "取消收藏" : "加入收藏"} ${shortTitle}`}
+                          aria-label={`${favorite ? "取消收藏" : "加入收藏"} ${displayTitle}`}
                           aria-busy={isSyncing(stop.live_id)}
                           onClick={() => onToggleFavorite(stop.live_id)}
                         >★</button>

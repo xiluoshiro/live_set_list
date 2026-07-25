@@ -8,6 +8,7 @@ import {
   type TourRef,
 } from "../api";
 import { logError } from "../logger";
+import { formatLiveStatusText, getPerformanceGroupStatusPresentation } from "../liveStatus";
 import { ContentState } from "./ContentState";
 import { DetailTitleLink } from "./DetailTitleLink";
 import { LiveDetailContent } from "./LiveDetailContent";
@@ -31,10 +32,13 @@ function getDisplayTypeLabel(
 }
 
 function getCountText(detail: PerformanceGroupDetailResponse): string {
+  const cancelledText = (detail.cancelled_live_count ?? 0) > 0
+    ? ` · 取消 ${detail.cancelled_live_count ?? 0} 场`
+    : "";
   if (detail.day_count === 1) {
-    return `已收录 ${detail.live_count} 场`;
+    return `已收录 ${detail.live_count} 场${cancelledText}`;
   }
-  return `已收录 ${detail.day_count} 日 · ${detail.live_count} 场`;
+  return `已收录 ${detail.day_count} 日 · ${detail.live_count} 场${cancelledText}`;
 }
 
 function normalizeError(caught: unknown): string {
@@ -72,7 +76,14 @@ export function PerformanceGroupDetailPage({
         setDetail(data);
         const requestedLiveExists = initialLiveId !== null
           && data.lives.some((live) => live.live_id === initialLiveId);
-        setSelectedLiveId(requestedLiveExists ? initialLiveId : data.lives[0]?.live_id ?? null);
+        const requestedLive = data.lives.find((live) => live.live_id === initialLiveId);
+        const requestedLiveCanOpen = requestedLive
+          && (requestedLive.event_status !== "cancelled" || requestedLive.has_setlist);
+        setSelectedLiveId(
+          requestedLiveExists && requestedLiveCanOpen
+            ? initialLiveId
+            : data.lives.find((live) => live.event_status !== "cancelled" || live.has_setlist)?.live_id ?? null,
+        );
       })
       .catch((caught) => {
         if (canceled) return;
@@ -135,6 +146,19 @@ export function PerformanceGroupDetailPage({
       {error && <ContentState kind="error" title="活动组详情加载失败" description={error} layout="detail" />}
       {detail && (
         <>
+          {(() => {
+            const status = getPerformanceGroupStatusPresentation(
+              detail.start_date,
+              detail.end_date,
+              detail.cancelled_live_count ?? 0,
+              detail.live_count,
+            );
+            return (
+              <section className="live-status-panel" data-status-tone={status.tone} aria-label="活动状态">
+                <strong>{status.primary}</strong>
+              </section>
+            );
+          })()}
           <div className="detail-meta-line">
             <p className="detail-inline-item"><strong>类型：</strong><span>{getDisplayTypeLabel(detail.display_type)}</span></p>
             <p className="detail-inline-item"><strong>场次：</strong><span>{getCountText(detail)}</span></p>
@@ -146,24 +170,39 @@ export function PerformanceGroupDetailPage({
           >
             {detail.lives.map((live, index) => {
               const shortTitle = getGroupedLiveShortTitle(live.live_title, detail.group_title);
+              const displayTitle = `${shortTitle}（${formatLiveStatusText(
+                live.event_status ?? "scheduled",
+                live.date_phase ?? "past",
+                live.was_rescheduled ?? false,
+              )}）`;
               const favorite = isFavorite(live.live_id);
+              const canOpenLive = live.event_status !== "cancelled" || live.has_setlist;
               return (
-                <span key={live.live_id} className="tour-stop-shortcut-item">
+                <span
+                  key={live.live_id}
+                  className={`tour-stop-shortcut-item ${live.event_status === "cancelled" ? "is-cancelled" : ""}`}
+                >
                   {index > 0 && <span className="tour-stop-separator" aria-hidden="true" />}
-                  <button
-                    type="button"
-                    className="detail-tour-link tour-stop-shortcut"
-                    title={live.live_title}
-                    aria-pressed={live.live_id === selectedLiveId}
-                    onClick={() => setSelectedLiveId(live.live_id)}
-                  >
-                    {shortTitle}
-                  </button>
+                  {canOpenLive ? (
+                    <button
+                      type="button"
+                      className="detail-tour-link tour-stop-shortcut"
+                      title={live.live_title}
+                      aria-pressed={live.live_id === selectedLiveId}
+                      onClick={() => setSelectedLiveId(live.live_id)}
+                    >
+                      {displayTitle}
+                    </button>
+                  ) : (
+                    <span className="tour-stop-shortcut cancelled-static-title" title={live.live_title}>
+                      {displayTitle}
+                    </span>
+                  )}
                   {canFavorite && onToggleFavorite && (
                     <button
                       type="button"
                       className={`star-btn performance-group-live-star ${favorite ? "is-fav" : ""} ${isSyncing(live.live_id) ? "is-syncing" : ""}`}
-                      aria-label={`${favorite ? "取消收藏" : "加入收藏"} ${shortTitle}`}
+                      aria-label={`${favorite ? "取消收藏" : "加入收藏"} ${displayTitle}`}
                       aria-busy={isSyncing(live.live_id)}
                       onClick={() => onToggleFavorite(live.live_id)}
                     >★</button>

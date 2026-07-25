@@ -657,6 +657,9 @@ def test_console_create_live_persists_live_row(
             "venue_id": 2,
             "default_band_ids": [1, 3],
             "event_attendees": [],
+            "event_status": "scheduled",
+            "status_note": None,
+            "date_phase": "past",
         },
     }
 
@@ -704,6 +707,8 @@ def test_console_create_live_persists_live_row(
             "live_type": "oneman",
             "default_band_ids": [1, 3],
             "event_attendees": [],
+            "event_status": "scheduled",
+            "status_note": None,
         },
     )
 
@@ -780,6 +785,88 @@ def test_console_update_live_persists_base_fields_without_touching_relations(
         (live_id,),
     ) == setlist_count_before
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "live_update"
+
+
+# 测试点：资料修正不得写正式改期历史；正式改期必须保存修改前的排期快照并公开返回。
+def test_console_live_schedule_change_separates_correction_from_reschedule(
+    integration_test_client,
+    integration_admin_connection,
+):
+    live_id = 1
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_tester",
+        password="editor-test-pass",
+    )
+    original = integration_test_client.get(f"/api/console/lives/{live_id}").json()["item"]
+
+    correction_payload = {
+        "live_date": original["live_date"],
+        "live_title": original["live_title"],
+        "live_type": original["live_type"],
+        "url": original["url"],
+        "opening_time": "18:01",
+        "start_time": original["start_time"][:5],
+        "timezone": original["timezone"],
+        "venue_id": original["venue_id"],
+        "default_band_ids": original["default_band_ids"],
+        "event_attendees": original["event_attendees"],
+        "event_status": original["event_status"],
+        "status_note": original["status_note"],
+        "schedule_change_kind": "correction",
+        "schedule_change_note": "录入时分钟写错",
+    }
+    correction_response = integration_test_client.put(
+        f"/api/console/lives/{live_id}",
+        headers={"X-CSRF-Token": csrf_token},
+        json=correction_payload,
+    )
+    assert correction_response.status_code == 200
+    assert _count_rows(
+        integration_admin_connection,
+        "SELECT COUNT(*) FROM live_schedule_history WHERE live_id = %s",
+        (live_id,),
+    ) == 0
+
+    reschedule_payload = {
+        **correction_payload,
+        "live_date": "2026-03-02",
+        "opening_time": "18:30",
+        "start_time": "19:30",
+        "schedule_change_kind": "reschedule",
+        "schedule_change_note": "主办方正式改期",
+    }
+    reschedule_response = integration_test_client.put(
+        f"/api/console/lives/{live_id}",
+        headers={"X-CSRF-Token": csrf_token},
+        json=reschedule_payload,
+    )
+    assert reschedule_response.status_code == 200
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT previous_live_date::text, previous_opening_time::text,
+                   previous_start_time::text, previous_venue_id, note
+            FROM live_schedule_history
+            WHERE live_id = %s
+            """,
+            (live_id,),
+        )
+        history = cursor.fetchone()
+    assert history == (
+        original["live_date"],
+        "18:01:00+09",
+        original["start_time"].replace(":00+09:00", ":00+09"),
+        original["venue_id"],
+        "主办方正式改期",
+    )
+
+    public_detail = integration_test_client.get(f"/api/lives/{live_id}").json()
+    assert public_detail["was_rescheduled"] is True
+    assert len(public_detail["schedule_history"]) == 1
+    assert public_detail["schedule_history"][0]["note"] == "主办方正式改期"
 
 
 # 测试点：追加 Setlist 时应保留具名空成员，并将完全为空的 other_member 写成 NULL。
