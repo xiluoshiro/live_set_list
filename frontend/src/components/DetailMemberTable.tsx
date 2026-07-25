@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import type { LiveDetailBandMember, LiveDetailRow } from "../api";
 import { getBandRepresentativeColor } from "./BandIconsCell";
+import { ContentState } from "./ContentState";
 
 type OtherPopoverState = {
   rowId: string;
@@ -209,21 +210,33 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
             {loading && (
               <tr>
                 <td colSpan={5} className="empty-cell">
-                  详情加载中...
+                  <ContentState kind="loading" title="详情加载中..." layout="detail" compact />
                 </td>
               </tr>
             )}
             {!loading && error && (
               <tr>
                 <td colSpan={5} className="empty-cell">
-                  详情加载失败: {error}
+                  <ContentState
+                    kind="error"
+                    title="详情加载失败"
+                    description={error}
+                    layout="detail"
+                    compact
+                  />
                 </td>
               </tr>
             )}
             {!loading && !error && sourceRows.length === 0 && (
               <tr>
                 <td colSpan={5} className="empty-cell">
-                  当前 Live 暂无详情数据
+                  <ContentState
+                    kind="empty"
+                    title="当前 Live 暂无详情数据"
+                    description="基础信息仍可继续查看。"
+                    layout="detail"
+                    compact
+                  />
                 </td>
               </tr>
             )}

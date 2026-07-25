@@ -8,6 +8,7 @@ import {
   type TourRef,
 } from "../api";
 import { logError } from "../logger";
+import { ContentState } from "./ContentState";
 import { DetailTitleLink } from "./DetailTitleLink";
 import { LiveDetailContent } from "./LiveDetailContent";
 import { getGroupedLiveShortTitle } from "./performanceGroupHelpers";
@@ -128,10 +129,10 @@ export function PerformanceGroupDetailPage({
             ? <DetailTitleLink href={groupUrl}>{detail?.group_title ?? `活动组 #${groupId}`}</DetailTitleLink>
             : detail?.group_title ?? `活动组 #${groupId}`}
         </h2>
-        <button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回"><span className="modal-action-glyph close">✕</span></button>
+        <button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回"><span className="modal-action-glyph" aria-hidden="true">←</span></button>
       </div>
-      {loading && <p className="tour-detail-state">加载活动组详情...</p>}
-      {error && <p className="tour-detail-state tour-list-error">活动组详情加载失败：{error}</p>}
+      {loading && <ContentState kind="loading" title="加载活动组详情..." layout="detail" />}
+      {error && <ContentState kind="error" title="活动组详情加载失败" description={error} layout="detail" />}
       {detail && (
         <>
           <div className="detail-meta-line">

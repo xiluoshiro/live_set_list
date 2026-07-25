@@ -1,6 +1,6 @@
 :root {
-  --bg-body-start: rgba(243, 24, 100, 0.08);
-  --bg-body-end: rgba(243, 24, 100, 0.03);
+  --bg-body: #f7f8fc;
+  --bg-body-accent: rgba(243, 24, 100, 0.07);
   --text-main: #172033;
   --text-link: #f31864;
   --text-heading: #1f2d4d;
@@ -35,6 +35,8 @@
   --border-table-row: #eef2fb;
 
   --accent-primary: #f31864;
+  --accent-primary-hover: #d41558;
+  --accent-focus-ring: rgba(243, 24, 100, 0.2);
   --accent-success: #214a37;
   --accent-danger: #b23a3a;
   --accent-success-strip: #2fa55f;
@@ -55,6 +57,31 @@
   --scrollbar-thumb: #cfd5df;
   --tile-bg: #f5f7fc;
   --tile-fallback-text: #5f6e8c;
+  --skeleton-base: #e7ebf3;
+  --skeleton-highlight: #f6f8fc;
+
+  --live-type-oneman-bg: #ffe7ef;
+  --live-type-oneman-text: #a51448;
+  --live-type-multi-bg: #eee8ff;
+  --live-type-multi-text: #5940a8;
+  --live-type-festival-bg: #dff6f1;
+  --live-type-festival-text: #176b5b;
+  --live-type-event-bg: #fff1d6;
+  --live-type-event-text: #8a560d;
+  --live-type-group-bg: #e4edff;
+  --live-type-group-text: #31579d;
+  --live-type-other-bg: #edf0f6;
+  --live-type-other-text: #4e5f7e;
+
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
+
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-dropdown: 30;
+  --z-drawer: 60;
+  --z-popover: 120;
 
   --overlay-mask: rgba(13, 22, 40, 0.46);
   --overlay-soft-mask: rgba(18, 27, 45, 0.3);
@@ -64,8 +91,8 @@
 }
 
 :root[data-theme="dark"] {
-  --bg-body-start: #0f1524;
-  --bg-body-end: #121b2d;
+  --bg-body: #121b2d;
+  --bg-body-accent: rgba(243, 24, 100, 0.12);
   --text-main: #dce7ff;
   --text-link: #ff6f9f;
   --text-heading: #dce7ff;
@@ -100,6 +127,7 @@
   --border-table-row: #2c3f61;
 
   --accent-primary: #f31864;
+  --accent-focus-ring: rgba(255, 111, 159, 0.28);
   --accent-success: #87c7a8;
   --accent-danger: #ff8c8c;
   --accent-success-strip: #4bc27b;
@@ -120,6 +148,21 @@
   --scrollbar-thumb: #546789;
   --tile-bg: #273a5a;
   --tile-fallback-text: #b4c5e6;
+  --skeleton-base: #273651;
+  --skeleton-highlight: #354866;
+
+  --live-type-oneman-bg: #552238;
+  --live-type-oneman-text: #ff9abd;
+  --live-type-multi-bg: #372f62;
+  --live-type-multi-text: #c0afff;
+  --live-type-festival-bg: #1d4945;
+  --live-type-festival-text: #83d8c8;
+  --live-type-event-bg: #513b1d;
+  --live-type-event-text: #ffd084;
+  --live-type-group-bg: #263f70;
+  --live-type-group-text: #a9c5ff;
+  --live-type-other-bg: #2d3b55;
+  --live-type-other-text: #b8c8e8;
 
   --overlay-mask: rgba(4, 8, 15, 0.72);
   --overlay-soft-mask: rgba(4, 8, 15, 0.58);

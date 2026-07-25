@@ -33,17 +33,20 @@ import {
   SearchResultsPanel,
 } from "./components/CatalogPanels";
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
+import { ContentState } from "./components/ContentState";
 import { HomeDashboard, type HomeLiveRow } from "./components/HomeDashboard";
 import { PageTitle } from "./components/PageTitle";
 import { formatPerformanceDate, LiveCardGrid } from "./components/LiveCardGrid";
 import { LiveDetailPage } from "./components/LiveDetailPage";
 import { LiveListFiltersToolbar } from "./components/LiveListFilters";
+import { LiveTypeBadge } from "./components/LiveTypeBadge";
 import { LoginDialog } from "./components/LoginDialog";
 import { StatisticsPanel } from "./components/StatisticsPanel";
 import { TourArchivePage } from "./components/TourArchivePage";
 import { TourDetailPage, type TourDetailFallback } from "./components/TourDetailPage";
 import { PerformanceGroupDetailPage } from "./components/PerformanceGroupDetailPage";
 import { DEFAULT_TOUR_FILTERS, type TourFilters } from "./components/TourListFilters";
+import { ViewModeToggle } from "./components/ViewModeToggle";
 import { formatLiveType } from "./components/console/constants";
 import { useFavorites } from "./favorites/FavoriteProvider";
 import {
@@ -178,7 +181,7 @@ function canAccessConsole(role: string | null | undefined): boolean {
   return currentPriority >= ROLE_PRIORITY.editor;
 }
 
-const USER_AVATAR_COLORS = ["#5b7cfa", "#00a4a6", "#f59f00", "#e8590c", "#6c5ce7", "#2b8a3e"];
+const USER_AVATAR_COLORS = ["#f31864", "#d41558", "#ff6f9f", "#7c5cff", "#2b8a3e", "#e8590c"];
 
 function getAvatarInitial(name: string | null | undefined): string {
   const text = name?.trim() ?? "";
@@ -1506,18 +1509,7 @@ function App() {
                 title="演出资料"
                 description="浏览已收录的 Live，也可以只查看收藏内容。"
               />
-              <span className="view-toggle">
-                <button
-                  type="button"
-                  className="view-toggle-btn"
-                  data-active="true"
-                  onClick={() => handleViewModeChange(viewMode === "cards" ? "table" : "cards")}
-                  aria-label={viewMode === "cards" ? "切换为表格模式" : "切换为卡片模式"}
-                  title={viewMode === "cards" ? "切换为表格模式" : "切换为卡片模式"}
-                >
-                  {viewMode === "cards" ? "▦" : "☷"}
-                </button>
-              </span>
+              <ViewModeToggle value={viewMode} onChange={handleViewModeChange} />
             </header>
             <LiveListFiltersToolbar
               filters={listFilters}
@@ -1640,7 +1632,12 @@ function App() {
                             {row.liveTitle}
                           </button>
                         </td>
-                        <td>{row.groupDisplayType === "single_day_multi_show" ? "单日多场" : "多日活动"}</td>
+                        <td>
+                          <LiveTypeBadge
+                            value="performance_group"
+                            label={row.groupDisplayType === "single_day_multi_show" ? "单日多场" : "多日活动"}
+                          />
+                        </td>
                         <td className="band-cell" title={`${row.groupIcons.length} 支乐队`}>
                           <BandIconsCell icons={row.groupIcons} rowId={row.groupId ?? 0} />
                         </td>
@@ -1671,7 +1668,7 @@ function App() {
                           {row.liveTitle}
                         </button>
                       </td>
-                      <td>{formatLiveType(row.liveType)}</td>
+                      <td><LiveTypeBadge value={row.liveType} label={formatLiveType(row.liveType)} /></td>
                       <td className="band-cell" title={`${row.icons.length} 支乐队`}>
                         <BandIconsCell icons={row.icons} rowId={row.liveId} />
                       </td>
@@ -1682,6 +1679,7 @@ function App() {
                             target="_blank"
                             rel="noreferrer"
                             className="url-icon-link"
+                            aria-label={`打开《${row.liveTitle}》的资料来源`}
                           >
                             🔗
                           </a>
@@ -1695,14 +1693,30 @@ function App() {
                   {loadError && (
                     <tr>
                       <td colSpan={showFavoriteColumn ? 6 : 5} className="empty-cell">
-                        数据加载失败: {loadError}
+                        <ContentState
+                          kind="error"
+                          title="数据加载失败"
+                          description={loadError}
+                          layout="rows"
+                          compact
+                        />
                       </td>
                     </tr>
                   )}
                   {!loadError && pagedRows.length === 0 && (
                     <tr>
                       <td colSpan={showFavoriteColumn ? 6 : 5} className="empty-cell">
-                        {loading ? "加载中..." : "当前没有可展示的数据"}
+                        {loading ? (
+                          <ContentState kind="loading" title="加载中..." layout="rows" compact />
+                        ) : (
+                          <ContentState
+                            kind="empty"
+                            title="当前没有可展示的数据"
+                            description="可以调整筛选条件后再试。"
+                            layout="rows"
+                            compact
+                          />
+                        )}
                       </td>
                     </tr>
                   )}
