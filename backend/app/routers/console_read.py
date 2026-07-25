@@ -362,6 +362,7 @@ def get_editable_live_setlist(
 def list_songs(
     q: str | None = Query(default=None, max_length=255, description="Song title prefix"),
     limit: int = Query(default=20, ge=1, le=100, description="Maximum number of songs to return"),
+    page: int = Query(default=1, ge=1, description="Result page"),
     _: Any = Depends(require_role("editor")),
 ):
     """Return song_list rows for the console song selector without mutating any data."""
@@ -372,8 +373,7 @@ def list_songs(
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 if query_text:
-                    cur.execute(
-                        """
+                    normalized_song_list_sql = """
                         WITH normalized_song_list AS (
                             SELECT
                                 s.id,
@@ -405,6 +405,41 @@ def list_songs(
                             FROM song_list AS s
                             JOIN band_attrs AS b ON b.id = s.band_id
                         )
+                    """
+                    normalization_params = (
+                        SONG_LOOKUP_SQL_FROM_CHARS,
+                        SONG_LOOKUP_SQL_TO_CHARS,
+                        SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[0],
+                        SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[1],
+                        SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[2],
+                        SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[3],
+                    )
+                    prefix_params = (
+                        _build_prefix_lookup_pattern(query_text),
+                        _build_prefix_lookup_pattern(normalized_query_text),
+                    )
+                    cur.execute(
+                        f"""
+                        {normalized_song_list_sql}
+                        SELECT COUNT(*)
+                        FROM normalized_song_list
+                        WHERE song_name ILIKE %s ESCAPE '\\'
+                           OR normalized_song_name ILIKE %s ESCAPE '\\'
+                        """,
+                        (*normalization_params, *prefix_params),
+                    )
+                else:
+                    cur.execute("SELECT COUNT(*) FROM song_list")
+                total_row = cur.fetchone()
+                total = int(total_row[0]) if total_row is not None else 0
+                total_pages = max(1, (total + limit - 1) // limit)
+                safe_page = min(page, total_pages)
+                offset = (safe_page - 1) * limit
+
+                if query_text:
+                    cur.execute(
+                        f"""
+                        {normalized_song_list_sql}
                         SELECT id, song_name, band_id, is_cover, band_name
                         FROM normalized_song_list
                         WHERE song_name ILIKE %s ESCAPE '\\'
@@ -417,20 +452,15 @@ def list_songs(
                             END,
                             song_name,
                             id
-                        LIMIT %s
+                        LIMIT %s OFFSET %s
                         """,
                         (
-                            SONG_LOOKUP_SQL_FROM_CHARS,
-                            SONG_LOOKUP_SQL_TO_CHARS,
-                            SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[0],
-                            SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[1],
-                            SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[2],
-                            SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[3],
-                            _build_prefix_lookup_pattern(query_text),
-                            _build_prefix_lookup_pattern(normalized_query_text),
+                            *normalization_params,
+                            *prefix_params,
                             _build_exact_lookup_pattern(query_text),
                             _build_exact_lookup_pattern(normalized_query_text),
                             limit,
+                            offset,
                         ),
                     )
                 else:
@@ -440,21 +470,21 @@ def list_songs(
                         FROM song_list AS s
                         JOIN band_attrs AS b ON b.id = s.band_id
                         ORDER BY s.song_name, s.id
-                        LIMIT %s
+                        LIMIT %s OFFSET %s
                         """,
-                        (limit,),
+                        (limit, offset),
                     )
                 rows = cur.fetchall()
     except QueryCanceled as exc:
-        logger.exception("list_songs timeout q=%s limit=%s", query_text, limit)
+        logger.exception("list_songs timeout q=%s limit=%s page=%s", query_text, limit, page)
         raise HTTPException(status_code=504, detail="Database query timeout") from exc
     except OperationalError as exc:
-        logger.exception("list_songs operational error q=%s limit=%s", query_text, limit)
+        logger.exception("list_songs operational error q=%s limit=%s page=%s", query_text, limit, page)
         if "timeout expired" in str(exc).lower():
             raise HTTPException(status_code=504, detail="Database connection timeout") from exc
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     except Error as exc:
-        logger.exception("list_songs failed q=%s limit=%s", query_text, limit)
+        logger.exception("list_songs failed q=%s limit=%s page=%s", query_text, limit, page)
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
     return {
@@ -467,7 +497,11 @@ def list_songs(
                 "band_name": row[4],
             }
             for row in rows
-        ]
+        ],
+        "page": safe_page,
+        "page_size": limit,
+        "total": total,
+        "total_pages": total_pages,
     }
 
 

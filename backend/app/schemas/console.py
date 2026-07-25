@@ -68,6 +68,10 @@ class ConsoleSongBatchCreateResponse(BaseModel):
 
 class ConsoleSongListResponse(BaseModel):
     items: list[ConsoleSongLookupItem] = Field(..., description="Songs available for console lookup")
+    page: int = Field(..., ge=1, description="Current page")
+    page_size: int = Field(..., ge=1, description="Requested page size")
+    total: int = Field(..., ge=0, description="Total matching songs")
+    total_pages: int = Field(..., ge=1, description="Total pages")
 
 
 class ConsoleBandItem(BaseModel):

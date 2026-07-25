@@ -29,20 +29,25 @@ describe("console lookup api", () => {
     vi.unstubAllGlobals();
   });
 
-  // 测试点：歌曲候选查询封装应生成后端期望的 q/limit 参数并透传乐队名称。
-  test("getConsoleSongs 会按 q/limit 请求 console songs 并返回 items", async () => {
+  // 测试点：歌曲候选查询封装应透传 q、每页数量和页码，并保留服务端分页信息。
+  test("getConsoleSongs 会按 q/limit/page 请求 console songs", async () => {
     fetchMock.mockResolvedValueOnce(
       makeJsonResponse({
         items: [{ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, cover: false, band_name: "Poppin'Party" }],
+        page: 2,
+        page_size: 10,
+        total: 12,
+        total_pages: 2,
       }),
     );
     const { getConsoleSongs } = await import("../api");
 
-    const payload = await getConsoleSongs("  BanG  ", 10);
+    const payload = await getConsoleSongs("  BanG  ", 10, 2);
 
     expect(payload.items[0]).toEqual({ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, cover: false, band_name: "Poppin'Party" });
+    expect(payload.total_pages).toBe(2);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs?limit=10&q=BanG");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs?limit=10&q=BanG&page=2");
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ credentials: "include" }));
   });
 

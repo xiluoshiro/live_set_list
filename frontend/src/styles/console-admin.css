@@ -353,6 +353,14 @@
   overflow-y: auto;
 }
 
+.modal.console-confirm-modal > .modal-head {
+  flex: 0 0 auto;
+}
+
+.modal.console-confirm-modal.setlist-paste-confirm {
+  height: min(760px, calc(100vh - 40px));
+}
+
 .console-confirm-table-wrap {
   overflow-x: auto;
 }
@@ -750,12 +758,11 @@
 }
 
 .song-submit-row {
-  margin-top: 8px;
+  margin-top: 0;
 }
 
-.song-admin-form-table {
-  min-width: 860px;
-  table-layout: fixed;
+.song-admin-fields {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(120px, 1fr);
 }
 
 .live-admin-form-table {
@@ -861,21 +868,38 @@
   margin-top: 10px;
 }
 
-.song-admin-form-table th:nth-child(1),
-.song-admin-form-table td:nth-child(1) {
-  width: 50%;
+.song-cover-field {
+  align-content: start;
 }
 
-.song-admin-form-table th:nth-child(2),
-.song-admin-form-table td:nth-child(2) {
-  width: 35%;
-  min-width: 220px;
+.song-cover-control {
+  display: flex;
+  min-height: 39px;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
 }
 
-.song-admin-form-table th:nth-child(3),
-.song-admin-form-table td:nth-child(3) {
-  width: 15%;
-  min-width: 96px;
+.song-cover-control input {
+  width: auto;
+}
+
+.song-candidate-col-id {
+  width: 92px;
+}
+
+.song-candidate-col-band {
+  width: 28%;
+}
+
+.song-candidate-col-cover {
+  width: 72px;
+}
+
+@media (max-width: 720px) {
+  .song-admin-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 .song-band-trigger {
