@@ -1,6 +1,7 @@
 import type { MutableRefObject } from "react";
 
 import type { TourSummary } from "../api";
+import { formatCompactDateRange } from "../dateFormat";
 import { BandIconsCell } from "./BandIconsCell";
 import { ContentState } from "./ContentState";
 
@@ -16,7 +17,7 @@ type TourCardGridProps = {
 };
 
 function formatDateRange(tour: TourSummary): string {
-  return tour.start_date === tour.end_date ? tour.start_date : `${tour.start_date} — ${tour.end_date}`;
+  return formatCompactDateRange(tour.start_date, tour.end_date, tour.start_date);
 }
 
 export function TourCardGrid({

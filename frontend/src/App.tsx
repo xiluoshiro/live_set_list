@@ -1775,15 +1775,17 @@ function App() {
                     >
                       {showFavoriteColumn && (
                         <td className="fav-col-cell">
-                          <button
-                            className={`star-btn ${isFavorite(row.liveId) ? "is-fav" : ""} ${favorites.isFavoriteSyncing(row.liveId) ? "is-syncing" : ""}`}
-                            onClick={() => void toggleFavorite(row.liveId)}
-                            title={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
-                            aria-label={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
-                            aria-busy={favorites.isFavoriteSyncing(row.liveId)}
-                          >
-                            ★
-                          </button>
+                          {row.eventStatus !== "cancelled" && (
+                            <button
+                              className={`star-btn ${isFavorite(row.liveId) ? "is-fav" : ""} ${favorites.isFavoriteSyncing(row.liveId) ? "is-syncing" : ""}`}
+                              onClick={() => void toggleFavorite(row.liveId)}
+                              title={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
+                              aria-label={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
+                              aria-busy={favorites.isFavoriteSyncing(row.liveId)}
+                            >
+                              ★
+                            </button>
+                          )}
                         </td>
                       )}
                       <td>{row.liveDate}</td>

@@ -31,8 +31,10 @@
   - 获取当前登录用户的收藏分页列表
 - `POST /api/me/favorites/lives:batch`
   - 批量收藏或取消收藏 Live，要求登录态与 CSRF
+  - 取消 Live 不可新增收藏；批量新增时归入 `noop_live_ids`
 - `PUT /api/me/favorites/lives/{live_id}`
   - 收藏指定 live
+  - 目标已取消时返回 `409`
 - `DELETE /api/me/favorites/lives/{live_id}`
   - 取消收藏指定 live
 - `GET /api/lives`
@@ -169,7 +171,7 @@
 - 无 Setlist 时，单条与批量详情的 `bands/band_names` 会回退 `default_band_ids`，与列表有效 Band 规则一致
 - `event_attendees` 只在 `live_type=event` 时返回内容；每项包含 `band_id/band_name/mode/members`
 - `mode=full|partial` 是查询时根据完整 `members` 与 `band_attrs.band_members` 计算的值，不在数据库中持久化
-- 详情返回 `event_status/date_phase/status_note/was_rescheduled`；`schedule_history` 只包含正式改期前的排期快照，不包含资料修正
+- 详情返回 `event_status/date_phase/status_note/was_rescheduled`；`schedule_history` 只包含正式改期前的快照，前端仅展示实际变化的标题、日期、时间或场地，不包含资料修正
 
 ### 3. `POST /api/lives/details:batch`
 

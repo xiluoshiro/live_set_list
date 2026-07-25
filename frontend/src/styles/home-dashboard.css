@@ -178,7 +178,7 @@
 
 .home-section-head {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) 140px;
+  grid-template-columns: minmax(172px, auto) minmax(0, 1fr) 140px;
   gap: 12px;
   align-items: end;
   margin-bottom: 4px;
@@ -221,7 +221,7 @@
 
 .home-recent-item {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) 140px;
+  grid-template-columns: minmax(172px, auto) minmax(0, 1fr) 140px;
   gap: 12px;
   align-items: center;
   padding: 10px 0;
@@ -232,10 +232,40 @@
   border-top: none;
 }
 
+.home-recent-meta {
+  --live-status-text: var(--live-status-past-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.home-recent-meta[data-status-tone="upcoming"] {
+  --live-status-text: var(--live-status-upcoming-text);
+}
+
+.home-recent-meta[data-status-tone="today"] {
+  --live-status-text: var(--live-status-today-text);
+}
+
+.home-recent-meta[data-status-tone="postponed"] {
+  --live-status-text: var(--live-status-postponed-text);
+}
+
+.home-recent-meta[data-status-tone="cancelled"] {
+  --live-status-text: var(--live-status-cancelled-text);
+}
+
 .home-recent-date {
   color: var(--text-secondary);
   font-size: 14px;
-  white-space: nowrap;
+}
+
+.home-recent-meta .live-status-pill {
+  min-height: 22px;
+  padding: 1px 7px;
+  font-size: 12px;
 }
 
 .home-recent-title {

@@ -1,7 +1,8 @@
 import { useState } from "react";
 
 import type { CatalogStatsResponse, DatePhase, EventStatus } from "../api";
-import { formatLiveStatusText } from "../liveStatus";
+import { formatCompactDate } from "../dateFormat";
+import { formatLiveStatusText, getLiveStatusPresentation } from "../liveStatus";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
 import { ContentState } from "./ContentState";
 import { PageTitle } from "./PageTitle";
@@ -15,6 +16,15 @@ export type HomeLiveRow = {
   datePhase: DatePhase | null;
   wasRescheduled: boolean;
 };
+
+function getHomeLiveStatus(row: HomeLiveRow): { text: string; tone: string } {
+  const eventStatus = row.eventStatus ?? "scheduled";
+  const datePhase = row.datePhase ?? "past";
+  return {
+    text: formatLiveStatusText(eventStatus, datePhase, row.wasRescheduled),
+    tone: getLiveStatusPresentation(eventStatus, datePhase, row.wasRescheduled).tone,
+  };
+}
 
 type HomeDashboardProps = {
   isAuthenticated: boolean;
@@ -117,7 +127,9 @@ export function HomeDashboard({
       </section>
       <p className="home-latest-live">
         <span className="home-latest-live-label">最新 Live 日期</span>
-        <span className="home-latest-live-value">{stats?.latest_live_date ?? "..."}</span>
+        <span className="home-latest-live-value">
+          {stats?.latest_live_date ? formatCompactDate(stats.latest_live_date) : "..."}
+        </span>
       </p>
 
       <div className="home-grid">
@@ -159,24 +171,23 @@ export function HomeDashboard({
             />
           ) : (
             <ol className="home-recent-list">
-              {recentRows.slice(0, 6).map((row) => (
-                <li key={row.liveId} className="home-recent-item">
-                  <span className="home-recent-date">
-                    {row.liveDate}
-                    {` · ${formatLiveStatusText(
-                      row.eventStatus ?? "scheduled",
-                      row.datePhase ?? "past",
-                      row.wasRescheduled,
-                    )}`}
-                  </span>
-                  <button type="button" className="home-recent-title" onClick={() => onOpenLive(row)}>
-                    {row.liveTitle}
-                  </button>
-                  <span className="home-recent-bands" title={`${row.icons.length} 支乐队`}>
-                    <BandIconsCell icons={row.icons} rowId={row.liveId} />
-                  </span>
-                </li>
-              ))}
+              {recentRows.slice(0, 6).map((row) => {
+                const status = getHomeLiveStatus(row);
+                return (
+                  <li key={row.liveId} className="home-recent-item">
+                    <span className="home-recent-meta" data-status-tone={status.tone}>
+                      <span className="home-recent-date">{formatCompactDate(row.liveDate)}</span>
+                      <span className="live-status-pill">{status.text}</span>
+                    </span>
+                    <button type="button" className="home-recent-title" onClick={() => onOpenLive(row)}>
+                      {row.liveTitle}
+                    </button>
+                    <span className="home-recent-bands" title={`${row.icons.length} 支乐队`}>
+                      <BandIconsCell icons={row.icons} rowId={row.liveId} />
+                    </span>
+                  </li>
+                );
+              })}
             </ol>
           )}
         </section>

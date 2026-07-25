@@ -604,7 +604,7 @@ describe("App", () => {
     expect(within(metrics).getByText("场地")).toBeInTheDocument();
     expect(within(metrics).getByText("17")).toBeInTheDocument();
     expect(within(metrics).getAllByText("3")).toHaveLength(2);
-    expect(screen.getByText("2026-05-30")).toBeInTheDocument();
+    expect(screen.getByText("2026.05.30")).toBeInTheDocument();
     expect(screen.getByText("最新 Live 日期")).toBeInTheDocument();
     expect(getCatalogStatsMock).toHaveBeenCalled();
   });
@@ -617,6 +617,8 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
 
+    expect(await screen.findByText("2026.03.02")).toBeInTheDocument();
+    expect(screen.getAllByText("已结束")[0]).toHaveClass("live-status-pill");
     await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(1));
     await user.click(screen.getByRole("button", { name: "返回" }));
@@ -1063,7 +1065,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
   });
 
-  // 测试点：单日多场活动组在演出资料的表格和卡片视图都只显示一个日期。
+  // 测试点：单日多场活动组表格只显示一个原格式日期，卡片只显示一个紧凑日期。
   test("单日多场活动组不重复显示起止日期", async () => {
     getPerformancesMock.mockResolvedValue({
       items: [{
@@ -1093,7 +1095,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "卡片" }));
     const card = screen.getByText("示例单日多场").closest("article") as HTMLElement;
-    expect(within(card).getByText("2026-08-01")).toBeInTheDocument();
+    expect(within(card).getByText("2026.08.01")).toBeInTheDocument();
     expect(within(card).queryByText("2026-08-01 ~ 2026-08-01")).not.toBeInTheDocument();
   });
 
@@ -1126,6 +1128,7 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看巡演" })).not.toBeInTheDocument();
     expect(screen.getByText("已收录 2 场")).toBeInTheDocument();
+    expect(within(tourCard).getByText("2026.05.30–06.02")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Band 2" })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("关键词"), "Exitus");
@@ -1199,7 +1202,7 @@ describe("App", () => {
     }
   });
 
-  // 测试点：巡演场次导航用竖向分隔条组织带状态的缩写，点击后在当前页内切换 Live 详情。
+  // 测试点：巡演场次导航用竖向分隔条组织纯标题缩写，不把已结束等状态塞进选项。
   test("巡演详情在页内切换缩写后的 Live 场次", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -1209,10 +1212,11 @@ describe("App", () => {
     await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
     const stopNavigation = screen.getByRole("navigation", { name: "巡演场次" });
     expect(within(stopNavigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "東京公演（已结束）",
-      "FINAL（已结束）",
+      "東京公演",
+      "FINAL",
     ]);
-    expect(stopNavigation).toHaveTextContent("東京公演（已结束）FINAL（已结束）");
+    expect(stopNavigation).toHaveTextContent("東京公演FINAL");
+    expect(stopNavigation).not.toHaveTextContent("已结束");
     expect(stopNavigation.querySelectorAll(".tour-stop-separator")).toHaveLength(1);
     expect(within(stopNavigation).queryByText("/")).not.toBeInTheDocument();
     expect(within(stopNavigation).queryByText("2026-05-30")).not.toBeInTheDocument();
@@ -1225,13 +1229,13 @@ describe("App", () => {
 
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(41));
     expect(screen.getByText("曲目名称")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "FINAL（已结束）" }));
+    await user.click(screen.getByRole("button", { name: "FINAL" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
     expect(getTourDetailMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
   });
 
-  // 测试点：已登录用户可以直接在巡演详情中逐场收藏子 Live。
+  // 测试点：已登录用户可以用不含状态后缀的巡演场次标题逐场收藏子 Live。
   test("巡演详情提供逐场收藏操作", async () => {
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
@@ -1245,8 +1249,8 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "巡演资料" }));
     await user.click(await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus"));
 
-    expect(await screen.findByRole("button", { name: "取消收藏 東京公演（已结束）" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "加入收藏 FINAL（已结束）" }));
+    expect(await screen.findByRole("button", { name: "取消收藏 東京公演" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "加入收藏 FINAL" }));
     await waitFor(() => expect(favoriteLiveMock).toHaveBeenCalledWith(42, "csrf-token"));
   });
 
@@ -2176,7 +2180,7 @@ describe("App", () => {
     expect(document.querySelector(".live-card")).not.toBeNull();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument();
-    expect(screen.getByText("2026-03-02")).toBeInTheDocument();
+    expect(screen.getByText("2026.03.02")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /查看《示例 Live 名称 1》详情，状态：/ })).toBeInTheDocument();
     const favoriteAction = screen.getAllByRole("button", { name: "加入收藏" })[0];
     const sourceAction = screen.getAllByRole("link", { name: /打开《.*》的资料来源/ })[0];

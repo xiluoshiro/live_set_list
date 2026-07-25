@@ -33,6 +33,7 @@ class LiveItem(BaseModel):
 
 
 class LiveScheduleHistoryItem(BaseModel):
+    previous_live_title: str | None
     previous_live_date: date
     previous_opening_time: str
     previous_start_time: str

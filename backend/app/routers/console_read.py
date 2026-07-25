@@ -260,6 +260,7 @@ def get_editable_live(
                             (
                                 SELECT jsonb_agg(
                                     jsonb_build_object(
+                                        'previous_live_title', history.previous_live_title,
                                         'previous_live_date', history.previous_live_date,
                                         'previous_opening_time', history.previous_opening_time::text,
                                         'previous_start_time', history.previous_start_time::text,

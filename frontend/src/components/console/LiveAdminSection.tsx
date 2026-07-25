@@ -413,37 +413,36 @@ export function LiveAdminSection({
             </label>
           )}
         </div>
+        {variant === "edit" && hasScheduleChanges && (
+          <div className="live-schedule-change-editor">
+            <span className="live-management-label">本次排期变化</span>
+            <label>
+              <input
+                type="radio"
+                name="schedule-change-kind"
+                checked={scheduleChangeKind === "correction"}
+                onChange={() => onScheduleChangeKindChange("correction")}
+              />
+              资料修正
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="schedule-change-kind"
+                checked={scheduleChangeKind === "reschedule"}
+                onChange={() => onScheduleChangeKindChange("reschedule")}
+              />
+              主办方正式改期
+            </label>
+            <input
+              aria-label="排期变化说明"
+              value={scheduleChangeNote}
+              onChange={(event) => onScheduleChangeNoteChange(event.target.value)}
+              placeholder="说明（可选）"
+            />
+          </div>
+        )}
       </section>
-
-      {variant === "edit" && hasScheduleChanges && (
-        <div className="live-id-selector live-schedule-change-editor">
-          <span className="live-management-label">本次排期变化</span>
-          <label>
-            <input
-              type="radio"
-              name="schedule-change-kind"
-              checked={scheduleChangeKind === "correction"}
-              onChange={() => onScheduleChangeKindChange("correction")}
-            />
-            资料修正
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="schedule-change-kind"
-              checked={scheduleChangeKind === "reschedule"}
-              onChange={() => onScheduleChangeKindChange("reschedule")}
-            />
-            主办方正式改期
-          </label>
-          <input
-            aria-label="排期变化说明"
-            value={scheduleChangeNote}
-            onChange={(event) => onScheduleChangeNoteChange(event.target.value)}
-            placeholder="说明（可选）"
-          />
-        </div>
-      )}
 
       <div className="console-submit-row live-admin-insert-row">
         {variant === "create" && (

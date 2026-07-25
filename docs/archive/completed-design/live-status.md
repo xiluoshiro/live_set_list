@@ -44,7 +44,7 @@
 | `postponed` | 延期 | 原计划不再按期举行，新日期尚未确定 |
 | `cancelled` | 已取消 | Live 已取消 |
 
-状态语义统一为“取消”。`cancelled` 可以与已有 Setlist 共存，服务端不根据 Setlist 是否存在自动改写状态，也不因状态变化自动删除已经录入的资料。
+状态语义统一为“取消”。`cancelled` 可以与已有 Setlist 共存，服务端不根据 Setlist 是否存在自动改写状态，也不删除已经录入的歌单资料；公开详情不展示其歌单。取消 Live 不可收藏，切换为取消状态时自动移除已有收藏。
 
 `scheduled` 不表示 Live 一定尚未开始；一场按计划举行的历史 Live 仍保持 `scheduled`，由日期阶段表达其已经过去。
 
@@ -74,7 +74,7 @@
 - `scheduled + upcoming + was_rescheduled`：已改期 · 待举行
 - `scheduled + today + was_rescheduled`：已改期 · 进行中
 - `scheduled + past + was_rescheduled`：已结束 · 曾改期
-- `postponed`：延期
+- `postponed`：延期，并同时显示待举行、进行中或已结束的日期阶段
 - `cancelled`：已取消
 
 ### 资料修正
@@ -95,7 +95,7 @@
 公开端按以下优先级生成主状态：
 
 1. `event_status=cancelled`：已取消
-2. `event_status=postponed`：延期
+2. `event_status=postponed`：延期，并按 `date_phase` 补充待举行、进行中或已结束
 3. `event_status=scheduled`：按 `date_phase` 显示待举行、进行中或已结束
 
 `was_rescheduled` 是次级标记，不覆盖主状态：
@@ -174,6 +174,7 @@ CHECK (event_status IN ('scheduled', 'postponed', 'cancelled'))
 CREATE TABLE public.live_schedule_history (
     id bigserial PRIMARY KEY,
     live_id integer NOT NULL REFERENCES public.live_attrs(id),
+    previous_live_title text,
     previous_live_date date NOT NULL,
     previous_opening_time time with time zone NOT NULL,
     previous_start_time time with time zone NOT NULL,
@@ -191,7 +192,7 @@ CREATE INDEX live_schedule_history_live_id_changed_at_idx
     ON public.live_schedule_history (live_id, changed_at, id);
 ```
 
-每次正式改期插入“改期前快照”。当前值始终读取 `live_attrs`。多次正式改期会依次保存每个旧版本，可以按 `changed_at, id` 还原排期变化。
+每次正式改期插入“改期前快照”。当前值始终读取 `live_attrs`。多次正式改期会依次保存每个旧版本，可以按 `changed_at, id` 还原排期变化；公开详情逐次比较前后快照，只展示实际变化的标题、日期、时间或场地。
 
 迁移同时补齐现有数据库角色的目标权限、对象 owner 和序列权限；不得改变 `flyway_schema_history` 的 owner。
 
@@ -276,7 +277,7 @@ Tour 摘要/详情和活动组摘要/详情增加：
 - 不改变 stop 顺序以外的显式关系。
 - 子 Live 入口显示自身状态。
 
-取消 Live 不拆散聚合：单日多场、多日活动和巡演都继续作为原有聚合对象返回，分页、排序、日期范围和收藏聚合规则不变。公开活动组卡片只按下文调整取消样式、取消场数文案和点击能力；巡演列表只增加取消场数文案。以下活动组排序规则只用于“巡演详情 → 场次详情”中的巡演场次序列。
+取消 Live 不拆散全部范围中的聚合：单日多场、多日活动和巡演都继续作为原有聚合对象返回，分页、排序和日期范围不变。取消 Live 不可收藏，因此包含取消场次的活动组不会在仅收藏范围中满足全场收藏条件。公开活动组卡片继续显示取消样式和取消场数文案；巡演列表只增加取消场数文案。以下活动组排序规则只用于“巡演详情 → 场次详情”中的巡演场次序列。
 
 巡演场次采用“活动组排序块优先、块内时间排序”：
 
@@ -487,7 +488,7 @@ COUNT(DISTINCT l.id) FILTER (
 )::int AS cancelled_live_count
 ```
 
-普通列表、收藏列表、Tour 摘要/详情和活动组摘要/详情必须使用相同定义。取消 Live 仍参与活动组完整收藏判断和总场数统计，避免取消状态改变既有聚合边界。
+普通列表、收藏列表、Tour 摘要/详情和活动组摘要/详情必须使用相同定义。取消 Live 仍参与活动组总场数统计，但不可收藏，也不会被计入已收藏 Live 集合。
 
 ## 缓存与失效
 
@@ -534,7 +535,7 @@ COUNT(DISTINCT l.id) FILTER (
 - 正式改期插入旧排期快照并在同一事务写审计。
 - 资料修正只更新当前值和审计，不写 `live_schedule_history`。
 - 公共接口只返回正式改期历史。
-- 取消 Live 不删除 Setlist、Tour、活动组或收藏关系。
+- 取消 Live 不删除 Setlist、Tour 或活动组关系；公开端隐藏 Setlist，数据库自动删除并禁止其收藏关系。
 - 多次正式改期可以按顺序还原旧排期。
 - Tour 和活动组的总场数继续包含取消 Live，并正确返回 `cancelled_live_count`。
 - 普通列表与收藏列表使用相同的取消计数和聚合规则。

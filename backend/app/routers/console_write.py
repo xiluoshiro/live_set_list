@@ -727,6 +727,7 @@ def update_live(
                             """
                             INSERT INTO live_schedule_history (
                                 live_id,
+                                previous_live_title,
                                 previous_live_date,
                                 previous_opening_time,
                                 previous_start_time,
@@ -734,10 +735,11 @@ def update_live(
                                 changed_by,
                                 note
                             )
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                             """,
                             (
                                 live_id,
+                                existing["live_title"],
                                 existing["live_date"],
                                 existing["opening_time"],
                                 existing["start_time"],

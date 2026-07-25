@@ -186,6 +186,35 @@ def test_favorite_live_adds_server_side_state_and_marks_lives_responses(
     assert me_response.json()["favorite_live_ids"] == [1]
 
 
+# 测试点：取消状态禁止新增收藏，并在演出从可收藏状态切为取消时自动移除既有收藏。
+def test_cancelled_live_rejects_and_removes_favorites(
+    integration_test_client,
+    integration_admin_connection,
+):
+    csrf_token = _login_and_get_csrf(integration_test_client)
+    favorite_response = integration_test_client.put(
+        "/api/me/favorites/lives/1",
+        headers={"X-CSRF-Token": csrf_token},
+    )
+    assert favorite_response.status_code == 204
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("UPDATE live_attrs SET event_status = 'cancelled' WHERE id = 1")
+        cursor.execute("SELECT COUNT(*) FROM user_live_favorites WHERE live_id = 1")
+        assert cursor.fetchone()[0] == 0
+
+    rejected_response = integration_test_client.put(
+        "/api/me/favorites/lives/1",
+        headers={"X-CSRF-Token": csrf_token},
+    )
+    me_response = integration_test_client.get("/api/auth/me")
+
+    assert rejected_response.status_code == 409
+    assert rejected_response.json()["detail"] == "Cancelled Live cannot be favorited"
+    assert me_response.json()["favorite_live_ids"] == []
+
+
 # 测试点：收藏范围中的无 setlist Live 应与全部内容一致地返回默认 Band。
 def test_favorite_live_without_setlist_uses_default_bands(integration_test_client):
     csrf_token = _login_and_get_csrf(integration_test_client)

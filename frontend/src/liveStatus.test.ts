@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { getPerformanceGroupStatusPresentation } from "./liveStatus";
+import { getLiveStatusPresentation, getPerformanceGroupStatusPresentation } from "./liveStatus";
 
 
 describe("performance group status", () => {
@@ -28,5 +28,20 @@ describe("performance group status", () => {
       4,
       new Date("2026-08-05T00:00:00"),
     )).toEqual({ primary: "已取消", tone: "cancelled" });
+  });
+});
+
+describe("postponed live status", () => {
+  // 测试点：延期状态保留人工事实，同时仍区分待举行、进行中和已结束三个日期阶段。
+  test.each([
+    ["upcoming", "待举行"],
+    ["today", "进行中"],
+    ["past", "已结束"],
+  ] as const)("keeps the %s phase visible", (datePhase, primary) => {
+    expect(getLiveStatusPresentation("postponed", datePhase, false)).toEqual({
+      primary,
+      secondary: "延期",
+      tone: "postponed",
+    });
   });
 });

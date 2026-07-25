@@ -72,6 +72,39 @@ function EventAttendeesLine({ attendees }: { attendees: LiveDetailResponse["even
   );
 }
 
+function getScheduleHistoryParts(
+  history: NonNullable<LiveDetailResponse["schedule_history"]>[number],
+  nextHistory: NonNullable<LiveDetailResponse["schedule_history"]>[number] | undefined,
+  detail: LiveDetailResponse,
+): string[] {
+  const parts: string[] = [];
+  const nextTitle = nextHistory?.previous_live_title ?? detail.live_title;
+  const nextDate = nextHistory?.previous_live_date ?? detail.live_date;
+  const nextOpeningTime = nextHistory?.previous_opening_time ?? detail.opening_time;
+  const nextStartTime = nextHistory?.previous_start_time ?? detail.start_time;
+  const nextVenue = nextHistory?.previous_venue ?? detail.venue;
+
+  if (history.previous_live_title && history.previous_live_title !== nextTitle) {
+    parts.push(`名称 ${history.previous_live_title}`);
+  }
+  if (history.previous_live_date !== nextDate) {
+    parts.push(`日期 ${history.previous_live_date}`);
+  }
+  if (formatTimedLabel(history.previous_opening_time) !== formatTimedLabel(nextOpeningTime)) {
+    parts.push(`开场 ${formatTimedLabel(history.previous_opening_time)}`);
+  }
+  if (formatTimedLabel(history.previous_start_time) !== formatTimedLabel(nextStartTime)) {
+    parts.push(`开演 ${formatTimedLabel(history.previous_start_time)}`);
+  }
+  if ((history.previous_venue ?? null) !== (nextVenue ?? null)) {
+    parts.push(`场地 ${history.previous_venue ?? "-"}`);
+  }
+  if (history.note) {
+    parts.push(history.note);
+  }
+  return parts;
+}
+
 export function LiveDetailContent({
   detailData,
   detailLoading,
@@ -127,13 +160,10 @@ export function LiveDetailContent({
         <div className="detail-row live-schedule-history">
           <strong>排期记录：</strong>
           <ul>
-            {(detailData.schedule_history ?? []).map((history, index) => (
+            {(detailData.schedule_history ?? []).map((history, index, histories) => (
               <li key={`${history.changed_at}-${index}`}>
-                原定 {history.previous_live_date}
-                {" · "}开场 {formatTimedLabel(history.previous_opening_time)}
-                {" · "}开演 {formatTimedLabel(history.previous_start_time)}
-                {history.previous_venue ? ` · ${history.previous_venue}` : ""}
-                {history.note ? ` · ${history.note}` : ""}
+                <span className="live-schedule-history-prefix">原定</span>
+                <span>{getScheduleHistoryParts(history, histories[index + 1], detailData).join(" · ")}</span>
               </li>
             ))}
           </ul>
@@ -154,9 +184,11 @@ export function LiveDetailContent({
           <button type="button" className="detail-tour-link" onClick={() => onOpenTour(detailData.tour as TourRef)}>{detailData.tour.tour_title}</button>
         </p>
       )}
-      <div className="detail-table-wrap">
-        <MemberStatusTable rows={detailData?.detail_rows} loading={detailLoading} error={detailError} />
-      </div>
+      {detailData?.event_status !== "cancelled" && (
+        <div className="detail-table-wrap">
+          <MemberStatusTable rows={detailData?.detail_rows} loading={detailLoading} error={detailError} />
+        </div>
+      )}
     </>
   );
 }
