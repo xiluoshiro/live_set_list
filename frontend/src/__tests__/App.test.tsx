@@ -42,6 +42,7 @@ import {
   type ToursResponse,
 } from "../api";
 import { logError } from "../logger";
+import { CONSOLE_LIVE_CHANGE_STORAGE_KEY } from "../consoleLiveSync";
 import { ThemeProvider } from "../theme/ThemeProvider";
 
 vi.mock("../api", () => ({
@@ -422,6 +423,7 @@ describe("App", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", window.location.href);
     localStorage.setItem("live-view-mode", "table");
+    localStorage.removeItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY);
     Reflect.deleteProperty(window, "requestIdleCallback");
     Reflect.deleteProperty(window, "cancelIdleCallback");
     getLivesMock.mockReset();
@@ -2242,11 +2244,174 @@ describe("App", () => {
     expect(screen.queryByText(/（\d+）/)).not.toBeInTheDocument();
   });
 
-  // 测试点：窗口重新获得焦点时清空 Live 列表与详情缓存，并重新请求当前公开页面的数据。
-  test("重新聚焦页面会失效 Live 缓存并刷新当前数据", async () => {
+  // 测试点：没有控制台变更时，重新聚焦后的首次卡片点击必须直接进入详情而不刷新列表。
+  test("重新聚焦后的首次卡片点击不会被列表刷新吞掉", async () => {
+    localStorage.setItem("live-view-mode", "cards");
+    const user = userEvent.setup();
     renderApp();
-    await waitFor(() => expect(getLivesMock).toHaveBeenCalled());
-    const requestCount = getLivesMock.mock.calls.length;
+    await openAllContent(user);
+    const card = await screen.findByRole("button", { name: /查看《示例 Live 名称 1》详情/ });
+    const requestCount = getPerformancesMock.mock.calls.length;
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await user.click(card);
+
+    await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(1));
+    expect(await screen.findByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
+    expect(clearLiveDataCachesMock).not.toHaveBeenCalled();
+    expect(getPerformancesMock).toHaveBeenCalledTimes(requestCount);
+  });
+
+  // 测试点：没有控制台变更时，重新聚焦后按 Escape 不得清空或重新请求当前卡片列表。
+  test("重新聚焦后按Escape不会刷新卡片列表", async () => {
+    localStorage.setItem("live-view-mode", "cards");
+    const user = userEvent.setup();
+    renderApp();
+    await openAllContent(user);
+    await screen.findByRole("button", { name: /查看《示例 Live 名称 1》详情/ });
+    const requestCount = getPerformancesMock.mock.calls.length;
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+
+    expect(screen.getByRole("button", { name: /查看《示例 Live 名称 1》详情/ })).toBeInTheDocument();
+    expect(clearLiveDataCachesMock).not.toHaveBeenCalled();
+    expect(getPerformancesMock).toHaveBeenCalledTimes(requestCount);
+  });
+
+  // 测试点：首页真实跨标签刷新在途时保留最近 Live，首次点击仍可直接进入详情。
+  test("首页跨标签刷新在途时最近Live仍可点击", async () => {
+    const refresh = deferred<LivesResponse>();
+    getLivesMock
+      .mockResolvedValueOnce(
+        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
+      )
+      .mockReturnValueOnce(refresh.promise);
+    const user = userEvent.setup();
+    renderApp();
+    const recentLive = await screen.findByRole("button", { name: "示例 Live 名称 1" });
+    const rawChange = JSON.stringify({
+      action: "updated",
+      liveId: 1,
+      changedAt: "2026-07-26T09:59:30.000Z",
+      nonce: "home-update-in-flight-1",
+    });
+    localStorage.setItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY, rawChange);
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: CONSOLE_LIVE_CHANGE_STORAGE_KEY,
+        newValue: rawChange,
+      }));
+    });
+
+    await waitFor(() => expect(getLivesMock).toHaveBeenCalledTimes(2));
+    expect(recentLive).toBeInTheDocument();
+    await user.click(recentLive);
+    expect(await screen.findByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
+
+    await act(async () => {
+      refresh.resolve(
+        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
+      );
+    });
+  });
+
+  // 测试点：真实的跨标签控制台写入仍会失效缓存并刷新当前公开列表，后续聚焦不重复刷新。
+  test("跨标签控制台变更会刷新一次且聚焦恢复不会重复刷新", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await openAllContent(user);
+    await screen.findByRole("button", { name: "示例 Live 名称 1" });
+    const rawChange = JSON.stringify({
+      action: "updated",
+      liveId: 1,
+      changedAt: "2026-07-26T10:00:00.000Z",
+      nonce: "other-tab-update-1",
+    });
+    localStorage.setItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY, rawChange);
+    const requestCount = getPerformancesMock.mock.calls.length;
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: CONSOLE_LIVE_CHANGE_STORAGE_KEY,
+        newValue: rawChange,
+      }));
+    });
+
+    await waitFor(() => {
+      expect(clearLiveDataCachesMock).toHaveBeenCalledTimes(1);
+      expect(getPerformancesMock.mock.calls.length).toBeGreaterThan(requestCount);
+    });
+    const refreshedRequestCount = getPerformancesMock.mock.calls.length;
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(clearLiveDataCachesMock).toHaveBeenCalledTimes(1);
+    expect(getPerformancesMock).toHaveBeenCalledTimes(refreshedRequestCount);
+  });
+
+  // 测试点：真实跨标签刷新在途时保留旧卡片，避免用户正在进行的首次点击被卸载。
+  test("跨标签刷新在途时旧卡片仍可点击进入详情", async () => {
+    localStorage.setItem("live-view-mode", "cards");
+    const refresh = deferred<PerformancesResponse>();
+    getPerformancesMock
+      .mockResolvedValueOnce(
+        makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+      )
+      .mockReturnValueOnce(refresh.promise);
+    const user = userEvent.setup();
+    renderApp();
+    await openAllContent(user);
+    const card = await screen.findByRole("button", { name: /查看《示例 Live 名称 1》详情/ });
+    const rawChange = JSON.stringify({
+      action: "updated",
+      liveId: 1,
+      changedAt: "2026-07-26T10:00:30.000Z",
+      nonce: "other-tab-update-in-flight-1",
+    });
+    localStorage.setItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY, rawChange);
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: CONSOLE_LIVE_CHANGE_STORAGE_KEY,
+        newValue: rawChange,
+      }));
+    });
+
+    await waitFor(() => expect(getPerformancesMock).toHaveBeenCalledTimes(2));
+    expect(card).toBeInTheDocument();
+    await user.click(card);
+    expect(await screen.findByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
+
+    await act(async () => {
+      refresh.resolve(
+        makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+      );
+    });
+  });
+
+  // 测试点：页面休眠期间漏收 storage 事件时，重新聚焦会根据未消费 nonce 补做一次刷新。
+  test("重新聚焦会补偿休眠期间漏收的控制台变更", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await openAllContent(user);
+    await screen.findByRole("button", { name: "示例 Live 名称 1" });
+    localStorage.setItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY, JSON.stringify({
+      action: "setlist_appended",
+      liveId: 1,
+      changedAt: "2026-07-26T10:01:00.000Z",
+      nonce: "missed-while-hidden-1",
+    }));
+    const requestCount = getPerformancesMock.mock.calls.length;
 
     act(() => {
       window.dispatchEvent(new Event("focus"));
@@ -2254,7 +2419,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(clearLiveDataCachesMock).toHaveBeenCalledTimes(1);
-      expect(getLivesMock.mock.calls.length).toBeGreaterThan(requestCount);
+      expect(getPerformancesMock.mock.calls.length).toBeGreaterThan(requestCount);
     });
   });
 

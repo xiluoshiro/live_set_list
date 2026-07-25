@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { CONSOLE_LIVE_CHANGE_STORAGE_KEY } from "../consoleLiveSync";
 
 vi.mock("../logger", () => ({
   logInfo: vi.fn(),
@@ -223,7 +224,7 @@ describe("api cache behavior", () => {
   });
 
   test("createConsoleLive 成功后会清理列表缓存", async () => {
-    // 测试点：控制台新增 Live 后，下一次列表读取必须回源而不是命中旧分页缓存。
+    // 测试点：控制台新增 Live 后会清理分页缓存，并发布可供其他标签消费的变更标记。
     fetchMock
       .mockResolvedValueOnce(
         makeJsonResponse({
@@ -283,6 +284,11 @@ describe("api cache behavior", () => {
     expect(refreshed.pagination.total).toBe(4);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[2][0]).toBe("/api/lives?page=1&page_size=20");
+    expect(JSON.parse(localStorage.getItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY) ?? "{}")).toMatchObject({
+      action: "created",
+      liveId: 41,
+      nonce: expect.any(String),
+    });
   });
 
   test("getLiveDetail 命中缓存，不重复请求同一 live_id", async () => {
