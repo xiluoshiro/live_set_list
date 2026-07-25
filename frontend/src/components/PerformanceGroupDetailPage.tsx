@@ -8,7 +8,7 @@ import {
   type TourRef,
 } from "../api";
 import { logError } from "../logger";
-import { formatLiveStatusText, getPerformanceGroupStatusPresentation } from "../liveStatus";
+import { getPerformanceGroupStatusPresentation } from "../liveStatus";
 import { ContentState } from "./ContentState";
 import { DetailTitleLink } from "./DetailTitleLink";
 import { LiveDetailContent } from "./LiveDetailContent";
@@ -170,11 +170,9 @@ export function PerformanceGroupDetailPage({
           >
             {detail.lives.map((live, index) => {
               const shortTitle = getGroupedLiveShortTitle(live.live_title, detail.group_title);
-              const displayTitle = `${shortTitle}（${formatLiveStatusText(
-                live.event_status ?? "scheduled",
-                live.date_phase ?? "past",
-                live.was_rescheduled ?? false,
-              )}）`;
+              const displayTitle = live.event_status === "cancelled"
+                ? `${shortTitle}（已取消）`
+                : shortTitle;
               const favorite = isFavorite(live.live_id);
               const canOpenLive = live.event_status !== "cancelled" || live.has_setlist;
               return (

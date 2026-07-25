@@ -54,15 +54,17 @@ describe("TourStatisticsPanel", () => {
     getTourStatisticsComparisonMock.mockReset();
   });
 
-  // 测试点：只有两场可比较 Setlist 时，任意场次比较不应重复相邻场次的唯一结果。
+  // 测试点：取消场次即使保留 Setlist 也不进入比较候选，两场有效 Setlist 不重复显示任意比较。
   test("两场 Setlist 时不显示任意场次比较", () => {
     const stops: TourStopItem[] = [
       { stop_order: 1, stop_label: null, live_id: 40, live_date: "2026-05-20", live_title: "Tour 2026 大阪公演", live_type: "oneman", venue: null, bands: [1], url: null, is_favorite: false, has_setlist: true },
       { stop_order: 2, stop_label: null, live_id: 41, live_date: "2026-05-30", live_title: "Tour 2026 東京公演", live_type: "oneman", venue: null, bands: [1], url: null, is_favorite: false, has_setlist: true },
+      { stop_order: 3, stop_label: null, live_id: 42, live_date: "2026-06-02", live_title: "Tour 2026 取消公演", live_type: "oneman", venue: null, bands: [1], url: null, is_favorite: false, has_setlist: true, event_status: "cancelled" },
     ];
     render(<TourStatisticsPanel tourTitle="Tour 2026" data={makeStatistics()} loading={false} error={null} onOpenStop={vi.fn()} stops={stops} />);
 
     expect(screen.queryByRole("button", { name: "比较" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /取消公演/ })).not.toBeInTheDocument();
   });
 
   // 测试点：任意比较应替换“对比上一场”的同一详情区域，选择相邻场次后可切回原结果。

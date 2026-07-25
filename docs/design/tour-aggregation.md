@@ -210,7 +210,7 @@ tour: TourRef | None = None
 
 - Tour 不存在返回 `404`。
 - 返回 Tour 摘要和完整 `stops`。
-- `stops` 按 `live_date ASC, start_time ASC, live_id ASC` 返回；写入时同步生成连续 `stop_order`。
+- `stops` 按活动组块返回：先按块起始日期，若同日起始则含取消场次的块优先，再按块起始时间和 ID；块内按日期、取消优先、开演时间和 Live ID 排列。写入关系仍按日期、开演时间和 Live ID 生成，公共读取重新计算连续 `stop_order`。
 - `has_setlist` 使用 `EXISTS`，不加载 setlist 明细。
 - 登录用户批量查询 stops 对应的收藏状态；匿名统一为 `false`。
 - Tour 意外没有关联 Live 时视为数据异常，返回 `500` 并记录日志，不伪装成正常空详情。
@@ -337,14 +337,14 @@ type TabKey = ExistingTabKey | "tours" | "tour_detail";
 ### 列表与详情交互
 
 - “巡演资料”作为独立主导航页签，不在“演出资料”内部增加实体切换。
-- 巡演卡片直接复用演出资料的 `live-card` 结构与样式；卡片主区域使用真实 `<button>` 进入详情，官方来源使用独立 `<a>`，两个操作都能单独聚焦。
+- 巡演卡片直接复用演出资料的 `live-card`、`data-status-tone`、`live-status-pill` 和 `LiveTypeBadge`；聚合状态复用活动组日期状态计算，只有 `cancelled_live_count >= collected_live_count` 时使用取消 tone。计数显示为“收录N / 取消M”标签。卡片主区域使用真实 `<button>` 进入详情，官方来源使用独立 `<a>`，两个操作都能单独聚焦。
 - 巡演列表复用演出资料的布局顺序和间距：`list-filter-panel` → 总计 → `live-card-grid` → 加载哨兵；服务端仍分页，前端通过哨兵连续加载后续页，并在末尾显示“已加载全部 N 个巡演”。
-- 巡演详情标题外链复用演出详情的 `DetailTitleLink` 与 SVG 图标；场次来源复用现有 `🔗` 链接样式，不另造字符箭头或专用样式。
+- 巡演卡片、巡演详情标题和演出资料表格外链统一复用 `ExternalLinkIcon` / `DetailTitleLink` 的 SVG 图标，不保留 `🔗` 字符图标。
 - 巡演详情的日期范围、场次和参与乐队复用演出详情的 `detail-meta-line` 与 `detail-inline-item`；场次导航只保留由主题边框色竖条分隔的短标题，并复用 `detail-tour-link` 交互，不重复日期、场地、类型、收藏或来源链接。
 - 巡演详情的直属 `section-tabs` 使用 `14px` 上间距，公演导航继续使用 `14px` 上间距，使“已收录日期 → 场次详情 → 公演名”两段垂直距离一致。
 - Tour stop 导航在登录用户可收藏时显示逐场星标，复用现有 Live 收藏、乐观同步和跨页面状态；星标只操作单场 Live，不创建巡演收藏语义。
 - Tour stop 通过现有 `GET /api/lives/{live_id}` 缓存接口加载，并在 `TourDetailPage` 内复用 `LiveDetailContent` 渲染，不改变主导航状态。
-- “场次详情 / 巡演统计”复用控制台既有页签样式；统计通过 `GET /api/catalog/tours/{tour_id}/statistics` 首次打开时按需加载。统计查询在 `LEFT JOIN live_setlist` 的连接条件中检查 `tour_bands`：存在显式乐队时，只连接 `band_member` 命中任一指定 `band_name` 的行；没有显式乐队时连接全部 Setlist。过滤保留没有指定乐队歌曲的巡演场次，使覆盖率仍以完整巡演场次为分母，但该场次不计入有 Setlist 场次或相邻比较。场次变化在 `TourStatisticsPanel` 内使用主从布局：左侧从相邻比较数据还原纵向场次时间线，选择器显示变化总数并默认定位最近一次有变化的比较；右侧复用统计卡片和主题变量，按新增、移除、顺序变化分组展示差异，接口返回的位置更换在展示层拆成一项新增和一项移除，无变化只显示单一状态。至少三场有可纳入 Setlist 时显示起始场/目标场选择器，确认后调用 `GET /api/catalog/tours/{tour_id}/statistics/comparison?from_live_id=...&to_live_id=...`，并在同一差异面板展示按需结果；选择时间线条目时清除自定义结果并恢复相邻比较。相同歌曲的顺序变化仍先于位置更换计算；时间线和差异标题中的场次名复用 `detail-tour-link`，点击后设置对应 `live_id` 并切回场次详情。窄屏改为上下布局，时间线保持纵向，不引入横向滚动。
+- “场次详情 / 巡演统计”复用控制台既有页签样式；统计通过 `GET /api/catalog/tours/{tour_id}/statistics` 首次打开时按需加载。统计查询在 `LEFT JOIN live_setlist` 的连接条件中排除取消场次并检查 `tour_bands`：存在显式乐队时，只连接 `band_member` 命中任一指定 `band_name` 的行；没有显式乐队时连接全部 Setlist。覆盖分母仍保留完整巡演场次，但取消场次和没有指定乐队歌曲的场次不计入有 Setlist 场次或相邻比较。`_build_tour_statistics` 先形成未取消且有歌曲的 `setlist_stops`，再对该列表执行相邻配对，确保中间的取消或无 Setlist 场次不会截断前后有效场次。前端任意比较选择器同样排除取消场次。场次变化在 `TourStatisticsPanel` 内使用主从布局：左侧从相邻比较数据还原纵向场次时间线，选择器显示变化总数并默认定位最近一次有变化的比较；右侧复用统计卡片和主题变量，按新增、移除、顺序变化分组展示差异，接口返回的位置更换在展示层拆成一项新增和一项移除，无变化只显示单一状态。至少三场有可纳入 Setlist 时显示起始场/目标场选择器，确认后调用 `GET /api/catalog/tours/{tour_id}/statistics/comparison?from_live_id=...&to_live_id=...`，并在同一差异面板展示按需结果；选择时间线条目时清除自定义结果并恢复对应相邻比较。相同歌曲的顺序变化仍先于位置更换计算；时间线和差异标题中的场次名复用 `detail-tour-link`，点击后设置对应 `live_id` 并切回场次详情。窄屏改为上下布局，时间线保持纵向，不引入横向滚动。
 - Live 详情中的 Tour 名称打开 `TourDetailPage`，返回时恢复 Live 详情。
 
 ## 控制台交互

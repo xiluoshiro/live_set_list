@@ -2,8 +2,11 @@ import type { MutableRefObject } from "react";
 
 import type { TourSummary } from "../api";
 import { formatCompactDateRange } from "../dateFormat";
+import { getPerformanceGroupStatusPresentation } from "../liveStatus";
+import { ExternalLinkIcon } from "./ActionIcons";
 import { BandIconsCell } from "./BandIconsCell";
 import { ContentState } from "./ContentState";
+import { LiveTypeBadge } from "./LiveTypeBadge";
 
 type TourCardGridProps = {
   tours: TourSummary[];
@@ -50,41 +53,52 @@ export function TourCardGrid({
         )
       ) : (
         <div className="live-card-grid">
-          {tours.map((tour) => (
-            <article className="live-card" key={tour.tour_id}>
-              <button
-                type="button"
-                className="live-card-main"
-                aria-label={`查看巡演《${tour.tour_title}》详情`}
-                onClick={() => onOpenTour(tour)}
-              >
-                <span className="live-card-head">
-                  <span className="live-card-date">{formatDateRange(tour)}</span>
-                  <span className="live-card-count">
-                    已收录 {tour.collected_live_count} 场
-                    {(tour.cancelled_live_count ?? 0) > 0 && (
-                      <span className="live-cancelled-count"> · 取消 {tour.cancelled_live_count ?? 0} 场</span>
-                    )}
+          {tours.map((tour) => {
+            const status = getPerformanceGroupStatusPresentation(
+              tour.start_date,
+              tour.end_date,
+              tour.cancelled_live_count ?? 0,
+              tour.collected_live_count,
+            );
+            return (
+              <article className="live-card" data-status-tone={status.tone} key={tour.tour_id}>
+                <button
+                  type="button"
+                  className="live-card-main"
+                  aria-label={`查看巡演《${tour.tour_title}》详情，状态：${status.primary}`}
+                  onClick={() => onOpenTour(tour)}
+                >
+                  <span className="live-card-head">
+                    <span className="live-card-date">{formatDateRange(tour)}</span>
+                    <span className="live-card-badges">
+                      <span className="live-status-pill">{status.primary}</span>
+                    </span>
                   </span>
-                </span>
-                <span className="live-card-title">{tour.tour_title}</span>
-              </button>
-              <div className="live-card-footer">
-                <BandIconsCell icons={tour.bands.map((band) => band.band_id)} rowId={tour.tour_id} />
-                {tour.url ? (
-                  <a
-                    href={tour.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="live-card-url"
-                    aria-label={`打开《${tour.tour_title}》的资料来源`}
-                  >
-                    🔗
-                  </a>
-                ) : null}
-              </div>
-            </article>
-          ))}
+                  <span className="live-card-title">{tour.tour_title}</span>
+                </button>
+                <div className="live-card-footer">
+                  <BandIconsCell icons={tour.bands.map((band) => band.band_id)} rowId={tour.tour_id} />
+                  <span className="live-card-actions">
+                    <LiveTypeBadge value="other" label={`收录${tour.collected_live_count}`} />
+                    {(tour.cancelled_live_count ?? 0) > 0 && (
+                      <LiveTypeBadge value="cancelled" label={`取消${tour.cancelled_live_count ?? 0}`} />
+                    )}
+                    {tour.url ? (
+                      <a
+                        href={tour.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="live-card-url live-card-action"
+                        aria-label={`打开《${tour.tour_title}》的资料来源`}
+                      >
+                        <ExternalLinkIcon />
+                      </a>
+                    ) : null}
+                  </span>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
       <div ref={sentinelRef} className="live-card-sentinel">

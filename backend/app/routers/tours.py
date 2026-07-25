@@ -341,6 +341,10 @@ WITH stop_base AS (
             WHERE history.live_id = l.id
         ) AS was_rescheduled,
         CASE
+            WHEN pgl.group_id IS NULL THEN (l.event_status = 'cancelled')
+            ELSE BOOL_OR(l.event_status = 'cancelled') OVER (PARTITION BY pgl.group_id)
+        END AS block_has_cancelled,
+        CASE
             WHEN pgl.group_id IS NULL THEN l.live_date
             ELSE MIN(l.live_date) OVER (PARTITION BY pgl.group_id)
         END AS block_date,
@@ -366,7 +370,15 @@ WITH stop_base AS (
 )
 SELECT
     ROW_NUMBER() OVER (
-        ORDER BY block_date, block_time, block_id, live_date, start_time, id
+        ORDER BY
+            block_date,
+            block_has_cancelled DESC,
+            block_time,
+            block_id,
+            live_date,
+            (event_status = 'cancelled') DESC,
+            start_time,
+            id
     )::int AS stop_order,
     stop_label,
     id,
@@ -381,7 +393,15 @@ SELECT
     start_time,
     was_rescheduled
 FROM stop_base
-ORDER BY block_date, block_time, block_id, live_date, start_time, id
+ORDER BY
+    block_date,
+    block_has_cancelled DESC,
+    block_time,
+    block_id,
+    live_date,
+    (event_status = 'cancelled') DESC,
+    start_time,
+    id
 """
 
 TOUR_STATISTICS_QUERY = """
@@ -398,11 +418,13 @@ SELECT
         SELECT 1
         FROM tour_bands explicit_tour_band
         WHERE explicit_tour_band.tour_id = tl.tour_id
-    ) AS has_explicit_bands
+    ) AS has_explicit_bands,
+    l.event_status
 FROM tour_lives tl
 JOIN live_attrs l ON l.id = tl.live_id
 LEFT JOIN live_setlist stl
     ON stl.live_id = l.id
+   AND l.event_status <> 'cancelled'
    AND (
         NOT EXISTS (
             SELECT 1
@@ -441,11 +463,12 @@ def _build_tour_statistics(tour_id: int, rows: list[tuple[Any, ...]]) -> dict[st
                 "live_id": live_id,
                 "live_date": row[1],
                 "live_title": str(row[2]),
+                "event_status": str(row[9]) if len(row) > 9 else "scheduled",
                 "songs": [],
             }
             stop_by_id[live_id] = stop
             stops.append(stop)
-        if row[3] is not None:
+        if row[3] is not None and stop["event_status"] != "cancelled":
             comparison_order = (
                 len(stop["songs"]) + 1 if bool(row[8]) else int(row[7])
             )
@@ -499,9 +522,7 @@ def _build_tour_statistics(tour_id: int, rows: list[tuple[Any, ...]]) -> dict[st
     song_items.sort(key=lambda item: (-item["appearance_count"], item["song_id"]))
 
     transitions: list[dict[str, Any]] = []
-    for from_stop, to_stop in zip(stops, stops[1:]):
-        if not from_stop["songs"] or not to_stop["songs"]:
-            continue
+    for from_stop, to_stop in zip(setlist_stops, setlist_stops[1:]):
         from_slots = {
             (song["segment_type"], song["sub_order"]): song
             for song in from_stop["songs"]

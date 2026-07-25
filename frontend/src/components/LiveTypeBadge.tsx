@@ -11,6 +11,7 @@ function getLiveTypeTone(value: string): string {
   if (value === "festival") return "festival";
   if (value === "event") return "event";
   if (value === "performance_group") return "group";
+  if (value === "cancelled") return "cancelled";
   return "other";
 }
 

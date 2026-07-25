@@ -247,6 +247,26 @@ describe("PerformanceGroupDetailPage", () => {
     });
   });
 
+  // 测试点：活动组短标题只给取消场次追加“已取消”，正常场次不拼接日期状态。
+  test("marks only cancelled grouped live short titles", async () => {
+    const detail = makeDetailResponse();
+    getPerformanceGroupDetailMock.mockResolvedValue({
+      ...detail,
+      lives: detail.lives.map((live, index) => (
+        index === 2 ? { ...live, event_status: "cancelled" } : live
+      )),
+    });
+
+    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+
+    await waitFor(() => {
+      const nav = screen.getByRole("navigation", { name: "活动组场次" });
+      expect(within(nav).getByText("DAY 2: After Party（已取消）")).toBeInTheDocument();
+      expect(nav).toHaveTextContent("DAY 1: Poppin'Party");
+      expect(nav).not.toHaveTextContent("DAY 1: Poppin'Party（已结束）");
+    });
+  });
+
   // 测试点：点击场次按钮加载对应 Live 详情
   test("clicking a live button loads its detail", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());

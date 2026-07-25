@@ -157,7 +157,9 @@ export function TourDetailPage({
               <nav className="tour-stop-shortcuts" aria-label="巡演场次">
                 {detail.stops.map((stop, index) => {
                   const shortTitle = getTourStopShortTitle(stop.live_title, detail.tour_title);
-                  const displayTitle = shortTitle;
+                  const displayTitle = stop.event_status === "cancelled"
+                    ? `${shortTitle}（已取消）`
+                    : shortTitle;
                   const favorite = isFavorite(stop.live_id);
                   const canOpenStop = stop.event_status !== "cancelled" || stop.has_setlist;
                   return (

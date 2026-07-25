@@ -257,18 +257,18 @@
   - 默认按最后一场的日期、开演时间倒序；升序按第一场的日期、开演时间排序；ID 仅作完全同时间的稳定兜底
   - 只返回至少关联一场 Live 的巡演，日期范围和 `collected_live_count` 均由当前关联实时聚合
 - `GET /api/catalog/tours/{tour_id}`
-  - 场次按 `live_date ASC, start_time ASC, live_id ASC` 返回；`stop_order` 是服务端按该顺序生成的连续值
+  - 场次保持活动组连续；同日起始时含取消场次的活动组块优先，块内同日取消场次也优先于正常场次；`stop_order` 是服务端按公共展示顺序生成的连续值
   - `url` 取日期最早场次的 Live URL，`description` 当前固定为 `null`
   - `tour_bands` 为空时，`bands` 从全部场次的有效 Live 乐队动态聚合并按 Band ID 排序
   - `has_setlist` 只表示是否至少存在一行 setlist，不加载 setlist 明细
   - 登录用户的场次带当前用户 `is_favorite`；匿名统一为 `false`
   - 页面文案应使用“已收录 N 场”，不能把当前关联数描述成官方总场数
 - `GET /api/catalog/tours/{tour_id}/statistics`
-  - 返回巡演覆盖、歌曲状态和相邻且均有可纳入 Setlist 的场次差异
+  - 返回巡演覆盖、歌曲状态和未取消且有可纳入 Setlist 的相邻场次差异；中间的取消或无 Setlist 场次不会截断前后有效场次
   - 显式指定 `tour_bands` 时只统计命中指定乐队的 Setlist；未指定时统计全部 Setlist
 - `GET /api/catalog/tours/{tour_id}/statistics/comparison`
   - 必填查询参数为 `from_live_id` 与 `to_live_id`，两者必须不同且大于等于 1
-  - 两场都必须属于该巡演且存在可纳入统计的 Setlist；否则返回 `422`
+  - 两场都必须属于该巡演、未取消且存在可纳入统计的 Setlist；否则返回 `422`
   - 成功时返回与相邻场次 `transitions[]` 单项相同的差异结构，不改变默认相邻比较结果
 - `GET /api/catalog/stats`
   - 返回 `band_count/song_count/venue_count/latest_live_date/years`

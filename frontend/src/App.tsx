@@ -27,6 +27,7 @@ import {
   type EventStatus,
 } from "./api";
 import { useAuth } from "./auth/AuthProvider";
+import { ExternalLinkIcon } from "./components/ActionIcons";
 import { BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
 import {
   AboutPanel,
@@ -1818,7 +1819,7 @@ function App() {
                             className="url-icon-link"
                             aria-label={`打开《${row.liveTitle}》的资料来源`}
                           >
-                            🔗
+                            <ExternalLinkIcon />
                           </a>
                         ) : (
                           <span>-</span>

@@ -123,8 +123,8 @@ def test_performance_group_detail_includes_correct_venue_aggregation():
     assert "Zepp Shinjuku" in payload["venues"]
 
 
-# 测试点：Lives 应按 live_date ASC、start_time ASC、id ASC 排序。
-def test_performance_group_detail_lives_sorted_by_date_start_time_id():
+# 测试点：活动组同日场次应先显示取消场次，再按开演时间和 ID 保持稳定顺序。
+def test_performance_group_detail_lives_prioritize_cancelled_on_same_date():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (4, "Sort Group", date(2026, 5, 1), date(2026, 5, 1), 1, 3)
     cursor.fetchall.side_effect = [
@@ -142,7 +142,9 @@ def test_performance_group_detail_lives_sorted_by_date_start_time_id():
 
     live_ids = [live["live_id"] for live in response.json()["lives"]]
     assert live_ids == [401, 402, 403]
-    assert "ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC" in PERFORMANCE_GROUP_LIVES_QUERY
+    assert "(l.event_status = 'cancelled') DESC" in PERFORMANCE_GROUP_LIVES_QUERY
+    assert "l.start_time ASC" in PERFORMANCE_GROUP_LIVES_QUERY
+    assert "l.id ASC" in PERFORMANCE_GROUP_LIVES_QUERY
 
 
 # 测试点：day_count=1 且 live_count>=2 时 display_type 应为 "single_day_multi_show"。
