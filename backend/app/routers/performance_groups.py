@@ -108,7 +108,11 @@ FROM performance_group_lives pgl
 JOIN live_attrs l ON l.id = pgl.live_id
 LEFT JOIN venue_list v ON v.id = l.venue_id
 WHERE pgl.group_id = %s
-ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC
+ORDER BY
+    l.live_date ASC,
+    (l.event_status = 'cancelled') DESC,
+    l.start_time ASC,
+    l.id ASC
 """
 
 

@@ -96,7 +96,7 @@ def test_get_tours_binds_keyword_year_and_band_filters():
     assert "ORDER BY summary.start_date ASC, summary.start_time ASC, summary.tour_id ASC" in page_query
 
 
-# 测试点：巡演详情应按日期、开演时间、ID 返回场次，并保留单场 setlist 与收藏语义。
+# 测试点：巡演详情应保持活动组连续，并在同日起始时把含取消场次的组排在正常组之前。
 def test_get_tour_detail_returns_ordered_stops():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (
@@ -130,7 +130,8 @@ def test_get_tour_detail_returns_ordered_stops():
         call(TOUR_DETAIL_BANDS_QUERY, (7, 7, 7, 7)),
         call(TOUR_DETAIL_STOPS_QUERY, (7,)),
     ]
-    assert "ORDER BY l.live_date, l.start_time, l.id" in TOUR_DETAIL_STOPS_QUERY
+    assert "block_has_cancelled DESC" in TOUR_DETAIL_STOPS_QUERY
+    assert "(event_status = 'cancelled') DESC" in TOUR_DETAIL_STOPS_QUERY
 
 
 # 测试点：不存在的巡演 ID 应返回 404，而不是伪装成空详情。
@@ -172,6 +173,34 @@ def test_get_tour_statistics_compares_adjacent_setlists():
     assert [song["song_id"] for song in transition["removed_songs"]] == [2]
     assert [song["song_id"] for song in transition["added_songs"]] == [4]
     assert cursor.execute.call_args_list == [call(TOUR_STATISTICS_QUERY, (7,))]
+
+
+# 测试点：取消或无 Setlist 的中间场次不能截断有效场次链，前后正常场次仍应形成相邻比较。
+def test_get_tour_statistics_reconnects_comparable_stops_across_cancelled_stops():
+    conn, cursor = _build_connection_mock()
+    cursor.fetchall.return_value = [
+        (40, "2026-01-16", "大阪追加公演 DAY1", 1, "Song A", "main", 1, 1, False, "scheduled"),
+        (296, "2026-01-16", "上海公演 DAY1", None, None, None, None, None, False, "cancelled"),
+        (41, "2026-01-17", "大阪追加公演 DAY2", 1, "Song A", "main", 1, 1, False, "scheduled"),
+        (297, "2026-01-17", "上海公演 DAY2", None, None, None, None, None, False, "cancelled"),
+        (77, "2026-02-14", "東京公演 DAY1", 2, "Song B", "main", 1, 1, False, "scheduled"),
+    ]
+
+    with patch("app.routers.tours.get_db_connection", return_value=conn):
+        response = TestClient(app).get("/api/catalog/tours/9/statistics")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["coverage"] == {
+        "stop_count": 5,
+        "setlist_stop_count": 3,
+        "comparable_transition_count": 2,
+    }
+    assert [
+        (transition["from_live_id"], transition["to_live_id"])
+        for transition in payload["transitions"]
+    ] == [(40, 41), (41, 77)]
+    assert "l.event_status <> 'cancelled'" in TOUR_STATISTICS_QUERY
 
 
 # 测试点：任意场次接口按请求的起始和目标方向比较，而不是强制改回时间顺序。

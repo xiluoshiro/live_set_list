@@ -1102,6 +1102,9 @@ describe("App", () => {
   // 测试点：巡演资料复用演出卡片流的筛选、总计和单页布局，不再暴露翻页控件。
   test("巡演资料页签展示聚合资料并支持独立筛选", async () => {
     const user = userEvent.setup();
+    const toursResponse = makeToursResponse();
+    toursResponse.items[0].cancelled_live_count = 1;
+    getToursMock.mockResolvedValue(toursResponse);
     renderApp();
     await user.click(await screen.findByRole("button", { name: "巡演资料" }));
 
@@ -1125,11 +1128,17 @@ describe("App", () => {
     expect(filterPanel.compareDocumentPosition(totalText) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(totalText.compareDocumentPosition(tourCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(tourCard).toHaveClass("live-card");
+    expect(tourCard).toHaveAttribute("data-status-tone", "past");
     expect(screen.queryByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看巡演" })).not.toBeInTheDocument();
-    expect(screen.getByText("已收录 2 场")).toBeInTheDocument();
+    expect(within(tourCard).getByText("已结束")).toBeInTheDocument();
+    expect(within(tourCard).getByText("收录2")).toBeInTheDocument();
+    expect(within(tourCard).getByText("取消1")).toBeInTheDocument();
     expect(within(tourCard).getByText("2026.05.30–06.02")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Band 2" })).toBeInTheDocument();
+    expect(
+      within(tourCard).getByRole("link", { name: /资料来源/ }).querySelector(".action-icon-external"),
+    ).not.toBeNull();
 
     await user.type(screen.getByLabelText("关键词"), "Exitus");
     await user.click(screen.getByRole("button", { name: "搜索" }));
@@ -1139,6 +1148,26 @@ describe("App", () => {
       bandId: undefined,
       sort: "date_desc",
     }));
+  });
+
+  // 测试点：只有全部场次取消时巡演卡片才显示“已取消”，部分取消仍按日期显示正常状态。
+  test("全部取消的巡演卡片显示取消状态", async () => {
+    const user = userEvent.setup();
+    const toursResponse = makeToursResponse();
+    toursResponse.items[0].cancelled_live_count = toursResponse.items[0].collected_live_count;
+    getToursMock.mockResolvedValue(toursResponse);
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "巡演资料" }));
+
+    const cardButton = await screen.findByRole("button", {
+      name: "查看巡演《Ave Mujica LIVE TOUR 2026 Exitus》详情，状态：已取消",
+    });
+    const card = cardButton.closest("article") as HTMLElement;
+    expect(card).toHaveAttribute("data-status-tone", "cancelled");
+    expect(within(card).getByText("已取消")).toBeInTheDocument();
+    expect(within(card).getByText("收录2")).toBeInTheDocument();
+    expect(within(card).getByText("取消2")).toBeInTheDocument();
   });
 
   // 测试点：巡演卡片流滚动到末尾时自动预加载下一批，并把结果追加在同一页面。
@@ -1703,7 +1732,7 @@ describe("App", () => {
   });
 
   test("URL 列使用链接图标并携带正确链接", async () => {
-    // 测试点：URL 列展示为 🔗，并指向对应详情地址。
+    // 测试点：URL 列展示统一外链 SVG，并指向对应详情地址。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20, withUrl: true }),
     );
@@ -1716,6 +1745,7 @@ describe("App", () => {
     await waitFor(() => {
       const firstLink = screen.getAllByRole("link", { name: /打开《.*》的资料来源/ })[0];
       expect(firstLink.getAttribute("href")).toMatch(/^https:\/\/example\.com\/live\/\d+$/);
+      expect(firstLink.querySelector(".action-icon-external")).not.toBeNull();
     });
   });
 
@@ -1985,7 +2015,7 @@ describe("App", () => {
   });
 
   test("url 为空时显示 '-' 且不渲染链接", async () => {
-    // 测试点：url 为 null 的行应该显示 '-'，不应出现 🔗 链接。
+    // 测试点：url 为 null 的行应该显示 '-'，不应出现外链 SVG。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 3, totalPages: 1, itemCount: 3, withUrl: false }),
     );

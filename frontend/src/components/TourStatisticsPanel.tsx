@@ -206,7 +206,10 @@ function TourTransitionExplorer({
 }
 
 export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenStop, stops = [] }: TourStatisticsPanelProps) {
-  const comparableStops = useMemo(() => stops.filter((stop) => stop.has_setlist), [stops]);
+  const comparableStops = useMemo(
+    () => stops.filter((stop) => stop.has_setlist && stop.event_status !== "cancelled"),
+    [stops],
+  );
   const comparableStopKey = comparableStops.map((stop) => stop.live_id).join(":");
   const [fromLiveId, setFromLiveId] = useState<number | null>(comparableStops[0]?.live_id ?? null);
   const [toLiveId, setToLiveId] = useState<number | null>(comparableStops[comparableStops.length - 1]?.live_id ?? null);

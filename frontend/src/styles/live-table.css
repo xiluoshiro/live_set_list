@@ -496,6 +496,11 @@ tr.is-cancelled {
   color: var(--live-type-group-text);
 }
 
+.live-type-badge[data-tone="cancelled"] {
+  background: var(--live-status-cancelled-bg);
+  color: var(--live-status-cancelled-text);
+}
+
 .live-card-title {
   color: var(--text-link);
   font-size: 18px;

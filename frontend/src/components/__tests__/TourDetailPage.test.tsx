@@ -35,7 +35,7 @@ describe("TourDetailPage cancelled stops", () => {
     });
   });
 
-  // 测试点：巡演场次选项不拼接已结束等状态文字，取消场次也不提供收藏入口。
+  // 测试点：巡演场次只给取消场次追加状态短名，并且不为取消场次提供收藏入口。
   test("renders cancelled count and keeps no-setlist cancelled stop static", async () => {
     apiMocks.getTourDetail.mockResolvedValue({
       tour_id: 1,
@@ -96,8 +96,9 @@ describe("TourDetailPage cancelled stops", () => {
 
     await waitFor(() => expect(apiMocks.getLiveDetail).toHaveBeenCalledWith(4));
     const nav = screen.getByRole("navigation", { name: "巡演场次" });
-    expect(within(nav).getByText("场3")).toBeInTheDocument();
-    expect(within(nav).queryByText(/已结束|已取消/)).not.toBeInTheDocument();
+    expect(within(nav).getByText("场3（已取消）")).toBeInTheDocument();
+    expect(within(nav).getByText("场4")).toBeInTheDocument();
+    expect(within(nav).queryByText("场4（已结束）")).not.toBeInTheDocument();
     expect(within(nav).queryByRole("button", { name: /收藏.*场3/ })).not.toBeInTheDocument();
     expect(screen.getByText("· 取消 1 场")).toBeInTheDocument();
   });
