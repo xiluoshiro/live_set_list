@@ -135,7 +135,7 @@ export type StatisticsSongItem = {
   latest_live_id: number; latest_live_date: string; latest_live_title: string;
 };
 export type StatisticsStaleSongItem = {
-  song_id: number; song_name: string; band_name: string | null; live_count: number;
+  song_id: number; song_name: string; band_name: string | null; is_cover: boolean; live_count: number;
   latest_live_id: number; latest_live_date: string; latest_live_title: string;
   reference_live_date: string; stale_days: number; missed_live_count: number;
 };
@@ -150,6 +150,10 @@ export type CatalogStatisticsResponse = {
   live_types: StatisticsDimensionItem[];
   top_songs: StatisticsSongItem[];
   stale_songs: StatisticsStaleSongItem[];
+  stale_songs_by_kind: {
+    original: StatisticsStaleSongItem[];
+    cover: StatisticsStaleSongItem[];
+  };
 };
 
 export type LiveDetailBandMember = {

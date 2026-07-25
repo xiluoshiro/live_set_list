@@ -107,6 +107,92 @@ def test_catalog_statistics_filters_by_band(integration_test_client):
     assert all(item["band_id"] == 1 and item["band_name"] == "Poppin'Party" for item in body["top_songs"])
 
 
+# 测试点：全部、原创和翻唱久未演唱榜单各自独立截取 limit 首，并保留只演唱一次的歌曲。
+def test_catalog_statistics_limits_stale_song_kinds_independently(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO song_list (id, song_name, band_id, is_cover)
+            VALUES (%s, %s, 2, %s)
+            """,
+            [
+                (
+                    901 + index,
+                    f"Stale {'cover' if index >= 6 else 'original'} song {index + 1}",
+                    index >= 6,
+                )
+                for index in range(12)
+            ],
+        )
+        cursor.execute(
+            """
+            INSERT INTO live_attrs (
+                id,
+                live_date,
+                live_title,
+                url,
+                opening_time,
+                start_time,
+                venue_id,
+                live_type,
+                default_band_ids
+            )
+            VALUES (
+                901,
+                DATE '2020-01-01',
+                'Roselia old live',
+                'https://example.com/lives/roselia-old',
+                TIME WITH TIME ZONE '17:00:00+09',
+                TIME WITH TIME ZONE '18:00:00+09',
+                1,
+                'oneman',
+                ARRAY[2]
+            )
+            """
+        )
+        cursor.executemany(
+            """
+            INSERT INTO live_setlist (
+                live_id,
+                song_id,
+                absolute_order,
+                segment_type,
+                sub_order,
+                band_member
+            )
+            VALUES (%s, %s, %s, 'main', %s, '{"Roselia": ["Yukina"]}'::jsonb)
+            """,
+            [(901, 901 + index, index + 1, index + 1) for index in range(12)],
+        )
+
+    response = integration_test_client.get(
+        "/api/catalog/statistics",
+        params={"band_id": 2, "limit": 5},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    original_songs = body["stale_songs_by_kind"]["original"]
+    cover_songs = body["stale_songs_by_kind"]["cover"]
+    assert len(body["stale_songs"]) == 5
+    assert len(original_songs) == 5
+    assert len(cover_songs) == 5
+    assert {song["song_id"] for song in original_songs}.isdisjoint(
+        song["song_id"] for song in cover_songs
+    )
+
+    item = next(song for song in original_songs if song["song_id"] == 901)
+    assert item["is_cover"] is False
+    assert item["live_count"] == 1
+    assert item["latest_live_date"] == "2020-01-01"
+    assert item["reference_live_date"] == "2026-03-28"
+    assert item["missed_live_count"] == 1
+
+
 # 测试点：收藏统计不会向匿名访问者泄露用户范围数据。
 def test_catalog_statistics_requires_login_for_favorites(integration_test_client):
     response = integration_test_client.get("/api/catalog/statistics", params={"scope": "favorites"})

@@ -279,7 +279,9 @@
   - `top_songs.band_id / band_name` 表示该次统计中的实际演唱乐队，不表示 `song_list.band_id` 中的歌曲目录归属
   - 未指定 `band_id` 时，先在每支乐队内部按出现 Live 数、setlist 条目数、歌名和 `song_id` 排名，只返回每队第 1 名，最终按 `band_id` 升序
   - 指定 `band_id` 时，返回该乐队 Top N，按出现 Live 数、setlist 条目数、歌名和 `song_id` 排序
-  - `stale_songs` 只在指定乐队时计算；歌曲至少出现于 2 场候选 Live，并返回距该乐队最近候选 Live 的天数及此后缺席场次
+  - `stale_songs` 只在指定乐队时计算；只演唱过 1 场的歌曲也会纳入，并返回全部歌曲中最久未演唱的前 `limit` 首
+  - `stale_songs_by_kind.original / cover` 分别独立排序并各自返回前 `limit` 首，前端对应“原创 / 翻唱”页签；三组窗口相互独立，不要求原创与翻唱数量之和等于全部
+  - 每项通过 `is_cover` 标识原创/翻唱，并返回距该乐队最近候选 Live 的天数及此后缺席场次
   - `live_types.key` 返回稳定 code；中文名称由前端唯一的 `LIVE_TYPE_LABELS` 字典格式化，其中 `multi_act` 显示为“拼盘”
 
 ### 6. 控制台 lookup 接口
