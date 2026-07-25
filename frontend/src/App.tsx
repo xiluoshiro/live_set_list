@@ -63,7 +63,10 @@ import {
   getLiveStatusPresentation,
   getPerformanceGroupStatusPresentation,
 } from "./liveStatus";
-import { CONSOLE_LIVE_CHANGE_STORAGE_KEY } from "./consoleLiveSync";
+import {
+  CONSOLE_LIVE_CHANGE_STORAGE_KEY,
+  parseConsoleLiveChange,
+} from "./consoleLiveSync";
 import {
   prefetchCurrentPageDetails,
   scheduleIdleFavoritePagePrefetch,
@@ -294,6 +297,15 @@ function App() {
   const activeCardSessionKeyRef = useRef<string | null>(null);
   const cardLoadInFlightRef = useRef(false);
   const pendingScrollRestoreRef = useRef<number | null>(null);
+  const activeTabRef = useRef<TabKey>(tab);
+  const preserveListDuringLiveRefreshRef = useRef(false);
+  const preserveHomeDuringLiveRefreshRef = useRef(false);
+  const lastHandledConsoleLiveChangeNonceRef = useRef<string | null>(
+    parseConsoleLiveChange(
+      window.localStorage.getItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY),
+    )?.nonce ?? null,
+  );
+  activeTabRef.current = tab;
   const listEnabled = (tab === "all" || tab === "favorites") && !auth.isLoading;
   const canUseFavoriteFeatures = auth.isAuthenticated;
   const canUseConsoleFeatures = auth.isAuthenticated && canAccessConsole(auth.user?.role);
@@ -574,9 +586,11 @@ function App() {
   useEffect(() => {
     if (auth.isLoading) return;
     let canceled = false;
+    const preserveVisibleRows = preserveHomeDuringLiveRefreshRef.current && homeRecentRows.length > 0;
+    preserveHomeDuringLiveRefreshRef.current = false;
 
     const fetchHomeRecentLives = async () => {
-      setHomeLoading(true);
+      setHomeLoading(!preserveVisibleRows);
       setHomeError(null);
       try {
         const data = await getLives(1, 15);
@@ -592,8 +606,10 @@ function App() {
           pageSize: 15,
           message,
         });
-        setHomeRecentRows([]);
-        setHomeLiveTotal(0);
+        if (!preserveVisibleRows) {
+          setHomeRecentRows([]);
+          setHomeLiveTotal(0);
+        }
         setHomeError(message);
       } finally {
         if (!canceled) setHomeLoading(false);
@@ -771,8 +787,10 @@ function App() {
     const cachedSnapshot = listSnapshotsRef.current[requestedSnapshotKey];
     const cardSessionKey = getCardSessionKey(tab as ListTabKey);
     const cachedCardSession = viewMode === "cards" ? cardSessionsRef.current[cardSessionKey] : undefined;
+    const preserveVisibleItems = preserveListDuringLiveRefreshRef.current && items.length > 0;
+    preserveListDuringLiveRefreshRef.current = false;
 
-    // 列表加载状态机：优先命中页快照/收藏缓存，再回源；切 tab 时先清空旧列表避免残影。
+    // 列表加载状态机：普通导航无缓存时清空旧列表；控制台变更回源时保留可点击的当前列表。
     const fetchLives = async () => {
       if (cachedCardSession && cachedCardSession.cardPage >= cardPage) {
         setItems(cachedCardSession.items);
@@ -798,11 +816,13 @@ function App() {
         }
         return;
       }
-      setLoading(true);
+      setLoading(!preserveVisibleItems);
       setLoadError(null);
-      setItems([]);
-      setServerTotal(0);
-      setServerTotalPages(1);
+      if (!preserveVisibleItems) {
+        setItems([]);
+        setServerTotal(0);
+        setServerTotalPages(1);
+      }
       try {
         const scope = tab === "favorites" ? "favorites" as const : "all" as const;
         const performFilters = toPerformanceFilters(listFilters);
@@ -851,9 +871,11 @@ function App() {
           message,
         });
         setLoadError(message);
-        setItems([]);
-        setServerTotal(0);
-        setServerTotalPages(1);
+        if (!preserveVisibleItems) {
+          setItems([]);
+          setServerTotal(0);
+          setServerTotalPages(1);
+        }
       } finally {
         if (!canceled) setLoading(false);
       }
@@ -974,26 +996,46 @@ function App() {
   };
 
   const handleConsoleLiveDataChanged = useCallback(() => {
+    const latestChange = parseConsoleLiveChange(
+      window.localStorage.getItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY),
+    );
+    if (latestChange) {
+      lastHandledConsoleLiveChangeNonceRef.current = latestChange.nonce;
+    }
+    preserveListDuringLiveRefreshRef.current = (
+      activeTabRef.current === "all" || activeTabRef.current === "favorites"
+    );
+    preserveHomeDuringLiveRefreshRef.current = activeTabRef.current === "home";
     listSnapshotsRef.current = {};
     cardSessionsRef.current = {};
     clearLiveDataCaches();
-    setHomeRecentRows([]);
-    setHomeLiveTotal(0);
     setHomeError(null);
     setHomeRefreshKey((key) => key + 1);
     setLiveDataRevision((revision) => revision + 1);
   }, []);
 
   useEffect(() => {
+    const refreshIfConsoleLiveChanged = (raw: string | null) => {
+      const change = parseConsoleLiveChange(raw);
+      if (!change || change.nonce === lastHandledConsoleLiveChangeNonceRef.current) return;
+      lastHandledConsoleLiveChangeNonceRef.current = change.nonce;
+      handleConsoleLiveDataChanged();
+    };
     const handleStorage = (event: StorageEvent) => {
       if (event.key === CONSOLE_LIVE_CHANGE_STORAGE_KEY) {
-        handleConsoleLiveDataChanged();
+        refreshIfConsoleLiveChanged(event.newValue);
       }
     };
-    const handleFocus = () => handleConsoleLiveDataChanged();
+    const handleFocus = () => {
+      refreshIfConsoleLiveChanged(
+        window.localStorage.getItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY),
+      );
+    };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        handleConsoleLiveDataChanged();
+        refreshIfConsoleLiveChanged(
+          window.localStorage.getItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY),
+        );
       }
     };
     window.addEventListener("storage", handleStorage);
