@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -137,5 +137,55 @@ describe("BandAdminSection", () => {
     expect(await screen.findByText("回填预检：未通过")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "回填预检问题" })).toHaveTextContent("Unknown");
     expect(screen.getByRole("table", { name: "回填预检问题" })).toHaveTextContent("band_name_not_unique");
+  });
+
+  // 测试点：乐队阵容资料修正应在最终提交前仅列出实际变化字段。
+  test("confirms only changed lineup fields before correction", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleBandHistory.mockResolvedValue(initializedHistory);
+    apiMocks.getConsoleBandLineupImpact.mockResolvedValue({
+      band_id: 1,
+      lineup_version_id: 21,
+      live_ids: [55],
+      setlist_row_count: 3,
+    });
+    apiMocks.correctConsoleBandLineupVersion.mockResolvedValue({
+      ...initializedHistory,
+      lineup_versions: [{
+        ...initializedHistory.lineup_versions[0],
+        version_label: "Poppin'Party V3 corrected",
+        change_type: "correction" as const,
+      }],
+    });
+
+    render(
+      <BandAdminSection
+        bands={[{ band_id: 1, band_name: "Poppin'Party", band_abbr: "ppp", band_members: ["Kasumi", "Tae"] }]}
+        onMessage={vi.fn()}
+        onBandsChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await screen.findByRole("table", { name: "乐队阵容时间线" });
+    await user.click(screen.getByRole("button", { name: "资料修正" }));
+    const editDialog = screen.getByRole("dialog", { name: /资料修正：/ });
+    await user.clear(within(editDialog).getByLabelText("版本标签"));
+    await user.type(within(editDialog).getByLabelText("版本标签"), "Poppin'Party V3 corrected");
+    await user.click(within(editDialog).getByRole("button", { name: "检查修改" }));
+
+    const dialog = screen.getByRole("dialog", { name: /确认资料修正/ });
+    const diffTable = within(dialog).getByRole("table", { name: "乐队资料修改内容" });
+    expect(within(diffTable).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual([
+      "version_labelPoppin'Party V3Poppin'Party V3 corrected",
+    ]);
+    expect(within(diffTable).queryByText("members")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "确认资料修正" }));
+
+    await waitFor(() => expect(apiMocks.correctConsoleBandLineupVersion).toHaveBeenCalledWith(
+      1,
+      21,
+      expect.objectContaining({ version_label: "Poppin'Party V3 corrected" }),
+      "csrf-token",
+    ));
   });
 });

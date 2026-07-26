@@ -13,6 +13,7 @@ import {
   type ConsoleBandLineupVersion,
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
+import { UpdateDiffTable, type UpdateChange } from "./UpdateDiffTable";
 import type { BandOption } from "./types";
 
 
@@ -39,6 +40,23 @@ function parseMembers(value: string): string[] {
 
 function membersText(members: string[]): string {
   return members.join("\n");
+}
+
+function buildBandCorrectionChanges(
+  version: ConsoleBandLineupVersion | null,
+  label: string,
+  members: string[],
+  validFrom: string,
+  validTo: string,
+): UpdateChange[] {
+  if (version === null) return [];
+  const values: Array<[string, string, string]> = [
+    ["version_label", version.version_label, label.trim()],
+    ["members", version.members.join(" / "), members.join(" / ")],
+    ["valid_from", version.valid_from ?? "-", validFrom || "-"],
+    ["valid_to", version.valid_to ?? "-", validTo || "-"],
+  ];
+  return values.flatMap(([field, before, after]) => before === after ? [] : [{ field, before, after }]);
 }
 
 function dateText(value: string | null): string {
@@ -84,6 +102,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
   const [correctionMembers, setCorrectionMembers] = useState("");
   const [correctionValidFrom, setCorrectionValidFrom] = useState("");
   const [correctionValidTo, setCorrectionValidTo] = useState("");
+  const [correctionConfirming, setCorrectionConfirming] = useState(false);
   const [preflight, setPreflight] = useState<BandHistoryBackfillPreflight | null>(null);
 
   const hydrateCurrentDraft = (nextHistory: ConsoleBandHistory) => {
@@ -216,6 +235,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
     try {
       const impact = await getConsoleBandLineupImpact(selectedBandId, version.lineup_version_id);
       setCorrectingVersion(version);
+      setCorrectionConfirming(false);
       setCorrectionImpact(impact);
       setCorrectionLabel(version.version_label);
       setCorrectionMembers(membersText(version.members));
@@ -247,6 +267,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
       );
       setCorrectingVersion(null);
       setCorrectionImpact(null);
+      setCorrectionConfirming(false);
       await applyHistory(nextHistory, `已修正阵容版本 #${correctingVersion.lineup_version_id}`);
     } catch (error) {
       onMessage(`资料修正失败：${errorMessage(error)}`);
@@ -274,6 +295,13 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
     parseMembers(currentMembers).length === 0 ||
     Number(initialVersionNo) < 1;
   const initialVersionLabel = `${currentName.trim()} V${initialVersionNo}`;
+  const correctionChanges = buildBandCorrectionChanges(
+    correctingVersion,
+    correctionLabel,
+    parseMembers(correctionMembers),
+    correctionValidFrom,
+    correctionValidTo,
+  );
 
   return (
     <section className="tour-admin-section" aria-label="乐队管理">
@@ -495,25 +523,59 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
       )}
 
       {correctingVersion && correctionImpact && (
-        <div className="modal-mask" onClick={() => setCorrectingVersion(null)}>
+        <div className="modal-mask" onClick={() => {
+          setCorrectingVersion(null);
+          setCorrectionConfirming(false);
+        }}>
           <div className="modal console-confirm-modal wide" role="dialog" aria-modal="true" aria-labelledby="band-correction-title" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head"><h2 id="band-correction-title">资料修正：{correctingVersion.version_label}</h2></div>
+            <div className="modal-head">
+              <h2 id="band-correction-title">
+                {correctionConfirming ? "确认资料修正" : "资料修正"}：{correctingVersion.version_label}
+              </h2>
+            </div>
             <div className="console-confirm-body">
               <p className="console-admin-warning">
                 影响 {correctionImpact.live_ids.length} 场 Live、{correctionImpact.setlist_row_count} 条 Setlist：
                 {correctionImpact.live_ids.length > 0 ? correctionImpact.live_ids.join(" / ") : "无引用"}
               </p>
-              <div className="tour-admin-fields">
-                <label>版本标签<input value={correctionLabel} onChange={(event) => setCorrectionLabel(event.target.value)} /></label>
-                <label>生效日期<input type="date" value={correctionValidFrom} onChange={(event) => setCorrectionValidFrom(event.target.value)} /></label>
-                <label>结束日期<input type="date" value={correctionValidTo} onChange={(event) => setCorrectionValidTo(event.target.value)} /></label>
-                <label className="band-admin-members-field">成员（每行一人）<textarea rows={8} value={correctionMembers} onChange={(event) => setCorrectionMembers(event.target.value)} /></label>
-              </div>
+              {correctionConfirming ? (
+                <UpdateDiffTable changes={correctionChanges} ariaLabel="乐队资料修改内容" />
+              ) : (
+                <div className="tour-admin-fields">
+                  <label>版本标签<input value={correctionLabel} onChange={(event) => setCorrectionLabel(event.target.value)} /></label>
+                  <label>生效日期<input type="date" value={correctionValidFrom} onChange={(event) => setCorrectionValidFrom(event.target.value)} /></label>
+                  <label>结束日期<input type="date" value={correctionValidTo} onChange={(event) => setCorrectionValidTo(event.target.value)} /></label>
+                  <label className="band-admin-members-field">成员（每行一人）<textarea rows={8} value={correctionMembers} onChange={(event) => setCorrectionMembers(event.target.value)} /></label>
+                </div>
+              )}
             </div>
             <div className="console-confirm-actions">
-              <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setCorrectingVersion(null)}>取消</button>
-              <button type="button" className="console-submit-btn" disabled={submitting || !correctionLabel.trim() || parseMembers(correctionMembers).length === 0} onClick={() => void submitCorrection()}>
-                确认资料修正
+              <button
+                type="button"
+                className="console-ghost-btn"
+                disabled={submitting}
+                onClick={() => {
+                  if (correctionConfirming) setCorrectionConfirming(false);
+                  else setCorrectingVersion(null);
+                }}
+              >
+                {correctionConfirming ? "返回修改" : "取消"}
+              </button>
+              <button
+                type="button"
+                className="console-submit-btn"
+                disabled={
+                  submitting ||
+                  !correctionLabel.trim() ||
+                  parseMembers(correctionMembers).length === 0 ||
+                  correctionChanges.length === 0
+                }
+                onClick={() => {
+                  if (correctionConfirming) void submitCorrection();
+                  else setCorrectionConfirming(true);
+                }}
+              >
+                {correctionConfirming ? "确认资料修正" : "检查修改"}
               </button>
             </div>
           </div>
