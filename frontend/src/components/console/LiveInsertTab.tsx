@@ -246,10 +246,11 @@ export function LiveInsertTab({
           </select>
         </div>
       )}
-      {variant === "create" && <div className="live-id-selector">
-        <label htmlFor="live-id-select">选择 live_id</label>
+      {variant === "create" && <div className="tour-admin-toolbar live-admin-toolbar">
+        <label className="live-management-label" htmlFor="live-id-select">选择 live_id</label>
         <select
           id="live-id-select"
+          className="console-entity-select"
           value={selectedLiveId}
           disabled={isLiveLoading || lives.length === 0}
           onChange={(e) => onSelectedLiveIdChange(Number(e.target.value))}

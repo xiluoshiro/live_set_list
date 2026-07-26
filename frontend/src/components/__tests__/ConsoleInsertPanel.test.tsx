@@ -279,7 +279,7 @@ describe("ConsoleInsertPanel", () => {
     expect(minuteButton).toBeDisabled();
   });
 
-  // 测试点：新增 Setlist 候选会把活动 Live 排到普通 Live 之后，并用弱化底色标识活动项。
+  // 测试点：新增 Setlist 复用 Live 管理候选栏，并把活动 Live 后置且弱化显示。
   test("活动 Live 在候选下拉框中降级并弱化显示", async () => {
     apiMocks.getLives.mockResolvedValue({
       items: [
@@ -309,6 +309,8 @@ describe("ConsoleInsertPanel", () => {
 
     const liveSelect = await screen.findByLabelText("选择 live_id");
     await waitFor(() => expect(liveSelect).toHaveValue("101"));
+    expect(liveSelect).toHaveClass("console-entity-select");
+    expect(liveSelect.closest(".live-admin-toolbar")).not.toBeNull();
     const liveOptions = within(liveSelect).getAllByRole("option");
     expect(liveOptions.map((option) => option.getAttribute("value"))).toEqual(["101", "102"]);
     expect(liveOptions[0]).not.toHaveClass("live-id-option-muted");
@@ -1537,7 +1539,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("第 2 / 2 页 · 每页 20 首 · 共 21 首")).toBeInTheDocument();
   });
 
-  // 测试点：Setlist 更新确认只列出改动的行字段，但提交仍发送完整目标集合。
+  // 测试点：Setlist 管理只查已有数据、复用 Live 管理候选栏，更新时仍提交完整目标集合。
   test("Setlist管理加载并更新既有Setlist", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleLiveCandidates.mockResolvedValue({
@@ -1573,6 +1575,9 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("tab", { name: "Setlist管理" }));
     await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledWith("", 1, 100, "", true));
     await waitFor(() => expect(apiMocks.getConsoleLiveSetlist).toHaveBeenCalledWith(55));
+    const setlistSelect = screen.getByRole("combobox", { name: "选择要编辑的 Setlist" });
+    expect(setlistSelect).toHaveClass("console-entity-select");
+    expect(setlistSelect.closest(".live-admin-toolbar")).not.toBeNull();
     expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("BLACK SHOUT");
     const managementTable = document.querySelector(".setlist-input-wrap .setlist-table") as HTMLTableElement;
     expect(managementTable).toHaveClass("setlist-management-table");
