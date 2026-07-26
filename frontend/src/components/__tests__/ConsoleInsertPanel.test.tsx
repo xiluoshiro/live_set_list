@@ -402,7 +402,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(resultTable).queryByRole("columnheader", { name: "song_id" })).not.toBeInTheDocument();
   });
 
-  // 测试点：交接共演应独立选择旧/新正式基准，并把该选择连同实际出演成员提交给版本化接口。
+  // 测试点：后继阵容与手工勾选成员应进入确认数据，交接共演的正式基准和实际成员也应原样提交。
   test("交接共演可选择新阵容为正式基准", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -475,13 +475,22 @@ describe("ConsoleInsertPanel", () => {
     await user.selectOptions(await screen.findByLabelText("Roselia 基础阵容"), "21");
     await user.selectOptions(screen.getByLabelText("Roselia 交接后继阵容"), "22");
     await user.click(screen.getByRole("button", { name: "1支 / 1人" }));
-    await user.selectOptions(screen.getByLabelText("Roselia 本曲模式"), "handover");
-    await user.selectOptions(screen.getByLabelText("Roselia 交接正式基准"), "next");
-    await user.click(screen.getByRole("checkbox", { name: "New Member（新）" }));
+    await user.selectOptions(screen.getByLabelText("Roselia 本曲模式"), "next");
+    await user.click(screen.getByRole("checkbox", { name: "Old Member（旧）" }));
 
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+    const nextLineupDialog = screen.getByRole("dialog", { name: "确认提交 Setlist" });
+    expect(within(nextLineupDialog).getByText('{"Roselia":["New Member","Old Member"]}')).toBeInTheDocument();
+    await user.click(within(nextLineupDialog).getByRole("button", { name: "取消" }));
+
+    await user.click(screen.getByRole("button", { name: "1支 / 2人" }));
+    await user.selectOptions(screen.getByLabelText("Roselia 本曲模式"), "handover");
+    await user.selectOptions(screen.getByLabelText("Roselia 交接正式基准"), "next");
+    await user.click(screen.getByRole("checkbox", { name: "New Member（新）" }));
+
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 

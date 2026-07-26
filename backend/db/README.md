@@ -2,7 +2,7 @@
 
 本目录存放当前项目与 PostgreSQL / Flyway / seed 相关的内容。
 
-当前仓库结构基线为 `B1__baseline_schema.sql`，后续 migration 为 V2~V23；V12 增加 `live_attrs.default_band_ids`，V13/V14 增加巡演和演出活动组聚合，V15 增加活动出演成员，V16 允许同一 session 保留多个已签发的 CSRF token hash，V17 为控制台 Setlist 完整集合更新授予窄范围删除权限，V18 增加 Live 状态与正式改期历史，V19 恢复四张完整集合关系表的窄范围删除授权，V20 禁止取消 Live 被收藏、清理状态切换前的收藏并为正式改期快照补充旧标题，V21 创建乐队历史名称、不可变阵容、Live 阵容上下文和逐曲出演关系结构，V22 为交接共演增加显式旧/新正式基准，V23 收紧约束并明确禁止 handover 的基准为 `NULL`。目标数据库的实际版本仍应通过 `flyway info` 确认。
+当前仓库结构基线为 `B1__baseline_schema.sql`，后续 migration 为 V2~V24；V12 增加 `live_attrs.default_band_ids`，V13/V14 增加巡演和演出活动组聚合，V15 增加活动出演成员，V16 允许同一 session 保留多个已签发的 CSRF token hash，V17 为控制台 Setlist 完整集合更新授予窄范围删除权限，V18 增加 Live 状态与正式改期历史，V19 恢复四张完整集合关系表的窄范围删除授权，V20 禁止取消 Live 被收藏、清理状态切换前的收藏并为正式改期快照补充旧标题，V21 创建乐队历史名称、不可变阵容、Live 阵容上下文和逐曲出演关系结构，V22 为交接共演增加显式旧/新正式基准，V23 收紧约束并明确禁止 handover 的基准为 `NULL`，V24 恢复阵容历史完整集合替换所需的窄范围删除授权。目标数据库的实际版本仍应通过 `flyway info` 确认。
 
 ## 角色分工
 

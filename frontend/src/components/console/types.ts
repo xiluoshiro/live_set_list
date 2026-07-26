@@ -71,6 +71,7 @@ export type SetlistDraftRow = {
     band_id: number;
     lineup_usage: "base" | "next" | "handover";
     handover_baseline: "base" | "next" | null;
+    members: string[];
   }>;
   other_member: OtherMemberDraft[];
   comment?: string;

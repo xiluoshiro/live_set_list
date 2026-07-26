@@ -998,6 +998,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
                 band_id: performance.band_id,
                 lineup_usage: performance.lineup_usage,
                 handover_baseline: performance.handover_baseline,
+                members: [...performance.members],
               }]] : [];
             }),
           ),
@@ -1628,6 +1629,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
                 band_id: band.band_id,
                 lineup_usage: "base",
                 handover_baseline: null,
+                members: [...baseMembers],
               },
             },
           };
@@ -1672,6 +1674,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
                   band_id: matchedBand.band_id,
                   lineup_usage: "base",
                   handover_baseline: null,
+                  members: [...members],
                 },
               },
             }
@@ -1711,7 +1714,26 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
                 band_id: bandId,
                 lineup_usage: "base",
                 handover_baseline: null,
+                members: [...members],
               },
+            },
+          };
+        }),
+      );
+      return;
+    }
+    if (field === "next_lineup_version_id") {
+      const members = getLineupMembers(history, Number(value));
+      setSetlistRows((prev) =>
+        prev.map((row) => {
+          const performance = row.band_performances?.[band.band_name];
+          if (!performance || performance.lineup_usage !== "next") return row;
+          return {
+            ...row,
+            band_member: { ...row.band_member, [band.band_name]: members },
+            band_performances: {
+              ...(row.band_performances ?? {}),
+              [band.band_name]: { ...performance, members: [...members] },
             },
           };
         }),
@@ -1732,6 +1754,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
               band_id: bandId,
               lineup_usage: "base",
               handover_baseline: null,
+              members: [...members],
             },
           },
         };
@@ -1763,6 +1786,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
               band_id: band.band_id,
               lineup_usage: lineupUsage,
               handover_baseline: lineupUsage === "handover" ? "base" : null,
+              members: [...members],
             },
           },
         }
@@ -1796,12 +1820,19 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         const nextMembers = selected.includes(memberName)
           ? selected.filter((member) => member !== memberName)
           : [...selected, memberName];
+        const performance = row.band_performances?.[bandName];
         return {
           ...row,
           band_member: {
             ...row.band_member,
             [bandName]: nextMembers,
           },
+          band_performances: performance
+            ? {
+                ...(row.band_performances ?? {}),
+                [bandName]: { ...performance, members: [...nextMembers] },
+              }
+            : row.band_performances,
         };
       }),
     );
@@ -1907,25 +1938,41 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     const setlistPayload = validRows.map((row, payloadIndex) => {
       const derived = validDerivedSegments[payloadIndex];
       const originalIndex = setlistRows.findIndex((r) => r.row_key === row.row_key);
+      const versionedBandNames = new Set([
+        ...Object.keys(row.band_member),
+        ...Object.keys(row.band_performances ?? {}),
+      ]);
       const bandPerformances = usesVersionedLineups
-        ? Object.entries(row.band_member).flatMap(([bandName, members]) => {
+        ? [...versionedBandNames].flatMap((bandName) => {
             const band = bands.find((item) => item.band_name === bandName);
             if (!band) return [];
+            const fallbackMembers = row.band_member[bandName] ?? [];
             const performance = row.band_performances?.[bandName] ?? {
               band_id: band.band_id,
               lineup_usage: "base" as const,
               handover_baseline: null,
+              members: [...fallbackMembers],
             };
-            return [{ ...performance, members }];
+            return [{ ...performance, members: [...performance.members] }];
           })
         : [];
+      const bandMember = usesVersionedLineups
+        ? Object.fromEntries(
+            bandPerformances.flatMap((performance) => {
+              const bandName = bands.find((band) => band.band_id === performance.band_id)?.band_name;
+              return bandName ? [[bandName, [...performance.members]]] : [];
+            }),
+          )
+        : Object.fromEntries(
+            Object.entries(row.band_member).map(([bandName, members]) => [bandName, [...members]]),
+          );
       return {
         song_id: Number(row.song_id),
         absolute_order: effectiveAbs[originalIndex],
         segment_type: derived.segmentType,
         sub_order: effectiveSub[originalIndex],
         is_short: row.is_short,
-        band_member: row.band_member,
+        band_member: bandMember,
         ...(usesVersionedLineups ? { band_performances: bandPerformances } : {}),
         other_member: buildOtherMemberPayloadObject(row.other_member, otherMemberValueSeparator),
         comment: row.comment?.trim() || null,

@@ -736,11 +736,11 @@ export function LiveInsertTab({
           style={{ top: bandMemberMenuPos.top, left: bandMemberMenuPos.left, width: bandMemberMenuPos.width }}
         >
           {bandOptions.filter((band) => band.band_id > 0).map((band) => {
-            const selected = editingBandRow.band_member[band.band_name] ?? [];
-            const bandChecked = selected.length > 0;
             const history = bandHistories[band.band_id];
             const context = lineupContexts[band.band_id];
             const performance = editingBandRow.band_performances?.[band.band_name];
+            const selected = performance?.members ?? editingBandRow.band_member[band.band_name] ?? [];
+            const bandChecked = selected.length > 0;
             const baseMembers = history?.lineup_versions.find(
               (version) => version.lineup_version_id === context?.base_lineup_version_id,
             )?.members ?? [];

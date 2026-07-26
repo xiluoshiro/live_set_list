@@ -159,7 +159,7 @@ def test_database_ownership_contract_rejects_drift(monkeypatch, tmp_path) -> Non
         )
 
 
-# 测试点：主库恢复权限收口必须保留完整集合替换的窄范围 DELETE，并维持 Flyway 历史表独立 owner。
+# 测试点：主库恢复权限收口必须保留旧集合与阵容历史关系的窄范围 DELETE，并维持 Flyway 历史表独立 owner。
 def test_apply_app_permissions_preserves_flyway_history_owner(monkeypatch) -> None:
     captured_sql: list[str] = []
 
@@ -185,7 +185,11 @@ def test_apply_app_permissions_preserves_flyway_history_owner(monkeypatch) -> No
     assert "public.tour_bands," in permission_sql
     assert "public.tour_lives," in permission_sql
     assert "public.performance_group_lives," in permission_sql
-    assert "public.live_setlist" in permission_sql
+    assert "public.live_setlist," in permission_sql
+    assert "public.band_lineup_version_members," in permission_sql
+    assert "public.live_band_lineup_contexts," in permission_sql
+    assert "public.live_setlist_band_performances," in permission_sql
+    assert "public.live_setlist_band_performance_members" in permission_sql
     assert "TO live_project_super_ro;" in permission_sql
 
 
