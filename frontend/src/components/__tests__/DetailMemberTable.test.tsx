@@ -140,8 +140,8 @@ describe("MemberStatusTable", () => {
     expect(screen.getByText("特别出演：F（新成员）")).toBeInTheDocument();
   });
 
-  // 测试点：非交接演出无论采用基础或后继阵容，详情都只显示乐队名而不暴露版本和新旧标签。
-  test.each(["base", "next"] as const)("非交接的 %s 模式只显示乐队名", async (lineupUsage) => {
+  // 测试点：没有后继阵容的普通 Live 只显示乐队名，不暴露单一基础版本。
+  test("普通Live只显示乐队名", async () => {
     const user = userEvent.setup();
     render(
       <MemberStatusTable
@@ -153,10 +153,10 @@ describe("MemberStatusTable", () => {
               {
                 band_id: 8,
                 band_name: "RAISE A SUILEN",
-                lineup_usage: lineupUsage,
+                lineup_usage: "base",
                 handover_baseline: null,
                 lineup_version: { lineup_version_id: 31, version_label: "RAISE A SUILEN V3" },
-                next_lineup_version: { lineup_version_id: 32, version_label: "RAISE A SUILEN V4" },
+                next_lineup_version: null,
                 attendance_status: "full",
                 expected_count: 5,
                 present_members: ["A", "B", "C", "D", "E"],
@@ -178,6 +178,49 @@ describe("MemberStatusTable", () => {
     expect(screen.getByText("阵容：RAISE A SUILEN")).toBeInTheDocument();
     expect(screen.queryByText(/RAISE A SUILEN V[34]/)).not.toBeInTheDocument();
     expect(screen.queryByText(/旧阵容|新阵容/)).not.toBeInTheDocument();
+  });
+
+  // 测试点：存在后继阵容即表示 Live 发生交接，基础与后继曲目都必须展示完整版本链及新旧语义。
+  test.each([
+    ["base", "阵容：Poppin'Party V1 → Poppin'Party V2 · 旧阵容"],
+    ["next", "阵容：Poppin'Party V1 → Poppin'Party V2 · 新阵容"],
+  ] as const)("交接Live的 %s 曲目展示版本", async (lineupUsage, expectedText) => {
+    const user = userEvent.setup();
+    render(
+      <MemberStatusTable
+        rows={[
+          {
+            row_id: "M1",
+            song_name: "交接Live曲目",
+            band_members: [
+              {
+                band_id: 1,
+                band_name: "Poppin'Party",
+                lineup_usage: lineupUsage,
+                handover_baseline: null,
+                lineup_version: { lineup_version_id: 1, version_label: "Poppin'Party V1" },
+                next_lineup_version: { lineup_version_id: 2, version_label: "Poppin'Party V2" },
+                attendance_status: "full",
+                expected_count: lineupUsage === "base" ? 3 : 4,
+                present_members: lineupUsage === "base"
+                  ? ["愛美", "西本りみ", "伊藤彩沙"]
+                  : ["愛美", "大塚紗英", "西本りみ", "伊藤彩沙"],
+                present_count: lineupUsage === "base" ? 3 : 4,
+                missing_members: [],
+                extra_members: [],
+                total_count: lineupUsage === "base" ? 3 : 4,
+                is_full: true,
+              },
+            ],
+            other_members: [],
+            comments: [],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByTitle("点击查看参加队员"));
+    expect(screen.getByText(expectedText)).toBeInTheDocument();
   });
 
   test("其他成员 +N 按钮可打开浮层，点击外部可关闭", async () => {
