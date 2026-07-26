@@ -294,6 +294,24 @@ function suggestLineupContext(
   };
 }
 
+function getCurrentLineupContext(history: ConsoleBandHistory): ConsoleLiveBandLineupContext | null {
+  const nameVersion = [...history.name_versions]
+    .reverse()
+    .find((version) => version.valid_to === null)
+    ?? history.name_versions[history.name_versions.length - 1];
+  const lineupVersion = [...history.lineup_versions]
+    .reverse()
+    .find((version) => version.valid_to === null)
+    ?? history.lineup_versions[history.lineup_versions.length - 1];
+  if (!nameVersion || !lineupVersion) return null;
+  return {
+    band_id: history.band_id,
+    band_name_version_id: nameVersion.name_version_id,
+    base_lineup_version_id: lineupVersion.lineup_version_id,
+    next_lineup_version_id: null,
+  };
+}
+
 function getLineupMembers(history: ConsoleBandHistory | undefined, lineupVersionId: number | null): string[] {
   if (!history || lineupVersionId === null) return [];
   return history.lineup_versions.find((version) => version.lineup_version_id === lineupVersionId)?.members ?? [];
@@ -325,6 +343,8 @@ function normalizeLivePayload(payload: ConsoleLiveUpsertPayload): ConsoleLiveUps
     event_attendees: [...payload.event_attendees]
       .sort((left, right) => left.band_id - right.band_id)
       .map((attendee) => ({ ...attendee, members: [...attendee.members] })),
+    band_lineup_contexts: [...(payload.band_lineup_contexts ?? [])]
+      .sort((left, right) => left.band_id - right.band_id),
   };
 }
 
@@ -337,6 +357,11 @@ function formatLivePayloadValue(field: keyof ConsoleLiveUpsertPayload, value: Co
   if (field === "event_attendees") {
     return (value as ConsoleLiveUpsertPayload["event_attendees"])
       .map((attendee) => `${attendee.band_id}: ${attendee.members.join(" / ")}`)
+      .join("; ") || "-";
+  }
+  if (field === "band_lineup_contexts") {
+    return (value as ConsoleLiveBandLineupContext[] | undefined)
+      ?.map((context) => `${context.band_id}:${context.band_name_version_id}/${context.base_lineup_version_id}`)
       .join("; ") || "-";
   }
   return String(value);
@@ -386,6 +411,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [timezone, setTimezone] = useState(DEFAULT_LIVE_TIMEZONE);
   const [selectedVenueId, setSelectedVenueId] = useState<number>(0);
   const [defaultBandIds, setDefaultBandIds] = useState<number[]>([]);
+  const [defaultBandLineupContexts, setDefaultBandLineupContexts] = useState<
+    Record<number, ConsoleLiveBandLineupContext>
+  >({});
+  const [historicalDefaultBandSelectionEnabled, setHistoricalDefaultBandSelectionEnabled] = useState(true);
   const [eventAttendees, setEventAttendees] = useState<Record<number, string[]>>({});
   const [eventStatus, setEventStatus] = useState<EventStatus>("scheduled");
   const [statusNote, setStatusNote] = useState("");
@@ -468,10 +497,18 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           return members.length > 0 ? [{ band_id: bandId, members }] : [];
         })
       : [],
+    band_lineup_contexts: editingLiveHasSetlist
+      ? []
+      : defaultBandIds.flatMap((bandId) => {
+          const context = defaultBandLineupContexts[bandId];
+          return context ? [context] : [];
+        }),
     event_status: eventStatus,
     status_note: statusNote.trim() || null,
   }), [
     defaultBandIds,
+    defaultBandLineupContexts,
+    editingLiveHasSetlist,
     eventAttendees,
     eventStatus,
     liveDate,
@@ -616,6 +653,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       }
       if (bandResult.status === "fulfilled" && bandResult.value.items.length > 0) {
         setBands(sortById(bandResult.value.items.map(toBandOption), (band) => band.band_id));
+        setHistoricalDefaultBandSelectionEnabled(
+          bandResult.value.historical_default_band_selection_enabled ?? true,
+        );
       }
       if (venueResult.status === "fulfilled" && venueResult.value.items.length > 0) {
         const nextVenues = sortById(venueResult.value.items.map(toVenueOption), (venue) => venue.venue_id);
@@ -835,6 +875,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setTimezone(DEFAULT_LIVE_TIMEZONE);
     setSelectedVenueId(0);
     setDefaultBandIds([]);
+    setDefaultBandLineupContexts({});
     setEventAttendees({});
     setEventStatus("scheduled");
     setStatusNote("");
@@ -858,6 +899,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setTimezone(payload.timezone);
     setSelectedVenueId(payload.venue_id);
     setDefaultBandIds([...payload.default_band_ids]);
+    setDefaultBandLineupContexts(Object.fromEntries(
+      (payload.band_lineup_contexts ?? []).map((context) => [context.band_id, { ...context }]),
+    ));
     setEventAttendees(Object.fromEntries(payload.event_attendees.map((attendee) => [attendee.band_id, [...attendee.members]])));
     setEventStatus(payload.event_status ?? "scheduled");
     setStatusNote(payload.status_note ?? "");
@@ -878,23 +922,55 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   };
 
   const toggleDefaultBand = (bandId: number) => {
-    setDefaultBandIds((current) => {
-      if (current.includes(bandId)) {
-        setEventAttendees((attendees) => {
-          const next = { ...attendees };
-          delete next[bandId];
-          return next;
-        });
-        return current.filter((currentBandId) => currentBandId !== bandId);
+    if (defaultBandIds.includes(bandId)) {
+      setDefaultBandIds((current) => current.filter((currentBandId) => currentBandId !== bandId));
+      setDefaultBandLineupContexts((contexts) => {
+        const next = { ...contexts };
+        delete next[bandId];
+        return next;
+      });
+      setEventAttendees((attendees) => {
+        const next = { ...attendees };
+        delete next[bandId];
+        return next;
+      });
+      return;
+    }
+    setDefaultBandIds((current) => [...new Set([...current, bandId])].sort((left, right) => left - right));
+    void ensureBandHistory(bandId).then((history) => {
+      const context = history ? getCurrentLineupContext(history) : null;
+      if (context) {
+        setDefaultBandLineupContexts((current) => ({ ...current, [bandId]: context }));
       }
-      return [...current, bandId].sort((left, right) => left - right);
     });
+  };
+
+  const updateDefaultBandLineupContext = (
+    bandId: number,
+    field: "band_name_version_id" | "base_lineup_version_id",
+    value: number,
+  ) => {
+    setDefaultBandLineupContexts((current) => {
+      const context = current[bandId];
+      if (!context) return current;
+      return { ...current, [bandId]: { ...context, [field]: value, next_lineup_version_id: null } };
+    });
+    if (field === "base_lineup_version_id") {
+      setEventAttendees((current) => {
+        const next = { ...current };
+        delete next[bandId];
+        return next;
+      });
+    }
   };
 
   const toggleEventAttendee = (bandId: number, memberName: string) => {
     setEventAttendees((current) => {
       const selected = current[bandId] ?? [];
-      const bandMembers = bands.find((band) => band.band_id === bandId)?.band_members ?? [];
+      const context = defaultBandLineupContexts[bandId];
+      const bandMembers = context
+        ? getLineupMembers(bandHistories[bandId], context.base_lineup_version_id)
+        : bands.find((band) => band.band_id === bandId)?.band_members ?? [];
       const nextSelected = selected.includes(memberName)
         ? selected.filter((member) => member !== memberName)
         : bandMembers.filter((member) => member === memberName || selected.includes(member));
@@ -1076,6 +1152,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           band_id: attendee.band_id,
           members: attendee.members,
         })),
+        band_lineup_contexts: item.band_lineup_contexts ?? [],
         event_status: item.event_status,
         status_note: item.status_note,
       });
@@ -1085,6 +1162,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setEditingLiveId(item.live_id);
       setOriginalLivePayload(payload);
       setEditingLiveHasSetlist(item.has_setlist ?? false);
+      await Promise.all(item.default_band_ids.map((bandId) => ensureBandHistory(bandId)));
       applyLivePayloadToForm(payload);
       setMessage(`已加载 Live #${item.live_id}。`);
     } catch (error) {
@@ -2229,6 +2307,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           band_id: attendee.band_id,
           members: attendee.members,
         })),
+        band_lineup_contexts: response.item.band_lineup_contexts ?? [],
         event_status: response.item.event_status ?? "scheduled",
         status_note: response.item.status_note ?? null,
       });
@@ -2789,6 +2868,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           timezoneMinuteDisabled={timezoneMinuteDisabled}
           selectedVenueId={selectedVenueId}
           defaultBandIds={defaultBandIds}
+          defaultBandLineupContexts={defaultBandLineupContexts}
+          bandHistories={bandHistories}
+          historicalDefaultBandSelectionEnabled={historicalDefaultBandSelectionEnabled}
           eventAttendees={eventAttendees}
           bandOptions={bands}
           venueQueryText={venueQueryText}
@@ -2852,6 +2934,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
             setVenueOpen(false);
           }}
           onToggleDefaultBand={toggleDefaultBand}
+          onUpdateDefaultBandLineupContext={updateDefaultBandLineupContext}
           onToggleEventAttendee={toggleEventAttendee}
           onQueryVid={queryVid}
           onInsertVenue={requestVenueConfirmation}
@@ -2953,6 +3036,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onBandsChanged={async () => {
             const response = await getConsoleBands(undefined, 100);
             setBands(sortById(response.items.map(toBandOption), (band) => band.band_id));
+            setHistoricalDefaultBandSelectionEnabled(
+              response.historical_default_band_selection_enabled ?? true,
+            );
           }}
         />
       )}

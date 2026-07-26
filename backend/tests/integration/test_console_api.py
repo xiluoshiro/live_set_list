@@ -118,7 +118,8 @@ def test_console_lookup_endpoints_return_seeded_options(
                 "band_abbr": "rsl",
                 "band_members": ["Yukina", "Sayo", "Lisa", "Ako", "Rinko"],
             }
-        ]
+        ],
+        "historical_default_band_selection_enabled": True,
     }
 
     assert venues_response.status_code == 200
@@ -657,6 +658,7 @@ def test_console_create_live_persists_live_row(
             "venue_id": 2,
             "default_band_ids": [1, 3],
             "event_attendees": [],
+            "band_lineup_contexts": [],
             "event_status": "scheduled",
             "status_note": None,
             "date_phase": "past",
@@ -707,10 +709,114 @@ def test_console_create_live_persists_live_row(
             "live_type": "oneman",
             "default_band_ids": [1, 3],
             "event_attendees": [],
+            "band_lineup_contexts": [],
             "event_status": "scheduled",
             "status_note": None,
         },
     )
+
+
+# 测试点：资料整理期可为无 Setlist 活动固化旧名称和旧阵容，成员校验与公开详情不得回退到当前 Band 投影。
+def test_console_create_event_persists_historical_default_band_context(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO band_name_versions (band_id, band_name, band_abbr, valid_from, valid_to, note)
+            VALUES
+                (3, 'MyGO old', 'old', '2020-01-01', '2021-01-01', 'test old'),
+                (3, 'MyGO!!!!!', 'mygo', '2021-01-01', NULL, 'test current')
+            RETURNING id
+            """
+        )
+        old_name_version_id, _ = [int(row[0]) for row in cursor.fetchall()]
+        cursor.execute(
+            """
+            INSERT INTO band_lineup_versions (
+                band_id, version_no, version_label, valid_from, valid_to,
+                predecessor_id, change_type, note
+            )
+            VALUES (3, 1, 'MyGO V1', '2020-01-01', '2021-01-01', NULL, 'initial', 'test old')
+            RETURNING id
+            """
+        )
+        old_lineup_version_id = int(cursor.fetchone()[0])
+        cursor.execute(
+            """
+            INSERT INTO band_lineup_versions (
+                band_id, version_no, version_label, valid_from, valid_to,
+                predecessor_id, change_type, note
+            )
+            VALUES (3, 2, 'MyGO V2', '2021-01-01', NULL, %s, 'replacement', 'test current')
+            """,
+            (old_lineup_version_id,),
+        )
+        cursor.executemany(
+            """
+            INSERT INTO band_lineup_version_members (lineup_version_id, member_name, display_order)
+            VALUES (%s, %s, %s)
+            """,
+            [
+                (old_lineup_version_id, "Old Vocal", 1),
+                (old_lineup_version_id, "Old Guitar", 2),
+            ],
+        )
+
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_tester",
+        password="editor-test-pass",
+    )
+    response = integration_test_client.post(
+        "/api/console/lives",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "live_date": "2020-06-01",
+            "live_title": "Historical default Band event",
+            "live_type": "event",
+            "url": "https://example.com/lives/historical-default",
+            "opening_time": "18:00",
+            "start_time": "19:00",
+            "timezone": "+09:00",
+            "venue_id": 2,
+            "default_band_ids": [3],
+            "event_attendees": [{"band_id": 3, "members": ["Old Guitar", "Old Vocal"]}],
+            "band_lineup_contexts": [{
+                "band_id": 3,
+                "band_name_version_id": old_name_version_id,
+                "base_lineup_version_id": old_lineup_version_id,
+                "next_lineup_version_id": None,
+            }],
+        },
+    )
+
+    assert response.status_code == 201
+    item = response.json()["item"]
+    live_id = item["live_id"]
+    assert item["event_attendees"] == [{
+        "band_id": 3,
+        "mode": "full",
+        "members": ["Old Vocal", "Old Guitar"],
+    }]
+    assert item["band_lineup_contexts"] == [{
+        "band_id": 3,
+        "band_name_version_id": old_name_version_id,
+        "base_lineup_version_id": old_lineup_version_id,
+        "next_lineup_version_id": None,
+    }]
+
+    detail_response = integration_test_client.get(f"/api/lives/{live_id}")
+    assert detail_response.status_code == 200
+    assert detail_response.json()["band_names"] == ["MyGO old"]
+    assert detail_response.json()["event_attendees"] == [{
+        "band_id": 3,
+        "band_name": "MyGO old",
+        "mode": "full",
+        "members": ["Old Vocal", "Old Guitar"],
+    }]
 
 
 # 测试点：更新活动为非活动时应原子清空出演成员，同时保留既有活动组关系和 Setlist 数据。

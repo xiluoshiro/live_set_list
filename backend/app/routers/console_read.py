@@ -7,6 +7,7 @@ from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled
 
 from app.auth import require_role
+from app.config import historical_default_band_selection_enabled
 from app.db import get_db_connection
 from app.logging_config import get_logger
 from app.live_status import build_public_live_status
@@ -40,7 +41,22 @@ CASE
                 jsonb_build_object(
                     'band_id', ba.id,
                     'mode', CASE
-                        WHEN jsonb_array_length(attendee.members) = cardinality(ba.band_members) THEN 'full'
+                        WHEN context.base_lineup_version_id IS NOT NULL
+                             AND jsonb_array_length(attendee.members) = (
+                                 SELECT COUNT(*)
+                                 FROM band_lineup_version_members expected
+                                 WHERE expected.lineup_version_id = context.base_lineup_version_id
+                             )
+                             AND NOT EXISTS (
+                                 SELECT 1
+                                 FROM band_lineup_version_members expected
+                                 WHERE expected.lineup_version_id = context.base_lineup_version_id
+                                   AND NOT attendee.members ? expected.member_name
+                             )
+                            THEN 'full'
+                        WHEN context.base_lineup_version_id IS NULL
+                             AND jsonb_array_length(attendee.members) = cardinality(ba.band_members)
+                            THEN 'full'
                         ELSE 'partial'
                     END,
                     'members', attendee.members
@@ -53,6 +69,9 @@ CASE
                     WHEN attendee.band_id_text ~ '^[0-9]+$' THEN attendee.band_id_text::int
                     ELSE NULL
                 END
+            LEFT JOIN live_band_lineup_contexts context
+                ON context.live_id = l.id
+               AND context.band_id = ba.id
             WHERE jsonb_typeof(attendee.members) = 'array'
         ),
         '[]'::jsonb
@@ -280,7 +299,23 @@ def get_editable_live(
                         EXISTS (
                             SELECT 1 FROM live_setlist existing_setlist
                             WHERE existing_setlist.live_id = l.id
-                        ) AS has_setlist
+                        ) AS has_setlist,
+                        COALESCE(
+                            (
+                                SELECT jsonb_agg(
+                                    jsonb_build_object(
+                                        'band_id', context.band_id,
+                                        'band_name_version_id', context.band_name_version_id,
+                                        'base_lineup_version_id', context.base_lineup_version_id,
+                                        'next_lineup_version_id', context.next_lineup_version_id
+                                    )
+                                    ORDER BY context.band_id
+                                )
+                                FROM live_band_lineup_contexts context
+                                WHERE context.live_id = l.id
+                            ),
+                            '[]'::jsonb
+                        ) AS band_lineup_contexts
                     FROM live_attrs l
                     JOIN venue_list v ON v.id = l.venue_id
                     WHERE l.id = %s
@@ -327,6 +362,7 @@ def get_editable_live(
             )["date_phase"],
             "schedule_history": list(row[13] or []) if len(row) > 13 else [],
             "has_setlist": bool(row[14]) if len(row) > 14 else False,
+            "band_lineup_contexts": list(row[15] or []) if len(row) > 15 else [],
         }
     }
 
@@ -681,7 +717,8 @@ def list_bands(
                 "band_members": list(row[3] or []),
             }
             for row in rows
-        ]
+        ],
+        "historical_default_band_selection_enabled": historical_default_band_selection_enabled(),
     }
 
 

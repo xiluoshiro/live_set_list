@@ -10,12 +10,14 @@ from psycopg2.extras import Json
 
 from app.auth import AuthSessionContext, assert_valid_csrf, get_current_auth_context, require_role
 from app.band_history_write import (
+    PersistedLineupContext,
     build_band_performances,
     load_lineup_contexts,
     persist_band_performances,
     replace_lineup_contexts,
     validate_lineup_contexts,
 )
+from app.config import historical_default_band_selection_enabled
 from app.db import get_write_db_connection
 from app.logging_config import get_logger
 from app.live_status import build_public_live_status
@@ -23,6 +25,7 @@ from app.schemas import ErrorResponse, ValidationErrorResponse
 from app.schemas.auth import AuthErrorResponse
 from app.schemas.console import (
     ConsoleLiveMutationResponse,
+    ConsoleLiveBandLineupContextRequest,
     ConsoleLiveBaseRequest,
     ConsoleLiveCreateRequest,
     ConsoleLiveUpdateRequest,
@@ -156,16 +159,44 @@ def _format_date(value: date) -> str:
 def _validate_and_normalize_live_relations(
     cur: Any,
     payload: ConsoleLiveBaseRequest,
-) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    *,
+    existing_contexts: dict[int, PersistedLineupContext] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, list[str]], dict[int, PersistedLineupContext]]:
     """Validate Live foreign keys and normalize event attendance for create and update."""
     cur.execute("SELECT 1 FROM venue_list WHERE id = %s", (payload.venue_id,))
     if cur.fetchone() is None:
         raise HTTPException(status_code=404, detail=f"Venue id {payload.venue_id} not found")
 
     band_members_by_id: dict[int, list[str]] = {}
+    band_rows: list[Any] = []
     if payload.default_band_ids:
         cur.execute(
-            "SELECT id, band_members FROM band_attrs WHERE id = ANY(%s) ORDER BY id",
+            """
+            SELECT
+                band.id,
+                band.band_members,
+                current_name.id,
+                current_lineup.id
+            FROM band_attrs band
+            LEFT JOIN LATERAL (
+                SELECT version.id
+                FROM band_name_versions version
+                WHERE version.band_id = band.id
+                  AND version.valid_to IS NULL
+                ORDER BY version.valid_from DESC NULLS LAST, version.id DESC
+                LIMIT 1
+            ) current_name ON true
+            LEFT JOIN LATERAL (
+                SELECT version.id
+                FROM band_lineup_versions version
+                WHERE version.band_id = band.id
+                  AND version.valid_to IS NULL
+                ORDER BY version.version_no DESC, version.id DESC
+                LIMIT 1
+            ) current_lineup ON true
+            WHERE band.id = ANY(%s)
+            ORDER BY band.id
+            """,
             (payload.default_band_ids,),
         )
         band_rows = cur.fetchall()
@@ -179,10 +210,59 @@ def _validate_and_normalize_live_relations(
             missing_text = ", ".join(str(band_id) for band_id in missing_band_ids)
             raise HTTPException(status_code=404, detail=f"Band ids not found: {missing_text}")
 
+    requested_context_band_ids = {context.band_id for context in payload.band_lineup_contexts}
+    unexpected_context_band_ids = sorted(requested_context_band_ids - set(payload.default_band_ids))
+    if unexpected_context_band_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Default Band contexts are not selected: {', '.join(map(str, unexpected_context_band_ids))}",
+        )
+
+    resolved_context_requests = list(payload.band_lineup_contexts)
+    current_context_ids = {
+        int(row[0]): (int(row[2]), int(row[3]))
+        for row in band_rows
+        if len(row) > 3 and row[2] is not None and row[3] is not None
+    }
+    historical_selection_enabled = historical_default_band_selection_enabled()
+    for band_id, version_ids in current_context_ids.items():
+        if band_id not in requested_context_band_ids:
+            resolved_context_requests.append(
+                ConsoleLiveBandLineupContextRequest(
+                    band_id=band_id,
+                    band_name_version_id=version_ids[0],
+                    base_lineup_version_id=version_ids[1],
+                    next_lineup_version_id=None,
+                )
+            )
+
+    resolved_contexts = validate_lineup_contexts(cur, resolved_context_requests)
+    if not historical_selection_enabled:
+        existing_contexts = existing_contexts or {}
+        for band_id, resolved in resolved_contexts.items():
+            existing = existing_contexts.get(band_id)
+            if (
+                existing is not None
+                and existing.band_name_version_id == resolved.band_name_version_id
+                and existing.base_lineup_version_id == resolved.base_lineup_version_id
+            ):
+                continue
+            current_ids = current_context_ids.get(band_id)
+            if current_ids != (resolved.band_name_version_id, resolved.base_lineup_version_id):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Historical default Band selection is disabled for Band {band_id}",
+                )
+
     normalized_event_attendees: list[dict[str, Any]] = []
     persisted_event_attendees: dict[str, list[str]] = {}
     for attendee in sorted(payload.event_attendees, key=lambda item: item.band_id):
-        catalog_members = band_members_by_id.get(attendee.band_id, [])
+        lineup_context = resolved_contexts.get(attendee.band_id)
+        catalog_members = (
+            list(lineup_context.base_members)
+            if lineup_context is not None
+            else band_members_by_id.get(attendee.band_id, [])
+        )
         requested_members = set(attendee.members)
         unknown_members = [member for member in attendee.members if member not in catalog_members]
         if unknown_members:
@@ -197,7 +277,22 @@ def _validate_and_normalize_live_relations(
                 "members": ordered_members,
             }
         )
-    return normalized_event_attendees, persisted_event_attendees
+    return normalized_event_attendees, persisted_event_attendees, resolved_contexts
+
+
+def _serialize_lineup_contexts(
+    contexts: dict[int, PersistedLineupContext],
+) -> list[dict[str, int | None]]:
+    """Return stable API/audit payloads for persisted Live-level Band contexts."""
+    return [
+        {
+            "band_id": context.band_id,
+            "band_name_version_id": context.band_name_version_id,
+            "base_lineup_version_id": context.base_lineup_version_id,
+            "next_lineup_version_id": context.next_lineup_version_id,
+        }
+        for context in sorted(contexts.values(), key=lambda item: item.band_id)
+    ]
 
 
 def _build_live_mutation_item(
@@ -207,6 +302,7 @@ def _build_live_mutation_item(
     opening_time: str,
     start_time: str,
     normalized_event_attendees: list[dict[str, Any]],
+    lineup_contexts: dict[int, PersistedLineupContext],
 ) -> dict[str, Any]:
     """Build the common normalized response item for Live create and update."""
     return {
@@ -220,6 +316,7 @@ def _build_live_mutation_item(
         "venue_id": payload.venue_id,
         "default_band_ids": payload.default_band_ids,
         "event_attendees": normalized_event_attendees,
+        "band_lineup_contexts": _serialize_lineup_contexts(lineup_contexts),
         "event_status": payload.event_status,
         "status_note": payload.status_note,
         "date_phase": build_public_live_status(
@@ -569,7 +666,7 @@ def create_live(
     try:
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
-                normalized_event_attendees, persisted_event_attendees = _validate_and_normalize_live_relations(
+                normalized_event_attendees, persisted_event_attendees, lineup_contexts = _validate_and_normalize_live_relations(
                     cur,
                     payload,
                 )
@@ -610,6 +707,8 @@ def create_live(
                 created_row = cur.fetchone()
                 assert created_row is not None
                 live_id = int(created_row[0])
+                if lineup_contexts:
+                    replace_lineup_contexts(cur, live_id, lineup_contexts)
 
                 audit_payload = {
                     "venue_id": payload.venue_id,
@@ -618,6 +717,7 @@ def create_live(
                     "live_type": payload.live_type,
                     "default_band_ids": payload.default_band_ids,
                     "event_attendees": normalized_event_attendees,
+                    "band_lineup_contexts": _serialize_lineup_contexts(lineup_contexts),
                     "event_status": payload.event_status,
                     "status_note": payload.status_note,
                 }
@@ -652,6 +752,7 @@ def create_live(
             opening_time=opening_time,
             start_time=start_time,
             normalized_event_attendees=normalized_event_attendees,
+            lineup_contexts=lineup_contexts,
         ),
     }
 
@@ -694,10 +795,33 @@ def update_live(
                 existing.setdefault("status_note", None)
                 existing["opening_time"] = _normalize_persisted_time_with_timezone(existing["opening_time"])
                 existing["start_time"] = _normalize_persisted_time_with_timezone(existing["start_time"])
-                normalized_event_attendees, persisted_event_attendees = _validate_and_normalize_live_relations(
-                    cur,
-                    payload,
+                should_manage_lineup_contexts = (
+                    bool(payload.band_lineup_contexts)
+                    or not historical_default_band_selection_enabled()
                 )
+                if should_manage_lineup_contexts:
+                    cur.execute("SELECT 1 FROM live_setlist WHERE live_id = %s LIMIT 1", (live_id,))
+                    has_setlist = cur.fetchone() is not None
+                    existing_lineup_contexts = load_lineup_contexts(cur, live_id)
+                else:
+                    has_setlist = True
+                    existing_lineup_contexts = {}
+                if has_setlist:
+                    normalized_event_attendees, persisted_event_attendees, _ = _validate_and_normalize_live_relations(
+                        cur,
+                        payload.model_copy(update={"band_lineup_contexts": []}),
+                        existing_contexts=existing_lineup_contexts,
+                    )
+                    lineup_contexts = existing_lineup_contexts
+                else:
+                    normalized_event_attendees, persisted_event_attendees, lineup_contexts = (
+                        _validate_and_normalize_live_relations(
+                            cur,
+                            payload,
+                            existing_contexts=existing_lineup_contexts,
+                        )
+                    )
+                existing["band_lineup_contexts"] = _serialize_lineup_contexts(existing_lineup_contexts)
                 target = {
                     "live_date": _format_date(payload.live_date),
                     "live_title": payload.live_title,
@@ -708,6 +832,7 @@ def update_live(
                     "venue_id": payload.venue_id,
                     "default_band_ids": payload.default_band_ids,
                     "event_attendees": persisted_event_attendees,
+                    "band_lineup_contexts": _serialize_lineup_contexts(lineup_contexts),
                     "event_status": payload.event_status,
                     "status_note": payload.status_note,
                 }
@@ -787,6 +912,8 @@ def update_live(
                             live_id,
                         ),
                     )
+                    if not has_setlist:
+                        replace_lineup_contexts(cur, live_id, lineup_contexts)
                     _write_console_audit_log(
                         cur,
                         user_id=context.user.id,
@@ -820,6 +947,7 @@ def update_live(
             opening_time=opening_time,
             start_time=start_time,
             normalized_event_attendees=normalized_event_attendees,
+            lineup_contexts=lineup_contexts,
         ),
     }
 

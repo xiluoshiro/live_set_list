@@ -85,6 +85,10 @@ class ConsoleBandItem(BaseModel):
 
 class ConsoleBandListResponse(BaseModel):
     items: list[ConsoleBandItem] = Field(..., description="Bands available for console lookup")
+    historical_default_band_selection_enabled: bool = Field(
+        default=True,
+        description="Temporary console capability for choosing historical default Band versions",
+    )
 
 
 class ConsoleVenueItem(BaseModel):
@@ -138,6 +142,13 @@ class ConsoleEventAttendee(BaseModel):
     members: list[str] = Field(..., description="Complete recorded attendee list")
 
 
+class ConsoleLiveBandLineupContextRequest(BaseModel):
+    band_id: int = Field(..., ge=1)
+    band_name_version_id: int = Field(..., ge=1)
+    base_lineup_version_id: int = Field(..., ge=1)
+    next_lineup_version_id: int | None = Field(default=None, ge=1)
+
+
 class ConsoleLiveBaseRequest(BaseModel):
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., min_length=1, max_length=255, description="Live title")
@@ -162,6 +173,11 @@ class ConsoleLiveBaseRequest(BaseModel):
         max_length=100,
         description="Event-only Band member attendance; mode is computed and is not accepted as input.",
     )
+    band_lineup_contexts: list[ConsoleLiveBandLineupContextRequest] = Field(
+        default_factory=list,
+        max_length=100,
+        description="Persisted name and base-lineup versions for default Bands while the Live has no Setlist.",
+    )
     event_status: EventStatus = Field(default="scheduled", description="Persisted event status")
     status_note: str | None = Field(default=None, max_length=2000, description="Optional status explanation")
 
@@ -184,6 +200,20 @@ class ConsoleLiveBaseRequest(BaseModel):
         if any(band_id <= 0 for band_id in value):
             raise ValueError("default_band_ids must contain only positive band IDs")
         return sorted(set(value))
+
+    @field_validator("band_lineup_contexts")
+    @classmethod
+    def validate_context_band_ids(
+        cls,
+        value: list[ConsoleLiveBandLineupContextRequest],
+    ) -> list[ConsoleLiveBandLineupContextRequest]:
+        """Reject duplicate Bands and unsupported transitions in default-only Live contexts."""
+        band_ids = [context.band_id for context in value]
+        if len(set(band_ids)) != len(band_ids):
+            raise ValueError("band_lineup_contexts must not contain duplicate band_id values")
+        if any(context.next_lineup_version_id is not None for context in value):
+            raise ValueError("default Band contexts must not contain next_lineup_version_id")
+        return value
 
     @field_validator("status_note")
     @classmethod
@@ -241,6 +271,7 @@ class ConsoleLiveItem(BaseModel):
         default_factory=list,
         description="Event attendance with mode computed from the complete persisted member list",
     )
+    band_lineup_contexts: list[ConsoleLiveBandLineupContextRequest] = Field(default_factory=list)
     event_status: EventStatus
     status_note: str | None = None
     date_phase: DatePhase
@@ -278,13 +309,6 @@ class ConsoleLiveEditResponse(BaseModel):
 class ConsoleLiveMutationResponse(BaseModel):
     ok: bool = Field(..., description="Whether the write succeeded")
     item: ConsoleLiveItem = Field(..., description="Created live payload")
-
-
-class ConsoleLiveBandLineupContextRequest(BaseModel):
-    band_id: int = Field(..., ge=1)
-    band_name_version_id: int = Field(..., ge=1)
-    base_lineup_version_id: int = Field(..., ge=1)
-    next_lineup_version_id: int | None = Field(default=None, ge=1)
 
 
 class ConsoleLiveBandPerformanceRequest(BaseModel):

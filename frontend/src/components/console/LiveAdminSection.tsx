@@ -1,6 +1,12 @@
 import type { RefObject } from "react";
 
-import type { ConsoleLiveCandidate, DatePhase, EventStatus } from "../../api";
+import type {
+  ConsoleBandHistory,
+  ConsoleLiveBandLineupContext,
+  ConsoleLiveCandidate,
+  DatePhase,
+  EventStatus,
+} from "../../api";
 import { DATE_PHASE_LABELS } from "../../liveStatus";
 import { formatLiveType } from "./constants";
 import type { BandOption, Position, VenueOption } from "./types";
@@ -24,6 +30,9 @@ type LiveAdminSectionProps = {
   timezoneMinuteDisabled: boolean;
   selectedVenueId: number;
   defaultBandIds: number[];
+  defaultBandLineupContexts: Record<number, ConsoleLiveBandLineupContext>;
+  bandHistories: Record<number, ConsoleBandHistory>;
+  historicalDefaultBandSelectionEnabled: boolean;
   eventAttendees: Record<number, string[]>;
   bandOptions: BandOption[];
   venueQueryText: string;
@@ -91,6 +100,11 @@ type LiveAdminSectionProps = {
   onOpenDefaultBandMenu: () => void;
   onSelectVenue: (venueId: number) => void;
   onToggleDefaultBand: (bandId: number) => void;
+  onUpdateDefaultBandLineupContext: (
+    bandId: number,
+    field: "band_name_version_id" | "base_lineup_version_id",
+    value: number,
+  ) => void;
   onToggleEventAttendee: (bandId: number, memberName: string) => void;
   onQueryVid: () => void;
   onInsertVenue: () => void;
@@ -119,6 +133,9 @@ export function LiveAdminSection({
   timezoneMinuteDisabled,
   selectedVenueId,
   defaultBandIds,
+  defaultBandLineupContexts,
+  bandHistories,
+  historicalDefaultBandSelectionEnabled,
   eventAttendees,
   bandOptions,
   venueQueryText,
@@ -170,6 +187,7 @@ export function LiveAdminSection({
   onOpenDefaultBandMenu,
   onSelectVenue,
   onToggleDefaultBand,
+  onUpdateDefaultBandLineupContext,
   onToggleEventAttendee,
   onQueryVid,
   onInsertVenue,
@@ -187,7 +205,13 @@ export function LiveAdminSection({
   const selectedDefaultBandText = (() => {
     const selected = selectableBands.filter((band) => defaultBandIds.includes(band.band_id));
     if (selected.length === 0) return "请选择默认 Band";
-    return selected.map((band) => band.band_name).join("、");
+    return selected.map((band) => {
+      const context = defaultBandLineupContexts[band.band_id];
+      const history = bandHistories[band.band_id];
+      return history?.name_versions.find(
+        (version) => version.name_version_id === context?.band_name_version_id,
+      )?.band_name ?? band.band_name;
+    }).join("、");
   })();
   const selectedCandidateMissing = editingLiveId !== null && !liveCandidates.some((live) => live.live_id === editingLiveId);
   const normalizedLiveCandidateTotalPages = Math.max(1, liveCandidateTotalPages);
@@ -518,7 +542,16 @@ export function LiveAdminSection({
           {selectableBands.map((band) => {
             const selected = defaultBandIds.includes(band.band_id);
             const selectedMembers = eventAttendees[band.band_id] ?? [];
-            const memberOptions = band.band_members ?? [];
+            const history = bandHistories[band.band_id];
+            const context = defaultBandLineupContexts[band.band_id];
+            const displayName = history?.name_versions.find(
+              (version) => version.name_version_id === context?.band_name_version_id,
+            )?.band_name ?? band.band_name;
+            const memberOptions = history && context
+              ? history.lineup_versions.find(
+                  (version) => version.lineup_version_id === context.base_lineup_version_id,
+                )?.members ?? []
+              : band.band_members ?? [];
             return (
               <div key={band.band_id} className="band-member-block">
                 <label className="band-member-main">
@@ -527,8 +560,48 @@ export function LiveAdminSection({
                     checked={selected}
                     onChange={() => onToggleDefaultBand(band.band_id)}
                   />
-                  <span>{band.band_id} - {band.band_name}</span>
+                  <span>{band.band_id} - {displayName}</span>
                 </label>
+                {selected && historicalDefaultBandSelectionEnabled && history && context && (
+                  <div className="band-member-mode-controls" aria-label={`${band.band_name} 默认版本`}>
+                    <label>
+                      历史名称
+                      <select
+                        aria-label={`${band.band_name} 默认历史名称`}
+                        value={context.band_name_version_id}
+                        onChange={(event) => onUpdateDefaultBandLineupContext(
+                          band.band_id,
+                          "band_name_version_id",
+                          Number(event.target.value),
+                        )}
+                      >
+                        {history.name_versions.map((version) => (
+                          <option key={version.name_version_id} value={version.name_version_id}>
+                            {version.band_name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      基础阵容
+                      <select
+                        aria-label={`${band.band_name} 默认基础阵容`}
+                        value={context.base_lineup_version_id}
+                        onChange={(event) => onUpdateDefaultBandLineupContext(
+                          band.band_id,
+                          "base_lineup_version_id",
+                          Number(event.target.value),
+                        )}
+                      >
+                        {history.lineup_versions.map((version) => (
+                          <option key={version.lineup_version_id} value={version.lineup_version_id}>
+                            {version.version_label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                )}
                 {liveType === "event" && selected && memberOptions.length > 0 && (
                   <div className="band-member-sub-list" role="group" aria-label={`${band.band_name} 出演成员`}>
                     {memberOptions.map((memberName) => (
