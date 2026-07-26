@@ -140,6 +140,46 @@ describe("MemberStatusTable", () => {
     expect(screen.getByText("特别出演：F（新成员）")).toBeInTheDocument();
   });
 
+  // 测试点：非交接演出无论采用基础或后继阵容，详情都只显示乐队名而不暴露版本和新旧标签。
+  test.each(["base", "next"] as const)("非交接的 %s 模式只显示乐队名", async (lineupUsage) => {
+    const user = userEvent.setup();
+    render(
+      <MemberStatusTable
+        rows={[
+          {
+            row_id: "M1",
+            song_name: "普通演出曲",
+            band_members: [
+              {
+                band_id: 8,
+                band_name: "RAISE A SUILEN",
+                lineup_usage: lineupUsage,
+                handover_baseline: null,
+                lineup_version: { lineup_version_id: 31, version_label: "RAISE A SUILEN V3" },
+                next_lineup_version: { lineup_version_id: 32, version_label: "RAISE A SUILEN V4" },
+                attendance_status: "full",
+                expected_count: 5,
+                present_members: ["A", "B", "C", "D", "E"],
+                present_count: 5,
+                missing_members: [],
+                extra_members: [],
+                total_count: 5,
+                is_full: true,
+              },
+            ],
+            other_members: [],
+            comments: [],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByTitle("点击查看参加队员"));
+    expect(screen.getByText("阵容：RAISE A SUILEN")).toBeInTheDocument();
+    expect(screen.queryByText(/RAISE A SUILEN V[34]/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/旧阵容|新阵容/)).not.toBeInTheDocument();
+  });
+
   test("其他成员 +N 按钮可打开浮层，点击外部可关闭", async () => {
     // 测试点：+N 按钮打开“其他成员明细”浮层，点外部关闭。
     const user = userEvent.setup();
