@@ -8,7 +8,7 @@
 - 已准备本地 PostgreSQL 18.3 容器作为迁移目标库
 - `B1__baseline_schema.sql` 是当前 baseline
 - `live_statistic` 与 `live_statistic_test` 都应通过同一套 Flyway migration 管理
-- 当前仓库内版本化迁移已到 `V23__enforce_handover_baseline_not_null.sql`
+- 当前仓库内版本化迁移已到 `V24__restore_band_history_replace_delete_grants.sql`
 
 ## 1. 日常推荐流程
 
@@ -164,6 +164,7 @@ backend/
         V21__add_band_name_and_lineup_history.sql
         V22__add_handover_baseline.sql
         V23__enforce_handover_baseline_not_null.sql
+        V24__restore_band_history_replace_delete_grants.sql
       scripts/
     postgres/
       init/
@@ -181,8 +182,8 @@ backend/
 - `backend/db/flyway/sql/B1__baseline_schema.sql`
   - 当前 baseline 脚本
   - 已准备完成，作为版本 `1` 保留
-- `backend/db/flyway/sql/V2__...` 到 `V23__...`
-  - 当前已经落地的认证、收藏、权限、控制台、`live_type`、歌曲唯一键、成员数据清理、默认 Band、巡演聚合、演出活动组聚合、活动出演成员、多标签页 CSRF token、Setlist 完整替换权限、历史阵容和交接正式基准迁移
+- `backend/db/flyway/sql/V2__...` 到 `V24__...`
+  - 当前已经落地的认证、收藏、权限、控制台、`live_type`、歌曲唯一键、成员数据清理、默认 Band、巡演聚合、演出活动组聚合、活动出演成员、多标签页 CSRF token、Setlist 完整替换权限、历史阵容、交接正式基准和恢复后阵容关系权限收口迁移
 - `infra/postgres/docker-compose.pg-migrate.yml`
   - 本地 PostgreSQL 18.3 迁移目标库容器配置
 - `infra/postgres/.env.pg-migrate`
@@ -284,8 +285,8 @@ flyway -configFiles=backend/db/flyway/flyway.toml migrate
 仓库当前状态：
 
 - baseline 文件为 `B1__baseline_schema.sql`
-- 当前最新 migration 文件为 `V23__enforce_handover_baseline_not_null.sql`
-- 目标库执行 `flyway migrate` 后，应应用 `B1` 以及 `V2` 到 `V23`
+- 当前最新 migration 文件为 `V24__restore_band_history_replace_delete_grants.sql`
+- 目标库执行 `flyway migrate` 后，应应用 `B1` 以及 `V2` 到 `V24`
 - `public.flyway_schema_history` 由 Flyway 自动维护，不应在业务 migration 中改 owner 或额外授权
 
 因此：

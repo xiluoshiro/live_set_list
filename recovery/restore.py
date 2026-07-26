@@ -488,7 +488,11 @@ GRANT DELETE ON TABLE
     public.tour_bands,
     public.tour_lives,
     public.performance_group_lives,
-    public.live_setlist
+    public.live_setlist,
+    public.band_lineup_version_members,
+    public.live_band_lineup_contexts,
+    public.live_setlist_band_performances,
+    public.live_setlist_band_performance_members
 TO {super_user};
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.flyway_schema_history TO {flyway_user};
 GRANT SELECT ON TABLE public.live_attrs TO {user_rw_user};
