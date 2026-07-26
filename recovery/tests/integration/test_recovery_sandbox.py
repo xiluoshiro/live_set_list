@@ -25,6 +25,153 @@ class SandboxContext:
     volume_name: str
 
 
+CONSOLE_DELETABLE_TABLES = (
+    "band_lineup_version_members",
+    "live_band_lineup_contexts",
+    "live_setlist",
+    "live_setlist_band_performance_members",
+    "live_setlist_band_performances",
+    "performance_group_lives",
+    "tour_bands",
+    "tour_lives",
+)
+
+
+def _console_permission_violations_sql() -> str:
+    deletable_values = ",\n                ".join(
+        f"('{table_name}')" for table_name in CONSOLE_DELETABLE_TABLES
+    )
+    return f"""
+WITH deletable_tables(table_name) AS (
+    VALUES
+        {deletable_values}
+),
+violations AS (
+    SELECT 'schema:public:USAGE' AS violation
+    WHERE NOT has_schema_privilege(current_user, 'public', 'USAGE')
+
+    UNION ALL
+
+    SELECT 'table:' || tables.tablename
+    FROM pg_tables AS tables
+    LEFT JOIN deletable_tables
+      ON deletable_tables.table_name = tables.tablename
+    WHERE tables.schemaname = 'public'
+      AND tables.tablename <> 'flyway_schema_history'
+      AND (
+          NOT has_table_privilege(
+              current_user,
+              format('%I.%I', tables.schemaname, tables.tablename),
+              'SELECT'
+          )
+          OR NOT has_table_privilege(
+              current_user,
+              format('%I.%I', tables.schemaname, tables.tablename),
+              'INSERT'
+          )
+          OR NOT has_table_privilege(
+              current_user,
+              format('%I.%I', tables.schemaname, tables.tablename),
+              'UPDATE'
+          )
+          OR has_table_privilege(
+              current_user,
+              format('%I.%I', tables.schemaname, tables.tablename),
+              'DELETE'
+          ) IS DISTINCT FROM (deletable_tables.table_name IS NOT NULL)
+      )
+
+    UNION ALL
+
+    SELECT 'sequence:' || sequences.sequencename
+    FROM pg_sequences AS sequences
+    WHERE sequences.schemaname = 'public'
+      AND (
+          NOT has_sequence_privilege(
+              current_user,
+              format('%I.%I', sequences.schemaname, sequences.sequencename),
+              'USAGE'
+          )
+          OR NOT has_sequence_privilege(
+              current_user,
+              format('%I.%I', sequences.schemaname, sequences.sequencename),
+              'SELECT'
+          )
+          OR NOT has_sequence_privilege(
+              current_user,
+              format('%I.%I', sequences.schemaname, sequences.sequencename),
+              'UPDATE'
+          )
+      )
+)
+SELECT COALESCE(string_agg(violation, ',' ORDER BY violation), '')
+FROM violations;
+"""
+
+
+def _readonly_permission_violations_sql() -> str:
+    return """
+WITH violations AS (
+    SELECT 'schema:public:USAGE' AS violation
+    WHERE NOT has_schema_privilege(current_user, 'public', 'USAGE')
+
+    UNION ALL
+
+    SELECT 'table:' || tables.tablename
+    FROM pg_tables AS tables
+    WHERE tables.schemaname = 'public'
+      AND tables.tablename <> 'flyway_schema_history'
+      AND (
+          NOT has_table_privilege(
+              current_user,
+              format('%I.%I', tables.schemaname, tables.tablename),
+              'SELECT'
+          )
+          OR has_table_privilege(
+              current_user,
+              format('%I.%I', tables.schemaname, tables.tablename),
+              'INSERT'
+          )
+          OR has_table_privilege(
+              current_user,
+              format('%I.%I', tables.schemaname, tables.tablename),
+              'UPDATE'
+          )
+          OR has_table_privilege(
+              current_user,
+              format('%I.%I', tables.schemaname, tables.tablename),
+              'DELETE'
+          )
+      )
+
+    UNION ALL
+
+    SELECT 'sequence:' || sequences.sequencename
+    FROM pg_sequences AS sequences
+    WHERE sequences.schemaname = 'public'
+      AND (
+          NOT has_sequence_privilege(
+              current_user,
+              format('%I.%I', sequences.schemaname, sequences.sequencename),
+              'SELECT'
+          )
+          OR has_sequence_privilege(
+              current_user,
+              format('%I.%I', sequences.schemaname, sequences.sequencename),
+              'USAGE'
+          )
+          OR has_sequence_privilege(
+              current_user,
+              format('%I.%I', sequences.schemaname, sequences.sequencename),
+              'UPDATE'
+          )
+      )
+)
+SELECT COALESCE(string_agg(violation, ',' ORDER BY violation), '')
+FROM violations;
+"""
+
+
 def _require_binary(name: str) -> str:
     path = shutil.which(name)
     if not path:
@@ -338,12 +485,72 @@ def test_candidate_container_can_boot_from_external_volume_and_rollback_to_forma
 
 
 def test_restore_backup_on_candidate_container_runs_flyway_and_restores_data(sandbox_context: SandboxContext) -> None:
-    # 测试点：候选容器中的真实 pg_restore 完成后，应能继续执行 Flyway info/validate，并恢复备份中的业务数据。
+    # 测试点：真实恢复后运行时角色必须满足完整权限矩阵，并能原子替换阵容上下文。
     _psql(
         sandbox_context.docker_cmd,
         sandbox_context.container_name,
         "live_statistic",
         "INSERT INTO public.venue_list (id, venue) VALUES (101, 'Sandbox Hall');",
+    )
+    _psql(
+        sandbox_context.docker_cmd,
+        sandbox_context.container_name,
+        "live_statistic",
+        """
+        INSERT INTO public.band_attrs (id, band_abbr, band_name, band_members)
+        VALUES (101, 'sandbox', 'Sandbox Band', ARRAY['Before', 'After']);
+
+        INSERT INTO public.live_attrs (
+            id,
+            live_date,
+            live_title,
+            is_internal,
+            url,
+            opening_time,
+            start_time,
+            venue_id,
+            live_type
+        )
+        VALUES (
+            101,
+            DATE '2026-04-06',
+            'Sandbox Live',
+            true,
+            'https://example.test/sandbox-live',
+            TIME WITH TIME ZONE '18:00:00+09',
+            TIME WITH TIME ZONE '19:00:00+09',
+            101,
+            'oneman'
+        );
+
+        INSERT INTO public.band_name_versions (
+            id,
+            band_id,
+            band_name,
+            band_abbr,
+            valid_from
+        )
+        VALUES (101, 101, 'Sandbox Band', 'sandbox', DATE '2026-01-01');
+
+        INSERT INTO public.band_lineup_versions (
+            id,
+            band_id,
+            version_no,
+            version_label,
+            valid_from,
+            change_type
+        )
+        VALUES (101, 101, 1, 'Sandbox V1', DATE '2026-01-01', 'initial');
+
+        INSERT INTO public.live_band_lineup_contexts (
+            live_id,
+            band_id,
+            band_name_version_id,
+            base_lineup_version_id,
+            note
+        )
+        VALUES (101, 101, 101, 101, 'before restore');
+        """,
     )
     backup_path = backup.create_app_backup(
         sandbox_context.env_values,
@@ -374,6 +581,48 @@ def test_restore_backup_on_candidate_container_runs_flyway_and_restores_data(san
             "live_statistic",
             "SELECT venue FROM public.venue_list WHERE id = 101;",
         ) == "Sandbox Hall"
+        assert _psql(
+            sandbox_context.docker_cmd,
+            container_name,
+            "live_statistic",
+            _readonly_permission_violations_sql(),
+            user=sandbox_context.env_values["APP_RO_USER"],
+        ) == ""
+        assert _psql(
+            sandbox_context.docker_cmd,
+            container_name,
+            "live_statistic",
+            _console_permission_violations_sql(),
+            user=sandbox_context.env_values["APP_SUPER_USER"],
+        ) == ""
+        assert _psql(
+            sandbox_context.docker_cmd,
+            container_name,
+            "live_statistic",
+            """
+            WITH deleted_context AS (
+                DELETE FROM public.live_band_lineup_contexts
+                WHERE live_id = 101
+                  AND band_id = 101
+                RETURNING live_id, band_id
+            ),
+            inserted_context AS (
+                INSERT INTO public.live_band_lineup_contexts (
+                    live_id,
+                    band_id,
+                    band_name_version_id,
+                    base_lineup_version_id,
+                    note
+                )
+                SELECT live_id, band_id, 101, 101, 'after restore'
+                FROM deleted_context
+                RETURNING note
+            )
+            SELECT note
+            FROM inserted_context;
+            """,
+            user=sandbox_context.env_values["APP_SUPER_USER"],
+        ) == "after restore"
     finally:
         docker_ops.rollback_candidate(
             sandbox_context.env_values,

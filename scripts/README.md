@@ -51,7 +51,7 @@ python scripts/run_checks.py <arguments>
 - `recovery-unit`：运行恢复脚本的 mock/命令契约测试
 - `recovery-integration`：运行恢复脚本的 Docker 沙箱集成测试
 - `recovery`：相当于运行 `recovery-unit + recovery-integration`，这组检查会真实操作独立 Docker 沙箱，明显更重
-- `functional`：运行功能测试集，包含 `scripts + frontend + backend`
+- `functional`：运行功能测试集，包含 `scripts + frontend + backend + recovery-unit`
 - `full`：运行全部检查，等于 `scripts + frontend + backend + recovery`
 
 后端 integration 测试结束后，`run_checks.py` 会调用内部脚本 `scripts/internal/restore_test_seed.py`，重新导入测试库 seed，并按 `infra/auth/.env.auth` 恢复默认 admin，避免测试执行污染手工联调用的测试库状态。
