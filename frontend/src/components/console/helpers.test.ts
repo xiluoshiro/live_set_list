@@ -17,6 +17,13 @@ describe("buildOtherMemberPayloadObject", () => {
 });
 
 describe("normalizeSongLookupText", () => {
+  // 测试点：U+02BB 左撇号不能阻止分解假名输入匹配使用 U+02BC 右撇号的规范歌名。
+  test("左右修饰撇号会归一化为半角撇号", () => {
+    const canonicalTitle = "ぽっぴんʼしゃっふる";
+
+    expect(normalizeSongLookupText("ぽっぴんʻしゃっふる")).toBe(normalizeSongLookupText(canonicalTitle));
+  });
+
   test("等价撇号及其拉丁词与日文之间的空白会归一化", () => {
     // 测试点：目标标题的弯撇号和拉丁词后空白差异不能阻止 setlist 歌曲匹配。
     expect(normalizeSongLookupText("LET’S あちあちトレーニング！"))

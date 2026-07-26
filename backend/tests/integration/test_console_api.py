@@ -279,6 +279,40 @@ def test_console_song_lookup_matches_punctuation_equivalent_title(
     ]
 
 
+# 测试点：U+02BB 左撇号应加入已有的 U+02BC 与半角撇号等价组，并兼容分解假名。
+def test_console_song_lookup_matches_modifier_apostrophe_pair(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s) RETURNING id",
+            ("ぽっぴん'しゃっふる", 1, False),
+        )
+        song_id = cursor.fetchone()[0]
+
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    expected_items = [
+        {
+            "song_id": song_id,
+            "song_name": "ぽっぴん'しゃっふる",
+            "band_id": 1,
+            "cover": False,
+            "band_name": "Poppin'Party",
+        }
+    ]
+    left_response = integration_test_client.get("/api/console/songs?q=ぽっぴんʻしゃっふる&limit=10")
+
+    assert left_response.status_code == 200
+    assert left_response.json()["items"] == expected_items
+
+
 # 测试点：歌曲查询应忽略相同或等价标点两侧的空白，但保留标题中的普通词间空格。
 def test_console_song_lookup_ignores_only_whitespace_adjacent_to_punctuation(
     integration_test_client,
