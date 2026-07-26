@@ -456,6 +456,7 @@ export type ConsoleBandItem = {
 
 export type ConsoleBandListResponse = {
   items: ConsoleBandItem[];
+  historical_default_band_selection_enabled?: boolean;
 };
 
 export type ConsoleBandNameVersion = {
@@ -566,6 +567,7 @@ export type ConsoleLiveUpsertPayload = {
   venue_id: number;
   default_band_ids: number[];
   event_attendees: Array<{ band_id: number; members: string[] }>;
+  band_lineup_contexts?: ConsoleLiveBandLineupContext[];
   event_status?: EventStatus;
   status_note?: string | null;
 };
@@ -595,6 +597,7 @@ export type ConsoleLiveMutationItem = {
   venue_id: number;
   default_band_ids: number[];
   event_attendees: ConsoleEventAttendee[];
+  band_lineup_contexts?: ConsoleLiveBandLineupContext[];
   event_status?: EventStatus;
   status_note?: string | null;
   date_phase?: DatePhase;

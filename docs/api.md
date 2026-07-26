@@ -189,7 +189,7 @@
 - `is_favorite` 会按当前登录用户的 `user_live_favorites` 计算；匿名请求统一返回 `false`
 - 无 Setlist 时，单条与批量详情的 `bands/band_names` 会回退 `default_band_ids`，与列表有效 Band 规则一致
 - `event_attendees` 只在 `live_type=event` 时返回内容；每项包含 `band_id/band_name/mode/members`
-- `mode=full|partial` 是查询时根据完整 `members` 与 `band_attrs.band_members` 计算的值，不在数据库中持久化
+- `mode=full|partial` 不持久化；有默认 Band 阵容上下文时按固化基础阵容做成员集合比较，旧兼容数据才回退当前 `band_attrs.band_members`
 - 详情返回 `event_status/date_phase/status_note/was_rescheduled`；`schedule_history` 只包含正式改期前的快照，前端仅展示实际变化的标题、日期、时间或场地，不包含资料修正
 
 ### 3. `POST /api/lives/details:batch`
@@ -350,8 +350,10 @@
   - `live_type` 必填，只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
   - `default_band_ids` 可选，最多 100 项；后端要求每项为已存在的正数 `band_attrs.id`，并去重、升序后写入
   - `default_band_ids` 只在该 Live 尚无任何 setlist 行时作为列表 Band 使用
-  - 成功响应会原样返回后端已经验证并保存的 `default_band_ids`
-  - `event_attendees` 只允许活动类型提交；每项 Band 必须属于 `default_band_ids`，成员必须属于对应 Band
+  - 无 Setlist Live 可同时提交 `band_lineup_contexts`，为默认 Band 固化历史名称与一个基础阵容；不接受交接后继版本
+  - `ALLOW_HISTORICAL_DEFAULT_BAND_SELECTION=true` 时控制台临时开放旧版本人工选择；关闭后新增选择只允许当前开放版本，已经固化的旧上下文继续保留
+  - 成功响应返回后端已经验证并保存的 `default_band_ids` 与 `band_lineup_contexts`
+  - `event_attendees` 只允许活动类型提交；每项 Band 必须属于 `default_band_ids`，成员按已固化基础阵容校验，未固化版本的兼容请求才回退当前成员目录
   - `event_attendees[].members` 始终保存完整名单；响应额外返回计算得到的 `mode=partial|full`
   - `event_status` 可为 `scheduled/postponed/cancelled`；`status_note` 仅在延期或取消时保留
 - `GET /api/console/lives`
@@ -361,7 +363,7 @@
   - `has_setlist=true|false` 可按是否已有 Setlist 筛选，与其他条件按 AND 组合
   - `event_status` 可按人工状态精确筛选；候选同时返回 `event_status/date_phase`
 - `GET /api/console/lives/{live_id}`
-  - 返回完整可编辑字段、`timezone` 和正式改期 `schedule_history`；活动出演成员的 `mode` 仍为计算值
+  - 返回完整可编辑字段、`timezone`、默认 Band 的 `band_lineup_contexts` 和正式改期 `schedule_history`；活动出演成员的 `mode` 仍为计算值
 - `PUT /api/console/lives/{live_id}`
   - 基本字段与新增 Live 共用契约，不接受出演成员 `mode`；排期变化时额外要求 `schedule_change_kind=correction|reschedule`
   - `reschedule` 会保存更新前的日期、开场、开演和 Venue 快照，`correction` 不写公开排期历史

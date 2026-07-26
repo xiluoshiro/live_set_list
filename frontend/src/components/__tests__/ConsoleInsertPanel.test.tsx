@@ -160,6 +160,7 @@ describe("ConsoleInsertPanel", () => {
         venue_id: 88,
         default_band_ids: [3],
         event_attendees: [],
+        band_lineup_contexts: [],
         event_status: "scheduled",
         status_note: null,
       },
@@ -927,6 +928,7 @@ describe("ConsoleInsertPanel", () => {
         venue_id: 88,
         default_band_ids: [3],
         event_attendees: [],
+        band_lineup_contexts: [],
         event_status: "scheduled",
         status_note: null,
       },
@@ -1161,6 +1163,156 @@ describe("ConsoleInsertPanel", () => {
       }),
       "csrf-token",
     ));
+  });
+
+  // 测试点：临时历史入口应把默认 Band 的旧名称、旧阵容和对应活动成员作为同一固化上下文提交。
+  test("无Setlist活动可临时选择默认Band旧版本", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{
+        band_id: 3,
+        band_name: "MyGO!!!!!",
+        band_abbr: "mygo",
+        band_members: ["Current Vocal"],
+      }],
+      historical_default_band_selection_enabled: true,
+    });
+    apiMocks.getConsoleBandHistory.mockResolvedValue({
+      band_id: 3,
+      current_name: "MyGO!!!!!",
+      current_abbr: "mygo",
+      current_members: ["Current Vocal"],
+      initialized: true,
+      name_versions: [
+        {
+          name_version_id: 19,
+          band_name: "MyGO old",
+          band_abbr: "old",
+          valid_from: "2020-01-01",
+          valid_to: "2021-01-01",
+          note: null,
+          live_ids: [],
+        },
+        {
+          name_version_id: 20,
+          band_name: "MyGO!!!!!",
+          band_abbr: "mygo",
+          valid_from: "2021-01-01",
+          valid_to: null,
+          note: null,
+          live_ids: [],
+        },
+      ],
+      lineup_versions: [
+        {
+          lineup_version_id: 21,
+          version_no: 1,
+          version_label: "MyGO V1",
+          valid_from: "2020-01-01",
+          valid_to: "2021-01-01",
+          predecessor_id: null,
+          change_type: "initial",
+          note: null,
+          members: ["Old Vocal", "Old Guitar"],
+          added_members: ["Old Vocal", "Old Guitar"],
+          removed_members: [],
+          live_ids: [],
+        },
+        {
+          lineup_version_id: 22,
+          version_no: 2,
+          version_label: "MyGO V2",
+          valid_from: "2021-01-01",
+          valid_to: null,
+          predecessor_id: 21,
+          change_type: "replacement",
+          note: null,
+          members: ["Current Vocal"],
+          added_members: ["Current Vocal"],
+          removed_members: ["Old Vocal", "Old Guitar"],
+          live_ids: [],
+        },
+      ],
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+    await screen.findByRole("button", { name: "88 - New Venue" });
+    await user.selectOptions(screen.getByDisplayValue("专场"), "event");
+    await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
+    await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
+    await user.selectOptions(await screen.findByLabelText("MyGO!!!!! 默认历史名称"), "19");
+    await user.selectOptions(screen.getByLabelText("MyGO!!!!! 默认基础阵容"), "21");
+    const memberGroup = screen.getByRole("group", { name: "MyGO!!!!! 出演成员" });
+    await user.click(within(memberGroup).getByRole("checkbox", { name: "Old Vocal" }));
+    await user.click(within(memberGroup).getByRole("checkbox", { name: "Old Guitar" }));
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), "Historical Event");
+    await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/historical-event");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        default_band_ids: [3],
+        event_attendees: [{ band_id: 3, members: ["Old Vocal", "Old Guitar"] }],
+        band_lineup_contexts: [{
+          band_id: 3,
+          band_name_version_id: 19,
+          base_lineup_version_id: 21,
+          next_lineup_version_id: null,
+        }],
+      }),
+      "csrf-token",
+    ));
+  });
+
+  // 测试点：关闭临时开关后隐藏旧版本选择器，但新默认 Band 仍固化当前名称和当前阵容。
+  test("关闭临时入口后默认Band只提交当前版本", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["Current Vocal"] }],
+      historical_default_band_selection_enabled: false,
+    });
+    apiMocks.getConsoleBandHistory.mockResolvedValue({
+      band_id: 3,
+      current_name: "MyGO!!!!!",
+      current_abbr: "mygo",
+      current_members: ["Current Vocal"],
+      initialized: true,
+      name_versions: [{
+        name_version_id: 20,
+        band_name: "MyGO!!!!!",
+        band_abbr: "mygo",
+        valid_from: "2021-01-01",
+        valid_to: null,
+        note: null,
+        live_ids: [],
+      }],
+      lineup_versions: [{
+        lineup_version_id: 22,
+        version_no: 2,
+        version_label: "MyGO V2",
+        valid_from: "2021-01-01",
+        valid_to: null,
+        predecessor_id: null,
+        change_type: "initial",
+        note: null,
+        members: ["Current Vocal"],
+        added_members: ["Current Vocal"],
+        removed_members: [],
+        live_ids: [],
+      }],
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+    await screen.findByRole("button", { name: "88 - New Venue" });
+    await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
+    await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
+    await waitFor(() => expect(apiMocks.getConsoleBandHistory).toHaveBeenCalledWith(3));
+
+    expect(screen.queryByLabelText("MyGO!!!!! 默认历史名称")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("MyGO!!!!! 默认基础阵容")).not.toBeInTheDocument();
   });
 
   // 测试点：活动类型未选择默认 Band 时，新增 Live 确认框应显示非阻断提醒。

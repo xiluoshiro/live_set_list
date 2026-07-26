@@ -168,7 +168,8 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
     }
     assert bands_response.status_code == 200
     assert bands_response.json() == {
-        "items": [{"band_id": 2, "band_name": "Roselia", "band_abbr": "rsl", "band_members": ["Yukina", "Sayo"]}]
+        "items": [{"band_id": 2, "band_name": "Roselia", "band_abbr": "rsl", "band_members": ["Yukina", "Sayo"]}],
+        "historical_default_band_selection_enabled": True,
     }
     assert venues_response.status_code == 200
     assert venues_response.json() == {"items": [{"venue_id": 3, "venue_name": "Zepp Shinjuku"}]}
@@ -536,6 +537,7 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         "venue_id": 2,
         "default_band_ids": [],
         "event_attendees": [],
+        "band_lineup_contexts": [],
         "event_status": "scheduled",
         "status_note": None,
         "date_phase": "past",
