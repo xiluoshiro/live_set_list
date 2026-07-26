@@ -430,7 +430,7 @@
 
 .modal.console-confirm-modal {
   height: auto;
-  max-height: calc(100vh - 40px);
+  max-height: 100%;
   overflow: hidden;
 }
 
@@ -479,10 +479,6 @@
 
 .modal.console-confirm-modal > .modal-head {
   flex: 0 0 auto;
-}
-
-.modal.console-confirm-modal.setlist-paste-confirm {
-  height: min(760px, calc(100vh - 40px));
 }
 
 .console-confirm-table-wrap {

@@ -1623,8 +1623,8 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLiveDetail).not.toHaveBeenCalled();
   });
 
-  // 测试点：批量确认框应限制高度，标题和操作区不收缩，超长内容只在中部滚动。
-  test("批量粘贴长确认内容保留可见标题和操作区", async () => {
+  // 测试点：批量确认框随内容自适应并限制最大高度，超长内容只在中部滚动。
+  test("批量粘贴确认框自适应高度并保留可见标题和操作区", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 8, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["羊宮妃那"] }],
@@ -1650,6 +1650,8 @@ describe("ConsoleInsertPanel", () => {
     expect(head).not.toBeNull();
     expect(body).not.toBeNull();
     expect(actions).not.toBeNull();
+    expect(getComputedStyle(dialog).height).toBe("auto");
+    expect(getComputedStyle(dialog).maxHeight).toBe("100%");
     expect(getComputedStyle(head as HTMLElement).flexShrink).toBe("0");
     expect(getComputedStyle(body as HTMLElement).overflowY).toBe("auto");
     expect(getComputedStyle(actions as HTMLElement).flexShrink).toBe("0");
