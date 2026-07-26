@@ -1479,7 +1479,7 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLives).toHaveBeenCalledTimes(1);
   });
 
-  // 测试点：无 setlist 候选直接开放录入，只有显式点击详情按钮才请求完整 Live 详情。
+  // 测试点：Setlist 详情只在显式请求后加载，并以内容自适应高度展示。
   test("显示详细信息会复用主页详情API与详情表格", async () => {
     const user = userEvent.setup();
     apiMocks.getLiveDetail.mockResolvedValue({
@@ -1518,6 +1518,17 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("Test Venue")).toBeInTheDocument();
     expect(screen.getByText("Poppin'Party")).toBeInTheDocument();
     expect(screen.getByText("真实详情歌曲")).toBeInTheDocument();
+
+    const detailModal = screen.getByRole("heading", { name: "Setlist 详细信息" }).closest<HTMLElement>(".modal");
+    const detailHead = detailModal?.querySelector<HTMLElement>(".modal-head");
+    const detailTableWrap = detailModal?.querySelector<HTMLElement>(".detail-table-wrap");
+    expect(detailModal).not.toBeNull();
+    expect(detailHead).not.toBeNull();
+    expect(detailTableWrap).not.toBeNull();
+    expect(getComputedStyle(detailModal as HTMLElement).height).toBe("auto");
+    expect(getComputedStyle(detailModal as HTMLElement).maxHeight).toBe("100%");
+    expect(getComputedStyle(detailHead as HTMLElement).flexShrink).toBe("0");
+    expect(getComputedStyle(detailTableWrap as HTMLElement).overflow).toBe("auto");
   });
 
   // 测试点：批量粘贴只在点击应用后替换表格、清空来源文本，并正确处理 from 成员归属。
