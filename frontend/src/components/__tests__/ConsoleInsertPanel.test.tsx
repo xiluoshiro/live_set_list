@@ -1369,7 +1369,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("button", { name: "请选择 band_id" })).toBeInTheDocument();
   });
 
-  // 测试点：歌曲管理会加载既有歌曲，并通过 PUT 保存名称、Band 和翻唱属性。
+  // 测试点：歌曲更新确认只列出实际变化的名称与翻唱属性，再通过 PUT 保存完整目标值。
   test("歌曲管理更新既有歌曲属性", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleSongs.mockResolvedValue({
@@ -1387,7 +1387,14 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByPlaceholderText("请输入歌曲名"), "改名曲");
     await user.click(screen.getByLabelText("song-cover"));
     await user.click(screen.getByRole("button", { name: "保存修改" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    const dialog = screen.getByRole("dialog", { name: "确认更新歌曲" });
+    const diffTable = within(dialog).getByRole("table", { name: "歌曲修改内容" });
+    expect(within(diffTable).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual([
+      "song_name原曲名改名曲",
+      "coverfalsetrue",
+    ]);
+    expect(within(diffTable).queryByText("band_id")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.updateConsoleSong).toHaveBeenCalledWith(
       901,
@@ -1448,7 +1455,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("第 2 / 2 页 · 每页 20 首 · 共 21 首")).toBeInTheDocument();
   });
 
-  // 测试点：Setlist 管理只查询已有歌单的 Live，加载原始行后可整表保存修改。
+  // 测试点：Setlist 更新确认只列出改动的行字段，但提交仍发送完整目标集合。
   test("Setlist管理加载并更新既有Setlist", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleLiveCandidates.mockResolvedValue({
@@ -1500,8 +1507,13 @@ describe("ConsoleInsertPanel", () => {
     ]);
     await user.type(screen.getByLabelText("comment-1"), "Encore note");
     await user.click(screen.getByRole("button", { name: "保存修改" }));
-    expect(screen.getByRole("dialog", { name: "确认更新 Setlist" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    const dialog = screen.getByRole("dialog", { name: "确认更新 Setlist" });
+    const diffTable = within(dialog).getByRole("table", { name: "Setlist 修改内容" });
+    expect(within(diffTable).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual([
+      "setlist_rows[abs=1].comment-Encore note",
+    ]);
+    expect(within(dialog).queryByRole("table", { name: "确认场次" })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.updateConsoleLiveSetlist).toHaveBeenCalledWith(
       55,

@@ -13,6 +13,7 @@ import {
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { getTourStopShortTitle } from "../tourHelpers";
+import { UpdateDiffTable, type UpdateChange } from "./UpdateDiffTable";
 import type { BandOption, Position } from "./types";
 
 type DraftStop = {
@@ -56,6 +57,65 @@ function candidateToDraft(candidate: ConsoleTourLiveCandidate): DraftStop {
   };
 }
 
+function formatBandSelection(bandIds: number[], bands: BandOption[]): string {
+  if (bandIds.length === 0) return "不指定";
+  return bandIds.map((bandId) => {
+    const band = bands.find((item) => item.band_id === bandId);
+    return band ? `${bandId} · ${band.band_name}` : String(bandId);
+  }).join("、");
+}
+
+function formatStop(stop: DraftStop): string {
+  return `${stop.live_id} · ${stop.live_date} · ${stop.live_title}`;
+}
+
+function buildTourUpdateChanges(
+  originalPayload: ConsoleTourUpsertPayload | null,
+  currentPayload: ConsoleTourUpsertPayload,
+  originalStops: DraftStop[],
+  currentStops: DraftStop[],
+  bands: BandOption[],
+): UpdateChange[] {
+  if (originalPayload === null) return [];
+  const changes: UpdateChange[] = [];
+  if (originalPayload.tour_title !== currentPayload.tour_title) {
+    changes.push({
+      field: "tour_title",
+      before: originalPayload.tour_title,
+      after: currentPayload.tour_title,
+    });
+  }
+  const originalBandText = formatBandSelection(originalPayload.band_ids, bands);
+  const currentBandText = formatBandSelection(currentPayload.band_ids, bands);
+  if (originalBandText !== currentBandText) {
+    changes.push({ field: "band_ids", before: originalBandText, after: currentBandText });
+  }
+  const originalPayloadStops = new Map(originalPayload.stops.map((stop) => [stop.live_id, stop]));
+  const currentPayloadStops = new Map(currentPayload.stops.map((stop) => [stop.live_id, stop]));
+  const originalStopDetails = new Map(originalStops.map((stop) => [stop.live_id, stop]));
+  const currentStopDetails = new Map(currentStops.map((stop) => [stop.live_id, stop]));
+  for (const liveId of [...new Set([...originalPayloadStops.keys(), ...currentPayloadStops.keys()])].sort((a, b) => a - b)) {
+    const before = originalPayloadStops.get(liveId);
+    const after = currentPayloadStops.get(liveId);
+    if (!before || !after) {
+      changes.push({
+        field: `stops[live_id=${liveId}]`,
+        before: before ? formatStop(originalStopDetails.get(liveId) as DraftStop) : "-",
+        after: after ? formatStop(currentStopDetails.get(liveId) as DraftStop) : "-",
+      });
+      continue;
+    }
+    if (before.stop_label !== after.stop_label) {
+      changes.push({
+        field: `stops[live_id=${liveId}].stop_label`,
+        before: before.stop_label ?? "-",
+        after: after.stop_label ?? "-",
+      });
+    }
+  }
+  return changes;
+}
+
 export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAdminSectionProps) {
   const auth = useAuth();
   const sortedBands = useMemo(
@@ -72,6 +132,8 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
   const bandTriggerRef = useRef<HTMLButtonElement>(null);
   const bandMenuRef = useRef<HTMLDivElement>(null);
   const [stops, setStops] = useState<DraftStop[]>([]);
+  const [originalPayload, setOriginalPayload] = useState<ConsoleTourUpsertPayload | null>(null);
+  const [originalStops, setOriginalStops] = useState<DraftStop[]>([]);
   const [candidateQuery, setCandidateQuery] = useState("");
   const [candidatePage, setCandidatePage] = useState(1);
   const [candidateTotalPages, setCandidateTotalPages] = useState(1);
@@ -90,6 +152,8 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
     setBandMenuOpen(false);
     setBandMenuPos(null);
     setStops([]);
+    setOriginalPayload(null);
+    setOriginalStops([]);
     setCandidateQuery("");
     setCandidatePage(1);
     setCandidateTotalPages(1);
@@ -167,7 +231,7 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
       setIsNew(false);
       setTourTitle(detail.tour_title);
       setSelectedBandIds([...detail.band_ids].sort((left, right) => left - right));
-      setStops(sortStops(detail.stops.map((stop) => ({
+      const loadedStops = sortStops(detail.stops.map((stop) => ({
         live_id: stop.live_id,
         live_date: stop.live_date,
         start_time: stop.start_time,
@@ -175,7 +239,17 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
         venue: stop.venue,
         stop_label: stop.stop_label ?? "",
         band_ids: stop.band_ids,
-      }))));
+      })));
+      setStops(loadedStops);
+      setOriginalStops(loadedStops.map((stop) => ({ ...stop, band_ids: [...stop.band_ids] })));
+      setOriginalPayload({
+        tour_title: detail.tour_title,
+        band_ids: [...detail.band_ids].sort((left, right) => left - right),
+        stops: loadedStops.map((stop) => ({
+          live_id: stop.live_id,
+          stop_label: stop.stop_label.trim() || null,
+        })),
+      });
     } catch (error) {
       onMessage(`加载巡演详情失败：${errorMessage(error)}`);
     } finally {
@@ -250,6 +324,10 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
   }), [selectedBandIds, stops, tourTitle]);
 
   const canSubmit = payload.tour_title !== "" && payload.stops.length > 0 && selectedBandsAppear;
+  const updateChanges = useMemo(
+    () => buildTourUpdateChanges(originalPayload, payload, originalStops, stops, sortedBands),
+    [originalPayload, originalStops, payload, sortedBands, stops],
+  );
 
   const submit = async () => {
     if (!auth.csrfToken || !canSubmit) return;
@@ -424,21 +502,27 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
                   尚未指定参与乐队；创建后将按所选场次自动聚合乐队，巡演统计会包含全部 Setlist。
                 </p>
               )}
-              <div className="console-confirm-table-wrap">
-                <table className="console-admin-table console-confirm-table">
-                  <tbody>
-                    <tr><th>tour_title</th><td>{payload.tour_title}</td></tr>
-                    <tr><th>band</th><td>{selectedBandNames}</td></tr>
-                    <tr><th>live_count</th><td>{stops.length}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="console-table-wrap console-confirm-setlist-wrap">
-                <table className="console-admin-table console-confirm-setlist-table" aria-label="确认场次">
-                  <thead><tr><th>live_date</th><th>live_id</th><th>short_title</th></tr></thead>
-                  <tbody>{stops.map((stop) => <tr key={stop.live_id}><td>{stop.live_date}</td><td>{stop.live_id}</td><td>{getTourStopShortTitle(stop.live_title, payload.tour_title)}</td></tr>)}</tbody>
-                </table>
-              </div>
+              {isNew ? (
+                <>
+                  <div className="console-confirm-table-wrap">
+                    <table className="console-admin-table console-confirm-table">
+                      <tbody>
+                        <tr><th>tour_title</th><td>{payload.tour_title}</td></tr>
+                        <tr><th>band</th><td>{selectedBandNames}</td></tr>
+                        <tr><th>live_count</th><td>{stops.length}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="console-table-wrap console-confirm-setlist-wrap">
+                    <table className="console-admin-table console-confirm-setlist-table" aria-label="确认场次">
+                      <thead><tr><th>live_date</th><th>live_id</th><th>short_title</th></tr></thead>
+                      <tbody>{stops.map((stop) => <tr key={stop.live_id}><td>{stop.live_date}</td><td>{stop.live_id}</td><td>{getTourStopShortTitle(stop.live_title, payload.tour_title)}</td></tr>)}</tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <UpdateDiffTable changes={updateChanges} ariaLabel="巡演修改内容" />
+              )}
             </div>
             <div className="console-confirm-actions">
               <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirming(false)}>取消</button>

@@ -419,7 +419,7 @@ describe("PerformanceGroupAdminSection", () => {
     });
   });
 
-  // 测试点：更新时使用完整目标集合替换
+  // 测试点：活动组更新确认仅展示标题和新增场次，提交仍使用完整目标集合替换。
   test("updates group with full target set replacement", async () => {
     getConsolePerformanceGroupsMock.mockResolvedValue({ items: [{ group_id: 1, group_title: "Update Target" }] });
     getConsolePerformanceGroupMock.mockResolvedValue(makeConsoleGroupEditResponse());
@@ -464,6 +464,10 @@ describe("PerformanceGroupAdminSection", () => {
     await user.click(screen.getByRole("button", { name: "更新" }));
 
     const dialog = await screen.findByRole("dialog", { name: "确认更新活动组" });
+    const diffTable = within(dialog).getByRole("table", { name: "活动组修改内容" });
+    expect(within(diffTable).getByText("group_title")).toBeInTheDocument();
+    expect(within(diffTable).getByText("live_ids[live_id=12]")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Existing Group Day 1")).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => {

@@ -50,6 +50,10 @@ import { BandAdminSection } from "./console/BandAdminSection";
 import { PerformanceGroupAdminSection } from "./console/PerformanceGroupAdminSection";
 import { TourAdminSection } from "./console/TourAdminSection";
 import {
+  UpdateDiffTable,
+  type UpdateChange,
+} from "./console/UpdateDiffTable";
+import {
   INITIAL_SETLIST_ROWS,
   LIVE_TYPE_OPTIONS,
   TIMEZONE_HOUR_OPTIONS,
@@ -139,6 +143,7 @@ type PendingConfirmation =
       songId: number | null;
       payload: ConsoleSongCreatePayload;
       bandName: string;
+      changes: UpdateChange[];
     }
   | {
       kind: "setlist";
@@ -147,6 +152,7 @@ type PendingConfirmation =
       live: LiveInsertRow;
       payload: ConsoleLiveSetlistAppendPayload;
       previewRows: SetlistConfirmRow[];
+      changes: UpdateChange[];
     }
   | {
       kind: "batch_song";
@@ -367,6 +373,103 @@ function formatLivePayloadValue(field: keyof ConsoleLiveUpsertPayload, value: Co
   return String(value);
 }
 
+function formatConfirmationValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (Array.isArray(value)) return value.length > 0 ? JSON.stringify(value) : "-";
+  if (typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>).length > 0 ? JSON.stringify(value) : "-";
+  }
+  return String(value);
+}
+
+function buildSongUpdateChanges(
+  original: ConsoleSongCreatePayload | null,
+  current: ConsoleSongCreatePayload,
+  bands: BandOption[],
+): UpdateChange[] {
+  if (original === null) return [];
+  const bandValue = (bandId: number) => {
+    const bandName = bands.find((band) => band.band_id === bandId)?.band_name;
+    return bandName ? `${bandId} · ${bandName}` : String(bandId);
+  };
+  const values: Array<[string, string, string]> = [
+    ["song_name", original.song_name, current.song_name],
+    ["band_id", bandValue(original.band_id), bandValue(current.band_id)],
+    ["cover", formatConfirmationValue(original.cover), formatConfirmationValue(current.cover)],
+  ];
+  return values.flatMap(([field, before, after]) => before === after ? [] : [{ field, before, after }]);
+}
+
+function formatSetlistRowSummary(
+  row: ConsoleLiveSetlistRowPayload,
+  songName: string | undefined,
+): string {
+  const title = songName ? `${row.song_id} · ${songName}` : String(row.song_id);
+  return `${title}; ${row.segment_type}${row.sub_order}; short=${row.is_short ? "true" : "false"}`;
+}
+
+function buildSetlistUpdateChanges(
+  original: ConsoleLiveSetlistAppendPayload | null,
+  current: ConsoleLiveSetlistAppendPayload,
+  originalSongNames: Record<number, string>,
+  currentRows: SetlistConfirmRow[],
+): UpdateChange[] {
+  if (original === null) return [];
+  const changes: UpdateChange[] = [];
+  const originalContexts = new Map((original.band_lineup_contexts ?? []).map((context) => [context.band_id, context]));
+  const currentContexts = new Map((current.band_lineup_contexts ?? []).map((context) => [context.band_id, context]));
+  for (const bandId of [...new Set([...originalContexts.keys(), ...currentContexts.keys()])].sort((a, b) => a - b)) {
+    const before = formatConfirmationValue(originalContexts.get(bandId));
+    const after = formatConfirmationValue(currentContexts.get(bandId));
+    if (before !== after) {
+      changes.push({ field: `band_lineup_contexts[band_id=${bandId}]`, before, after });
+    }
+  }
+
+  const originalRows = new Map(original.setlist_rows.map((row) => [row.absolute_order, row]));
+  const nextRows = new Map(current.setlist_rows.map((row) => [row.absolute_order, row]));
+  const nextSongNames = new Map(currentRows.map((row) => [row.absolute_order, row.song_name]));
+  const rowFields: Array<keyof ConsoleLiveSetlistRowPayload> = [
+    "song_id",
+    "segment_type",
+    "sub_order",
+    "is_short",
+    "band_member",
+    "band_performances",
+    "other_member",
+    "comment",
+  ];
+  for (const absoluteOrder of [...new Set([...originalRows.keys(), ...nextRows.keys()])].sort((a, b) => a - b)) {
+    const beforeRow = originalRows.get(absoluteOrder);
+    const afterRow = nextRows.get(absoluteOrder);
+    if (!beforeRow || !afterRow) {
+      changes.push({
+        field: `setlist_rows[abs=${absoluteOrder}]`,
+        before: beforeRow
+          ? formatSetlistRowSummary(beforeRow, originalSongNames[absoluteOrder])
+          : "-",
+        after: afterRow
+          ? formatSetlistRowSummary(afterRow, nextSongNames.get(absoluteOrder))
+          : "-",
+      });
+      continue;
+    }
+    for (const field of rowFields) {
+      const before = field === "song_id"
+        ? `${beforeRow.song_id}${originalSongNames[absoluteOrder] ? ` · ${originalSongNames[absoluteOrder]}` : ""}`
+        : formatConfirmationValue(beforeRow[field]);
+      const after = field === "song_id"
+        ? `${afterRow.song_id}${nextSongNames.get(absoluteOrder) ? ` · ${nextSongNames.get(absoluteOrder)}` : ""}`
+        : formatConfirmationValue(afterRow[field]);
+      if (before !== after) {
+        changes.push({ field: `setlist_rows[abs=${absoluteOrder}].${field}`, before, after });
+      }
+    }
+  }
+  return changes;
+}
+
 export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" }: ConsoleInsertPanelProps = {}) {
   const auth = useAuth();
   const [mode, setMode] = useState<ConsoleMode>(initialMode);
@@ -401,6 +504,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [songPagination, setSongPagination] = useState({ page: 1, page_size: 20, total: 0, total_pages: 1 });
   const [songLoading, setSongLoading] = useState(false);
   const [editingSongId, setEditingSongId] = useState<number | null>(null);
+  const [originalSongPayload, setOriginalSongPayload] = useState<ConsoleSongCreatePayload | null>(null);
 
   const [liveDate, setLiveDate] = useState(() => getTodayDateInputValue());
   const [liveTitle, setLiveTitle] = useState("");
@@ -445,6 +549,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [setlistDetailError, setSetlistDetailError] = useState<string | null>(null);
 
   const [setlistRows, setSetlistRows] = useState<SetlistDraftRow[]>(INITIAL_SETLIST_ROWS);
+  const [originalSetlistPayload, setOriginalSetlistPayload] = useState<ConsoleLiveSetlistAppendPayload | null>(null);
+  const [originalSetlistSongNames, setOriginalSetlistSongNames] = useState<Record<number, string>>({});
   const [bandHistories, setBandHistories] = useState<Record<number, ConsoleBandHistory>>({});
   const [lineupContexts, setLineupContexts] = useState<Record<number, ConsoleLiveBandLineupContext>>({});
   const [setlistRowKey, setSetlistRowKey] = useState(1000);
@@ -609,6 +715,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   useEffect(() => {
     if (mode === "setlist_edit") return;
     setSetlistRows(INITIAL_SETLIST_ROWS.map((row) => ({ ...row, row_key: 1 })));
+    setOriginalSetlistPayload(null);
+    setOriginalSetlistSongNames({});
     setSetlistRowKey(1000);
     setOtherMemberEntryKey(100);
     setDidSongLookup(false);
@@ -1086,6 +1194,25 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           comment: row.comment ?? "",
         };
       });
+      setOriginalSetlistPayload({
+        ...(responseLineupContexts.length > 0
+          ? { band_lineup_contexts: responseLineupContexts.map((context) => ({ ...context })) }
+          : {}),
+        setlist_rows: response.rows.map((row) => ({
+          song_id: row.song_id,
+          absolute_order: row.absolute_order,
+          segment_type: row.segment_type,
+          sub_order: row.sub_order,
+          is_short: row.is_short,
+          band_member: row.band_member,
+          ...(row.band_performances ? { band_performances: row.band_performances } : {}),
+          other_member: row.other_member,
+          comment: row.comment,
+        })),
+      });
+      setOriginalSetlistSongNames(Object.fromEntries(
+        response.rows.map((row) => [row.absolute_order, row.song_name]),
+      ));
       setSelectedLiveId(liveId);
       setSetlistRows(nextRows.length > 0 ? nextRows : INITIAL_SETLIST_ROWS.map((row) => ({ ...row })));
       setSetlistRowKey(Math.max(1000, nextRows.length + 1));
@@ -1093,6 +1220,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setDidSongLookup(true);
       setMessage(`已加载 Live #${liveId} 的 ${response.rows.length} 条 Setlist。`);
     } catch (error) {
+      setOriginalSetlistPayload(null);
+      setOriginalSetlistSongNames({});
       setMessage(`加载 Live #${liveId} Setlist 失败：${errorMessage(error)}`);
     } finally {
       setIsLiveLoading(false);
@@ -1232,6 +1361,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
   const resetSongForm = () => {
     setEditingSongId(null);
+    setOriginalSongPayload(null);
     setSongName("");
     setSongBandId(null);
     setSongCover(false);
@@ -1248,6 +1378,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     const song = songCandidates.find((candidate) => candidate.song_id === songId);
     if (!song) return;
     setEditingSongId(song.song_id);
+    setOriginalSongPayload({
+      song_name: song.song_name,
+      band_id: song.band_id,
+      cover: song.cover,
+    });
     setSongName(song.song_name);
     setSongBandId(song.band_id);
     setSongCover(song.cover);
@@ -1292,6 +1427,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
   const selectSongForEditFromItem = (song: SongInsertRow) => {
     setEditingSongId(song.song_id);
+    setOriginalSongPayload({
+      song_name: song.song_name,
+      band_id: song.band_id,
+      cover: song.cover,
+    });
     setSongName(song.song_name);
     setSongBandId(song.band_id);
     setSongCover(song.cover);
@@ -2061,22 +2201,31 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       song_name: resolveSetlistPreviewSongName(validRows[idx]),
     }));
 
+    const payload: ConsoleLiveSetlistAppendPayload = {
+      ...(usesVersionedLineups
+        ? {
+            band_lineup_contexts: activeSetlistBands
+              .map((band) => lineupContexts[band.band_id])
+              .filter((context): context is ConsoleLiveBandLineupContext => context !== undefined),
+          }
+        : {}),
+      setlist_rows: setlistPayload,
+    };
     setPendingConfirmation({
       kind: "setlist",
       title: mode === "setlist_edit" ? "确认更新 Setlist" : "确认提交 Setlist",
       action: mode === "setlist_edit" ? "update" : "create",
       live: targetLive,
-      payload: {
-        ...(usesVersionedLineups
-          ? {
-              band_lineup_contexts: activeSetlistBands
-                .map((band) => lineupContexts[band.band_id])
-                .filter((context): context is ConsoleLiveBandLineupContext => context !== undefined),
-            }
-          : {}),
-        setlist_rows: setlistPayload,
-      },
+      payload,
       previewRows,
+      changes: mode === "setlist_edit"
+        ? buildSetlistUpdateChanges(
+            originalSetlistPayload,
+            payload,
+            originalSetlistSongNames,
+            previewRows,
+          )
+        : [],
     });
   };
 
@@ -2392,17 +2541,21 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }
 
     const selectedBand = bands.find((band) => band.band_id === songBandId);
+    const payload: ConsoleSongCreatePayload = {
+      song_name: name,
+      band_id: songBandId,
+      cover: songCover,
+    };
     setPendingConfirmation({
       kind: "song",
       title: editingSongId === null ? "确认新增歌曲" : "确认更新歌曲",
       action: editingSongId === null ? "create" : "update",
       songId: editingSongId,
-      payload: {
-        song_name: name,
-        band_id: songBandId,
-        cover: songCover,
-      },
+      payload,
       bandName: selectedBand?.band_name ?? "-",
+      changes: editingSongId === null
+        ? []
+        : buildSongUpdateChanges(originalSongPayload, payload, bands),
     });
   };
 
@@ -2619,16 +2772,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       return (
         <>
           {pendingConfirmation.action === "update" ? (
-            <div className="console-confirm-table-wrap">
-              <table className="console-admin-table console-confirm-table live-update-diff-table">
-                <thead><tr><th>字段</th><th>原值</th><th>新值</th></tr></thead>
-                <tbody>
-                  {pendingConfirmation.changes.map((change) => (
-                    <tr key={change.field}><th>{change.field}</th><td>{change.before}</td><td>{change.after}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <UpdateDiffTable changes={pendingConfirmation.changes} ariaLabel="Live 修改内容" />
           ) : renderCompactConfirmation([
               ["live_date", payload.live_date],
               ["live_title", payload.live_title],
@@ -2673,7 +2817,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
     if (pendingConfirmation.kind === "song") {
       const payload = pendingConfirmation.payload;
-      return renderCompactConfirmation([
+      return pendingConfirmation.action === "update"
+        ? <UpdateDiffTable changes={pendingConfirmation.changes} ariaLabel="歌曲修改内容" />
+        : renderCompactConfirmation([
         ["song_name", payload.song_name],
         ["band_id", payload.band_id],
         ["band_name", pendingConfirmation.bandName],
@@ -2724,6 +2870,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           </div>
         </>
       );
+    }
+
+    if (pendingConfirmation.action === "update") {
+      return <UpdateDiffTable changes={pendingConfirmation.changes} ariaLabel="Setlist 修改内容" />;
     }
 
     return (

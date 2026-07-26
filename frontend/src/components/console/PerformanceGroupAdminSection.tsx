@@ -11,6 +11,7 @@ import {
   type ConsolePerformanceGroupUpsertPayload,
 } from "../../api";
 import { getGroupedLiveShortTitle } from "../performanceGroupHelpers";
+import { UpdateDiffTable, type UpdateChange } from "./UpdateDiffTable";
 
 type DraftStop = {
   live_id: number;
@@ -60,6 +61,44 @@ function candidateToDraft(
   };
 }
 
+function formatGroupStop(stop: DraftStop): string {
+  return `${stop.live_id} · ${stop.live_date} · ${stop.live_title}`;
+}
+
+function buildGroupUpdateChanges(
+  originalPayload: ConsolePerformanceGroupUpsertPayload | null,
+  currentPayload: ConsolePerformanceGroupUpsertPayload,
+  originalStops: DraftStop[],
+  currentStops: DraftStop[],
+): UpdateChange[] {
+  if (originalPayload === null) return [];
+  const changes: UpdateChange[] = [];
+  if (originalPayload.group_title !== currentPayload.group_title) {
+    changes.push({
+      field: "group_title",
+      before: originalPayload.group_title,
+      after: currentPayload.group_title,
+    });
+  }
+  const originalIds = new Set(originalPayload.live_ids);
+  const currentIds = new Set(currentPayload.live_ids);
+  const originalDetails = new Map(originalStops.map((stop) => [stop.live_id, stop]));
+  const currentDetails = new Map(currentStops.map((stop) => [stop.live_id, stop]));
+  for (const liveId of [...new Set([...originalIds, ...currentIds])].sort((a, b) => a - b)) {
+    if (originalIds.has(liveId) === currentIds.has(liveId)) continue;
+    changes.push({
+      field: `live_ids[live_id=${liveId}]`,
+      before: originalIds.has(liveId)
+        ? formatGroupStop(originalDetails.get(liveId) as DraftStop)
+        : "-",
+      after: currentIds.has(liveId)
+        ? formatGroupStop(currentDetails.get(liveId) as DraftStop)
+        : "-",
+    });
+  }
+  return changes;
+}
+
 export function PerformanceGroupAdminSection({
   csrfToken,
   onMessage,
@@ -70,6 +109,9 @@ export function PerformanceGroupAdminSection({
   const [isNew, setIsNew] = useState(true);
   const [groupTitle, setGroupTitle] = useState("");
   const [stops, setStops] = useState<DraftStop[]>([]);
+  const [originalPayload, setOriginalPayload] =
+    useState<ConsolePerformanceGroupUpsertPayload | null>(null);
+  const [originalStops, setOriginalStops] = useState<DraftStop[]>([]);
   const [candidateQuery, setCandidateQuery] = useState("");
   const [candidatePage, setCandidatePage] = useState(1);
   const [candidateTotalPages, setCandidateTotalPages] = useState(1);
@@ -89,6 +131,8 @@ export function PerformanceGroupAdminSection({
     setIsNew(true);
     setGroupTitle("");
     setStops([]);
+    setOriginalPayload(null);
+    setOriginalStops([]);
     setCandidateQuery("");
     setCandidatePage(1);
     setCandidateTotalPages(1);
@@ -136,17 +180,21 @@ export function PerformanceGroupAdminSection({
       setSelectedGroupId(groupId);
       setIsNew(false);
       setGroupTitle(detail.group_title);
-      setStops(
-        sortStops(
-          detail.lives.map((stop) => ({
+      const loadedStops = sortStops(
+        detail.lives.map((stop) => ({
             live_id: stop.live_id,
             live_date: stop.live_date,
             live_title: stop.live_title,
             start_time: stop.start_time,
             venue: stop.venue,
           })),
-        ),
       );
+      setStops(loadedStops);
+      setOriginalStops(loadedStops.map((stop) => ({ ...stop })));
+      setOriginalPayload({
+        group_title: detail.group_title,
+        live_ids: loadedStops.map((stop) => stop.live_id),
+      });
     } catch (error) {
       onMessage(`加载活动组详情失败：${errorMessage(error)}`);
     } finally {
@@ -219,6 +267,15 @@ export function PerformanceGroupAdminSection({
 
   const canSubmit =
     payload.group_title !== "" && payload.live_ids.length >= 2;
+  const updateChanges = useMemo(
+    () => buildGroupUpdateChanges(
+      originalPayload,
+      payload,
+      originalStops,
+      sortedStops,
+    ),
+    [originalPayload, originalStops, payload, sortedStops],
+  );
 
   const submit = async () => {
     if (!csrfToken || !canSubmit) return;
@@ -506,48 +563,54 @@ export function PerformanceGroupAdminSection({
               </div>
             </div>
             <div className="console-confirm-body">
-              <div className="console-confirm-table-wrap">
-                <table className="console-admin-table console-confirm-table">
-                  <tbody>
-                    <tr>
-                      <th>group_title</th>
-                      <td>{payload.group_title}</td>
-                    </tr>
-                    <tr>
-                      <th>live_count</th>
-                      <td>{sortedStops.length}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="console-table-wrap console-confirm-setlist-wrap">
-                <table
-                  className="console-admin-table console-confirm-setlist-table"
-                  aria-label="确认场次"
-                >
-                  <thead>
-                    <tr>
-                      <th>live_date</th>
-                      <th>live_id</th>
-                      <th>short_title</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedStops.map((stop) => (
-                      <tr key={stop.live_id}>
-                        <td>{stop.live_date}</td>
-                        <td>{stop.live_id}</td>
-                        <td>
-                          {getGroupedLiveShortTitle(
-                            stop.live_title,
-                            payload.group_title,
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {isNew ? (
+                <>
+                  <div className="console-confirm-table-wrap">
+                    <table className="console-admin-table console-confirm-table">
+                      <tbody>
+                        <tr>
+                          <th>group_title</th>
+                          <td>{payload.group_title}</td>
+                        </tr>
+                        <tr>
+                          <th>live_count</th>
+                          <td>{sortedStops.length}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="console-table-wrap console-confirm-setlist-wrap">
+                    <table
+                      className="console-admin-table console-confirm-setlist-table"
+                      aria-label="确认场次"
+                    >
+                      <thead>
+                        <tr>
+                          <th>live_date</th>
+                          <th>live_id</th>
+                          <th>short_title</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedStops.map((stop) => (
+                          <tr key={stop.live_id}>
+                            <td>{stop.live_date}</td>
+                            <td>{stop.live_id}</td>
+                            <td>
+                              {getGroupedLiveShortTitle(
+                                stop.live_title,
+                                payload.group_title,
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <UpdateDiffTable changes={updateChanges} ariaLabel="活动组修改内容" />
+              )}
             </div>
             <div className="console-confirm-actions">
               <button
