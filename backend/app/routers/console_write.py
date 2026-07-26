@@ -795,17 +795,9 @@ def update_live(
                 existing.setdefault("status_note", None)
                 existing["opening_time"] = _normalize_persisted_time_with_timezone(existing["opening_time"])
                 existing["start_time"] = _normalize_persisted_time_with_timezone(existing["start_time"])
-                should_manage_lineup_contexts = (
-                    bool(payload.band_lineup_contexts)
-                    or not historical_default_band_selection_enabled()
-                )
-                if should_manage_lineup_contexts:
-                    cur.execute("SELECT 1 FROM live_setlist WHERE live_id = %s LIMIT 1", (live_id,))
-                    has_setlist = cur.fetchone() is not None
-                    existing_lineup_contexts = load_lineup_contexts(cur, live_id)
-                else:
-                    has_setlist = True
-                    existing_lineup_contexts = {}
+                cur.execute("SELECT 1 FROM live_setlist WHERE live_id = %s LIMIT 1", (live_id,))
+                has_setlist = cur.fetchone() is not None
+                existing_lineup_contexts = load_lineup_contexts(cur, live_id)
                 if has_setlist:
                     normalized_event_attendees, persisted_event_attendees, _ = _validate_and_normalize_live_relations(
                         cur,

@@ -605,7 +605,7 @@ def test_console_create_event_persists_members_and_computes_modes():
     assert persisted_json.adapted == {"3": ["高松燈", "千早愛音"], "8": ["若葉睦"]}
 
 
-# 测试点：更新 Live 应复用成员规范化，在同一事务中写入基础字段并记录字段差异审计。
+# 测试点：更新 Live 应先读取既有阵容上下文，再复用成员规范化并记录字段差异审计。
 def test_console_update_live_mock_persists_changes_and_audits():
     _set_authenticated_role("editor")
     existing = {
@@ -620,8 +620,8 @@ def test_console_update_live_mock_persists_changes_and_audits():
         "event_attendees": {"3": ["高松燈"]},
     }
     conn, cursor = _build_connection_mock(
-        fetchone_side_effect=[(existing,), (1,)],
-        fetchall_side_effect=[[(3, ["高松燈", "千早愛音"])]],
+        fetchone_side_effect=[(existing,), (1,), (1,)],
+        fetchall_side_effect=[[], [(3, ["高松燈", "千早愛音"])]],
     )
 
     with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
@@ -641,13 +641,14 @@ def test_console_update_live_mock_persists_changes_and_audits():
     assert response.json()["item"]["event_attendees"] == [
         {"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]}
     ]
-    assert "UPDATE live_attrs" in cursor.execute.call_args_list[3].args[0]
-    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[4].args[0]
-    audit_json = cursor.execute.call_args_list[4].args[1][-1]
+    update_call = next(call for call in cursor.execute.call_args_list if "UPDATE live_attrs" in call.args[0])
+    audit_call = next(call for call in cursor.execute.call_args_list if "INSERT INTO audit_logs" in call.args[0])
+    assert update_call.args[1][-1] == 55
+    audit_json = audit_call.args[1][-1]
     assert audit_json.adapted["changes"]["live_title"] == {"before": "Old Live", "after": "Updated Live"}
 
 
-# 测试点：完全相同的 Live PUT 应返回成功，但不得执行 UPDATE 或制造无意义审计。
+# 测试点：完全相同的 Live PUT 可读取既有阵容上下文，但不得执行 UPDATE 或制造无意义审计。
 def test_console_update_live_mock_noop_skips_update_and_audit():
     _set_authenticated_role("editor")
     existing = {
@@ -661,7 +662,10 @@ def test_console_update_live_mock_noop_skips_update_and_audit():
         "default_band_ids": [],
         "event_attendees": {},
     }
-    conn, cursor = _build_connection_mock(fetchone_side_effect=[(existing,), (1,)])
+    conn, cursor = _build_connection_mock(
+        fetchone_side_effect=[(existing,), (1,), (1,)],
+        fetchall_side_effect=[[]],
+    )
 
     with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
         client = TestClient(app)
@@ -672,7 +676,9 @@ def test_console_update_live_mock_noop_skips_update_and_audit():
         )
 
     assert response.status_code == 200
-    assert cursor.execute.call_count == 2
+    assert cursor.execute.call_count == 4
+    assert all("UPDATE live_attrs" not in call.args[0] for call in cursor.execute.call_args_list)
+    assert all("INSERT INTO audit_logs" not in call.args[0] for call in cursor.execute.call_args_list)
 
 
 # 测试点：非活动 Live 不允许提交活动专用的出席成员数据。

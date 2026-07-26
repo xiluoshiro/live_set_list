@@ -1096,7 +1096,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
     )
 
 
-# 测试点：控制台写入交接共演时应单独保存“新阵容基准”，并让旧成员按 former 参与满员判定。
+# 测试点：交接共演应保存新阵容基准，后续只改 Live 标题不得清空或审计删除该历史上下文。
 def test_console_setlist_persists_handover_with_explicit_next_baseline(
     integration_test_client,
     integration_admin_connection,
@@ -1244,6 +1244,54 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
             "versioned_performance_count": 1,
         },
     )
+
+    live_item = integration_test_client.get("/api/console/lives/41").json()["item"]
+    metadata_response = integration_test_client.put(
+        "/api/console/lives/41",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "live_date": live_item["live_date"],
+            "live_title": f"{live_item['live_title']} renamed",
+            "live_type": live_item["live_type"],
+            "url": live_item["url"],
+            "opening_time": live_item["opening_time"][:5],
+            "start_time": live_item["start_time"][:5],
+            "timezone": live_item["timezone"],
+            "venue_id": live_item["venue_id"],
+            "default_band_ids": live_item["default_band_ids"],
+            "event_attendees": [],
+        },
+    )
+
+    assert metadata_response.status_code == 200
+    assert metadata_response.json()["item"]["band_lineup_contexts"] == [
+        {
+            "band_id": 1,
+            "band_name_version_id": name_version_id,
+            "base_lineup_version_id": base_version_id,
+            "next_lineup_version_id": next_version_id,
+        }
+    ]
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT band_name_version_id, base_lineup_version_id, next_lineup_version_id
+            FROM live_band_lineup_contexts
+            WHERE live_id = 41 AND band_id = 1
+            """
+        )
+        assert cursor.fetchone() == (name_version_id, base_version_id, next_version_id)
+    latest_action, _, latest_payload = _get_latest_audit_row(
+        integration_admin_connection,
+        user_id=editor_user_id,
+    )
+    assert latest_action == "live_update"
+    assert latest_payload["changes"] == {
+        "live_title": {
+            "before": live_item["live_title"],
+            "after": f"{live_item['live_title']} renamed",
+        }
+    }
 
 
 # 测试点：新增歌曲唯一键冲突、缺失 song_id 和请求体内 absolute_order 重复都应返回明确错误。

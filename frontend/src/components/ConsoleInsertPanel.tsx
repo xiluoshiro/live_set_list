@@ -604,7 +604,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         })
       : [],
     band_lineup_contexts: editingLiveHasSetlist
-      ? []
+      ? (originalLivePayload?.band_lineup_contexts ?? []).map((context) => ({ ...context }))
       : defaultBandIds.flatMap((bandId) => {
           const context = defaultBandLineupContexts[bandId];
           return context ? [context] : [];
@@ -622,6 +622,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     liveType,
     liveUrl,
     openingTime,
+    originalLivePayload,
     selectedVenueId,
     startTime,
     statusNote,
