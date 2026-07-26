@@ -596,8 +596,9 @@
   color: var(--text-main);
 }
 
-.live-id-selector option.live-id-option-muted {
+.live-id-option-muted {
   background: var(--surface-muted);
+  color: var(--text-muted);
 }
 
 .live-page-status {
