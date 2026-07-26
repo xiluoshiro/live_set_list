@@ -1373,8 +1373,8 @@ describe("App", () => {
     expect(screen.getByRole("menuitem", { name: "退出登录" })).toBeInTheDocument();
   });
 
+  // 测试点：登录弹窗保持内容自适应，只受遮罩层可用空间约束。
   test("登录弹窗使用紧凑样式，避免被通用 modal 尺寸覆盖", async () => {
-    // 测试点：登录弹窗应命中 .modal.login-modal 的覆盖样式，不再使用通用 .modal 的大弹窗布局。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1387,6 +1387,7 @@ describe("App", () => {
     const style = getComputedStyle(loginModal as HTMLElement);
     expect(style.display).toBe("block");
     expect(style.height).toBe("auto");
+    expect(style.maxHeight).toBe("100%");
   });
 
   test("从全量切到收藏时不会残留上一轮全量结果", async () => {

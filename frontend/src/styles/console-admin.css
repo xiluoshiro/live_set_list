@@ -477,10 +477,6 @@
   overflow-y: auto;
 }
 
-.modal.console-confirm-modal > .modal-head {
-  flex: 0 0 auto;
-}
-
 .console-confirm-table-wrap {
   overflow-x: auto;
 }
@@ -507,11 +503,6 @@
 
 .live-update-diff-table th:first-child {
   width: 140px;
-}
-
-.console-confirm-setlist-wrap {
-  max-height: min(52vh, 520px);
-  overflow: auto;
 }
 
 .console-confirm-setlist-table {
