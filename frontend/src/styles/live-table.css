@@ -365,6 +365,36 @@ tbody tr[data-status-tone="cancelled"] {
   white-space: nowrap;
 }
 
+.live-status-meta {
+  --live-status-text: var(--live-status-past-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.live-status-meta[data-status-tone="upcoming"] {
+  --live-status-text: var(--live-status-upcoming-text);
+}
+
+.live-status-meta[data-status-tone="today"] {
+  --live-status-text: var(--live-status-today-text);
+}
+
+.live-status-meta[data-status-tone="postponed"] {
+  --live-status-text: var(--live-status-postponed-text);
+}
+
+.live-status-meta[data-status-tone="cancelled"] {
+  --live-status-text: var(--live-status-cancelled-text);
+}
+
+.live-status-date {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
 .live-card[data-status-tone] {
   position: relative;
   overflow: hidden;

@@ -395,7 +395,11 @@ export function LiveAdminSection({
               <option value="cancelled">已取消</option>
             </select>
           </label>
-          <div className="live-admin-readonly-field" aria-label={`日期阶段：${DATE_PHASE_LABELS[datePhase]}（只读）`}>
+          <div
+            className="live-admin-readonly-field"
+            data-status-tone={datePhase}
+            aria-label={`日期阶段：${DATE_PHASE_LABELS[datePhase]}（只读）`}
+          >
             <span>日期阶段</span>
             <strong>{DATE_PHASE_LABELS[datePhase]}</strong>
             <small>按演出日期自动判断</small>

@@ -108,7 +108,7 @@
 
 .catalog-live-item {
   display: grid;
-  grid-template-columns: 108px minmax(0, 1fr) 116px;
+  grid-template-columns: minmax(172px, auto) minmax(0, 1fr) 116px;
   gap: 12px;
   align-items: center;
   padding: 10px 0;
@@ -119,9 +119,8 @@
   border-top: none;
 }
 
-.catalog-live-date {
-  color: var(--text-secondary);
-  white-space: nowrap;
+.catalog-live-meta {
+  justify-self: start;
 }
 
 .catalog-live-title {
