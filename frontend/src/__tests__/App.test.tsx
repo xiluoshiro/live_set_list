@@ -804,7 +804,7 @@ describe("App", () => {
     expect(await screen.findByText("没有找到与“不存在”匹配的资料。")).toBeInTheDocument();
   });
 
-  // 测试点：乐队浏览保留左侧背景图案，并把接口返回的有效 Band SVG 展示在右侧关联 Live。
+  // 测试点：乐队浏览保留 Band 图案，并让关联 Live 复用首页的日期与状态 pill 布局。
   test("乐队浏览页可加载乐队 Live 并打开详情", async () => {
     getCatalogBandsMock.mockResolvedValue({
       items: [
@@ -833,7 +833,12 @@ describe("App", () => {
     expect(await screen.findByText("默认成员：Kasumi / Tae")).toBeInTheDocument();
     expect(screen.getAllByRole("img", { name: "Band 1" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("img", { name: "Band 2" }).length).toBeGreaterThan(0);
-    await user.click(await screen.findByRole("button", { name: "Poppin'Party Browse Live" }));
+    const browseLive = screen.getByRole("button", { name: "Poppin'Party Browse Live" });
+    const browseLiveRow = browseLive.closest(".catalog-live-item");
+    expect(browseLiveRow?.querySelector(".live-status-meta")).toHaveAttribute("data-status-tone", "past");
+    expect(within(browseLiveRow as HTMLElement).getByText("2026.07.01")).toHaveClass("live-status-date");
+    expect(within(browseLiveRow as HTMLElement).getByText("已结束")).toHaveClass("live-status-pill");
+    await user.click(browseLive);
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(201));
   });
 

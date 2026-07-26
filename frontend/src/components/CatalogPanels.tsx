@@ -8,7 +8,7 @@ import type {
   DatePhase,
   EventStatus,
 } from "../api";
-import { formatLiveStatusText } from "../liveStatus";
+import { formatLiveStatusText, getLiveStatusPresentation } from "../liveStatus";
 import { PageTitle } from "./PageTitle";
 import {
   BandIconsCell,
@@ -17,6 +17,7 @@ import {
   type BandIconInput,
 } from "./BandIconsCell";
 import { ContentState } from "./ContentState";
+import { LiveStatusMeta } from "./LiveStatusMeta";
 
 export type CatalogLiveRow = {
   liveId: number;
@@ -111,10 +112,16 @@ function LiveResultList({
     <ol className="catalog-live-list">
       {rows.map((row) => (
         <li key={row.liveId} className="catalog-live-item">
-          <span className="catalog-live-date">
-            {row.liveDate}
-            {` · ${formatLiveStatusText(row.eventStatus, row.datePhase, row.wasRescheduled)}`}
-          </span>
+          <LiveStatusMeta
+            date={row.liveDate}
+            statusText={formatLiveStatusText(row.eventStatus, row.datePhase, row.wasRescheduled)}
+            tone={getLiveStatusPresentation(
+              row.eventStatus,
+              row.datePhase,
+              row.wasRescheduled,
+            ).tone}
+            className="catalog-live-meta"
+          />
           <button type="button" className="catalog-live-title" onClick={() => onOpenLive(row)}>
             {row.liveTitle}
           </button>

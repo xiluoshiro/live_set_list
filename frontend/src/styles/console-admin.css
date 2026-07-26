@@ -100,11 +100,23 @@
 }
 
 .live-admin-readonly-field {
+  --live-admin-phase-bg: var(--live-status-past-bg);
+  --live-admin-phase-text: var(--live-status-past-text);
   min-height: 34px;
   padding: 6px 9px;
-  border: 1px solid var(--border-soft);
+  border: 1px solid color-mix(in srgb, var(--live-admin-phase-text) 32%, var(--border-soft));
   border-radius: 7px;
-  background: var(--surface-muted);
+  background: var(--live-admin-phase-bg);
+}
+
+.live-admin-readonly-field[data-status-tone="upcoming"] {
+  --live-admin-phase-bg: var(--live-status-upcoming-bg);
+  --live-admin-phase-text: var(--live-status-upcoming-text);
+}
+
+.live-admin-readonly-field[data-status-tone="today"] {
+  --live-admin-phase-bg: var(--live-status-postponed-bg);
+  --live-admin-phase-text: var(--live-status-postponed-text);
 }
 
 .live-admin-readonly-field > span {
@@ -116,13 +128,17 @@
 }
 
 .live-admin-readonly-field strong {
-  color: var(--text-main);
+  color: var(--live-admin-phase-text);
 }
 
 .live-admin-status-fields small {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 400;
+}
+
+.live-admin-readonly-field small {
+  color: var(--live-admin-phase-text);
 }
 
 @media (max-width: 900px) {

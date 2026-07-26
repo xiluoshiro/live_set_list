@@ -2,9 +2,14 @@ import { useState } from "react";
 
 import type { CatalogStatsResponse, DatePhase, EventStatus } from "../api";
 import { formatCompactDate } from "../dateFormat";
-import { formatLiveStatusText, getLiveStatusPresentation } from "../liveStatus";
+import {
+  formatLiveStatusText,
+  getLiveStatusPresentation,
+  type LiveStatusPresentation,
+} from "../liveStatus";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
 import { ContentState } from "./ContentState";
+import { LiveStatusMeta } from "./LiveStatusMeta";
 import { PageTitle } from "./PageTitle";
 
 export type HomeLiveRow = {
@@ -17,7 +22,9 @@ export type HomeLiveRow = {
   wasRescheduled: boolean;
 };
 
-function getHomeLiveStatus(row: HomeLiveRow): { text: string; tone: string } {
+function getHomeLiveStatus(
+  row: HomeLiveRow,
+): { text: string; tone: LiveStatusPresentation["tone"] } {
   const eventStatus = row.eventStatus ?? "scheduled";
   const datePhase = row.datePhase ?? "past";
   return {
@@ -175,10 +182,12 @@ export function HomeDashboard({
                 const status = getHomeLiveStatus(row);
                 return (
                   <li key={row.liveId} className="home-recent-item">
-                    <span className="home-recent-meta" data-status-tone={status.tone}>
-                      <span className="home-recent-date">{formatCompactDate(row.liveDate)}</span>
-                      <span className="live-status-pill">{status.text}</span>
-                    </span>
+                    <LiveStatusMeta
+                      date={row.liveDate}
+                      statusText={status.text}
+                      tone={status.tone}
+                      className="home-recent-meta"
+                    />
                     <button type="button" className="home-recent-title" onClick={() => onOpenLive(row)}>
                       {row.liveTitle}
                     </button>

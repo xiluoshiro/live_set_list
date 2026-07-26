@@ -233,33 +233,7 @@
 }
 
 .home-recent-meta {
-  --live-status-text: var(--live-status-past-text);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  white-space: nowrap;
-}
-
-.home-recent-meta[data-status-tone="upcoming"] {
-  --live-status-text: var(--live-status-upcoming-text);
-}
-
-.home-recent-meta[data-status-tone="today"] {
-  --live-status-text: var(--live-status-today-text);
-}
-
-.home-recent-meta[data-status-tone="postponed"] {
-  --live-status-text: var(--live-status-postponed-text);
-}
-
-.home-recent-meta[data-status-tone="cancelled"] {
-  --live-status-text: var(--live-status-cancelled-text);
-}
-
-.home-recent-date {
-  color: var(--text-secondary);
-  font-size: 14px;
+  justify-self: start;
 }
 
 .home-recent-meta .live-status-pill {
