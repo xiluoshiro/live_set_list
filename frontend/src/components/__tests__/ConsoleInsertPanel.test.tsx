@@ -1051,6 +1051,88 @@ describe("ConsoleInsertPanel", () => {
     expect(within(liveSelect).getAllByRole("option").map((option) => option.getAttribute("value"))).toEqual(["101"]);
   });
 
+  // 测试点：有 Setlist 的历史 Live 只改标题时必须原样提交阵容上下文，确认框不得误报删除。
+  test("Live管理保留已有Setlist的历史阵容上下文", async () => {
+    const user = userEvent.setup();
+    const historicalContext = {
+      band_id: 3,
+      band_name_version_id: 19,
+      base_lineup_version_id: 21,
+      next_lineup_version_id: 22,
+    };
+    apiMocks.getConsoleLiveCandidates.mockResolvedValue({
+      items: [{ live_id: 55, live_date: "2026-07-05", live_title: "Historical Live", live_type: "oneman", venue_name: "New Venue" }],
+      page: 1,
+      page_size: 20,
+      total: 1,
+      total_pages: 1,
+    });
+    apiMocks.getConsoleLive.mockResolvedValue({
+      item: {
+        live_id: 55,
+        live_date: "2026-07-05",
+        live_title: "Historical Live",
+        live_type: "oneman",
+        url: "https://example.com/historical",
+        opening_time: "18:00:00+09:00",
+        start_time: "19:00:00+09:00",
+        timezone: "+09:00",
+        venue_id: 88,
+        venue_name: "New Venue",
+        default_band_ids: [3],
+        event_attendees: [],
+        band_lineup_contexts: [historicalContext],
+        event_status: "scheduled",
+        status_note: null,
+        has_setlist: true,
+      },
+    });
+    apiMocks.updateConsoleLive.mockResolvedValue({
+      ok: true,
+      item: {
+        live_id: 55,
+        live_date: "2026-07-05",
+        live_title: "Historical Live renamed",
+        live_type: "oneman",
+        url: "https://example.com/historical",
+        opening_time: "18:00:00+09:00",
+        start_time: "19:00:00+09:00",
+        venue_id: 88,
+        default_band_ids: [3],
+        event_attendees: [],
+        band_lineup_contexts: [historicalContext],
+        event_status: "scheduled",
+        status_note: null,
+      },
+    });
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: [] }],
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_edit" />);
+    await user.selectOptions(
+      await screen.findByRole("combobox", { name: "选择要编辑的 Live" }),
+      "55",
+    );
+    await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Historical Live"));
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), " renamed");
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认更新 Live #55" });
+    expect(within(dialog).queryByText("band_lineup_contexts")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
+
+    await waitFor(() => expect(apiMocks.updateConsoleLive).toHaveBeenCalledWith(
+      55,
+      expect.objectContaining({
+        live_title: "Historical Live renamed",
+        band_lineup_contexts: [historicalContext],
+      }),
+      "csrf-token",
+    ));
+  });
+
   // 测试点：编辑草稿存在修改时，切换到新建模式必须先确认放弃，不能静默清空。
   test("Live编辑脏草稿切换新建前要求确认", async () => {
     const user = userEvent.setup();
