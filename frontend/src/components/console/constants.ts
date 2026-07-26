@@ -55,6 +55,7 @@ export const INITIAL_SETLIST_ROWS: SetlistDraftRow[] = [
     segment_start_type: "M",
     is_short: false,
     band_member: {},
+    band_performances: {},
     other_member: [{ entry_id: 1, member_key: "", member_value: "" }],
   },
 ];

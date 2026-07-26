@@ -15,6 +15,8 @@ from app.schemas.console import (
     ConsoleLiveSetlistAppendItem,
     ConsoleLiveSetlistAppendRequest,
     ConsoleLiveSetlistAppendResponse,
+    ConsoleLiveBandLineupContextRequest,
+    ConsoleLiveBandPerformanceRequest,
     ConsoleLiveSetlistRowRequest,
     ConsolePerformanceGroupEditResponse,
     ConsolePerformanceGroupEditStop,

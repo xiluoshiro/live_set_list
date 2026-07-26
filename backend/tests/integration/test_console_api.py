@@ -990,6 +990,156 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
     )
 
 
+# 测试点：控制台写入交接共演时应单独保存“新阵容基准”，并让旧成员按 former 参与满员判定。
+def test_console_setlist_persists_handover_with_explicit_next_baseline(
+    integration_test_client,
+    integration_admin_connection,
+):
+    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_tester",
+        password="editor-test-pass",
+    )
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO band_name_versions (
+                band_id, band_name, band_abbr, valid_from, valid_to
+            )
+            VALUES (1, 'Poppin''Party historical', 'ppp', DATE '2015-01-01', NULL)
+            RETURNING id
+            """
+        )
+        name_version_id = int(cursor.fetchone()[0])
+        cursor.execute(
+            """
+            INSERT INTO band_lineup_versions (
+                band_id, version_no, version_label, valid_from, valid_to,
+                predecessor_id, change_type
+            )
+            VALUES (1, 1, 'PPP V1', DATE '2015-01-01', DATE '2018-01-01', NULL, 'initial')
+            RETURNING id
+            """
+        )
+        base_version_id = int(cursor.fetchone()[0])
+        cursor.execute(
+            """
+            INSERT INTO band_lineup_versions (
+                band_id, version_no, version_label, valid_from, valid_to,
+                predecessor_id, change_type
+            )
+            VALUES (1, 2, 'PPP V2', DATE '2018-01-01', NULL, %s, 'replacement')
+            RETURNING id
+            """,
+            (base_version_id,),
+        )
+        next_version_id = int(cursor.fetchone()[0])
+        cursor.execute(
+            """
+            INSERT INTO band_lineup_version_members (
+                lineup_version_id, member_name, display_order
+            )
+            VALUES
+                (%s, 'Kasumi', 1),
+                (%s, 'Rimi', 2),
+                (%s, 'Kasumi', 1),
+                (%s, 'Tae', 2)
+            """,
+            (base_version_id, base_version_id, next_version_id, next_version_id),
+        )
+
+    response = integration_test_client.post(
+        "/api/console/lives/41/setlist",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "band_lineup_contexts": [
+                {
+                    "band_id": 1,
+                    "band_name_version_id": name_version_id,
+                    "base_lineup_version_id": base_version_id,
+                    "next_lineup_version_id": next_version_id,
+                }
+            ],
+            "setlist_rows": [
+                {
+                    "song_id": 4,
+                    "absolute_order": 1,
+                    "segment_type": "M",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_performances": [
+                        {
+                            "band_id": 1,
+                            "lineup_usage": "handover",
+                            "handover_baseline": "next",
+                            "members": ["Kasumi", "Tae", "Rimi"],
+                        }
+                    ],
+                    "comment": "handover",
+                }
+            ],
+        },
+    )
+    edit_response = integration_test_client.get("/api/console/lives/41/setlist")
+    public_response = integration_test_client.get("/api/lives/41")
+
+    assert response.status_code == 201
+    assert edit_response.status_code == 200
+    assert edit_response.json()["band_lineup_contexts"] == [
+        {
+            "band_id": 1,
+            "band_name_version_id": name_version_id,
+            "base_lineup_version_id": base_version_id,
+            "next_lineup_version_id": next_version_id,
+        }
+    ]
+    assert edit_response.json()["rows"][0]["band_member"] == {
+        "Poppin'Party historical": ["Kasumi", "Tae", "Rimi"]
+    }
+    assert edit_response.json()["rows"][0]["band_performances"] == [
+        {
+            "band_id": 1,
+            "lineup_usage": "handover",
+            "handover_baseline": "next",
+            "members": ["Kasumi", "Tae", "Rimi"],
+        }
+    ]
+
+    public_member = public_response.json()["detail_rows"][0]["band_members"][0]
+    assert public_member["band_name"] == "Poppin'Party historical"
+    assert public_member["lineup_usage"] == "handover"
+    assert public_member["handover_baseline"] == "next"
+    assert public_member["attendance_status"] == "full_plus"
+    assert public_member["missing_members"] == []
+    assert public_member["extra_members"] == [{"member_name": "Rimi", "category": "former"}]
+
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT performance.lineup_usage, performance.handover_baseline, member.appearance_role
+            FROM live_setlist_band_performances performance
+            JOIN live_setlist_band_performance_members member
+              ON member.setlist_id = performance.setlist_id
+             AND member.band_id = performance.band_id
+            WHERE performance.live_id = 41
+              AND member.member_name = 'Rimi'
+            """
+        )
+        assert cursor.fetchone() == ("handover", "next", "former")
+    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
+        "live_setlist_append",
+        "41",
+        {
+            "inserted_row_count": 1,
+            "lineup_context_count": 1,
+            "total_setlist_row_count": 1,
+            "versioned_performance_count": 1,
+        },
+    )
+
+
 # 测试点：新增歌曲唯一键冲突、缺失 song_id 和请求体内 absolute_order 重复都应返回明确错误。
 def test_console_endpoints_surface_conflict_and_missing_song_errors(
     integration_test_client,

@@ -1,13 +1,14 @@
 ﻿import json
 from collections.abc import Mapping
 from math import ceil
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled
 
 from app.auth import AuthUser, get_current_user_optional
+from app.band_history import AppearanceCategory, calculate_attendance
 from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set, is_live_favorite
 from app.live_list_filters import (
@@ -451,6 +452,63 @@ GROUP BY
 ORDER BY rb.live_id, rb.absolute_order
 """
 
+LIVE_DETAIL_PERFORMANCES_QUERY = """
+SELECT
+    performance.live_id,
+    concat(setlist.segment_type, setlist.sub_order)::text AS row_id,
+    performance.band_id,
+    name_version.band_name,
+    performance.lineup_usage,
+    performance.handover_baseline,
+    base_version.id,
+    base_version.version_label,
+    ARRAY(
+        SELECT member.member_name
+        FROM band_lineup_version_members member
+        WHERE member.lineup_version_id = base_version.id
+        ORDER BY member.display_order
+    ) AS base_members,
+    next_version.id,
+    next_version.version_label,
+    ARRAY(
+        SELECT member.member_name
+        FROM band_lineup_version_members member
+        WHERE member.lineup_version_id = next_version.id
+        ORDER BY member.display_order
+    ) AS next_members,
+    ARRAY(
+        SELECT member.member_name
+        FROM live_setlist_band_performance_members member
+        WHERE member.setlist_id = performance.setlist_id
+          AND member.band_id = performance.band_id
+        ORDER BY member.display_order
+    ) AS present_members,
+    COALESCE(
+        (
+            SELECT jsonb_object_agg(member.member_name, member.appearance_role)
+            FROM live_setlist_band_performance_members member
+            WHERE member.setlist_id = performance.setlist_id
+              AND member.band_id = performance.band_id
+              AND member.appearance_role IS NOT NULL
+        ),
+        '{}'::jsonb
+    ) AS appearance_roles
+FROM live_setlist_band_performances performance
+JOIN live_setlist setlist
+    ON setlist.id = performance.setlist_id
+JOIN live_band_lineup_contexts context
+    ON context.live_id = performance.live_id
+   AND context.band_id = performance.band_id
+JOIN band_name_versions name_version
+    ON name_version.id = context.band_name_version_id
+JOIN band_lineup_versions base_version
+    ON base_version.id = context.base_lineup_version_id
+LEFT JOIN band_lineup_versions next_version
+    ON next_version.id = context.next_lineup_version_id
+WHERE performance.live_id = ANY(%s)
+ORDER BY performance.live_id, setlist.absolute_order, performance.band_id
+"""
+
 BAND_ID_LOOKUP_QUERY = f"""
 SELECT
     ba.id,
@@ -463,7 +521,8 @@ WHERE ba.band_name = ANY(%s)
 DEFAULT_BAND_TOTAL_COUNT = 5
 
 
-ParsedDetailRow = tuple[str, str, dict[str, Any], dict[str, Any], bool, bool, int, str | None]
+ParsedDetailRow = tuple[str, str, Any, dict[str, Any], bool, bool, int, str | None]
+PerformanceRowsByDetail = dict[tuple[int, str], list[dict[str, Any]]]
 
 
 def _ensure_json_object(raw: Any) -> dict[str, Any]:
@@ -571,6 +630,186 @@ def _normalize_total_count(raw: Any) -> int:
     return DEFAULT_BAND_TOTAL_COUNT
 
 
+def _load_detail_performances(cur: Any, live_ids: list[int]) -> PerformanceRowsByDetail:
+    if not live_ids:
+        return {}
+    cur.execute(LIVE_DETAIL_PERFORMANCES_QUERY, (live_ids,))
+    rows_by_detail: PerformanceRowsByDetail = {}
+    allowed_roles: set[str] = {"former", "incoming", "guest", "support"}
+    for row in cur.fetchall():
+        (
+            live_id,
+            row_id,
+            band_id,
+            band_name,
+            lineup_usage,
+            handover_baseline,
+            base_version_id,
+            base_version_label,
+            base_members,
+            next_version_id,
+            next_version_label,
+            next_members,
+            present_members,
+            appearance_roles_raw,
+        ) = row
+        appearance_roles: dict[str, AppearanceCategory] = {
+            str(member): cast(AppearanceCategory, str(raw_role))
+            for member, raw_role in dict(appearance_roles_raw or {}).items()
+            if str(raw_role) in allowed_roles
+        }
+        rows_by_detail.setdefault((int(live_id), str(row_id)), []).append(
+            {
+                "band_id": int(band_id),
+                "band_name": str(band_name),
+                "lineup_usage": str(lineup_usage),
+                "handover_baseline": str(handover_baseline) if handover_baseline is not None else None,
+                "base_version_id": int(base_version_id),
+                "base_version_label": str(base_version_label),
+                "base_members": _to_string_list(base_members),
+                "next_version_id": int(next_version_id) if next_version_id is not None else None,
+                "next_version_label": str(next_version_label) if next_version_label is not None else None,
+                "next_members": _to_string_list(next_members),
+                "present_members": _to_string_list(present_members),
+                "appearance_roles": appearance_roles,
+            }
+        )
+    return rows_by_detail
+
+
+def _build_version_ref(version_id: int | None, version_label: str | None) -> dict[str, Any] | None:
+    if version_id is None or version_label is None:
+        return None
+    return {
+        "lineup_version_id": version_id,
+        "version_label": version_label,
+    }
+
+
+def _build_versioned_band_member(item: dict[str, Any]) -> dict[str, Any]:
+    usage = str(item["lineup_usage"])
+    handover_baseline = str(item["handover_baseline"]) if item["handover_baseline"] is not None else None
+    base_members = _to_string_list(item["base_members"])
+    next_members = _to_string_list(item["next_members"])
+    use_next_baseline = usage == "next" or (usage == "handover" and handover_baseline == "next")
+    expected_members = next_members if use_next_baseline and item["next_version_id"] is not None else base_members
+    base_member_set = set(base_members)
+    next_member_set = set(next_members)
+    incoming_members = [member for member in next_members if member not in base_member_set]
+    outgoing_members = [member for member in base_members if member not in next_member_set]
+    attendance = calculate_attendance(
+        expected_members=expected_members,
+        present_members=_to_string_list(item["present_members"]),
+        incoming_members=incoming_members,
+        outgoing_members=outgoing_members,
+        appearance_roles=item["appearance_roles"],
+    )
+    return {
+        "band_id": int(item["band_id"]),
+        "band_name": str(item["band_name"]),
+        "lineup_usage": usage,
+        "handover_baseline": handover_baseline,
+        "lineup_version": _build_version_ref(
+            int(item["base_version_id"]),
+            str(item["base_version_label"]),
+        ),
+        "next_lineup_version": _build_version_ref(
+            int(item["next_version_id"]) if item["next_version_id"] is not None else None,
+            str(item["next_version_label"]) if item["next_version_label"] is not None else None,
+        ),
+        "attendance_status": attendance.attendance_status,
+        "expected_count": attendance.expected_count,
+        "present_members": list(attendance.present_members),
+        "present_count": attendance.present_count,
+        "missing_members": list(attendance.missing_members),
+        "extra_members": [
+            {
+                "member_name": extra.member_name,
+                "category": extra.category,
+            }
+            for extra in attendance.extra_members
+        ],
+        "total_count": attendance.expected_count,
+        "is_full": attendance.attendance_status in {"full", "full_plus"},
+    }
+
+
+def _build_unknown_band_member(
+    *,
+    band_id: int | None,
+    band_name: str,
+    present_members_raw: Any,
+) -> dict[str, Any]:
+    attendance = calculate_attendance(
+        expected_members=None,
+        present_members=_to_string_list(present_members_raw),
+    )
+    return {
+        "band_id": band_id,
+        "band_name": band_name,
+        "lineup_usage": None,
+        "handover_baseline": None,
+        "lineup_version": None,
+        "next_lineup_version": None,
+        "attendance_status": attendance.attendance_status,
+        "expected_count": attendance.expected_count,
+        "present_members": list(attendance.present_members),
+        "present_count": attendance.present_count,
+        "missing_members": [],
+        "extra_members": [],
+        "total_count": attendance.expected_count,
+        "is_full": False,
+    }
+
+
+def _build_detail_band_members(
+    *,
+    live_id: int,
+    row_id: str,
+    band_member_raw: Any,
+    band_meta_by_name: dict[str, dict[str, int | None]],
+    performance_rows_by_detail: PerformanceRowsByDetail,
+) -> list[dict[str, Any]]:
+    versioned_items = performance_rows_by_detail.get((live_id, row_id), [])
+    band_members = [_build_versioned_band_member(item) for item in versioned_items]
+    versioned_band_names = {str(item["band_name"]) for item in versioned_items}
+    if isinstance(band_member_raw, dict):
+        for band_name, present_members in band_member_raw.items():
+            if str(band_name) in versioned_band_names:
+                continue
+            band_meta = band_meta_by_name.get(str(band_name), {})
+            raw_band_id = band_meta.get("band_id")
+            band_members.append(
+                _build_unknown_band_member(
+                    band_id=int(raw_band_id) if isinstance(raw_band_id, int) else None,
+                    band_name=str(band_name),
+                    present_members_raw=present_members,
+                )
+            )
+    else:
+        for raw_item in _ensure_json_array(band_member_raw):
+            if not isinstance(raw_item, dict) or raw_item.get("band_name") is None:
+                continue
+            if str(raw_item["band_name"]) in versioned_band_names:
+                continue
+            raw_band_id = raw_item.get("band_id")
+            band_members.append(
+                _build_unknown_band_member(
+                    band_id=int(raw_band_id) if isinstance(raw_band_id, int) else None,
+                    band_name=str(raw_item["band_name"]),
+                    present_members_raw=raw_item.get("present_members"),
+                )
+            )
+    band_members.sort(
+        key=lambda item: (
+            item["band_id"] is None,
+            item["band_id"] if item["band_id"] is not None else 10**9,
+            item["band_name"],
+        )
+    )
+    return band_members
+
+
 def _other_member_sort_key(item: dict[str, Any]) -> str:
     key = item.get("key")
     return str(key) if key is not None else ""
@@ -645,7 +884,9 @@ def _build_live_detail_payload(
     header_row: tuple[Any, ...],
     parsed_rows: list[ParsedDetailRow],
     band_meta_by_name: dict[str, dict[str, int | None]],
+    performance_rows_by_detail: PerformanceRowsByDetail,
 ) -> dict[str, Any]:
+    live_id = int(header_row[0])
     bands = _normalize_band_ids(header_row[6])
     band_name_to_id = {
         band_name: band_meta["band_id"]
@@ -653,30 +894,13 @@ def _build_live_detail_payload(
         if isinstance(band_meta.get("band_id"), int)
     }
     detail_rows = []
-    for row_id, song_name, band_member_obj, other_member_obj, is_short, is_cover, song_band_id, song_band_name in parsed_rows:
-        band_members = []
-        for band_name, present_members_raw in band_member_obj.items():
-            band_meta = band_meta_by_name.get(str(band_name), {})
-            present_members = _to_string_list(present_members_raw)
-            present_count = len(present_members)
-            total_count = _normalize_total_count(band_meta.get("total_count"))
-            band_members.append(
-                {
-                    "band_id": band_meta.get("band_id"),
-                    "band_name": str(band_name),
-                    "present_members": present_members,
-                    "present_count": present_count,
-                    "total_count": total_count,
-                    "is_full": present_count >= total_count,
-                }
-            )
-
-        band_members.sort(
-            key=lambda item: (
-                item["band_id"] is None,
-                item["band_id"] if item["band_id"] is not None else 10**9,
-                item["band_name"],
-            )
+    for row_id, song_name, band_member_raw, other_member_obj, is_short, is_cover, song_band_id, song_band_name in parsed_rows:
+        band_members = _build_detail_band_members(
+            live_id=live_id,
+            row_id=row_id,
+            band_member_raw=band_member_raw,
+            band_meta_by_name=band_meta_by_name,
+            performance_rows_by_detail=performance_rows_by_detail,
         )
 
         other_members = [{"key": str(key), "value": _to_string_array(value)} for key, value in other_member_obj.items()]
@@ -713,7 +937,7 @@ def _build_live_detail_payload(
         was_rescheduled=bool(schedule_history),
     )
     return {
-        "live_id": int(header_row[0]),
+        "live_id": live_id,
         "live_date": header_row[1],
         "live_title": str(header_row[2]),
         "live_type": live_type,
@@ -745,6 +969,7 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
 
     cur.execute(LIVE_DETAIL_ROWS_QUERY, (live_id,))
     raw_rows = cur.fetchall()
+    performance_rows_by_detail = _load_detail_performances(cur, [live_id])
 
     parsed_rows: list[ParsedDetailRow] = []
     all_band_names: set[str] = set()
@@ -781,8 +1006,19 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
             for band_id, band_name, total_count in band_lookup_rows
             if band_name is not None
         }
+    for performance_items in performance_rows_by_detail.values():
+        for performance_item in performance_items:
+            band_meta_by_name[str(performance_item["band_name"])] = {
+                "band_id": int(performance_item["band_id"]),
+                "total_count": None,
+            }
 
-    return _build_live_detail_payload(header_row, parsed_rows, band_meta_by_name)
+    return _build_live_detail_payload(
+        header_row,
+        parsed_rows,
+        band_meta_by_name,
+        performance_rows_by_detail,
+    )
 
 
 @router.get(
@@ -988,16 +1224,16 @@ def get_live_details_batch(
 
                 cur.execute(BATCH_LIVE_DETAIL_ROWS_QUERY, (deduped_live_ids,))
                 raw_rows = cur.fetchall()
+                performance_rows_by_detail = _load_detail_performances(cur, deduped_live_ids)
 
-                parsed_rows_by_live_id: dict[int, list[dict[str, Any]]] = {}
-                band_name_to_id_by_live_id: dict[int, dict[str, int]] = {}
+                parsed_rows_by_live_id: dict[int, list[ParsedDetailRow]] = {}
+                band_meta_by_name_by_live_id: dict[int, dict[str, dict[str, int | None]]] = {}
                 for row in raw_rows:
                     live_id, row_id, song_name, band_members_raw, other_member_raw, is_short, is_cover, *song_band_values = row
                     song_band_id = int(song_band_values[0]) if song_band_values else 0
                     song_band_name = str(song_band_values[1]) if len(song_band_values) > 1 and song_band_values[1] is not None else None
-                    band_members_arr = _ensure_json_array(band_members_raw)
-                    band_members = []
-                    for band_item in band_members_arr:
+                    live_id_int = int(live_id)
+                    for band_item in _ensure_json_array(band_members_raw):
                         if not isinstance(band_item, dict):
                             continue
                         band_name_raw = band_item.get("band_name")
@@ -1005,117 +1241,46 @@ def get_live_details_batch(
                             continue
                         band_name = str(band_name_raw)
                         band_id_raw = band_item.get("band_id")
-                        band_id = int(band_id_raw) if isinstance(band_id_raw, int) else None
-                        if band_id is not None:
-                            band_name_to_id_by_live_id.setdefault(int(live_id), {})[band_name] = band_id
-                        present_members = _to_string_list(band_item.get("present_members"))
-                        present_count = len(present_members)
-                        total_count = _normalize_total_count(band_item.get("total_count"))
-                        band_members.append(
-                            {
-                                "band_id": band_id,
-                                "band_name": band_name,
-                                "present_members": present_members,
-                                "present_count": present_count,
-                                "total_count": total_count,
-                                "is_full": present_count >= total_count,
-                            }
-                        )
-
-                    band_members.sort(
-                        key=lambda item: (
-                            item["band_id"] is None,
-                            item["band_id"] if item["band_id"] is not None else 10**9,
-                            item["band_name"],
-                        )
-                    )
-
-                    other_member_obj = _ensure_json_object(other_member_raw)
-                    parsed_rows_by_live_id.setdefault(int(live_id), []).append(
-                        {
-                            "row_id": str(row_id),
-                            "song_name": str(song_name),
-                            "band_members": band_members,
-                            "other_member_obj": other_member_obj,
-                            "is_short": bool(is_short),
-                            "is_cover": bool(is_cover),
-                            "song_band_id": int(song_band_id),
-                            "song_band_name": song_band_name,
+                        band_meta_by_name_by_live_id.setdefault(live_id_int, {})[band_name] = {
+                            "band_id": int(band_id_raw) if isinstance(band_id_raw, int) else None,
+                            "total_count": None,
                         }
+                    parsed_rows_by_live_id.setdefault(live_id_int, []).append(
+                        (
+                            str(row_id),
+                            str(song_name),
+                            band_members_raw,
+                            _ensure_json_object(other_member_raw),
+                            bool(is_short),
+                            bool(is_cover),
+                            int(song_band_id),
+                            song_band_name,
+                        )
                     )
+
+                for (live_id, _row_id), performance_items in performance_rows_by_detail.items():
+                    for performance_item in performance_items:
+                        band_meta_by_name_by_live_id.setdefault(live_id, {})[
+                            str(performance_item["band_name"])
+                        ] = {
+                            "band_id": int(performance_item["band_id"]),
+                            "total_count": None,
+                        }
 
                 for live_id in deduped_live_ids:
                     header_row = header_by_live_id.get(live_id)
                     if header_row is None:
                         missing_live_ids.append(live_id)
                         continue
-                    detail_rows = []
-                    for parsed_row in parsed_rows_by_live_id.get(live_id, []):
-                        other_members = [
-                            {"key": str(key), "value": _to_string_array(value)}
-                            for key, value in parsed_row["other_member_obj"].items()
-                        ]
-                        other_members.sort(key=_other_member_sort_key)
-                        performer_band_ids = {
-                            int(member["band_id"])
-                            for member in parsed_row["band_members"]
-                            if isinstance(member["band_id"], int)
-                        }
-                        comments, cover_band = _build_detail_tags(
-                            parsed_row["is_short"],
-                            parsed_row["is_cover"],
-                            parsed_row["song_band_id"],
-                            parsed_row["song_band_name"],
-                            performer_band_ids,
-                        )
-                        detail_rows.append(
-                            {
-                                "row_id": parsed_row["row_id"],
-                                "song_name": parsed_row["song_name"],
-                                "band_members": parsed_row["band_members"],
-                                "other_members": other_members,
-                                "comments": comments,
-                                "cover_band": cover_band,
-                            }
-                        )
-
-                    live_type = str(header_row[9])
-                    event_attendees_raw = header_row[14] if len(header_row) > 14 else []
-                    event_status = str(header_row[15]) if len(header_row) > 15 else "scheduled"
-                    schedule_history = list(header_row[17] or []) if len(header_row) > 17 else []
-                    detail = {
-                        "live_id": int(header_row[0]),
-                        "live_date": header_row[1],
-                        "live_title": str(header_row[2]),
-                        "live_type": live_type,
-                        "venue": header_row[3],
-                        "opening_time": header_row[4],
-                        "start_time": header_row[5],
-                        "bands": _normalize_band_ids(header_row[6]),
-                        "band_names": _order_band_names_by_bands(
-                            _normalize_band_ids(header_row[6]),
-                            header_row[7],
-                            band_name_to_id_by_live_id.get(live_id, {}),
-                        ),
-                        "url": header_row[8],
-                        "is_favorite": live_id in favorite_live_ids if current_user is not None else False,
-                        "tour": build_tour_ref_from_row(header_row, tour_id_index=10, tour_title_index=11),
-                        "performance_group": build_performance_group_ref_from_row(header_row, group_id_index=12, group_title_index=13),
-                        "event_attendees": _normalize_event_attendees(event_attendees_raw, live_type),
-                        **build_public_live_status(
-                            event_status=event_status,
-                            live_date=header_row[1],
-                            start_time=header_row[5] if len(header_row) > 15 else "00:00:00+00:00",
-                            was_rescheduled=bool(schedule_history),
-                        ),
-                        "status_note": (
-                            header_row[16]
-                            if len(header_row) > 16 and event_status in {"postponed", "cancelled"}
-                            else None
-                        ),
-                        "schedule_history": schedule_history,
-                        "detail_rows": detail_rows,
-                    }
+                    detail = _build_live_detail_payload(
+                        header_row,
+                        parsed_rows_by_live_id.get(live_id, []),
+                        band_meta_by_name_by_live_id.get(live_id, {}),
+                        performance_rows_by_detail,
+                    )
+                    detail["is_favorite"] = (
+                        live_id in favorite_live_ids if current_user is not None else False
+                    )
                     items.append(detail)
     except QueryCanceled as exc:
         logger.exception(

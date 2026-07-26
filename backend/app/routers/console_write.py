@@ -9,6 +9,13 @@ from psycopg2.errors import QueryCanceled, UniqueViolation
 from psycopg2.extras import Json
 
 from app.auth import AuthSessionContext, assert_valid_csrf, get_current_auth_context, require_role
+from app.band_history_write import (
+    build_band_performances,
+    load_lineup_contexts,
+    persist_band_performances,
+    replace_lineup_contexts,
+    validate_lineup_contexts,
+)
 from app.db import get_write_db_connection
 from app.logging_config import get_logger
 from app.live_status import build_public_live_status
@@ -855,13 +862,14 @@ def append_live_setlist(
                 f"Duplicate absolute_order in setlist_rows: {row.absolute_order}",
             )
         seen_absolute_orders.add(row.absolute_order)
-        normalized_row = {
+        normalized_row: dict[str, Any] = {
             "song_id": row.song_id,
             "absolute_order": row.absolute_order,
             "segment_type": _normalize_segment_type(row.segment_type),
             "sub_order": row.sub_order,
             "is_short": row.is_short,
-            "band_member": _normalize_band_member_payload(row.band_member),
+            "band_member": row.band_member,
+            "band_performances": row.band_performances,
             "other_member": _normalize_other_member_payload(row.other_member),
             "comment": row.comment,
         }
@@ -901,50 +909,98 @@ def append_live_setlist(
                         detail=f"absolute_order already exists for live {live_id}: {conflict_text}",
                     )
 
+                has_requested_performances = any(
+                    row["band_performances"] for row in normalized_rows
+                )
+                if payload.band_lineup_contexts:
+                    lineup_contexts = validate_lineup_contexts(cur, payload.band_lineup_contexts)
+                    replace_lineup_contexts(cur, live_id, lineup_contexts)
+                elif has_requested_performances:
+                    lineup_contexts = load_lineup_contexts(cur, live_id)
+                else:
+                    lineup_contexts = {}
+
                 for normalized_row in sorted(normalized_rows, key=lambda item: item["absolute_order"]):
-                    cur.execute(
-                        """
-                        INSERT INTO live_setlist (
-                            live_id,
-                            song_id,
-                            absolute_order,
-                            segment_type,
-                            sub_order,
-                            is_short,
-                            band_member,
-                            other_member,
-                            comment
+                    band_performances = normalized_row["band_performances"]
+                    if band_performances:
+                        band_member, persisted_performances = build_band_performances(
+                            band_performances,
+                            lineup_contexts,
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            live_id,
-                            normalized_row["song_id"],
-                            normalized_row["absolute_order"],
-                            normalized_row["segment_type"],
-                            normalized_row["sub_order"],
-                            normalized_row["is_short"],
-                            Json(normalized_row["band_member"]),
-                            Json(normalized_row["other_member"]) if normalized_row["other_member"] is not None else None,
-                            normalized_row["comment"],
-                        ),
+                    else:
+                        if lineup_contexts:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="band_performances are required when the Live has lineup contexts",
+                            )
+                        band_member = _normalize_band_member_payload(normalized_row["band_member"])
+                        persisted_performances = []
+                    insert_values = (
+                        live_id,
+                        normalized_row["song_id"],
+                        normalized_row["absolute_order"],
+                        normalized_row["segment_type"],
+                        normalized_row["sub_order"],
+                        normalized_row["is_short"],
+                        Json(band_member),
+                        Json(normalized_row["other_member"]) if normalized_row["other_member"] is not None else None,
+                        normalized_row["comment"],
                     )
+                    if persisted_performances:
+                        cur.execute(
+                            """
+                            INSERT INTO live_setlist (
+                                live_id, song_id, absolute_order, segment_type, sub_order,
+                                is_short, band_member, other_member, comment
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            RETURNING id::text
+                            """,
+                            insert_values,
+                        )
+                        setlist_id = str(cur.fetchone()[0])
+                        persist_band_performances(
+                            cur,
+                            setlist_id=setlist_id,
+                            live_id=live_id,
+                            performances=persisted_performances,
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            INSERT INTO live_setlist (
+                                live_id, song_id, absolute_order, segment_type, sub_order,
+                                is_short, band_member, other_member, comment
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            insert_values,
+                        )
 
                 cur.execute("SELECT COUNT(*) FROM live_setlist WHERE live_id = %s", (live_id,))
                 count_row = cur.fetchone()
                 assert count_row is not None
                 total_setlist_row_count = int(count_row[0])
 
+                audit_payload: dict[str, Any] = {
+                    "inserted_row_count": len(normalized_rows),
+                    "total_setlist_row_count": total_setlist_row_count,
+                }
+                versioned_performance_count = sum(
+                    len(row["band_performances"]) for row in normalized_rows
+                )
+                if payload.band_lineup_contexts or versioned_performance_count > 0:
+                    audit_payload.update({
+                        "lineup_context_count": len(lineup_contexts),
+                        "versioned_performance_count": versioned_performance_count,
+                    })
                 _write_console_audit_log(
                     cur,
                     user_id=context.user.id,
                     action="live_setlist_append",
                     resource_type="live",
                     resource_id=str(live_id),
-                    payload_json={
-                        "inserted_row_count": len(normalized_rows),
-                        "total_setlist_row_count": total_setlist_row_count,
-                    },
+                    payload_json=audit_payload,
                 )
     except HTTPException:
         raise
@@ -999,7 +1055,8 @@ def replace_live_setlist(
             "segment_type": _normalize_segment_type(row.segment_type),
             "sub_order": row.sub_order,
             "is_short": row.is_short,
-            "band_member": _normalize_band_member_payload(row.band_member),
+            "band_member": row.band_member,
+            "band_performances": row.band_performances,
             "other_member": _normalize_other_member_payload(row.other_member),
             "comment": row.comment,
         })
@@ -1015,35 +1072,96 @@ def replace_live_setlist(
                 missing_song_ids = [song_id for song_id in song_ids if song_id not in existing_song_ids]
                 if missing_song_ids:
                     raise HTTPException(status_code=404, detail=f"Song ids not found: {', '.join(map(str, missing_song_ids))}")
-                cur.execute("DELETE FROM live_setlist WHERE live_id = %s", (live_id,))
-                for normalized_row in sorted(normalized_rows, key=lambda item: item["absolute_order"]):
-                    cur.execute(
-                        """
-                        INSERT INTO live_setlist (
-                            live_id, song_id, absolute_order, segment_type, sub_order,
-                            is_short, band_member, other_member, comment
+                has_requested_performances = any(
+                    row["band_performances"] for row in normalized_rows
+                )
+                if payload.band_lineup_contexts:
+                    lineup_contexts = validate_lineup_contexts(cur, payload.band_lineup_contexts)
+                elif has_requested_performances:
+                    lineup_contexts = load_lineup_contexts(cur, live_id)
+                else:
+                    lineup_contexts = {}
+                prepared_rows: list[tuple[dict[str, Any], dict[str, list[str]], list[Any]]] = []
+                for normalized_row in normalized_rows:
+                    band_performances = normalized_row["band_performances"]
+                    if band_performances:
+                        band_member, persisted_performances = build_band_performances(
+                            band_performances,
+                            lineup_contexts,
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            live_id,
-                            normalized_row["song_id"],
-                            normalized_row["absolute_order"],
-                            normalized_row["segment_type"],
-                            normalized_row["sub_order"],
-                            normalized_row["is_short"],
-                            Json(normalized_row["band_member"]),
-                            Json(normalized_row["other_member"]) if normalized_row["other_member"] is not None else None,
-                            normalized_row["comment"],
-                        ),
+                    else:
+                        if lineup_contexts:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="band_performances are required when the Live has lineup contexts",
+                            )
+                        band_member = _normalize_band_member_payload(normalized_row["band_member"])
+                        persisted_performances = []
+                    prepared_rows.append((normalized_row, band_member, persisted_performances))
+                cur.execute("DELETE FROM live_setlist WHERE live_id = %s", (live_id,))
+                if payload.band_lineup_contexts:
+                    replace_lineup_contexts(cur, live_id, lineup_contexts)
+                for normalized_row, band_member, persisted_performances in sorted(
+                    prepared_rows,
+                    key=lambda item: item[0]["absolute_order"],
+                ):
+                    insert_values = (
+                        live_id,
+                        normalized_row["song_id"],
+                        normalized_row["absolute_order"],
+                        normalized_row["segment_type"],
+                        normalized_row["sub_order"],
+                        normalized_row["is_short"],
+                        Json(band_member),
+                        Json(normalized_row["other_member"]) if normalized_row["other_member"] is not None else None,
+                        normalized_row["comment"],
                     )
+                    if persisted_performances:
+                        cur.execute(
+                            """
+                            INSERT INTO live_setlist (
+                                live_id, song_id, absolute_order, segment_type, sub_order,
+                                is_short, band_member, other_member, comment
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            RETURNING id::text
+                            """,
+                            insert_values,
+                        )
+                        setlist_id = str(cur.fetchone()[0])
+                        persist_band_performances(
+                            cur,
+                            setlist_id=setlist_id,
+                            live_id=live_id,
+                            performances=persisted_performances,
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            INSERT INTO live_setlist (
+                                live_id, song_id, absolute_order, segment_type, sub_order,
+                                is_short, band_member, other_member, comment
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            insert_values,
+                        )
+                audit_payload = {"row_count": len(normalized_rows)}
+                versioned_performance_count = sum(
+                    len(row["band_performances"]) for row in normalized_rows
+                )
+                if payload.band_lineup_contexts or versioned_performance_count > 0:
+                    audit_payload.update({
+                        "lineup_context_count": len(lineup_contexts),
+                        "versioned_performance_count": versioned_performance_count,
+                    })
                 _write_console_audit_log(
                     cur,
                     user_id=context.user.id,
                     action="live_setlist_update",
                     resource_type="live",
                     resource_id=str(live_id),
-                    payload_json={"row_count": len(normalized_rows)},
+                    payload_json=audit_payload,
                 )
     except HTTPException:
         raise

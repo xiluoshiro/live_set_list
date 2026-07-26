@@ -209,6 +209,7 @@ export function mapParsedSetlist(
       sub_order: line.segmentOrder,
       is_short: false,
       band_member: mapping.bandMember,
+      band_performances: {},
       other_member: mapping.otherMember,
     });
   });

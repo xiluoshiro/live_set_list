@@ -280,13 +280,49 @@ class ConsoleLiveMutationResponse(BaseModel):
     item: ConsoleLiveItem = Field(..., description="Created live payload")
 
 
+class ConsoleLiveBandLineupContextRequest(BaseModel):
+    band_id: int = Field(..., ge=1)
+    band_name_version_id: int = Field(..., ge=1)
+    base_lineup_version_id: int = Field(..., ge=1)
+    next_lineup_version_id: int | None = Field(default=None, ge=1)
+
+
+class ConsoleLiveBandPerformanceRequest(BaseModel):
+    band_id: int = Field(..., ge=1)
+    lineup_usage: Literal["base", "next", "handover"]
+    handover_baseline: Literal["base", "next"] | None = None
+    members: list[str] = Field(..., min_length=1, max_length=100)
+
+    @field_validator("members")
+    @classmethod
+    def normalize_members(cls, value: list[str]) -> list[str]:
+        normalized = [member.strip() for member in value]
+        if any(not member for member in normalized):
+            raise ValueError("members must not contain blank names")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("members must not contain duplicates")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_handover_baseline(self) -> "ConsoleLiveBandPerformanceRequest":
+        if self.lineup_usage == "handover" and self.handover_baseline is None:
+            raise ValueError("handover_baseline is required for handover")
+        if self.lineup_usage != "handover" and self.handover_baseline is not None:
+            raise ValueError("handover_baseline is only allowed for handover")
+        return self
+
+
 class ConsoleLiveSetlistRowRequest(BaseModel):
     song_id: int = Field(..., ge=1, description="song_list.id")
     absolute_order: int = Field(..., ge=1, description="Absolute order in the setlist")
     segment_type: str = Field(..., min_length=1, max_length=32, description="Segment code or canonical segment type")
     sub_order: int = Field(..., ge=1, description="Sub-order within the segment")
     is_short: bool = Field(default=False, description="Whether the row is a short version")
-    band_member: dict[str, list[str] | str] = Field(..., description="Band member payload")
+    band_member: dict[str, list[str] | str] = Field(default_factory=dict, description="Compatibility Band member payload")
+    band_performances: list[ConsoleLiveBandPerformanceRequest] = Field(
+        default_factory=list,
+        description="Versioned Band performances; preferred over band_member when present",
+    )
     other_member: dict[str, list[str] | str | None] | None = Field(default=None, description="Other member payload")
     comment: str | None = Field(default=None, max_length=1024, description="Optional row comment")
 
@@ -305,21 +341,37 @@ class ConsoleLiveSetlistRowRequest(BaseModel):
         normalized = value.strip()
         return normalized or None
 
-    @field_validator("band_member")
-    @classmethod
-    def validate_band_member(cls, value: dict[str, list[str] | str]) -> dict[str, list[str] | str]:
-        """Require band_member to contain at least one band before JSON normalization runs."""
-        if len(value) == 0:
-            raise ValueError("band_member must not be empty")
-        return value
+    @model_validator(mode="after")
+    def validate_band_payload(self) -> "ConsoleLiveSetlistRowRequest":
+        if not self.band_member and not self.band_performances:
+            raise ValueError("band_member or band_performances must not be empty")
+        band_ids = [performance.band_id for performance in self.band_performances]
+        if len(set(band_ids)) != len(band_ids):
+            raise ValueError("band_performances must not contain duplicate band_id values")
+        return self
 
 
 class ConsoleLiveSetlistAppendRequest(BaseModel):
+    band_lineup_contexts: list[ConsoleLiveBandLineupContextRequest] = Field(
+        default_factory=list,
+        max_length=100,
+    )
     setlist_rows: list[ConsoleLiveSetlistRowRequest] = Field(
         ...,
         min_length=1,
         description="New setlist rows to append to the target live",
     )
+
+    @field_validator("band_lineup_contexts")
+    @classmethod
+    def validate_context_band_ids(
+        cls,
+        value: list[ConsoleLiveBandLineupContextRequest],
+    ) -> list[ConsoleLiveBandLineupContextRequest]:
+        band_ids = [context.band_id for context in value]
+        if len(set(band_ids)) != len(band_ids):
+            raise ValueError("band_lineup_contexts must not contain duplicate band_id values")
+        return value
 
 
 class ConsoleLiveSetlistAppendItem(BaseModel):
@@ -340,6 +392,7 @@ class ConsoleLiveSetlistEditRow(ConsoleLiveSetlistRowRequest):
 
 class ConsoleLiveSetlistEditResponse(BaseModel):
     live_id: int = Field(..., description="Target live ID")
+    band_lineup_contexts: list[ConsoleLiveBandLineupContextRequest] = Field(default_factory=list)
     rows: list[ConsoleLiveSetlistEditRow] = Field(..., description="Complete editable Setlist rows")
 
 

@@ -162,8 +162,19 @@ export type CatalogStatisticsResponse = {
 export type LiveDetailBandMember = {
   band_id: number | null;
   band_name: string;
+  lineup_usage?: "base" | "next" | "handover" | null;
+  handover_baseline?: "base" | "next" | null;
+  lineup_version?: { lineup_version_id: number; version_label: string } | null;
+  next_lineup_version?: { lineup_version_id: number; version_label: string } | null;
+  attendance_status?: "full" | "full_plus" | "partial" | "unknown";
+  expected_count?: number;
   present_members: string[];
   present_count: number;
+  missing_members?: string[];
+  extra_members?: Array<{
+    member_name: string;
+    category: "former" | "incoming" | "guest" | "support";
+  }>;
   total_count: number;
   is_full: boolean;
 };
@@ -447,6 +458,89 @@ export type ConsoleBandListResponse = {
   items: ConsoleBandItem[];
 };
 
+export type ConsoleBandNameVersion = {
+  name_version_id: number;
+  band_name: string;
+  band_abbr: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  note: string | null;
+  live_ids: number[];
+};
+
+export type ConsoleBandLineupVersion = {
+  lineup_version_id: number;
+  version_no: number;
+  version_label: string;
+  valid_from: string | null;
+  valid_to: string | null;
+  predecessor_id: number | null;
+  change_type: "initial" | "addition" | "removal" | "replacement" | "correction";
+  note: string | null;
+  members: string[];
+  added_members: string[];
+  removed_members: string[];
+  live_ids: number[];
+};
+
+export type ConsoleBandHistory = {
+  band_id: number;
+  current_name: string;
+  current_abbr: string;
+  current_members: string[];
+  initialized: boolean;
+  name_versions: ConsoleBandNameVersion[];
+  lineup_versions: ConsoleBandLineupVersion[];
+};
+
+export type ConsoleBandInitializePayload = {
+  band_name: string;
+  band_abbr: string;
+  members: string[];
+  version_no: number;
+  version_label: string;
+  valid_from: string | null;
+  valid_to: string | null;
+  note: string | null;
+};
+
+export type ConsoleBandNameVersionPayload = {
+  band_name: string;
+  band_abbr: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  note: string | null;
+  make_current: boolean;
+};
+
+export type ConsoleBandLineupVersionPayload = {
+  version_no: number | null;
+  version_label: string;
+  predecessor_id: number | null;
+  change_type: "initial" | "addition" | "removal" | "replacement" | "correction";
+  members: string[];
+  valid_from: string | null;
+  valid_to: string | null;
+  note: string | null;
+  make_current: boolean;
+};
+
+export type BandHistoryBackfillPreflight = {
+  ready: boolean;
+  setlist_row_count: number;
+  performance_count: number;
+  member_count: number;
+  live_band_context_count: number;
+  mapped_band_ids: number[];
+  issues: Array<{
+    code: string;
+    message: string;
+    live_id: number | null;
+    setlist_id: string | null;
+    band_name: string | null;
+  }>;
+};
+
 export type ConsoleVenueItem = {
   venue_id: number;
   venue_name: string;
@@ -518,11 +612,27 @@ export type ConsoleLiveSetlistRowPayload = {
   sub_order: number;
   is_short: boolean;
   band_member: Record<string, string[] | string>;
+  band_performances?: ConsoleLiveBandPerformance[];
   other_member?: Record<string, string[] | string | null> | null;
   comment?: string | null;
 };
 
+export type ConsoleLiveBandLineupContext = {
+  band_id: number;
+  band_name_version_id: number;
+  base_lineup_version_id: number;
+  next_lineup_version_id: number | null;
+};
+
+export type ConsoleLiveBandPerformance = {
+  band_id: number;
+  lineup_usage: "base" | "next" | "handover";
+  handover_baseline: "base" | "next" | null;
+  members: string[];
+};
+
 export type ConsoleLiveSetlistAppendPayload = {
+  band_lineup_contexts?: ConsoleLiveBandLineupContext[];
   setlist_rows: ConsoleLiveSetlistRowPayload[];
 };
 
@@ -542,6 +652,7 @@ export type ConsoleLiveSetlistEditRow = ConsoleLiveSetlistRowPayload & {
 
 export type ConsoleLiveSetlistEditResponse = {
   live_id: number;
+  band_lineup_contexts?: ConsoleLiveBandLineupContext[];
   rows: ConsoleLiveSetlistEditRow[];
 };
 
@@ -698,6 +809,13 @@ type RequestKind =
   | "favorite_remove"
   | "console_songs"
   | "console_bands"
+  | "console_band_history"
+  | "console_band_history_initialize"
+  | "console_band_name_version_create"
+  | "console_band_lineup_version_create"
+  | "console_band_lineup_impact"
+  | "console_band_lineup_correct"
+  | "console_band_history_backfill_preflight"
   | "console_venues"
   | "console_venue_create"
   | "console_live_candidates"
@@ -1139,6 +1257,109 @@ export async function getConsoleBands(q?: string, limit = 20): Promise<ConsoleBa
     requestKind: "console_bands",
   });
   return expectJsonResponse<ConsoleBandListResponse>(response);
+}
+
+export async function getConsoleBandHistory(bandId: number): Promise<ConsoleBandHistory> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/bands/${bandId}/history`, undefined, {
+    requestKind: "console_band_history",
+  });
+  return expectJsonResponse<ConsoleBandHistory>(response);
+}
+
+export async function initializeConsoleBandHistory(
+  bandId: number,
+  payload: ConsoleBandInitializePayload,
+  csrfToken: string,
+): Promise<ConsoleBandHistory> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/bands/${bandId}/initialize-current`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_band_history_initialize", method: "POST" },
+  );
+  const result = await expectJsonResponse<{ ok: boolean; history: ConsoleBandHistory }>(response);
+  return result.history;
+}
+
+export async function createConsoleBandNameVersion(
+  bandId: number,
+  payload: ConsoleBandNameVersionPayload,
+  csrfToken: string,
+): Promise<ConsoleBandHistory> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/bands/${bandId}/name-versions`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_band_name_version_create", method: "POST" },
+  );
+  const result = await expectJsonResponse<{ ok: boolean; history: ConsoleBandHistory }>(response);
+  return result.history;
+}
+
+export async function createConsoleBandLineupVersion(
+  bandId: number,
+  payload: ConsoleBandLineupVersionPayload,
+  csrfToken: string,
+): Promise<ConsoleBandHistory> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/bands/${bandId}/lineup-versions`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_band_lineup_version_create", method: "POST" },
+  );
+  const result = await expectJsonResponse<{ ok: boolean; history: ConsoleBandHistory }>(response);
+  return result.history;
+}
+
+export async function getConsoleBandLineupImpact(
+  bandId: number,
+  lineupVersionId: number,
+): Promise<{ band_id: number; lineup_version_id: number; live_ids: number[]; setlist_row_count: number }> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/bands/${bandId}/lineup-versions/${lineupVersionId}/impact`,
+    undefined,
+    { requestKind: "console_band_lineup_impact" },
+  );
+  return expectJsonResponse(response);
+}
+
+export async function correctConsoleBandLineupVersion(
+  bandId: number,
+  lineupVersionId: number,
+  payload: Omit<ConsoleBandLineupVersionPayload, "version_no" | "predecessor_id" | "change_type" | "make_current"> & {
+    confirmed_live_ids: number[];
+  },
+  csrfToken: string,
+): Promise<ConsoleBandHistory> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/bands/${bandId}/lineup-versions/${lineupVersionId}`,
+    {
+      method: "PUT",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_band_lineup_correct", method: "PUT" },
+  );
+  const result = await expectJsonResponse<{ ok: boolean; history: ConsoleBandHistory }>(response);
+  return result.history;
+}
+
+export async function getBandHistoryBackfillPreflight(): Promise<BandHistoryBackfillPreflight> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/bands/history/backfill-preflight`,
+    undefined,
+    { requestKind: "console_band_history_backfill_preflight" },
+  );
+  return expectJsonResponse<BandHistoryBackfillPreflight>(response);
 }
 
 export async function getConsoleVenues(q?: string, limit = 20): Promise<ConsoleVenueListResponse> {
