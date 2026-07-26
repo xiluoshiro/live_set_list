@@ -133,6 +133,15 @@ function getOrderedBandMembers(members: LiveDetailBandMember[]): LiveDetailBandM
   });
 }
 
+function lineupDisplayText(member: LiveDetailBandMember): string | null {
+  if (!member.lineup_version) return null;
+  if (member.lineup_usage !== "handover" || !member.next_lineup_version) {
+    return `阵容：${member.band_name}`;
+  }
+  return `阵容：${member.lineup_version.version_label} → ${member.next_lineup_version.version_label}`
+    + ` · 交接共演（${member.handover_baseline === "next" ? "新阵容" : "旧阵容"}基准）`;
+}
+
 function estimateOtherPopoverHeight(itemCount: number): number {
   const titleHeight = 26;
   const rowHeight = 26;
@@ -434,18 +443,8 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                     <strong>{member.band_name}</strong>
                   </div>
                   <p className="console-band-status">{attendanceText(member)}</p>
-                  {member.lineup_version && (
-                    <p className="console-band-members">
-                      阵容：{member.lineup_version.version_label}
-                      {member.next_lineup_version ? ` → ${member.next_lineup_version.version_label}` : ""}
-                      {member.lineup_usage
-                        ? ` · ${
-                            member.lineup_usage === "handover"
-                              ? `交接共演（${member.handover_baseline === "next" ? "新阵容" : "旧阵容"}基准）`
-                              : member.lineup_usage === "next" ? "新阵容" : "旧阵容"
-                          }`
-                        : ""}
-                    </p>
+                  {lineupDisplayText(member) && (
+                    <p className="console-band-members">{lineupDisplayText(member)}</p>
                   )}
                   <p className="console-band-members">参加队员：{member.present_members.join(" / ")}</p>
                   {(member.missing_members?.length ?? 0) > 0 && (

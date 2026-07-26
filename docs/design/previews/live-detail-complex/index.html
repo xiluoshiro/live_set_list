@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>演出详情复杂场景预览</title>
+    <link rel="stylesheet" href="../../../../frontend/src/styles/theme.css" />
+    <link rel="stylesheet" href="../../../../frontend/src/styles/base.css" />
+    <link rel="stylesheet" href="./preview.css" />
+  </head>
+  <body>
+    <header class="site-topbar">
+      <a class="site-brand" href="#preview" aria-label="返回演出详情预览顶部">
+        <span class="brand-mark" aria-hidden="true">★</span>
+        <span>BanG Dream! Live 资料库</span>
+      </a>
+      <nav class="top-nav" aria-label="主导航">
+        <span class="active">演出资料</span>
+        <span>巡演资料</span>
+        <span>数据统计</span>
+        <span>乐队浏览</span>
+      </nav>
+      <button class="icon-action theme-toggle" type="button" aria-label="切换深浅主题" title="切换深浅主题">
+        <span aria-hidden="true">◐</span>
+      </button>
+    </header>
+
+    <div class="preview-toolbar" id="preview">
+      <div>
+        <strong>演出详情复杂场景预览</strong>
+        <span>真实生产数据样例，独立设计稿</span>
+      </div>
+      <div class="segmented scenario-toggle" role="group" aria-label="预览场景">
+        <button type="button" data-scenario="full" class="active" aria-pressed="true">完整歌单</button>
+        <button type="button" data-scenario="extract" aria-pressed="false">参与摘录</button>
+      </div>
+    </div>
+
+    <main class="preview-shell">
+      <section class="detail-hero" aria-labelledby="live-title">
+        <div class="hero-head">
+          <button class="icon-action back-action" type="button" aria-label="返回列表" title="返回列表">←</button>
+          <div class="hero-title-wrap">
+            <h1 id="live-title"></h1>
+            <a class="source-link" href="#source" aria-label="打开资料来源" title="打开资料来源">↗</a>
+          </div>
+          <div class="hero-actions">
+            <button class="icon-action favorite-action" type="button" aria-label="加入收藏" title="加入收藏">♡</button>
+            <button class="icon-action more-action" type="button" aria-label="更多操作" title="更多操作">•••</button>
+          </div>
+        </div>
+
+        <div class="hero-meta" id="hero-meta"></div>
+        <div class="coverage-strip" id="coverage-strip"></div>
+      </section>
+
+      <section class="content-controls" aria-label="歌单显示设置">
+        <div class="control-group">
+          <span class="control-label">内容范围</span>
+          <div class="segmented scope-toggle" role="group" aria-label="内容范围"></div>
+        </div>
+        <div class="control-group">
+          <span class="control-label">展示方式</span>
+          <div class="segmented view-toggle" role="group" aria-label="展示方式">
+            <button type="button" data-view="timeline" class="active" aria-pressed="true">章节歌单</button>
+            <button type="button" data-view="table" aria-pressed="false">紧凑表格</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="detail-layout">
+        <section class="setlist-content" id="setlist-content" aria-live="polite"></section>
+        <aside class="detail-aside" id="detail-aside" aria-label="歌单概览与区段索引"></aside>
+      </div>
+    </main>
+
+    <div class="drawer-mask" id="drawer-mask" hidden>
+      <aside
+        class="performance-drawer"
+        id="performance-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="drawer-title"
+      >
+        <div class="drawer-head">
+          <div>
+            <span class="drawer-code" id="drawer-code"></span>
+            <h2 id="drawer-title"></h2>
+          </div>
+          <button class="icon-action drawer-close" type="button" aria-label="关闭出演详情">×</button>
+        </div>
+        <div class="drawer-body" id="drawer-body"></div>
+      </aside>
+    </div>
+
+    <div class="band-popover" id="band-popover" role="dialog" aria-modal="false" hidden></div>
+
+    <script src="./preview.js"></script>
+  </body>
+</html>
