@@ -215,7 +215,7 @@ def print_summary(target: str, failures: list[CheckFailure]) -> int:
         elif target == "scripts":
             print("脚本检查完成：scripts/*.py 语法全部通过。")
         elif target == "functional":
-            print("功能检查完成：scripts + frontend + backend 全部通过。")
+            print("功能检查完成：scripts + frontend + backend + recovery-unit 全部通过。")
         elif target == "full":
             print("全量检查完成：scripts + frontend + backend + recovery 全部通过。")
         else:
@@ -279,11 +279,14 @@ def run_functional_checks() -> int:
     failures: list[CheckFailure] = []
     backend_steps, backend_failures = build_backend_steps(mode="all")
     frontend_steps, frontend_failures = build_frontend_steps()
+    recovery_steps, recovery_failures = build_recovery_steps(mode="unit")
     failures.extend(run_scripts_syntax_steps())
     failures.extend(backend_failures)
     failures.extend(run_backend_check_steps(backend_steps))
     failures.extend(frontend_failures)
     failures.extend(run_check_steps(frontend_steps))
+    failures.extend(recovery_failures)
+    failures.extend(run_check_steps(recovery_steps))
     return print_summary("functional", failures)
 
 
