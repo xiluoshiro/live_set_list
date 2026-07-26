@@ -135,11 +135,14 @@ function getOrderedBandMembers(members: LiveDetailBandMember[]): LiveDetailBandM
 
 function lineupDisplayText(member: LiveDetailBandMember): string | null {
   if (!member.lineup_version) return null;
-  if (member.lineup_usage !== "handover" || !member.next_lineup_version) {
+  if (!member.next_lineup_version) {
     return `阵容：${member.band_name}`;
   }
-  return `阵容：${member.lineup_version.version_label} → ${member.next_lineup_version.version_label}`
-    + ` · 交接共演（${member.handover_baseline === "next" ? "新阵容" : "旧阵容"}基准）`;
+  const transition = `${member.lineup_version.version_label} → ${member.next_lineup_version.version_label}`;
+  if (member.lineup_usage === "handover") {
+    return `阵容：${transition} · 交接共演（${member.handover_baseline === "next" ? "新阵容" : "旧阵容"}基准）`;
+  }
+  return `阵容：${transition} · ${member.lineup_usage === "next" ? "新阵容" : "旧阵容"}`;
 }
 
 function estimateOtherPopoverHeight(itemCount: number): number {
