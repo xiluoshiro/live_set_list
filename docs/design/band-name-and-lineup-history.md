@@ -4,17 +4,18 @@
 
 本文只定义乐队改名、乐队成员增加/减少/更换、历史 Setlist 录入、公开演出详情和控制台适配的技术方案。
 
-本文不承担产品需求文档职责，也不表示相关数据库迁移、接口或页面已经实现。当前代码、FastAPI schema、Flyway SQL 和运行数据始终优先于本文。
+本文同时记录已实现范围和后续设计；当前代码、FastAPI schema、Flyway SQL 和运行数据始终优先于本文。
 
 ## 状态与已确认口径
 
-- 文档状态：待实现设计。
+- 文档状态：实施中；阶段 1～6 和公开详情适配已完成代码，仓库新增 V22/V23 交接基准迁移，控制台 Setlist 新增/管理已接入版本化双写；列表、Catalog、统计、Tour 和活动组仍待切换稳定 `band_id`。
 - 乐队改名前后视为同一支乐队，保持同一个 `band_id`。
 - 乐队成员改名不在本期范围内。
 - 本期需要支持成员增加、减少和更换，以及同一场 Live 中旧阵容、新阵容和交接共演按歌曲交替出现。
-- 本机 `live_statistic` 主库已只读确认 Flyway 为 V20，共 15 条 `band_attrs`；当前 `band_member` 尚未出现需要历史阵容解释的成员变化。
-- 当前 `band_attrs.band_members` 绝大多数可视为最新阵容；后续引入发生过成员变化的历史 Live 前，先补对应历史阵容版本。
-- 当前数据只有一项既知历史版本例外：唯一一套 2015 年 Poppin'Party 数据使用 Poppin'Party V1；当前主库内其余现存 Poppin'Party 数据使用 Poppin'Party V3。该例外允许在初始化后做一次受审计手工修改，不为它设计通用推断规则。
+- 本机 `live_statistic` 主库已迁移至 Flyway V21，共 15 条 `band_attrs`、其中 14 支真实 Band；当前名称、成员投影与唯一开放版本已核对一致。
+- 本地主库已建立 15 个名称版本、23 个阵容版本和 99 条阵容成员关系；Poppin'Party、Roselia、THE THIRD / RAISE A SUILEN、millsage 和一家Dumb Rock! 的历史版本已按人工确认时间表录入。
+- 当前数据只有一项既知历史版本例外：唯一一套 2015 年 Poppin'Party 数据使用 Poppin'Party V1；当前主库内其余现存 Poppin'Party 数据使用 Poppin'Party V3。该例外已通过一次受审计手工修改完成，不为它设计通用推断规则。
+- 已确认的 4 场阵容交接 Live 当前均不在主库，未凭日期创建 Live 或交接上下文。
 - 历史资料开发整理期允许编辑、选择历史阵容版本；资料集完成后的自动选择和历史锁定机制列为后续 TODO。
 - 本文不声明远端生产数据库的 Flyway 或数据状态。
 
@@ -282,6 +283,7 @@ CREATE TABLE public.live_setlist_band_performances (
     band_id integer NOT NULL
         REFERENCES public.band_attrs(id) ON DELETE RESTRICT,
     lineup_usage text NOT NULL,
+    handover_baseline text,
     PRIMARY KEY (setlist_id, band_id),
     FOREIGN KEY (setlist_id, live_id)
         REFERENCES public.live_setlist(id, live_id) ON DELETE CASCADE,
@@ -291,7 +293,13 @@ CREATE TABLE public.live_setlist_band_performances (
     CONSTRAINT live_setlist_band_performances_real_band
         CHECK (band_id > 0),
     CONSTRAINT live_setlist_band_performances_usage
-        CHECK (lineup_usage IN ('base', 'next', 'handover'))
+        CHECK (lineup_usage IN ('base', 'next', 'handover')),
+    CONSTRAINT live_setlist_band_performances_handover_baseline
+        CHECK (
+            (lineup_usage = 'handover' AND handover_baseline IN ('base', 'next'))
+            OR
+            (lineup_usage <> 'handover' AND handover_baseline IS NULL)
+        )
 );
 ```
 
@@ -301,10 +309,11 @@ CREATE TABLE public.live_setlist_band_performances (
 
 - `base`：以 Live 上下文的基础阵容作为该曲基准。
 - `next`：以 Live 上下文的后继阵容作为该曲基准。
-- `handover`：以基础阵容为正式基准，同时允许后继版本新增成员作为“新成员特别出演”。
+- `handover`：表示同曲出现两个连续阵容的交接共演；必须另存 `handover_baseline=base|next`，明确旧阵容或新阵容哪一方是正式基准。
 - 普通 Live 只能提交 `base`。
 - 没有 `next_lineup_version_id` 时不得提交 `next` 或 `handover`。
-- `handover` 主要用于成员增加或替换；纯减少且没有新增成员时通常只需 `base` / `next`。
+- `handover_baseline` 不根据实际成员自动反推，控制台建议后仍须由操作者确认并持久化。
+- `handover` 主要用于成员增加、减少或替换；以 `base` 为基准时新增成员属于 `incoming`，以 `next` 为基准时仍出演的旧成员属于 `former`。
 
 ### `live_setlist_band_performance_members`
 
@@ -390,16 +399,18 @@ outgoing = V1 - V2
 
 - `base`：对比 V1。
 - `next`：对比 V2。
-- `handover`：对比 V1；实际出现的 `incoming` 成员单列为“新成员特别出演”。
+- `handover + handover_baseline=base`：对比 V1；实际出现的 `incoming` 成员单列为“新成员特别出演”。
+- `handover + handover_baseline=next`：对比 V2；实际出现的 `outgoing` 成员单列为“前成员特别出演”。
 
 对于 Roselia V1 → V2 的交接场：
 
-| 歌曲 | 实际出演 | usage | 结果 |
+| 歌曲 | 实际出演 | usage / handover baseline | 结果 |
 |---|---|---|---|
 | 第1首 | V1完整成员 | `base` | V1 全员 |
-| 第2首 | V1完整成员＋V2新增成员 | `handover` | 旧阵容全员＋新成员特别出演1 |
-| 第3首 | V2完整成员 | `next` | V2 全员 |
-| 第4首 | V1完整成员 | `base` | V1 全员 |
+| 第2首 | V1完整成员＋V2新增成员 | `handover / base` | 旧阵容全员＋新成员特别出演1 |
+| 第3首 | V2完整成员＋V1离开成员 | `handover / next` | 新阵容全员＋前成员特别出演1 |
+| 第4首 | V2完整成员 | `next` | V2 全员 |
+| 第5首 | V1完整成员 | `base` | V1 全员 |
 
 模型不要求阵容模式随歌曲单调变化，因此可以准确保留旧成员间歇返场。
 
@@ -415,9 +426,10 @@ outgoing = V1 - V2
 
 1. `P == V1`：建议 `base`。
 2. `P == V2`：建议 `next`。
-3. `V1 ⊆ P` 且 `P` 包含 `incoming`：建议 `handover`。
-4. 其他情况分别计算相对 V1、V2 的 `missing/extra`。
-5. 只有一个候选明显更接近时建议该候选；结果并列或存在缺席时要求操作者确认。
+3. `V1 ⊆ P` 且 `P` 包含 `incoming`：建议 `handover + base`。
+4. `V2 ⊆ P` 且 `P` 包含 `outgoing`：建议 `handover + next`。
+5. 其他情况分别计算相对 V1、V2 的 `missing/extra`。
+6. 只有一个候选明显更接近时才建议正式基准；结果并列或存在缺席时要求操作者确认。
 
 自动建议不替代持久化。保存后必须以逐曲 `lineup_usage` 为准，不能在公开查询时重新推断。
 
@@ -432,6 +444,7 @@ outgoing = V1 - V2
   "band_id": 4,
   "band_name": "Roselia",
   "lineup_usage": "handover",
+  "handover_baseline": "next",
   "lineup_version": {
     "lineup_version_id": 21,
     "version_label": "Roselia V1"
@@ -480,7 +493,8 @@ outgoing = V1 - V2
 
 ```text
 V1 全员
-旧阵容全员＋新成员特别出演1
+交接共演（旧阵容基准）· 全员＋新成员特别出演1
+交接共演（新阵容基准）· 全员＋前成员特别出演1
 V2 全员
 V1 全员
 ```
@@ -499,11 +513,12 @@ Roselia · V2
 ✓ A / B / C / D / 新成员
 ```
 
-交接共演：
+交接共演（旧阵容基准）：
 
 ```text
 Roselia · V1 → V2
-状态：旧阵容全员＋新成员特别出演 1
+模式：交接共演（旧阵容基准）
+状态：全员 5/5＋新成员特别出演 1
 
 基础阵容 5/5
 ✓ A / B / C / D / 前成员
@@ -511,6 +526,8 @@ Roselia · V1 → V2
 新成员特别出演
 ・新成员
 ```
+
+交接共演选择新阵容基准时，弹窗改为显示 V2 正式阵容，并把仍出演的 `outgoing` 成员列在“前成员特别出演”中。
 
 非全员：
 
@@ -633,6 +650,10 @@ Roselia
 ( ) V2
 ( ) 交接共演
 
+交接正式基准（仅交接共演）
+( ) 旧阵容 V1
+( ) 新阵容 V2
+
 V1/V2成员
 [x] 共通成员A
 [x] 共通成员B
@@ -647,7 +668,7 @@ V1/V2成员
 交互要求：
 
 - 选择整支乐队时，只填当前行所选模式的基准阵容，不能把两个版本简单合并为“正式阵容”。
-- `handover` 默认填 V1，再允许选中 V2 新增成员。
+- 选择 `handover` 时默认填 V1 成员作为编辑起点，但“正式基准”是独立必填项，可明确选择旧阵容或新阵容；切换正式基准不静默覆盖已勾选的实际出演成员。
 - 提供“应用到选中行”和“从本行起应用”作为批量编辑工具。
 - 批量应用只是编辑便利；之后每行仍可覆盖，因此支持 `V1 → V2 → V1`。
 - 保存前逐行预览状态和缺席/额外成员。
@@ -734,10 +755,8 @@ Live 新增和更新 payload 增加：
     {
       "band_id": 4,
       "lineup_usage": "handover",
-      "members": [
-        {"member_name": "旧成员", "appearance_role": null},
-        {"member_name": "新成员", "appearance_role": "incoming"}
-      ]
+      "handover_baseline": "next",
+      "members": ["旧成员", "新成员"]
     }
   ],
   "other_member": null,
@@ -751,7 +770,13 @@ Live 新增和更新 payload 增加：
 
 ### Migration 版本
 
-当前仓库最高版本为 V20。若立即实施，应新增 V21；如果期间已有其他 migration，则使用当时的下一版本，绝不修改 B1 或 V2～V20。
+当前仓库已新增：
+
+- `V21__add_band_name_and_lineup_history.sql`：创建名称版本、阵容版本、Live 上下文和逐曲出演关系。
+- `V22__add_handover_baseline.sql`：为交接共演增加显式旧/新正式基准；既有 `handover` 行一次性兼容回填为 `base`，之后由约束保证 handover 必填、其他模式为空。
+- `V23__enforce_handover_baseline_not_null.sql`：在不修改已执行 V22 的前提下修正 PostgreSQL `CHECK` 的 `NULL` 三值逻辑，显式要求 handover 基准非空。
+
+业务历史版本和 Live 映射不硬编码进 migration。绝不修改已经执行的 B1 或 V2～V22。
 
 迁移需要：
 
@@ -776,7 +801,7 @@ Live 新增和更新 payload 增加：
 
 该例外只执行一次受审计手工修改，不为年份建立长期硬编码规则，也不推导其他乐队版本。
 
-`band_attrs` 仍有少量当前名单待更新，因此不能在 schema migration 中无条件把全部 `band_members` 标记为已确认的当前阵容。数据准备分为：
+本地主库已按以下步骤完成数据准备；schema migration 本身仍不包含任何业务数据：
 
 1. 首个 migration 只创建新结构，不切换公共读取。
 2. 通过乐队管理或受审计脚本更新少数尚未最新的 `band_attrs`。
@@ -787,6 +812,15 @@ Live 新增和更新 payload 增加：
 7. 为每行建立 `live_setlist_band_performances` 和实际成员。
 8. 创建 Poppin'Party V1 和 V3 后，将唯一一套 2015 年数据的 Live 上下文手工改为 V1；其余现存 Poppin'Party Live 保持 V3。
 9. 回填前后核对 Setlist 行数、逐曲乐队数、成员数、有效乐队集合和详情抽样。
+
+2026-07-26 本地主库执行结果：
+
+- 自动回填前只读预检通过，无阻断问题。
+- 回填 2733 条 Setlist、2822 条逐曲乐队出演、13562 条实际成员关系和 283 条 Live/Band 上下文。
+- 回填后没有未映射 Setlist，也没有缺少 Live/Band 上下文的出演。
+- 唯一手工目标为 `live_id=50`，日期 `2015-04-18`，标题 `BanG_Dream! 1st Live 「春、バンド始めました！」`；12 条 Setlist 对应上下文已从 Poppin'Party V3 改绑 V1，逐曲 `lineup_usage` 保持 `base`。
+- Poppin'Party V1 / V3 的阵容版本 ID 分别为 `1` / `3`；改绑后主库为 V1 1 场、V3 22 场。
+- `2026-06-21`、`2026-07-18`、`2026-07-19` 三场 Live 中涉及的 millsage / 一家Dumb Rock! 上下文均已由自动回填绑定 V2，无需重复修改。
 
 一次性手工修改需要：
 
@@ -849,7 +883,7 @@ Live 新增和更新 payload 增加：
 
 - 一个版本下的 `full / full_plus / partial / unknown` 集合计算。
 - 人数相等但正式成员缺席时仍为 `partial`。
-- 双版本 `base / next / handover` 校验。
+- 双版本 `base / next / handover` 校验，以及 `handover_baseline` 与模式的组合校验。
 - `next` 不是直接后继版本时拒绝。
 - 普通 Live 提交 `next/handover` 时拒绝。
 - 乐队历史名称解析为同一 `band_id`。
@@ -871,6 +905,7 @@ Live 新增和更新 payload 增加：
 
 - 普通 Live 只显示一个阵容版本。
 - 双版本 Live 可逐行选择 `V1 / V2 / 交接共演`。
+- 交接共演可独立选择旧阵容或新阵容为正式基准，并原样写入请求。
 - “从本行起应用”后仍能将后续单行改回 V1。
 - 交接共演显示“旧阵容全员＋新成员特别出演1”。
 - 新阵容行额外出现旧成员时显示“新阵容全员＋前成员特别出演1”。
@@ -925,9 +960,10 @@ Live 上下文：4人版本 → 5人版本
 
 ```text
 第1首：base      => 旧阵容全员
-第2首：handover  => 旧阵容全员＋新成员特别出演1
-第3首：next      => 新阵容全员
-第4首：base      => 旧阵容全员
+第2首：handover/base => 旧阵容全员＋新成员特别出演1
+第3首：handover/next => 新阵容全员＋前成员特别出演1
+第4首：next          => 新阵容全员
+第5首：base          => 旧阵容全员
 ```
 
 不得把整场压缩成一次不可逆的 V1 → V2 切换。
@@ -957,15 +993,15 @@ band_id=6
 
 ## 实施顺序
 
-1. 新增下一版 Flyway migration 和测试 seed，只创建新结构。
-2. 实现名称版本、阵容版本、集合计算和只读预检。
-3. 扩展控制台乐队管理，修正并确认当前 `band_attrs`。
-4. 初始化当前版本并回填现有 Setlist 关系。
-5. 一次性将 2015 年 Poppin'Party 目标数据改绑 V1，并确认其余现存 Poppin'Party 数据为 V3。
-6. 扩展 Live 阵容上下文，以及 Setlist 新增、管理和批量解析。
-7. 切换详情、列表、Catalog、统计、Tour 和活动组读取。
-8. 完成前端详情状态与成员弹窗。
-9. 开放历史名称、历史阵容和交接 Live 录入。
+1. [已完成] 新增 V21 Flyway migration 和测试 seed，只创建新结构。
+2. [已完成代码] 实现名称版本、阵容版本、集合计算和只读预检。
+3. [已完成] 扩展控制台乐队管理，修正并确认当前 `band_attrs`。
+4. [已完成] 初始化名称与阵容版本，并自动回填现有 Setlist 关系。
+5. [已完成] 一次性将 2015 年 Poppin'Party `live_id=50` 从 V3 改绑 V1，并确认其余现存 Poppin'Party 数据为 V3。
+6. [已完成代码] 已建立并回填 Live 阵容上下文与逐曲关系；Setlist 新增、管理和批量解析已接入上下文选择、逐曲模式、交接基准和新旧关系双写。
+7. [部分完成] 单条与批量详情已切换版本化读取；列表、Catalog、统计、Tour 和活动组仍待切换。
+8. [已完成详情部分] 详情页已按 `full|full_plus|partial|unknown` 展示，并在原成员弹窗显示版本、缺席和额外出演。
+9. [已完成控制台入口] 开放历史名称、历史阵容和交接 Live 录入；已确认但库中不存在的 4 场交接 Live 仍须由操作者按真实资料创建并录入。
 10. 双写观察后停止依赖旧 JSON。
 11. TODO：历史资料完成后实施版本锁定和按日期自动选择收口。
 

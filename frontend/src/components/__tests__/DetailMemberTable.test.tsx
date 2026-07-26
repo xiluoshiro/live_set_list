@@ -97,6 +97,49 @@ describe("MemberStatusTable", () => {
     expect(screen.getByRole("button", { name: "关闭乐队详情" })).toBeInTheDocument();
   });
 
+  // 测试点：full_plus 应复用成功状态图标并在成员详情中展示阵容版本和特别出演类别。
+  test("展示全员加特别出演状态与版本差异", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemberStatusTable
+        rows={[
+          {
+            row_id: "M1",
+            song_name: "交接曲",
+            band_members: [
+              {
+                band_id: 4,
+                band_name: "Roselia",
+                lineup_usage: "handover",
+                handover_baseline: "base",
+                lineup_version: { lineup_version_id: 21, version_label: "Roselia V1" },
+                next_lineup_version: { lineup_version_id: 22, version_label: "Roselia V2" },
+                attendance_status: "full_plus",
+                expected_count: 5,
+                present_members: ["A", "B", "C", "D", "E", "F"],
+                present_count: 6,
+                missing_members: [],
+                extra_members: [{ member_name: "F", category: "incoming" }],
+                total_count: 5,
+                is_full: true,
+              },
+            ],
+            other_members: [],
+            comments: [],
+          },
+        ]}
+      />,
+    );
+
+    const icon = screen.getByRole("img", { name: "Roselia" });
+    expect(icon.closest(".band-tile")).toHaveClass("full-plus");
+    expect(icon.closest(".band-tile")).toHaveAttribute("title", "Roselia · 全员 5/5＋特别出演 1");
+
+    await user.click(screen.getByTitle("点击查看参加队员"));
+    expect(screen.getByText("阵容：Roselia V1 → Roselia V2 · 交接共演（旧阵容基准）")).toBeInTheDocument();
+    expect(screen.getByText("特别出演：F（新成员）")).toBeInTheDocument();
+  });
+
   test("其他成员 +N 按钮可打开浮层，点击外部可关闭", async () => {
     // 测试点：+N 按钮打开“其他成员明细”浮层，点外部关闭。
     const user = userEvent.setup();

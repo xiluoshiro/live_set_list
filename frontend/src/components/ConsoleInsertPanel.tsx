@@ -12,6 +12,7 @@ import {
   createConsoleSongsBatch,
   createConsoleVenue,
   getConsoleBands,
+  getConsoleBandHistory,
   getConsoleLive,
   getConsoleLiveCandidates,
   getConsoleLiveSetlist,
@@ -23,6 +24,8 @@ import {
   updateConsoleLiveSetlist,
   updateConsoleSong,
   type ConsoleBandItem,
+  type ConsoleBandHistory,
+  type ConsoleLiveBandLineupContext,
   type ConsoleEventAttendee,
   type ConsoleLiveCandidate,
   type ConsoleLiveSetlistAppendPayload,
@@ -43,6 +46,7 @@ import { PageTitle } from "./PageTitle";
 import { SectionTabs } from "./SectionTabs";
 import { LiveInsertTab } from "./console/LiveInsertTab";
 import { SongAdminSection } from "./console/SongAdminSection";
+import { BandAdminSection } from "./console/BandAdminSection";
 import { PerformanceGroupAdminSection } from "./console/PerformanceGroupAdminSection";
 import { TourAdminSection } from "./console/TourAdminSection";
 import {
@@ -54,7 +58,6 @@ import {
 } from "./console/constants";
 import {
   buildOtherMemberPayloadObject,
-  getBandMembersTemplate,
   getDerivedSegments,
   normalizeSongLookupText,
 } from "./console/helpers";
@@ -266,6 +269,36 @@ function getTodayDateInputValue(): string {
   return `${year}-${month}-${day}`;
 }
 
+function dateFallsInRange(date: string, validFrom: string | null, validTo: string | null): boolean {
+  return (validFrom === null || validFrom <= date) && (validTo === null || date < validTo);
+}
+
+function suggestLineupContext(
+  history: ConsoleBandHistory,
+  liveDateValue: string,
+): ConsoleLiveBandLineupContext | null {
+  const nameVersion = [...history.name_versions]
+    .reverse()
+    .find((version) => dateFallsInRange(liveDateValue, version.valid_from, version.valid_to))
+    ?? history.name_versions[history.name_versions.length - 1];
+  const lineupVersion = [...history.lineup_versions]
+    .reverse()
+    .find((version) => dateFallsInRange(liveDateValue, version.valid_from, version.valid_to))
+    ?? history.lineup_versions[history.lineup_versions.length - 1];
+  if (!nameVersion || !lineupVersion) return null;
+  return {
+    band_id: history.band_id,
+    band_name_version_id: nameVersion.name_version_id,
+    base_lineup_version_id: lineupVersion.lineup_version_id,
+    next_lineup_version_id: null,
+  };
+}
+
+function getLineupMembers(history: ConsoleBandHistory | undefined, lineupVersionId: number | null): string[] {
+  if (!history || lineupVersionId === null) return [];
+  return history.lineup_versions.find((version) => version.lineup_version_id === lineupVersionId)?.members ?? [];
+}
+
 function deriveDatePhaseForOffset(liveDate: string, timezone: string): DatePhase {
   const match = timezone.match(/^([+-])(\d{2}):(\d{2})$/);
   if (!match) return "today";
@@ -383,6 +416,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [setlistDetailError, setSetlistDetailError] = useState<string | null>(null);
 
   const [setlistRows, setSetlistRows] = useState<SetlistDraftRow[]>(INITIAL_SETLIST_ROWS);
+  const [bandHistories, setBandHistories] = useState<Record<number, ConsoleBandHistory>>({});
+  const [lineupContexts, setLineupContexts] = useState<Record<number, ConsoleLiveBandLineupContext>>({});
   const [setlistRowKey, setSetlistRowKey] = useState(1000);
   const [setlistPasteText, setSetlistPasteText] = useState("");
   const [setlistParseWarnings, setSetlistParseWarnings] = useState<ParsedSetlistWarning[]>([]);
@@ -491,8 +526,19 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     [setlistRows, derivedSegments],
   );
   const hasBatchSongInsertCandidate = setlistRows.some(
-    (row) => row.song_name.trim() !== "" && row.song_id.trim() === "",
+    (row) =>
+      row.song_name.trim() !== ""
+      && row.song_id.trim() === ""
+      && (row.song_candidates?.length ?? 0) === 0,
   );
+  const selectedSetlistLive = [...setlistEditLives, ...lives].find((live) => live.live_id === selectedLiveId);
+  const activeSetlistBands = useMemo(() => {
+    const names = new Set(setlistRows.flatMap((row) => Object.keys(row.band_member)));
+    return bands.filter((band) => band.band_id > 0 && names.has(band.band_name));
+  }, [bands, setlistRows]);
+  const usesVersionedLineups =
+    activeSetlistBands.length > 0
+    && activeSetlistBands.every((band) => lineupContexts[band.band_id] !== undefined);
   // 校验规则 1：查询 venue 行若当前查询输入为空，禁用该行“插入”。
   const isVenueQuickInsertDisabled = venueQueryText.trim() === "";
   // 校验规则 2：新增 Live 的“提交插入”要求 venue 已选，且表格字段（含 url）全部非空。
@@ -520,7 +566,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     });
   // 校验规则 4：新增歌曲的“提交插入”要求 song_name 与 band_id 均非空。
   const isSongSubmitDisabled = songName.trim() === "" || songBandId === null;
-  // 校验规则 5：批量插入歌曲必须先查询过，且至少存在一行有歌名但 sid 为空。
+  // 校验规则 5：批量插入歌曲必须先查询过，且至少存在一行无 sid、无待选候选的歌名。
   const isBatchSongInsertDisabled = !didSongLookup || !hasBatchSongInsertCandidate;
 
   useEffect(() => {
@@ -542,6 +588,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setSetlistDetailData(null);
     setSetlistDetailError(null);
     setSetlistDetailLoading(false);
+    setLineupContexts({});
   }, [mode, selectedLiveId]);
 
   useEffect(() => {
@@ -908,29 +955,60 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setIsLiveLoading(true);
     try {
       const response = await getConsoleLiveSetlist(liveId);
-      let nextOtherEntryId = 100;
-      const nextRows: SetlistDraftRow[] = response.rows.map((row, index) => ({
-        row_key: index + 1,
-        song_name: row.song_name,
-        song_id: String(row.song_id),
-        song_resolved_name: row.song_name,
-        segment_start_type: row.segment_type,
-        absolute_order: row.absolute_order,
-        sub_order: row.sub_order,
-        is_short: row.is_short,
-        band_member: Object.fromEntries(
-          Object.entries(row.band_member).map(([name, members]) => [
-            name,
-            Array.isArray(members) ? members.map(String) : [String(members)],
-          ]),
-        ),
-        other_member: Object.entries(row.other_member ?? {}).map(([memberKey, memberValue]) => ({
-          entry_id: ++nextOtherEntryId,
-          member_key: memberKey,
-          member_value: Array.isArray(memberValue) ? memberValue.join(otherMemberValueSeparator) : String(memberValue ?? ""),
-        })),
-        comment: row.comment ?? "",
+      const responseLineupContexts = response.band_lineup_contexts ?? [];
+      const loadedHistories = await Promise.all(
+        responseLineupContexts.map((context) => getConsoleBandHistory(context.band_id)),
+      );
+      setBandHistories((current) => ({
+        ...current,
+        ...Object.fromEntries(loadedHistories.map((history) => [history.band_id, history])),
       }));
+      setLineupContexts(Object.fromEntries(
+        responseLineupContexts.map((context) => [context.band_id, context]),
+      ));
+      let nextOtherEntryId = 100;
+      const nextRows: SetlistDraftRow[] = response.rows.map((row, index) => {
+        const versionedBandMember = Object.fromEntries(
+          (row.band_performances ?? []).flatMap((performance) => {
+            const band = bands.find((item) => item.band_id === performance.band_id);
+            return band ? [[band.band_name, performance.members]] : [];
+          }),
+        );
+        return {
+          row_key: index + 1,
+          song_name: row.song_name,
+          song_id: String(row.song_id),
+          song_resolved_name: row.song_name,
+          segment_start_type: row.segment_type,
+          absolute_order: row.absolute_order,
+          sub_order: row.sub_order,
+          is_short: row.is_short,
+          band_member: Object.keys(versionedBandMember).length > 0
+            ? versionedBandMember
+            : Object.fromEntries(
+                Object.entries(row.band_member).map(([name, members]) => [
+                  name,
+                  Array.isArray(members) ? members.map(String) : [String(members)],
+                ]),
+              ),
+          band_performances: Object.fromEntries(
+            (row.band_performances ?? []).flatMap((performance) => {
+              const band = bands.find((item) => item.band_id === performance.band_id);
+              return band ? [[band.band_name, {
+                band_id: performance.band_id,
+                lineup_usage: performance.lineup_usage,
+                handover_baseline: performance.handover_baseline,
+              }]] : [];
+            }),
+          ),
+          other_member: Object.entries(row.other_member ?? {}).map(([memberKey, memberValue]) => ({
+            entry_id: ++nextOtherEntryId,
+            member_key: memberKey,
+            member_value: Array.isArray(memberValue) ? memberValue.join(otherMemberValueSeparator) : String(memberValue ?? ""),
+          })),
+          comment: row.comment ?? "",
+        };
+      });
       setSelectedLiveId(liveId);
       setSetlistRows(nextRows.length > 0 ? nextRows : INITIAL_SETLIST_ROWS.map((row) => ({ ...row })));
       setSetlistRowKey(Math.max(1000, nextRows.length + 1));
@@ -1154,6 +1232,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         segment_start_type: "",
         is_short: false,
         band_member: {},
+        band_performances: {},
         other_member: [{ entry_id: newRowKey, member_key: "", member_value: "" }],
       },
     ]);
@@ -1505,23 +1584,208 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setBandMemberMenuPos(null);
   };
 
+  const ensureBandHistory = async (bandId: number): Promise<ConsoleBandHistory | null> => {
+    const cached = bandHistories[bandId];
+    if (cached) return cached;
+    try {
+      const history = await getConsoleBandHistory(bandId);
+      if (!history) return null;
+      setBandHistories((current) => ({ ...current, [bandId]: history }));
+      return history;
+    } catch (error) {
+      setMessage(`加载 Band #${bandId} 历史失败：${errorMessage(error)}`);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const liveDateValue = selectedSetlistLive?.live_date ?? liveDate;
+    activeSetlistBands.forEach((band) => {
+      if (lineupContexts[band.band_id]) return;
+      void ensureBandHistory(band.band_id).then((history) => {
+        if (!history) return;
+        const suggestedContext = suggestLineupContext(history, liveDateValue);
+        if (!suggestedContext) return;
+        setLineupContexts((current) => current[band.band_id]
+          ? current
+          : { ...current, [band.band_id]: suggestedContext });
+        const catalogMembers = band.band_members ?? [];
+        const baseMembers = getLineupMembers(history, suggestedContext.base_lineup_version_id);
+        setSetlistRows((current) => current.map((row) => {
+          const selectedMembers = row.band_member[band.band_name];
+          const hasCatalogDefault =
+            row.band_performances?.[band.band_name] === undefined
+            && selectedMembers !== undefined
+            && selectedMembers.length === catalogMembers.length
+            && selectedMembers.every((member) => catalogMembers.includes(member));
+          if (!hasCatalogDefault) return row;
+          return {
+            ...row,
+            band_member: { ...row.band_member, [band.band_name]: baseMembers },
+            band_performances: {
+              ...(row.band_performances ?? {}),
+              [band.band_name]: {
+                band_id: band.band_id,
+                lineup_usage: "base",
+                handover_baseline: null,
+              },
+            },
+          };
+        }));
+      });
+    });
+  }, [activeSetlistBands, lineupContexts, liveDate, selectedSetlistLive?.live_date]);
+
   const toggleBandForSetlistRow = (rowKey: number, bandName: string) => {
+    const matchedBand = bands.find((band) => band.band_name === bandName);
+    if (!matchedBand) return;
+    const row = setlistRows.find((item) => item.row_key === rowKey);
+    if (row?.band_member[bandName]) {
+      setSetlistRows((current) => current.map((item) => {
+        if (item.row_key !== rowKey) return item;
+        const nextBandMember = { ...item.band_member };
+        const nextPerformances = { ...(item.band_performances ?? {}) };
+        delete nextBandMember[bandName];
+        delete nextPerformances[bandName];
+        return { ...item, band_member: nextBandMember, band_performances: nextPerformances };
+      }));
+      return;
+    }
+    void ensureBandHistory(matchedBand.band_id).then((history) => {
+      if (!history) return;
+      const liveDateValue = selectedSetlistLive?.live_date ?? liveDate;
+      const context = lineupContexts[matchedBand.band_id] ?? suggestLineupContext(history, liveDateValue);
+      if (!context) {
+        setMessage(`Band #${matchedBand.band_id} 尚未建立可用阵容版本。`);
+        return;
+      }
+      setLineupContexts((current) => ({ ...current, [matchedBand.band_id]: context }));
+      const members = getLineupMembers(history, context.base_lineup_version_id);
+      setSetlistRows((current) =>
+        current.map((item) => item.row_key === rowKey
+          ? {
+              ...item,
+              band_member: { ...item.band_member, [bandName]: members },
+              band_performances: {
+                ...(item.band_performances ?? {}),
+                [bandName]: {
+                  band_id: matchedBand.band_id,
+                  lineup_usage: "base",
+                  handover_baseline: null,
+                },
+              },
+            }
+          : item),
+      );
+    });
+  };
+
+  const updateLineupContext = (
+    bandId: number,
+    field: "band_name_version_id" | "base_lineup_version_id" | "next_lineup_version_id",
+    value: number | null,
+  ) => {
+    const currentContext = lineupContexts[bandId];
+    if (!currentContext || (field !== "next_lineup_version_id" && value === null)) return;
+    const nextContext = {
+      ...currentContext,
+      [field]: value,
+      ...(field === "base_lineup_version_id" ? { next_lineup_version_id: null } : {}),
+    };
+    setLineupContexts((current) => ({ ...current, [bandId]: nextContext }));
+    const band = bands.find((item) => item.band_id === bandId);
+    const history = bandHistories[bandId];
+    if (!band || !history) return;
+    if (field === "next_lineup_version_id" && value === null) {
+      const members = getLineupMembers(history, currentContext.base_lineup_version_id);
+      setSetlistRows((prev) =>
+        prev.map((row) => {
+          const performance = row.band_performances?.[band.band_name];
+          if (!performance || performance.lineup_usage === "base") return row;
+          return {
+            ...row,
+            band_member: { ...row.band_member, [band.band_name]: members },
+            band_performances: {
+              ...(row.band_performances ?? {}),
+              [band.band_name]: {
+                band_id: bandId,
+                lineup_usage: "base",
+                handover_baseline: null,
+              },
+            },
+          };
+        }),
+      );
+      return;
+    }
+    if (field !== "base_lineup_version_id") return;
+    const members = getLineupMembers(history, Number(value));
     setSetlistRows((prev) =>
       prev.map((row) => {
-        if (row.row_key !== rowKey) return row;
-        const next = { ...row.band_member };
-        if (next[bandName]) {
-          delete next[bandName];
-        } else {
-          const matchedBand = bands.find((band) => band.band_name === bandName);
-          next[bandName] =
-            matchedBand?.band_members && matchedBand.band_members.length > 0
-              ? [...matchedBand.band_members]
-              : getBandMembersTemplate(bandName);
-        }
-        return { ...row, band_member: next };
+        if (!row.band_member[band.band_name]) return row;
+        return {
+          ...row,
+          band_member: { ...row.band_member, [band.band_name]: members },
+          band_performances: {
+            ...(row.band_performances ?? {}),
+            [band.band_name]: {
+              band_id: bandId,
+              lineup_usage: "base",
+              handover_baseline: null,
+            },
+          },
+        };
       }),
     );
+  };
+
+  const updateSetlistBandMode = (
+    rowKey: number,
+    bandName: string,
+    lineupUsage: "base" | "next" | "handover",
+  ) => {
+    const band = bands.find((item) => item.band_name === bandName);
+    if (!band) return;
+    const context = lineupContexts[band.band_id];
+    const history = bandHistories[band.band_id];
+    if (!context || !history) return;
+    const lineupVersionId = lineupUsage === "next"
+      ? context.next_lineup_version_id
+      : context.base_lineup_version_id;
+    const members = getLineupMembers(history, lineupVersionId);
+    setSetlistRows((current) => current.map((row) => row.row_key === rowKey
+      ? {
+          ...row,
+          band_member: { ...row.band_member, [bandName]: members },
+          band_performances: {
+            ...(row.band_performances ?? {}),
+            [bandName]: {
+              band_id: band.band_id,
+              lineup_usage: lineupUsage,
+              handover_baseline: lineupUsage === "handover" ? "base" : null,
+            },
+          },
+        }
+      : row));
+  };
+
+  const updateSetlistHandoverBaseline = (
+    rowKey: number,
+    bandName: string,
+    handoverBaseline: "base" | "next",
+  ) => {
+    setSetlistRows((current) => current.map((row) => {
+      if (row.row_key !== rowKey) return row;
+      const performance = row.band_performances?.[bandName];
+      if (!performance || performance.lineup_usage !== "handover") return row;
+      return {
+        ...row,
+        band_performances: {
+          ...(row.band_performances ?? {}),
+          [bandName]: { ...performance, handover_baseline: handoverBaseline },
+        },
+      };
+    }));
   };
 
   const toggleBandMemberForSetlistRow = (rowKey: number, bandName: string, memberName: string) => {
@@ -1639,11 +1903,22 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setMessage("提交setlist失败：登录态已失效，请重新登录。");
       return;
     }
-
     const validDerivedSegments = getDerivedSegments(validRows);
     const setlistPayload = validRows.map((row, payloadIndex) => {
       const derived = validDerivedSegments[payloadIndex];
       const originalIndex = setlistRows.findIndex((r) => r.row_key === row.row_key);
+      const bandPerformances = usesVersionedLineups
+        ? Object.entries(row.band_member).flatMap(([bandName, members]) => {
+            const band = bands.find((item) => item.band_name === bandName);
+            if (!band) return [];
+            const performance = row.band_performances?.[bandName] ?? {
+              band_id: band.band_id,
+              lineup_usage: "base" as const,
+              handover_baseline: null,
+            };
+            return [{ ...performance, members }];
+          })
+        : [];
       return {
         song_id: Number(row.song_id),
         absolute_order: effectiveAbs[originalIndex],
@@ -1651,6 +1926,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         sub_order: effectiveSub[originalIndex],
         is_short: row.is_short,
         band_member: row.band_member,
+        ...(usesVersionedLineups ? { band_performances: bandPerformances } : {}),
         other_member: buildOtherMemberPayloadObject(row.other_member, otherMemberValueSeparator),
         comment: row.comment?.trim() || null,
       };
@@ -1665,7 +1941,16 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       title: mode === "setlist_edit" ? "确认更新 Setlist" : "确认提交 Setlist",
       action: mode === "setlist_edit" ? "update" : "create",
       live: targetLive,
-      payload: { setlist_rows: setlistPayload },
+      payload: {
+        ...(usesVersionedLineups
+          ? {
+              band_lineup_contexts: activeSetlistBands
+                .map((band) => lineupContexts[band.band_id])
+                .filter((context): context is ConsoleLiveBandLineupContext => context !== undefined),
+            }
+          : {}),
+        setlist_rows: setlistPayload,
+      },
       previewRows,
     });
   };
@@ -2033,6 +2318,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     rows.forEach((row) => {
       const sid = row.song_id.trim();
       if (sid !== "") {
+        skipped += 1;
+        return;
+      }
+      if ((row.song_candidates?.length ?? 0) > 1) {
         skipped += 1;
         return;
       }
@@ -2414,7 +2703,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         </div>
       )}
       <section className="console-admin">
-      <PageTitle kicker="Console" title="控制台" description="录入和维护 Live、Setlist、歌曲、场地与巡演资料。" />
+      <PageTitle kicker="Console" title="控制台" description="录入和维护 Live、Setlist、歌曲、乐队、场地与巡演资料。" />
       {message && <p className="console-admin-hint" role="status" aria-live="polite">{message}</p>}
 
       <SectionTabs
@@ -2426,6 +2715,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           { value: "setlist", label: "新增Setlist" },
           { value: "setlist_edit", label: "Setlist管理" },
           { value: "song", label: "歌曲管理" },
+          { value: "band", label: "乐队管理" },
           { value: "tour", label: "巡演管理" },
           { value: "performance_group", label: "活动组管理" },
         ]}
@@ -2543,6 +2833,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           submittedBundles={submittedBundles}
           displayedBundle={displayedBundle}
           bandOptions={bands}
+          bandHistories={bandHistories}
+          lineupContexts={lineupContexts}
           editingBandRow={editingBandRow}
           editingOtherRow={editingOtherRow}
           bandMemberMenuPos={bandMemberMenuPos}
@@ -2591,6 +2883,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           hasExistingSetlist={hasExistingSetlist}
           onToggleBandForSetlistRow={toggleBandForSetlistRow}
           onToggleBandMemberForSetlistRow={toggleBandMemberForSetlistRow}
+          onUpdateLineupContext={updateLineupContext}
+          onUpdateSetlistBandMode={updateSetlistBandMode}
+          onUpdateSetlistHandoverBaseline={updateSetlistHandoverBaseline}
           onUpdateOtherMemberEntry={updateOtherMemberEntry}
           onRemoveOtherMemberEntry={removeOtherMemberEntry}
           onAddOtherMemberEntry={addOtherMemberEntry}
@@ -2602,6 +2897,17 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
       {mode === "song" && (
         renderSongAdminSection()
+      )}
+
+      {mode === "band" && (
+        <BandAdminSection
+          bands={bands}
+          onMessage={setMessage}
+          onBandsChanged={async () => {
+            const response = await getConsoleBands(undefined, 100);
+            setBands(sortById(response.items.map(toBandOption), (band) => band.band_id));
+          }}
+        />
       )}
 
       {mode === "tour" && (

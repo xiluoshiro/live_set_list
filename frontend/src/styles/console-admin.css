@@ -339,6 +339,25 @@
   font-weight: 600;
 }
 
+.band-admin-members-field {
+  grid-column: 1 / -1;
+}
+
+.band-history-table td {
+  vertical-align: top;
+  white-space: normal;
+}
+
+.band-history-table th:first-child,
+.band-history-table td:first-child {
+  width: 92px;
+}
+
+.band-history-table th:last-child,
+.band-history-table td:last-child {
+  width: auto;
+}
+
 .tour-band-field {
   min-width: 0;
   margin: 0;
@@ -1241,6 +1260,24 @@
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 600;
+}
+
+.band-member-mode-controls {
+  margin: 8px 0 0 20px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.band-member-mode-controls label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.band-member-mode-controls select {
+  min-width: 0;
 }
 
 .band-member-sub-list {

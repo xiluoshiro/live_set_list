@@ -1,5 +1,6 @@
 import { useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
 
+import type { ConsoleBandHistory, ConsoleLiveBandLineupContext } from "../../api";
 import { SEGMENT_OPTIONS } from "./constants";
 import { getBandMembersTemplate, summarizeBandMember, summarizeOtherMember } from "./helpers";
 import type { ParsedSetlistWarning } from "./setlistParser/types";
@@ -22,6 +23,8 @@ type LiveInsertTabProps = {
   submittedBundles: LiveInsertBundle[];
   displayedBundle: LiveInsertBundle | null;
   bandOptions: BandOption[];
+  bandHistories: Record<number, ConsoleBandHistory>;
+  lineupContexts: Record<number, ConsoleLiveBandLineupContext>;
   editingBandRow: SetlistDraftRow | null;
   editingOtherRow: SetlistDraftRow | null;
   bandMemberMenuPos: Position | null;
@@ -67,6 +70,21 @@ type LiveInsertTabProps = {
   hasExistingSetlist: boolean;
   onToggleBandForSetlistRow: (rowKey: number, bandName: string) => void;
   onToggleBandMemberForSetlistRow: (rowKey: number, bandName: string, memberName: string) => void;
+  onUpdateLineupContext: (
+    bandId: number,
+    field: "band_name_version_id" | "base_lineup_version_id" | "next_lineup_version_id",
+    value: number | null,
+  ) => void;
+  onUpdateSetlistBandMode: (
+    rowKey: number,
+    bandName: string,
+    lineupUsage: "base" | "next" | "handover",
+  ) => void;
+  onUpdateSetlistHandoverBaseline: (
+    rowKey: number,
+    bandName: string,
+    handoverBaseline: "base" | "next",
+  ) => void;
   onUpdateOtherMemberEntry: (
     rowKey: number,
     entryId: number,
@@ -97,6 +115,8 @@ export function LiveInsertTab({
   submittedBundles,
   displayedBundle,
   bandOptions,
+  bandHistories,
+  lineupContexts,
   editingBandRow,
   editingOtherRow,
   bandMemberMenuPos,
@@ -142,6 +162,9 @@ export function LiveInsertTab({
   hasExistingSetlist,
   onToggleBandForSetlistRow,
   onToggleBandMemberForSetlistRow,
+  onUpdateLineupContext,
+  onUpdateSetlistBandMode,
+  onUpdateSetlistHandoverBaseline,
   onUpdateOtherMemberEntry,
   onRemoveOtherMemberEntry,
   onAddOtherMemberEntry,
@@ -157,6 +180,10 @@ export function LiveInsertTab({
     : setlistRows.find((row) => row.row_key === songModalRowKey) ?? null;
 
   const hasParsed = setlistParsePreviewRows.length > 0 || setlistParseWarnings.length > 0;
+  const activeBandNames = new Set(setlistRows.flatMap((row) => Object.keys(row.band_member)));
+  const activeBandOptions = bandOptions.filter(
+    (band) => band.band_id > 0 && activeBandNames.has(band.band_name),
+  );
 
   const renderPreviewTable = () => (
     <div className="console-table-wrap setlist-full-preview-table-wrap">
@@ -272,6 +299,95 @@ export function LiveInsertTab({
       )}
       {(variant === "edit" || !hasExistingSetlist) && (
         <>
+          <section className="tour-admin-block" aria-label="本场乐队阵容">
+            <h3>本场乐队阵容</h3>
+            <p className="console-admin-hint">
+              先确认历史名称与基础阵容；交接场再选择基础阵容的直接后继版本。
+            </p>
+            {activeBandOptions.length === 0 ? (
+              <p className="console-admin-hint">在下方任一曲目选择乐队后，这里会出现阵容设置。</p>
+            ) : (
+              <div className="console-table-wrap">
+                <table className="console-admin-table band-history-table">
+                  <thead>
+                    <tr><th>乐队</th><th>历史名称</th><th>基础阵容</th><th>交接后继阵容</th></tr>
+                  </thead>
+                  <tbody>
+                    {activeBandOptions.map((band) => {
+                      const history = bandHistories[band.band_id];
+                      const context = lineupContexts[band.band_id];
+                      const nextOptions = history?.lineup_versions.filter(
+                        (version) => version.predecessor_id === context?.base_lineup_version_id,
+                      ) ?? [];
+                      return (
+                        <tr key={band.band_id}>
+                          <td>{band.band_name}</td>
+                          <td>
+                            {history && context ? (
+                              <select
+                                aria-label={`${band.band_name} 历史名称`}
+                                value={context.band_name_version_id}
+                                onChange={(event) => onUpdateLineupContext(
+                                  band.band_id,
+                                  "band_name_version_id",
+                                  Number(event.target.value),
+                                )}
+                              >
+                                {history.name_versions.map((version) => (
+                                  <option key={version.name_version_id} value={version.name_version_id}>
+                                    {version.band_name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : "加载中…"}
+                          </td>
+                          <td>
+                            {history && context ? (
+                              <select
+                                aria-label={`${band.band_name} 基础阵容`}
+                                value={context.base_lineup_version_id}
+                                onChange={(event) => onUpdateLineupContext(
+                                  band.band_id,
+                                  "base_lineup_version_id",
+                                  Number(event.target.value),
+                                )}
+                              >
+                                {history.lineup_versions.map((version) => (
+                                  <option key={version.lineup_version_id} value={version.lineup_version_id}>
+                                    {version.version_label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : "加载中…"}
+                          </td>
+                          <td>
+                            {history && context ? (
+                              <select
+                                aria-label={`${band.band_name} 交接后继阵容`}
+                                value={context.next_lineup_version_id ?? ""}
+                                onChange={(event) => onUpdateLineupContext(
+                                  band.band_id,
+                                  "next_lineup_version_id",
+                                  event.target.value ? Number(event.target.value) : null,
+                                )}
+                              >
+                                <option value="">无（普通 Live）</option>
+                                {nextOptions.map((version) => (
+                                  <option key={version.lineup_version_id} value={version.lineup_version_id}>
+                                    {version.version_label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : "加载中…"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
           <section className="setlist-paste-panel" aria-label="批量粘贴 Setlist">
         <div className="setlist-paste-head">
           <div>
@@ -622,8 +738,19 @@ export function LiveInsertTab({
           {bandOptions.filter((band) => band.band_id > 0).map((band) => {
             const selected = editingBandRow.band_member[band.band_name] ?? [];
             const bandChecked = selected.length > 0;
-            const memberOptions =
-              band.band_members && band.band_members.length > 0
+            const history = bandHistories[band.band_id];
+            const context = lineupContexts[band.band_id];
+            const performance = editingBandRow.band_performances?.[band.band_name];
+            const baseMembers = history?.lineup_versions.find(
+              (version) => version.lineup_version_id === context?.base_lineup_version_id,
+            )?.members ?? [];
+            const nextMembers = history?.lineup_versions.find(
+              (version) => version.lineup_version_id === context?.next_lineup_version_id,
+            )?.members ?? [];
+            const hasNextLineup = context?.next_lineup_version_id != null;
+            const memberOptions = context
+              ? [...new Set([...baseMembers, ...nextMembers])]
+              : band.band_members && band.band_members.length > 0
                 ? band.band_members
                 : getBandMembersTemplate(band.band_name);
             return (
@@ -637,20 +764,66 @@ export function LiveInsertTab({
                   <span>{band.band_name}</span>
                 </label>
                 {bandChecked && (
-                  <div className="band-member-sub-list">
-                    {memberOptions.map((memberOption) => (
-                      <label key={memberOption}>
-                        <input
-                          type="checkbox"
-                          checked={selected.includes(memberOption)}
-                          onChange={() =>
-                            onToggleBandMemberForSetlistRow(editingBandRow.row_key, band.band_name, memberOption)
-                          }
-                        />
-                        <span>{memberOption}</span>
-                      </label>
-                    ))}
-                  </div>
+                  <>
+                    {hasNextLineup && (
+                      <div className="band-member-mode-controls">
+                        <label>
+                          本曲模式
+                          <select
+                            aria-label={`${band.band_name} 本曲模式`}
+                            value={performance?.lineup_usage ?? "base"}
+                            onChange={(event) => onUpdateSetlistBandMode(
+                              editingBandRow.row_key,
+                              band.band_name,
+                              event.target.value as "base" | "next" | "handover",
+                            )}
+                          >
+                            <option value="base">基础阵容</option>
+                            <option value="next">后继阵容</option>
+                            <option value="handover">交接共演</option>
+                          </select>
+                        </label>
+                        {performance?.lineup_usage === "handover" && (
+                          <label>
+                            正式基准
+                            <select
+                              aria-label={`${band.band_name} 交接正式基准`}
+                              value={performance.handover_baseline ?? "base"}
+                              onChange={(event) => onUpdateSetlistHandoverBaseline(
+                                editingBandRow.row_key,
+                                band.band_name,
+                                event.target.value as "base" | "next",
+                              )}
+                            >
+                              <option value="base">旧阵容</option>
+                              <option value="next">新阵容</option>
+                            </select>
+                          </label>
+                        )}
+                      </div>
+                    )}
+                    <div className="band-member-sub-list">
+                      {memberOptions.map((memberOption) => (
+                        <label key={memberOption}>
+                          <input
+                            type="checkbox"
+                            checked={selected.includes(memberOption)}
+                            onChange={() =>
+                              onToggleBandMemberForSetlistRow(editingBandRow.row_key, band.band_name, memberOption)
+                            }
+                          />
+                          <span>
+                            {memberOption}
+                            {hasNextLineup && nextMembers.includes(memberOption) && !baseMembers.includes(memberOption)
+                              ? "（新）"
+                              : hasNextLineup && baseMembers.includes(memberOption) && !nextMembers.includes(memberOption)
+                                ? "（旧）"
+                                : ""}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             );

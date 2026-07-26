@@ -19,6 +19,13 @@ type MemberStatusTableProps = {
 
 const BAND_FALLBACK_COLORS = ["#5b7cfa", "#00a4a6", "#f59f00", "#e8590c", "#6c5ce7", "#2b8a3e"];
 const bandIconExistsCache = new Map<string, boolean>();
+const ATTENDANCE_ORDER = { full: 0, full_plus: 1, partial: 2, unknown: 3 } as const;
+const EXTRA_CATEGORY_LABELS = {
+  former: "前成员",
+  incoming: "新成员",
+  guest: "嘉宾",
+  support: "支援",
+} as const;
 
 function getBandFallbackChar(bandName: string): string {
   const trimmed = bandName.trim();
@@ -40,6 +47,27 @@ function getBandIconSrc(bandId: number | null): string | null {
   return `/icons/Band_${bandId}.svg`;
 }
 
+function attendanceText(member: LiveDetailBandMember): string {
+  const expectedCount = member.expected_count ?? member.total_count;
+  const missingCount = member.missing_members?.length ?? 0;
+  const officialPresentCount = Math.max(0, expectedCount - missingCount);
+  const extraCount = member.extra_members?.length ?? 0;
+  switch (member.attendance_status) {
+    case "full":
+      return `全员 ${expectedCount}/${expectedCount}`;
+    case "full_plus":
+      return `全员 ${expectedCount}/${expectedCount}＋特别出演 ${extraCount}`;
+    case "partial":
+      return `非全员 ${officialPresentCount}/${expectedCount}`;
+    case "unknown":
+      return `阵容未知 · 实际出演 ${member.present_count} 人`;
+    default:
+      return member.is_full
+        ? `全员 ${expectedCount}/${expectedCount}`
+        : `非全员 ${member.present_count}/${expectedCount}`;
+  }
+}
+
 function BandTile({ member }: { member: LiveDetailBandMember }) {
   const iconSrc = getBandIconSrc(member.band_id);
   const [useFallback, setUseFallback] = useState<boolean>(() => {
@@ -55,10 +83,15 @@ function BandTile({ member }: { member: LiveDetailBandMember }) {
     setUseFallback(bandIconExistsCache.get(iconSrc) === false);
   }, [iconSrc]);
 
-  const tileClassName = useFallback ? "band-tile no-status" : member.is_full ? "band-tile full" : "band-tile partial";
+  const attendanceStatus = member.attendance_status ?? (member.is_full ? "full" : "partial");
+  const tileClassName = useFallback
+    ? "band-tile no-status"
+    : attendanceStatus === "unknown"
+      ? "band-tile no-status"
+      : `band-tile ${attendanceStatus.replace("_", "-")}`;
 
   return (
-    <span className={tileClassName} title={`${member.band_name} 已参加 ${member.present_count} 人`}>
+    <span className={tileClassName} title={`${member.band_name} · ${attendanceText(member)}`}>
       {useFallback || !iconSrc ? (
         <span
           className="band-fallback-icon"
@@ -88,9 +121,11 @@ function BandTile({ member }: { member: LiveDetailBandMember }) {
 
 function getOrderedBandMembers(members: LiveDetailBandMember[]): LiveDetailBandMember[] {
   return [...members].sort((a, b) => {
-    const aPartial = !a.is_full;
-    const bPartial = !b.is_full;
-    if (aPartial !== bPartial) return aPartial ? 1 : -1;
+    const aStatus = a.attendance_status ?? (a.is_full ? "full" : "partial");
+    const bStatus = b.attendance_status ?? (b.is_full ? "full" : "partial");
+    if (ATTENDANCE_ORDER[aStatus] !== ATTENDANCE_ORDER[bStatus]) {
+      return ATTENDANCE_ORDER[aStatus] - ATTENDANCE_ORDER[bStatus];
+    }
     const aBandId = a.band_id ?? Number.MAX_SAFE_INTEGER;
     const bBandId = b.band_id ?? Number.MAX_SAFE_INTEGER;
     if (aBandId !== bBandId) return aBandId - bBandId;
@@ -136,6 +171,21 @@ function normalizeRows(rows: LiveDetailRow[]): LiveDetailRow[] {
         ? member.present_members.map((name) => String(name))
         : [],
       present_count: Number(member.present_count ?? 0),
+      lineup_usage: member.lineup_usage ?? null,
+      handover_baseline: member.handover_baseline ?? null,
+      lineup_version: member.lineup_version ?? null,
+      next_lineup_version: member.next_lineup_version ?? null,
+      attendance_status: member.attendance_status ?? (member.is_full ? "full" : "partial"),
+      expected_count: Number(member.expected_count ?? member.total_count ?? 0),
+      missing_members: Array.isArray(member.missing_members)
+        ? member.missing_members.map((name) => String(name))
+        : [],
+      extra_members: Array.isArray(member.extra_members)
+        ? member.extra_members.map((extra) => ({
+            member_name: String(extra.member_name),
+            category: extra.category,
+          }))
+        : [],
       total_count: Number(member.total_count ?? 0),
       is_full: Boolean(member.is_full),
     })),
@@ -383,7 +433,31 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                     <BandTile member={member} />
                     <strong>{member.band_name}</strong>
                   </div>
+                  <p className="console-band-status">{attendanceText(member)}</p>
+                  {member.lineup_version && (
+                    <p className="console-band-members">
+                      阵容：{member.lineup_version.version_label}
+                      {member.next_lineup_version ? ` → ${member.next_lineup_version.version_label}` : ""}
+                      {member.lineup_usage
+                        ? ` · ${
+                            member.lineup_usage === "handover"
+                              ? `交接共演（${member.handover_baseline === "next" ? "新阵容" : "旧阵容"}基准）`
+                              : member.lineup_usage === "next" ? "新阵容" : "旧阵容"
+                          }`
+                        : ""}
+                    </p>
+                  )}
                   <p className="console-band-members">参加队员：{member.present_members.join(" / ")}</p>
+                  {(member.missing_members?.length ?? 0) > 0 && (
+                    <p className="console-band-members">缺席成员：{member.missing_members?.join(" / ")}</p>
+                  )}
+                  {(member.extra_members?.length ?? 0) > 0 && (
+                    <p className="console-band-members">
+                      特别出演：{member.extra_members
+                        ?.map((extra) => `${extra.member_name}（${EXTRA_CATEGORY_LABELS[extra.category]}）`)
+                        .join(" / ")}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

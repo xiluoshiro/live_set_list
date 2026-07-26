@@ -24,6 +24,13 @@ const apiMocks = vi.hoisted(() => ({
   getTourDetail: vi.fn(),
   getConsoleSongs: vi.fn(),
   getConsoleBands: vi.fn(),
+  getConsoleBandHistory: vi.fn(),
+  initializeConsoleBandHistory: vi.fn(),
+  createConsoleBandNameVersion: vi.fn(),
+  createConsoleBandLineupVersion: vi.fn(),
+  getConsoleBandLineupImpact: vi.fn(),
+  correctConsoleBandLineupVersion: vi.fn(),
+  getBandHistoryBackfillPreflight: vi.fn(),
   getConsoleLive: vi.fn(),
   getConsoleLiveCandidates: vi.fn(),
   getConsoleVenues: vi.fn(),
@@ -56,6 +63,13 @@ vi.mock("../../api", () => ({
   getTourDetail: apiMocks.getTourDetail,
   getConsoleSongs: apiMocks.getConsoleSongs,
   getConsoleBands: apiMocks.getConsoleBands,
+  getConsoleBandHistory: apiMocks.getConsoleBandHistory,
+  initializeConsoleBandHistory: apiMocks.initializeConsoleBandHistory,
+  createConsoleBandNameVersion: apiMocks.createConsoleBandNameVersion,
+  createConsoleBandLineupVersion: apiMocks.createConsoleBandLineupVersion,
+  getConsoleBandLineupImpact: apiMocks.getConsoleBandLineupImpact,
+  correctConsoleBandLineupVersion: apiMocks.correctConsoleBandLineupVersion,
+  getBandHistoryBackfillPreflight: apiMocks.getBandHistoryBackfillPreflight,
   getConsoleLive: apiMocks.getConsoleLive,
   getConsoleLiveCandidates: apiMocks.getConsoleLiveCandidates,
   getConsoleVenues: apiMocks.getConsoleVenues,
@@ -90,6 +104,13 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getTourDetail.mockReset();
     apiMocks.getConsoleSongs.mockReset();
     apiMocks.getConsoleBands.mockReset();
+    apiMocks.getConsoleBandHistory.mockReset();
+    apiMocks.initializeConsoleBandHistory.mockReset();
+    apiMocks.createConsoleBandNameVersion.mockReset();
+    apiMocks.createConsoleBandLineupVersion.mockReset();
+    apiMocks.getConsoleBandLineupImpact.mockReset();
+    apiMocks.correctConsoleBandLineupVersion.mockReset();
+    apiMocks.getBandHistoryBackfillPreflight.mockReset();
     apiMocks.getConsoleLive.mockReset();
     apiMocks.getConsoleLiveCandidates.mockReset();
     apiMocks.getConsoleVenues.mockReset();
@@ -379,6 +400,197 @@ describe("ConsoleInsertPanel", () => {
     expect(within(resultTable).getByRole("columnheader", { name: "sub" })).toBeInTheDocument();
     expect(within(resultTable).getByRole("columnheader", { name: "short" })).toBeInTheDocument();
     expect(within(resultTable).queryByRole("columnheader", { name: "song_id" })).not.toBeInTheDocument();
+  });
+
+  // 测试点：交接共演应独立选择旧/新正式基准，并把该选择连同实际出演成员提交给版本化接口。
+  test("交接共演可选择新阵容为正式基准", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{
+        band_id: 2,
+        band_name: "Roselia",
+        band_abbr: "ロゼリア",
+        band_members: ["Old Member", "New Member"],
+      }],
+    });
+    apiMocks.getConsoleBandHistory.mockResolvedValue({
+      band_id: 2,
+      current_name: "Roselia",
+      current_abbr: "ロゼリア",
+      current_members: ["New Member"],
+      initialized: true,
+      name_versions: [{
+        name_version_id: 20,
+        band_name: "Roselia historical",
+        band_abbr: "r",
+        valid_from: "2015-01-01",
+        valid_to: null,
+        note: null,
+        live_ids: [],
+      }],
+      lineup_versions: [
+        {
+          lineup_version_id: 21,
+          version_no: 1,
+          version_label: "Roselia V1",
+          valid_from: "2015-01-01",
+          valid_to: "2018-01-01",
+          predecessor_id: null,
+          change_type: "initial",
+          note: null,
+          members: ["Old Member"],
+          added_members: ["Old Member"],
+          removed_members: [],
+          live_ids: [],
+        },
+        {
+          lineup_version_id: 22,
+          version_no: 2,
+          version_label: "Roselia V2",
+          valid_from: "2018-01-01",
+          valid_to: null,
+          predecessor_id: 21,
+          change_type: "replacement",
+          note: null,
+          members: ["New Member"],
+          added_members: ["New Member"],
+          removed_members: ["Old Member"],
+          live_ids: [],
+        },
+      ],
+    });
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
+
+    render(<ConsoleInsertPanel />);
+    await screen.findByLabelText("批量粘贴 Setlist 文本");
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await user.selectOptions(await screen.findByLabelText("Roselia 基础阵容"), "21");
+    await user.selectOptions(screen.getByLabelText("Roselia 交接后继阵容"), "22");
+    await user.click(screen.getByRole("button", { name: "1支 / 1人" }));
+    await user.selectOptions(screen.getByLabelText("Roselia 本曲模式"), "handover");
+    await user.selectOptions(screen.getByLabelText("Roselia 交接正式基准"), "next");
+    await user.click(screen.getByRole("checkbox", { name: "New Member（新）" }));
+
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+    await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
+    await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await waitFor(() => expect(apiMocks.appendConsoleLiveSetlist).toHaveBeenCalledWith(
+      101,
+      {
+        band_lineup_contexts: [{
+          band_id: 2,
+          band_name_version_id: 20,
+          base_lineup_version_id: 21,
+          next_lineup_version_id: 22,
+        }],
+        setlist_rows: [{
+          song_id: 901,
+          absolute_order: 1,
+          segment_type: "M",
+          sub_order: 1,
+          is_short: false,
+          band_member: { Roselia: ["Old Member", "New Member"] },
+          band_performances: [{
+            band_id: 2,
+            lineup_usage: "handover",
+            handover_baseline: "next",
+            members: ["Old Member", "New Member"],
+          }],
+          other_member: null,
+          comment: null,
+        }],
+      },
+      "csrf-token",
+    ));
+  });
+
+  // 测试点：历史基础阵容加载后应替换当前成员默认值；没有交接后继时不显示模式选择和新旧标记。
+  test("基础阵容默认选择未更换成员和旧成员且无后继时简化成员界面", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{
+        band_id: 2,
+        band_name: "Roselia",
+        band_abbr: "ロゼリア",
+        band_members: ["Stable Member", "New Member"],
+      }],
+    });
+    apiMocks.getConsoleBandHistory.mockResolvedValue({
+      band_id: 2,
+      current_name: "Roselia",
+      current_abbr: "ロゼリア",
+      current_members: ["Stable Member", "New Member"],
+      initialized: true,
+      name_versions: [{
+        name_version_id: 20,
+        band_name: "Roselia",
+        band_abbr: "ロゼリア",
+        valid_from: "2015-01-01",
+        valid_to: null,
+        note: null,
+        live_ids: [],
+      }],
+      lineup_versions: [
+        {
+          lineup_version_id: 21,
+          version_no: 1,
+          version_label: "Roselia V1",
+          valid_from: "2015-01-01",
+          valid_to: "2030-01-01",
+          predecessor_id: null,
+          change_type: "initial",
+          note: null,
+          members: ["Stable Member", "Old Member"],
+          added_members: ["Stable Member", "Old Member"],
+          removed_members: [],
+          live_ids: [],
+        },
+        {
+          lineup_version_id: 22,
+          version_no: 2,
+          version_label: "Roselia V2",
+          valid_from: "2030-01-01",
+          valid_to: null,
+          predecessor_id: 21,
+          change_type: "replacement",
+          note: null,
+          members: ["Stable Member", "New Member"],
+          added_members: ["New Member"],
+          removed_members: ["Old Member"],
+          live_ids: [],
+        },
+      ],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await screen.findByLabelText("批量粘贴 Setlist 文本");
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    expect(await screen.findByLabelText("Roselia 基础阵容")).toHaveValue("21");
+    await waitFor(() => expect(screen.getByRole("button", { name: "1支 / 2人" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "1支 / 2人" }));
+
+    expect(screen.getByRole("checkbox", { name: "Stable Member" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Old Member" })).toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: "New Member" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Roselia 本曲模式")).not.toBeInTheDocument();
+    expect(screen.queryByText("Old Member（旧）")).not.toBeInTheDocument();
   });
 
   test("只读查询接口会加载候选数据并用于歌曲查询", async () => {
@@ -1659,6 +1871,40 @@ describe("ConsoleInsertPanel", () => {
       expect(screen.getByRole("status")).toHaveTextContent("#902 Requiem for Fate");
     });
     expect(screen.queryByRole("log", { name: "控制台日志" })).not.toBeInTheDocument();
+  });
+
+  // 测试点：多候选歌曲必须先人工选择，批量新增确认框只能收录真正未匹配的歌曲。
+  test("批量插入不会把候选2与未匹配歌曲一起新增", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({
+        items: [
+          { song_id: 910, song_name: "Candidate Song A", band_id: 2, cover: false },
+          { song_id: 911, song_name: "Candidate Song B", band_id: 2, cover: false },
+        ],
+      })
+      .mockResolvedValueOnce({ items: [] });
+
+    render(<ConsoleInsertPanel />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. Candidate Song\nM2. Missing Song" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+
+    await screen.findByText("查询歌曲完成：匹配 0 行，待选择 1 行，未匹配 1 行。");
+    await user.click(screen.getByRole("button", { name: "批量插入" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认批量新增歌曲" });
+    expect(within(dialog).getByText("Missing Song")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Candidate Song")).not.toBeInTheDocument();
   });
 
   // 测试点：批量新增歌曲失败时，共享日志应覆盖旧值并完整显示后端错误原因。

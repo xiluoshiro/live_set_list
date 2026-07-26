@@ -368,6 +368,41 @@ def get_editable_live_setlist(
                     (live_id,),
                 )
                 rows = cur.fetchall()
+                cur.execute(
+                    """
+                    SELECT
+                        context.band_id,
+                        context.band_name_version_id,
+                        context.base_lineup_version_id,
+                        context.next_lineup_version_id
+                    FROM live_band_lineup_contexts context
+                    WHERE context.live_id = %s
+                    ORDER BY context.band_id
+                    """,
+                    (live_id,),
+                )
+                lineup_context_rows = cur.fetchall()
+                cur.execute(
+                    """
+                    SELECT
+                        performance.setlist_id::text,
+                        performance.band_id,
+                        performance.lineup_usage,
+                        performance.handover_baseline,
+                        ARRAY(
+                            SELECT member.member_name
+                            FROM live_setlist_band_performance_members member
+                            WHERE member.setlist_id = performance.setlist_id
+                              AND member.band_id = performance.band_id
+                            ORDER BY member.display_order
+                        )
+                    FROM live_setlist_band_performances performance
+                    WHERE performance.live_id = %s
+                    ORDER BY performance.setlist_id, performance.band_id
+                    """,
+                    (live_id,),
+                )
+                performance_rows = cur.fetchall()
     except HTTPException:
         raise
     except QueryCanceled as exc:
@@ -378,8 +413,27 @@ def get_editable_live_setlist(
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     except Error as exc:
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    performances_by_setlist_id: dict[str, list[dict[str, Any]]] = {}
+    for setlist_id, band_id, lineup_usage, handover_baseline, members in performance_rows:
+        performances_by_setlist_id.setdefault(str(setlist_id), []).append(
+            {
+                "band_id": int(band_id),
+                "lineup_usage": str(lineup_usage),
+                "handover_baseline": str(handover_baseline) if handover_baseline is not None else None,
+                "members": [str(member) for member in members],
+            }
+        )
     return {
         "live_id": live_id,
+        "band_lineup_contexts": [
+            {
+                "band_id": int(row[0]),
+                "band_name_version_id": int(row[1]),
+                "base_lineup_version_id": int(row[2]),
+                "next_lineup_version_id": int(row[3]) if row[3] is not None else None,
+            }
+            for row in lineup_context_rows
+        ],
         "rows": [
             {
                 "row_id": row[0],
@@ -390,6 +444,7 @@ def get_editable_live_setlist(
                 "sub_order": int(row[5]),
                 "is_short": bool(row[6]),
                 "band_member": row[7],
+                "band_performances": performances_by_setlist_id.get(str(row[0]), []),
                 "other_member": row[8],
                 "comment": row[9],
             }

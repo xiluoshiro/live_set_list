@@ -37,6 +37,13 @@ vi.mock("../api", () => ({
   createConsoleVenue: vi.fn().mockResolvedValue({ ok: true, item: { venue_id: 1, venue_name: "Mock Venue" } }),
   getConsoleSongs: vi.fn().mockResolvedValue({ items: [] }),
   getConsoleBands: vi.fn().mockResolvedValue({ items: [] }),
+  getConsoleBandHistory: vi.fn(),
+  initializeConsoleBandHistory: vi.fn(),
+  createConsoleBandNameVersion: vi.fn(),
+  createConsoleBandLineupVersion: vi.fn(),
+  getConsoleBandLineupImpact: vi.fn(),
+  correctConsoleBandLineupVersion: vi.fn(),
+  getBandHistoryBackfillPreflight: vi.fn(),
   getConsoleVenues: vi.fn().mockResolvedValue({ items: [] }),
 }));
 

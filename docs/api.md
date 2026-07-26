@@ -69,6 +69,20 @@
   - `editor+` 查询控制台歌曲候选
 - `GET /api/console/bands`
   - `editor+` 查询控制台乐队与成员候选
+- `GET /api/console/bands/{band_id}/history`
+  - `editor+` 查询当前投影、历史名称、不可变阵容版本、成员差异与引用 Live
+- `POST /api/console/bands/{band_id}/initialize-current`
+  - `editor+` 确认并修正当前 Band 投影，同时创建首个名称和阵容版本
+- `POST /api/console/bands/{band_id}/name-versions`
+  - `editor+` 新增历史或当前名称版本；设为当前时同步更新 `band_attrs` 兼容投影
+- `POST /api/console/bands/{band_id}/lineup-versions`
+  - `editor+` 新增不可变阵容版本；设为当前时同步更新成员兼容投影
+- `GET /api/console/bands/{band_id}/lineup-versions/{lineup_version_id}/impact`
+  - `editor+` 查询资料修正将影响的 Live 和 Setlist 行数
+- `PUT /api/console/bands/{band_id}/lineup-versions/{lineup_version_id}`
+  - `editor+` 开发整理期资料修正；必须回传精确受影响 Live 集合作二次确认
+- `GET /api/console/bands/history/backfill-preflight`
+  - `editor+` 只读检查旧 `band_member` 是否可无歧义回填到稳定 Band/阵容关系
 - `GET /api/console/venues`
   - `editor+` 查询控制台场地候选
 - `GET /api/console/lives`
@@ -160,8 +174,13 @@
 - 无法映射到 `band_id` 的乐队名称排在 `band_names` 末尾
 - `band_members` 优先按 `band_id` 升序排列，无法映射到 `band_id` 的项目排在后面
 - `band_members[].present_count = present_members.length`
-- `band_members[].total_count` 来自 `band_attrs.band_members` 的数据库查询结果
-- `band_members[].is_full = present_count >= total_count`
+- 已完成历史关系回填的行优先读取持久化的 Live 阵容上下文、逐曲阵容用法和实际出演成员，不再使用当前 `band_attrs.band_members` 反推历史阵容
+- `lineup_usage` 为 `base|next|handover`；`lineup_version` 是本场基础版本，交接场还会返回 `next_lineup_version`
+- `handover` 行额外返回 `handover_baseline=base|next`，明确旧阵容或新阵容是满员判断的正式基准；其他模式返回 `null`
+- `attendance_status` 为 `full|full_plus|partial|unknown`，由预期成员集合与实际出演成员集合比较得到
+- `expected_count`、`missing_members` 和 `extra_members` 分别表达预期人数、缺席成员和额外出演；额外出演类别为 `former|incoming|guest|support`
+- `total_count` 是 `expected_count` 的兼容别名；`is_full` 仅在 `full` 或 `full_plus` 时为 `true`，新前端以 `attendance_status` 为准
+- 缺少可信版本关系时返回 `attendance_status=unknown`、`expected_count=0`，不会再用默认五人或当前阵容误判满员
 - `other_members` 会统一归一化为 `{key, value: string[]}`
 - `other_members` 的 `value` 允许源数据是数组、单个字符串、JSON 字符串数组、JSON 字符串字面量
 - `other_members` 最终按 `key` 升序排列
@@ -178,6 +197,7 @@
 这个接口的 schema 很直观，但业务行为有几个点需要补充：
 
 - `live_ids` 会先去重并保留原始请求顺序
+- 每条详情与单条接口共用相同的版本化成员和到场状态计算
 - 允许部分成功
 - 未命中的 ID 会进入 `missing_live_ids`
 - `items` 按去重后的请求顺序返回，而不是数据库自然顺序
@@ -309,6 +329,12 @@
 - `POST /api/console/songs`
   - 要求 `band_id` 已存在
   - 歌曲唯一键冲突返回 `409`
+- 乐队历史写接口
+  - 当前资料初始化会锁定目标 `band_attrs`；同一 Band 已存在名称或阵容版本时返回 `409`
+  - 名称和阵容日期使用 `[valid_from, valid_to)`，服务端拒绝同一 Band 的重叠范围
+  - 创建当前阵容时要求直接前驱为当前开放版本，并在同一事务关闭旧范围、更新兼容投影和写审计
+  - 资料修正只用于纠正资料错误，先通过 impact 接口展示引用范围；确认 Live 集合不一致时返回 `409`
+  - 第一版不提供名称或阵容顶层版本删除接口
 - `PUT /api/console/songs/{song_id}`
   - 与新增歌曲共用字段契约；目标歌曲或 Band 不存在返回 `404`
   - 成功后写 `song_update` 审计
@@ -349,13 +375,17 @@
   - 如果目标 Live 已有任何 setlist 行，返回 `409`
   - 请求体内 `absolute_order` 不能重复
   - 所有 `song_id` 都必须存在
-  - `band_member` 至少需要包含一个非空乐队和成员列表
+  - 兼容请求仍可只提交 `band_member`；版本化请求提交 Live 级 `band_lineup_contexts` 和逐行 `band_performances`
+  - `band_lineup_contexts` 固化历史名称、基础阵容和可选直接后继阵容；后继版本必须属于同一 Band 且直接跟随基础版本
+  - `band_performances[].lineup_usage` 为 `base|next|handover`；`handover` 必须额外提交 `handover_baseline=base|next`，其他模式禁止携带该字段
+  - 实际出演 `members` 必须非空且不得重复；后端根据正式基准计算 `former|incoming|guest`，不接受前端提交满员状态
+  - 版本化请求在同一事务内写新关系，并以所选历史名称同步生成兼容 `band_member` JSON
   - 后端按 `absolute_order` 升序写入
 - `GET /api/console/lives/{live_id}/setlist`
-  - 返回完整原始可编辑行，包含持久化 UUID、`song_id/song_name`、顺序、成员 JSON 和备注
+  - 返回 Live 级 `band_lineup_contexts` 和完整原始可编辑行；行内同时包含兼容成员 JSON、版本化 `band_performances`、交接基准和实际成员
 - `PUT /api/console/lives/{live_id}/setlist`
   - 与新增 Setlist 共用行字段和校验；请求集合至少保留一行
-  - 在单一事务内锁定 Live、校验全部歌曲、替换完整行集合并写 `live_setlist_update` 审计
+  - 在单一事务内锁定 Live、校验全部歌曲和版本关系、替换完整行集合、双写成员数据并写 `live_setlist_update` 审计
 - `POST /api/console/tours`、`PUT /api/console/tours/{tour_id}`
   - `band_ids` 可为空，最多 100 个已存在且不重复的正数 ID；后端按 Band ID 排序
   - `band_ids` 非空时，每个 Band 必须至少出现在一场所选 Live 中；为空时数据库关系保持空集合

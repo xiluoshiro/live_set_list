@@ -20,6 +20,109 @@ def _truncate_business_tables(integration_admin_connection) -> None:
         )
 
 
+def _seed_versioned_detail_relations(integration_admin_connection, live_ids: list[int]) -> None:
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO band_name_versions (
+                band_id, band_name, band_abbr, valid_from, valid_to, note
+            )
+            SELECT DISTINCT
+                band.id, band.band_name, NULLIF(band.band_abbr, ''),
+                NULL::date, NULL::date,
+                'versioned detail integration test'
+            FROM live_setlist setlist
+            CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) AS item(band_name)
+            JOIN band_attrs band ON band.band_name = item.band_name
+            WHERE setlist.live_id = ANY(%s)
+            """,
+            (live_ids,),
+        )
+        cursor.execute(
+            """
+            INSERT INTO band_lineup_versions (
+                band_id, version_no, version_label, valid_from, valid_to,
+                predecessor_id, change_type, note
+            )
+            SELECT DISTINCT
+                band.id, 1, band.band_name || ' V1',
+                NULL::date, NULL::date, NULL::bigint,
+                'initial', 'versioned detail integration test'
+            FROM live_setlist setlist
+            CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) AS item(band_name)
+            JOIN band_attrs band ON band.band_name = item.band_name
+            WHERE setlist.live_id = ANY(%s)
+            """,
+            (live_ids,),
+        )
+        cursor.execute(
+            """
+            INSERT INTO band_lineup_version_members (
+                lineup_version_id, member_name, display_order
+            )
+            SELECT version.id, member.member_name, member.display_order::integer
+            FROM band_lineup_versions version
+            JOIN band_attrs band ON band.id = version.band_id
+            CROSS JOIN LATERAL unnest(band.band_members) WITH ORDINALITY
+                AS member(member_name, display_order)
+            ORDER BY version.band_id, member.display_order
+            """
+        )
+        cursor.execute(
+            """
+            INSERT INTO live_band_lineup_contexts (
+                live_id, band_id, band_name_version_id,
+                base_lineup_version_id, next_lineup_version_id
+            )
+            SELECT DISTINCT
+                setlist.live_id, band.id, name_version.id, lineup_version.id, NULL::bigint
+            FROM live_setlist setlist
+            CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) AS item(band_name)
+            JOIN band_attrs band ON band.band_name = item.band_name
+            JOIN band_name_versions name_version ON name_version.band_id = band.id
+            JOIN band_lineup_versions lineup_version ON lineup_version.band_id = band.id
+            WHERE setlist.live_id = ANY(%s)
+            """,
+            (live_ids,),
+        )
+        cursor.execute(
+            """
+            INSERT INTO live_setlist_band_performances (
+                setlist_id, live_id, band_id, lineup_usage
+            )
+            SELECT setlist.id, setlist.live_id, band.id, 'base'
+            FROM live_setlist setlist
+            CROSS JOIN LATERAL jsonb_each(setlist.band_member) AS item(band_name, members)
+            JOIN band_attrs band ON band.band_name = item.band_name
+            WHERE setlist.live_id = ANY(%s)
+            """,
+            (live_ids,),
+        )
+        cursor.execute(
+            """
+            INSERT INTO live_setlist_band_performance_members (
+                setlist_id, band_id, member_name, display_order, appearance_role
+            )
+            SELECT
+                setlist.id, band.id, member.member_name,
+                member.display_order::integer, NULL
+            FROM live_setlist setlist
+            CROSS JOIN LATERAL jsonb_each(setlist.band_member) AS item(band_name, members)
+            JOIN band_attrs band ON band.band_name = item.band_name
+            CROSS JOIN LATERAL jsonb_array_elements_text(
+                CASE
+                    WHEN jsonb_typeof(item.members) = 'array' THEN item.members
+                    WHEN item.members IS NULL THEN '[]'::jsonb
+                    ELSE jsonb_build_array(item.members)
+                END
+            ) WITH ORDINALITY AS member(member_name, display_order)
+            WHERE setlist.live_id = ANY(%s)
+            """,
+            (live_ids,),
+        )
+
+
 def test_get_lives_returns_seeded_items(integration_test_client):
     # 测试点：列表接口应基于真实测试库返回种子数据，并正确聚合 bands 与分页信息。
     response = integration_test_client.get("/api/lives?page=1&page_size=20")
@@ -169,8 +272,12 @@ def test_get_lives_empty_result_returns_empty_items(
     }
 
 
-def test_get_live_detail_returns_seeded_detail_payload(integration_test_client):
-    # 测试点：详情接口应基于真实 SQL 返回 venue/time/url/detail_rows 等完整字段。
+def test_get_live_detail_returns_seeded_detail_payload(
+    integration_test_client,
+    integration_admin_connection,
+):
+    # 测试点：详情接口应基于真实固化阵容返回完整字段与 full/partial 出席状态。
+    _seed_versioned_detail_relations(integration_admin_connection, [1])
     response = integration_test_client.get("/api/lives/1")
 
     assert response.status_code == 200
@@ -193,6 +300,7 @@ def test_get_live_detail_returns_seeded_detail_payload(integration_test_client):
     assert first_row["band_members"][0]["band_name"] == "Poppin'Party"
     assert first_row["band_members"][0]["total_count"] == 5
     assert first_row["band_members"][0]["is_full"] is True
+    assert first_row["band_members"][0]["attendance_status"] == "full"
 
     second_row = payload["detail_rows"][1]
     assert second_row["row_id"] == "main2"
@@ -201,6 +309,8 @@ def test_get_live_detail_returns_seeded_detail_payload(integration_test_client):
     assert second_row["band_members"][0]["present_count"] == 4
     assert second_row["band_members"][0]["total_count"] == 5
     assert second_row["band_members"][0]["is_full"] is False
+    assert second_row["band_members"][0]["attendance_status"] == "partial"
+    assert second_row["band_members"][0]["missing_members"] == ["Rinko"]
 
 
 # 测试点：活动无 Setlist 时，单条与批量详情都应回退默认 Band，并根据完整成员名单计算 partial/full。
@@ -305,8 +415,12 @@ def test_get_live_detail_not_found_returns_404(integration_test_client):
     assert "not found" in response.json()["detail"]
 
 
-def test_get_live_detail_unmapped_band_uses_fallback_rules(integration_test_client):
-    # 测试点：未映射 band_name 在真实库查询下也应返回 band_id=None，并使用 total_count fallback。
+def test_get_live_detail_unmapped_band_uses_fallback_rules(
+    integration_test_client,
+    integration_admin_connection,
+):
+    # 测试点：未映射 band_name 没有可靠阵容时应返回 band_id=None 与 unknown。
+    _seed_versioned_detail_relations(integration_admin_connection, [2])
     response = integration_test_client.get("/api/lives/2")
 
     assert response.status_code == 200
@@ -323,13 +437,18 @@ def test_get_live_detail_unmapped_band_uses_fallback_rules(integration_test_clie
     assert first_row["band_members"][0]["is_full"] is False
     assert first_row["band_members"][1]["band_id"] is None
     assert first_row["band_members"][1]["present_count"] == 1
-    assert first_row["band_members"][1]["total_count"] == 5
+    assert first_row["band_members"][1]["total_count"] == 0
+    assert first_row["band_members"][1]["attendance_status"] == "unknown"
     assert first_row["band_members"][1]["is_full"] is False
     assert first_row["other_members"] == [{"key": "支援", "value": ["Keyboard"]}]
 
 
-def test_get_live_details_batch_returns_seeded_items_and_missing_ids(integration_test_client):
+def test_get_live_details_batch_returns_seeded_items_and_missing_ids(
+    integration_test_client,
+    integration_admin_connection,
+):
     # 测试点：批量详情接口应在真实库场景下支持去重、保序，并返回 missing_live_ids。
+    _seed_versioned_detail_relations(integration_admin_connection, [1, 2])
     response = integration_test_client.post(
         "/api/lives/details:batch",
         json={"live_ids": [2, 999, 1, 2]},
@@ -353,7 +472,8 @@ def test_get_live_details_batch_returns_seeded_items_and_missing_ids(integration
     assert first_row["band_members"][0]["total_count"] == 5
     assert first_row["band_members"][1]["band_id"] is None
     assert first_row["band_members"][1]["band_name"] == "Special Guest Band"
-    assert first_row["band_members"][1]["total_count"] == 5
+    assert first_row["band_members"][1]["total_count"] == 0
+    assert first_row["band_members"][1]["attendance_status"] == "unknown"
     assert first_row["other_members"] == [{"key": "支援", "value": ["Keyboard"]}]
 
 

@@ -10,6 +10,9 @@ from app.schemas.tours import TourRef
 MAX_BATCH_LIVE_IDS = 100
 EventStatus = Literal["scheduled", "postponed", "cancelled"]
 DatePhase = Literal["upcoming", "today", "past"]
+AttendanceStatus = Literal["full", "full_plus", "partial", "unknown"]
+LineupUsage = Literal["base", "next", "handover"]
+AppearanceCategory = Literal["former", "incoming", "guest", "support"]
 
 
 class LiveItem(BaseModel):
@@ -55,13 +58,34 @@ class LivesResponse(BaseModel):
     pagination: LivesPagination = Field(..., description='Pagination metadata')
 
 
+class LiveDetailLineupVersionRef(BaseModel):
+    lineup_version_id: int
+    version_label: str
+
+
+class LiveDetailExtraMember(BaseModel):
+    member_name: str
+    category: AppearanceCategory
+
+
 class LiveDetailBandMember(BaseModel):
     band_id: int | None = Field(default=None, description='band_attrs.id; null when unmapped')
     band_name: str = Field(..., description='Band name')
+    lineup_usage: LineupUsage | None = Field(default=None, description='Persisted per-song lineup mode')
+    handover_baseline: Literal['base', 'next'] | None = Field(
+        default=None,
+        description='Official lineup baseline selected for a handover performance',
+    )
+    lineup_version: LiveDetailLineupVersionRef | None = None
+    next_lineup_version: LiveDetailLineupVersionRef | None = None
+    attendance_status: AttendanceStatus = Field(..., description='Lineup-aware attendance status')
+    expected_count: int = Field(..., ge=0, description='Expected member count from the selected lineup')
     present_members: list[str] = Field(..., description='Members present in this song row')
     present_count: int = Field(..., description='Count of present members')
-    total_count: int = Field(..., description='Total member count for the band')
-    is_full: bool = Field(..., description='Whether present_count reaches total_count')
+    missing_members: list[str] = Field(default_factory=list)
+    extra_members: list[LiveDetailExtraMember] = Field(default_factory=list)
+    total_count: int = Field(..., ge=0, description='Compatibility alias of expected_count')
+    is_full: bool = Field(..., description='Compatibility flag for full and full_plus')
 
 
 class LiveDetailOtherMember(BaseModel):

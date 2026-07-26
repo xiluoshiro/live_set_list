@@ -88,7 +88,7 @@ python scripts/build_release.py --version 2026-07-10-001
 
 常规生产发布不需要在本机手工上传 `.tar.gz`。推送格式为 `vYYYY-MM-DD-NNN` 的 tag 会触发 `.github/workflows/release.yml`：隔离 PostgreSQL CI、`functional`、前端构建、白名单归档、SHA-256，并在 VM 按当前 SQL 分类。app-only release 继续进入 `production` 部署；migration release 停止并等待 `.github/workflows/migration-release.yml` 的两次手工阶段。
 
-当前仓库 migration 已到 V20；生产数据库已有证据仍只确认到 V13。`v2026-07-18-001` 已完成 V12/V13 migration 和应用切换。后续带 SQL 变化的 tag 仍必须按 migration release 验收，不能因为 tag 已存在或测试库已经迁移就假定生产数据库已经升级。
+当前仓库 migration 已到 V21；生产数据库已有证据仍只确认到 V13。`v2026-07-18-001` 已完成 V12/V13 migration 和应用切换。后续带 SQL 变化的 tag 仍必须按 migration release 验收，不能因为 tag 已存在或测试库已经迁移就假定生产数据库已经升级。
 
 `build_release.py` 仍用于首次 VM bootstrap、离线交付或手工排障。包含 `backend/db/flyway/sql` 变化的版本必须先运行 `phase=migrate` 生成服务器端 attestation，验收后再运行 `phase=deploy`；部署入口会拒绝缺少或不匹配 attestation 的 migration release。
 
@@ -115,6 +115,22 @@ python scripts/recovery_db.py <arguments> [--force]
 完整流程与测试说明见：
 
 - [recovery/README.md](D:/Code/PythonCode/5%20LiveSetList/recovery/README.md)
+
+## 乐队历史关系回填
+
+完成控制台“乐队管理”中的当前资料确认和版本初始化后，先执行只读预检：
+
+```powershell
+python scripts/band_history_backfill.py preflight
+```
+
+预检会输出明确的 host、port、database、目标计数与所有阻断项，不写数据库。只有 `ready=true` 时才允许执行自动回填：
+
+```powershell
+python scripts/band_history_backfill.py apply --confirm APPLY_LEGACY_BAND_HISTORY_BACKFILL
+```
+
+apply 在一个事务中锁定旧 Setlist、重新执行同一预检、建立 Live/Band 上下文及逐曲出演/成员关系，并写 `band_history_backfill` 审计。目标关系表非空、历史名称无法唯一映射、开放阵容不唯一或成员无法由阵容解释时都会停止。该脚本不包含 2015 年 Poppin'Party 的 V1 手工改绑；自动回填完成后必须按设计文档单独预览和审计该操作。
 
 ## 从生产 VM 覆盖本地主库
 
