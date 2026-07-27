@@ -459,6 +459,14 @@ export type ConsoleBandListResponse = {
   historical_default_band_selection_enabled?: boolean;
 };
 
+export type ConsoleBandCreatePayload = {
+  id_range: "regular" | "special";
+  band_name: string;
+  band_abbr: string;
+  members: string[];
+  valid_from: string | null;
+};
+
 export type ConsoleBandNameVersion = {
   name_version_id: number;
   band_name: string;
@@ -492,6 +500,12 @@ export type ConsoleBandHistory = {
   initialized: boolean;
   name_versions: ConsoleBandNameVersion[];
   lineup_versions: ConsoleBandLineupVersion[];
+};
+
+export type ConsoleBandCreateResponse = {
+  ok: boolean;
+  item: ConsoleBandItem;
+  history: ConsoleBandHistory;
 };
 
 export type ConsoleBandInitializePayload = {
@@ -812,6 +826,7 @@ type RequestKind =
   | "favorite_remove"
   | "console_songs"
   | "console_bands"
+  | "console_band_create"
   | "console_band_history"
   | "console_band_history_initialize"
   | "console_band_name_version_create"
@@ -1260,6 +1275,22 @@ export async function getConsoleBands(q?: string, limit = 20): Promise<ConsoleBa
     requestKind: "console_bands",
   });
   return expectJsonResponse<ConsoleBandListResponse>(response);
+}
+
+export async function createConsoleBand(
+  payload: ConsoleBandCreatePayload,
+  csrfToken: string,
+): Promise<ConsoleBandCreateResponse> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/api/console/bands`,
+    {
+      method: "POST",
+      headers: jsonHeaders(csrfToken),
+      body: JSON.stringify(payload),
+    },
+    { requestKind: "console_band_create", method: "POST" },
+  );
+  return expectJsonResponse<ConsoleBandCreateResponse>(response);
 }
 
 export async function getConsoleBandHistory(bandId: number): Promise<ConsoleBandHistory> {

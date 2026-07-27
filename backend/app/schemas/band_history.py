@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 BandLineupChangeType = Literal["initial", "addition", "removal", "replacement", "correction"]
+BandIdRange = Literal["regular", "special"]
 
 
 def _required_text(value: str) -> str:
@@ -62,6 +63,29 @@ class ConsoleBandInitializeRequest(BandHistoryDateRange):
     @field_validator("band_abbr")
     @classmethod
     def normalize_abbr(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("members")
+    @classmethod
+    def normalize_members(cls, value: list[str]) -> list[str]:
+        return _member_list(value)
+
+
+class ConsoleBandCreateRequest(BaseModel):
+    id_range: BandIdRange
+    band_name: str = Field(..., min_length=1, max_length=255)
+    band_abbr: str = Field(default="", max_length=255)
+    members: list[str] = Field(..., min_length=1, max_length=100)
+    valid_from: date | None = None
+
+    @field_validator("band_name")
+    @classmethod
+    def normalize_band_name(cls, value: str) -> str:
+        return _required_text(value)
+
+    @field_validator("band_abbr")
+    @classmethod
+    def normalize_band_abbr(cls, value: str) -> str:
         return value.strip()
 
     @field_validator("members")
@@ -181,6 +205,19 @@ class ConsoleBandHistoryResponse(BaseModel):
 
 class ConsoleBandHistoryMutationResponse(BaseModel):
     ok: bool
+    history: ConsoleBandHistoryResponse
+
+
+class ConsoleBandCreateItem(BaseModel):
+    band_id: int
+    band_name: str
+    band_abbr: str
+    band_members: list[str]
+
+
+class ConsoleBandCreateResponse(BaseModel):
+    ok: bool
+    item: ConsoleBandCreateItem
     history: ConsoleBandHistoryResponse
 
 

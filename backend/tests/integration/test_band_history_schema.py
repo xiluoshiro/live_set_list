@@ -269,6 +269,128 @@ def test_band_history_role_permission_contract(
             assert cursor.fetchone() == (True, True)
 
 
+# 测试点：新增 Band 会独立继承常规与特殊编号段，并原子建立当前名称、V1 阵容、成员和审计记录。
+def test_console_creates_band_in_selected_id_range_with_v1_history(
+    integration_test_client,
+    integration_admin_connection,
+):
+    csrf_token = _login_editor(integration_test_client)
+    regular = integration_test_client.post(
+        "/api/console/bands",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "id_range": "regular",
+            "band_name": "Regular New Band",
+            "band_abbr": "rnb",
+            "members": ["Member A", "Member B"],
+            "valid_from": "2026-07-27",
+        },
+    )
+    special = integration_test_client.post(
+        "/api/console/bands",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "id_range": "special",
+            "band_name": "Special New Band",
+            "band_abbr": "snb",
+            "members": ["Special A"],
+            "valid_from": None,
+        },
+    )
+
+    assert regular.status_code == 201
+    assert special.status_code == 201
+    assert regular.json()["item"]["band_id"] == 4
+    assert special.json()["item"]["band_id"] == 101
+    assert regular.json()["history"]["lineup_versions"][0]["version_label"] == "Regular New Band V1"
+    assert special.json()["history"]["lineup_versions"][0]["members"] == ["Special A"]
+
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) FROM band_attrs WHERE id = 100")
+        assert cursor.fetchone()[0] == 0
+        cursor.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM band_name_versions WHERE band_id IN (4, 101)),
+                (SELECT COUNT(*) FROM band_lineup_versions WHERE band_id IN (4, 101)),
+                (
+                    SELECT COUNT(*)
+                    FROM band_lineup_version_members member
+                    JOIN band_lineup_versions version ON version.id = member.lineup_version_id
+                    WHERE version.band_id IN (4, 101)
+                ),
+                (SELECT COUNT(*) FROM audit_logs WHERE action = 'band_create')
+            """
+        )
+        assert cursor.fetchone() == (2, 2, 3, 2)
+
+
+# 测试点：与当前或历史名称冲突时应返回 409，且不得留下 Band 或历史版本的部分数据。
+def test_console_create_band_rejects_duplicate_name_without_partial_rows(
+    integration_test_client,
+    integration_admin_connection,
+):
+    csrf_token = _login_editor(integration_test_client)
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) FROM band_attrs")
+        band_count_before = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM band_name_versions")
+        name_version_count_before = cursor.fetchone()[0]
+
+    response = integration_test_client.post(
+        "/api/console/bands",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "id_range": "special",
+            "band_name": "  Poppin'Party  ",
+            "band_abbr": "duplicate",
+            "members": ["Duplicate Member"],
+            "valid_from": None,
+        },
+    )
+
+    assert response.status_code == 409
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) FROM band_attrs")
+        assert cursor.fetchone()[0] == band_count_before
+        cursor.execute("SELECT COUNT(*) FROM band_name_versions")
+        assert cursor.fetchone()[0] == name_version_count_before
+
+
+# 测试点：常规编号达到 99 后必须明确报满，不得越界占用保留 ID 100 或自动切换特殊段。
+def test_console_create_band_rejects_exhausted_regular_range(
+    integration_test_client,
+    integration_admin_connection,
+):
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO band_attrs (id, band_abbr, band_name, band_members)
+            VALUES (99, 'last', 'Last Regular Band', ARRAY['Last Member'])
+            """
+        )
+    integration_admin_connection.commit()
+    csrf_token = _login_editor(integration_test_client)
+
+    response = integration_test_client.post(
+        "/api/console/bands",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "id_range": "regular",
+            "band_name": "Overflow Band",
+            "band_abbr": "overflow",
+            "members": ["Overflow Member"],
+            "valid_from": None,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "1-99 is exhausted" in response.json()["detail"]
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) FROM band_attrs WHERE id = 100")
+        assert cursor.fetchone()[0] == 0
+
+
 # 测试点：控制台确认当前资料时应同步修正兼容投影、初始化名称与阵容版本并返回完整历史。
 def test_console_initializes_current_band_history_and_audits(
     integration_test_client,

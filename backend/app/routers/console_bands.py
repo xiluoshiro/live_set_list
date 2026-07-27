@@ -12,6 +12,8 @@ from app.db import get_db_connection, get_write_db_connection
 from app.logging_config import get_logger
 from app.schemas.band_history import (
     BandHistoryBackfillPreflightResponse,
+    ConsoleBandCreateRequest,
+    ConsoleBandCreateResponse,
     ConsoleBandHistoryMutationResponse,
     ConsoleBandHistoryResponse,
     ConsoleBandInitializeRequest,
@@ -24,6 +26,11 @@ from app.schemas.band_history import (
 
 router = APIRouter()
 logger = get_logger(__name__)
+REGULAR_BAND_ID_MAX = 99
+BAND_ID_ALLOCATION_LOCK_SQL = (
+    "SELECT pg_advisory_xact_lock("
+    "hashtext('live-set-list'), hashtext('band-id-allocation'))"
+)
 
 
 def _write_audit(
@@ -41,6 +48,104 @@ def _write_audit(
         """,
         (user_id, action, str(band_id), Json(payload)),
     )
+
+
+def _insert_initial_band_history(
+    cur: Any,
+    *,
+    band_id: int,
+    band_name: str,
+    band_abbr: str,
+    members: list[str],
+    version_no: int,
+    version_label: str,
+    valid_from: date | None,
+    valid_to: date | None,
+    note: str | None,
+) -> tuple[int, int]:
+    cur.execute(
+        """
+        INSERT INTO band_name_versions (
+            band_id, band_name, band_abbr, valid_from, valid_to, note
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (band_id, band_name, band_abbr or None, valid_from, valid_to, note),
+    )
+    name_version_id = int(cur.fetchone()[0])
+    cur.execute(
+        """
+        INSERT INTO band_lineup_versions (
+            band_id, version_no, version_label, valid_from, valid_to,
+            predecessor_id, change_type, note
+        )
+        VALUES (%s, %s, %s, %s, %s, NULL, 'initial', %s)
+        RETURNING id
+        """,
+        (band_id, version_no, version_label, valid_from, valid_to, note),
+    )
+    lineup_version_id = int(cur.fetchone()[0])
+    cur.executemany(
+        """
+        INSERT INTO band_lineup_version_members (
+            lineup_version_id, member_name, display_order
+        )
+        VALUES (%s, %s, %s)
+        """,
+        [
+            (lineup_version_id, member, index)
+            for index, member in enumerate(members, start=1)
+        ],
+    )
+    return name_version_id, lineup_version_id
+
+
+def _allocate_band_id(cur: Any, id_range: str) -> int:
+    cur.execute(BAND_ID_ALLOCATION_LOCK_SQL)
+    if id_range == "regular":
+        cur.execute(
+            """
+            SELECT COALESCE(MAX(id), 0) + 1
+            FROM band_attrs
+            WHERE id BETWEEN 1 AND %s
+            """,
+            (REGULAR_BAND_ID_MAX,),
+        )
+        band_id = int(cur.fetchone()[0])
+        if band_id > REGULAR_BAND_ID_MAX:
+            raise HTTPException(status_code=409, detail="Regular Band ID range 1-99 is exhausted")
+        return band_id
+
+    cur.execute(
+        """
+        SELECT COALESCE(MAX(id), 100) + 1
+        FROM band_attrs
+        WHERE id > 100
+        """
+    )
+    return int(cur.fetchone()[0])
+
+
+def _ensure_band_name_available(cur: Any, band_name: str) -> None:
+    cur.execute(
+        """
+        SELECT 1
+        FROM (
+            SELECT band_name FROM band_attrs WHERE id > 0
+            UNION ALL
+            SELECT band_name FROM band_name_versions
+        ) known_name
+        WHERE lower(btrim(known_name.band_name)) = lower(btrim(%s))
+        LIMIT 1
+        """,
+        (band_name,),
+    )
+    if cur.fetchone() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Band name already exists in current or historical names",
+        )
 
 
 def _ensure_real_band(cur: Any, band_id: int, *, lock: bool = False) -> tuple[str, str, list[str]]:
@@ -210,6 +315,88 @@ def _load_history(cur: Any, band_id: int) -> dict[str, Any]:
     }
 
 
+@router.post(
+    "/bands",
+    response_model=ConsoleBandCreateResponse,
+    status_code=201,
+    summary="新增乐队并初始化 V1 历史",
+)
+def create_band(
+    payload: ConsoleBandCreateRequest,
+    request: Request,
+    _: Any = Depends(require_role("editor")),
+    context: AuthSessionContext = Depends(get_current_auth_context),
+):
+    assert_valid_csrf(request, context)
+    try:
+        with get_write_db_connection() as conn:
+            with conn.cursor() as cur:
+                band_id = _allocate_band_id(cur, payload.id_range)
+                _ensure_band_name_available(cur, payload.band_name)
+                version_label = f"{payload.band_name} V1"
+                cur.execute(
+                    """
+                    INSERT INTO band_attrs (id, band_abbr, band_name, band_members)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (band_id, payload.band_abbr, payload.band_name, payload.members),
+                )
+                name_version_id, lineup_version_id = _insert_initial_band_history(
+                    cur,
+                    band_id=band_id,
+                    band_name=payload.band_name,
+                    band_abbr=payload.band_abbr,
+                    members=payload.members,
+                    version_no=1,
+                    version_label=version_label,
+                    valid_from=payload.valid_from,
+                    valid_to=None,
+                    note="控制台新增 Band 并初始化 V1",
+                )
+                _write_audit(
+                    cur,
+                    user_id=context.user.id,
+                    action="band_create",
+                    band_id=band_id,
+                    payload={
+                        "id_range": payload.id_range,
+                        "band_name": payload.band_name,
+                        "band_abbr": payload.band_abbr,
+                        "members": payload.members,
+                        "valid_from": payload.valid_from.isoformat() if payload.valid_from else None,
+                        "name_version_id": name_version_id,
+                        "lineup_version_id": lineup_version_id,
+                    },
+                )
+                history = _load_history(cur, band_id)
+    except HTTPException:
+        raise
+    except UniqueViolation as exc:
+        raise HTTPException(status_code=409, detail="Band ID or version conflict; retry the request") from exc
+    except QueryCanceled as exc:
+        logger.exception("create_band timeout user_id=%s", context.user.id)
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        logger.exception("create_band operational error user_id=%s", context.user.id)
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        logger.exception("create_band failed user_id=%s", context.user.id)
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+    return {
+        "ok": True,
+        "item": {
+            "band_id": band_id,
+            "band_name": payload.band_name,
+            "band_abbr": payload.band_abbr,
+            "band_members": payload.members,
+        },
+        "history": history,
+    }
+
+
 @router.get(
     "/bands/history/backfill-preflight",
     response_model=BandHistoryBackfillPreflightResponse,
@@ -283,54 +470,17 @@ def initialize_current_band_history(
                     """,
                     (payload.band_name, payload.band_abbr, payload.members, band_id),
                 )
-                cur.execute(
-                    """
-                    INSERT INTO band_name_versions (
-                        band_id, band_name, band_abbr, valid_from, valid_to, note
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    RETURNING id
-                    """,
-                    (
-                        band_id,
-                        payload.band_name,
-                        payload.band_abbr or None,
-                        payload.valid_from,
-                        payload.valid_to,
-                        payload.note,
-                    ),
-                )
-                name_version_id = int(cur.fetchone()[0])
-                cur.execute(
-                    """
-                    INSERT INTO band_lineup_versions (
-                        band_id, version_no, version_label, valid_from, valid_to,
-                        predecessor_id, change_type, note
-                    )
-                    VALUES (%s, %s, %s, %s, %s, NULL, 'initial', %s)
-                    RETURNING id
-                    """,
-                    (
-                        band_id,
-                        payload.version_no,
-                        payload.version_label,
-                        payload.valid_from,
-                        payload.valid_to,
-                        payload.note,
-                    ),
-                )
-                lineup_version_id = int(cur.fetchone()[0])
-                cur.executemany(
-                    """
-                    INSERT INTO band_lineup_version_members (
-                        lineup_version_id, member_name, display_order
-                    )
-                    VALUES (%s, %s, %s)
-                    """,
-                    [
-                        (lineup_version_id, member, index)
-                        for index, member in enumerate(payload.members, start=1)
-                    ],
+                name_version_id, lineup_version_id = _insert_initial_band_history(
+                    cur,
+                    band_id=band_id,
+                    band_name=payload.band_name,
+                    band_abbr=payload.band_abbr,
+                    members=payload.members,
+                    version_no=payload.version_no,
+                    version_label=payload.version_label,
+                    valid_from=payload.valid_from,
+                    valid_to=payload.valid_to,
+                    note=payload.note,
                 )
                 _write_audit(
                     cur,
