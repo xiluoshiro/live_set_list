@@ -15,6 +15,7 @@ import {
   type ConsoleBandLineupVersion,
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
+import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { UpdateDiffTable, type UpdateChange } from "./UpdateDiffTable";
 import type { BandOption } from "./types";
 
@@ -613,21 +614,69 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
       )}
 
       {confirmCreate && (
-        <div className="modal-mask" onClick={() => setConfirmCreate(false)}>
-          <div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="band-create-title" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head"><h2 id="band-create-title">确认新增 Band</h2></div>
+        <div
+          className="modal-mask"
+          onClick={() => !submitting && setConfirmCreate(false)}
+        >
+          <div
+            className="modal console-confirm-modal compact"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="band-create-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h2 id="band-create-title">确认新增 Band</h2>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="modal-action-btn close"
+                  aria-label="关闭"
+                  disabled={submitting}
+                  onClick={() => setConfirmCreate(false)}
+                >
+                  <span className="modal-action-glyph close">✕</span>
+                </button>
+              </div>
+            </div>
             <div className="console-confirm-body">
-              <p>
-                编号段：{createIdRange === "regular" ? "常规编号（1–99）" : "特殊编号（101+，100 保留）"}
+              <CompactConfirmationTable
+                ariaLabel="新增 Band 确认内容"
+                rows={[
+                  [
+                    "id_range",
+                    createIdRange === "regular"
+                      ? "常规编号（1–99）"
+                      : "特殊编号（101+，100 保留）",
+                  ],
+                  ["band_name", createName.trim()],
+                  ["band_abbr", createAbbr.trim() || "未设置"],
+                  ["version_label", `${createName.trim()} V1`],
+                  ["valid_from", createValidFrom || "未设置"],
+                  ["members", parseMembers(createMembers).join(" / ")],
+                ]}
+              />
+              <p className="console-admin-hint">
+                最终 band_id 将在提交时由服务端按所选编号段分配。
               </p>
-              <p>最终 ID 将由服务端在提交时分配。</p>
-              <p><strong>{createName.trim()} V1</strong></p>
-              <p>{parseMembers(createMembers).join(" / ")}</p>
-              <p>生效日期：{createValidFrom || "未设置"}</p>
             </div>
             <div className="console-confirm-actions">
-              <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirmCreate(false)}>返回修改</button>
-              <button type="button" className="console-submit-btn" disabled={submitting} onClick={() => void submitCreate()}>确认新增</button>
+              <button
+                type="button"
+                className="console-ghost-btn"
+                disabled={submitting}
+                onClick={() => setConfirmCreate(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="console-submit-btn"
+                disabled={submitting}
+                onClick={() => void submitCreate()}
+              >
+                {submitting ? "提交中..." : "确认提交"}
+              </button>
             </div>
           </div>
         </div>

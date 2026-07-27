@@ -126,7 +126,7 @@ describe("BandAdminSection", () => {
     });
   });
 
-  // 测试点：新增 Band 可选择特殊编号段，经确认后提交并自动展示服务端返回的 V1 历史。
+  // 测试点：新增 Band 的共享确认表完整展示特殊编号段和初始资料，再提交并展示 V1 历史。
   test("creates and selects a special-range band with initialized history", async () => {
     const user = userEvent.setup();
     const onBandsChanged = vi.fn().mockResolvedValue(undefined);
@@ -151,9 +151,12 @@ describe("BandAdminSection", () => {
     await user.click(within(createBlock as HTMLElement).getByRole("button", { name: "检查新增资料" }));
 
     const dialog = screen.getByRole("dialog", { name: "确认新增 Band" });
-    expect(dialog).toHaveTextContent("特殊编号（101+，100 保留）");
-    expect(dialog).toHaveTextContent("New Special Band V1");
-    await user.click(within(dialog).getByRole("button", { name: "确认新增" }));
+    const confirmationTable = within(dialog).getByRole("table", { name: "新增 Band 确认内容" });
+    expect(confirmationTable).toHaveTextContent("特殊编号（101+，100 保留）");
+    expect(confirmationTable).toHaveTextContent("New Special Band V1");
+    expect(confirmationTable).toHaveTextContent("Member A / Member B");
+    expect(within(dialog).getByRole("button", { name: "关闭" })).toBeEnabled();
+    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleBand).toHaveBeenCalledWith(
       {
