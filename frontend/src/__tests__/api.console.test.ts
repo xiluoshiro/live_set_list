@@ -68,6 +68,49 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/console/bands?limit=5&q=rsl");
   });
 
+  // 测试点：新增乐队封装应携带编号段、V1 初始资料和 CSRF，并保留服务端最终分配的 Band ID。
+  test("createConsoleBand 会提交编号段与初始历史资料", async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeJsonResponse({
+        ok: true,
+        item: {
+          band_id: 103,
+          band_name: "New Special Band",
+          band_abbr: "nsb",
+          band_members: ["Member A"],
+        },
+        history: {
+          band_id: 103,
+          current_name: "New Special Band",
+          current_abbr: "nsb",
+          current_members: ["Member A"],
+          initialized: true,
+          name_versions: [],
+          lineup_versions: [],
+        },
+      }, true, 201),
+    );
+    const { createConsoleBand } = await import("../api");
+    const requestPayload = {
+      id_range: "special" as const,
+      band_name: "New Special Band",
+      band_abbr: "nsb",
+      members: ["Member A"],
+      valid_from: "2026-07-27",
+    };
+
+    const payload = await createConsoleBand(requestPayload, "csrf-token");
+
+    expect(payload.item.band_id).toBe(103);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/bands");
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
+      credentials: "include",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      body: JSON.stringify(requestPayload),
+    }));
+  });
+
   test("getConsoleVenues 空 q 时只发送 limit 参数", async () => {
     // 测试点：场地候选查询在空关键词时应走默认候选列表，不发送空 q。
     fetchMock.mockResolvedValueOnce(

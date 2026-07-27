@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   correctConsoleBandLineupVersion,
+  createConsoleBand,
   createConsoleBandLineupVersion,
   createConsoleBandNameVersion,
   getBandHistoryBackfillPreflight,
@@ -9,6 +10,7 @@ import {
   getConsoleBandLineupImpact,
   initializeConsoleBandHistory,
   type BandHistoryBackfillPreflight,
+  type ConsoleBandCreatePayload,
   type ConsoleBandHistory,
   type ConsoleBandLineupVersion,
 } from "../../api";
@@ -73,6 +75,13 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
   const [history, setHistory] = useState<ConsoleBandHistory | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createIdRange, setCreateIdRange] = useState<ConsoleBandCreatePayload["id_range"]>("regular");
+  const [createName, setCreateName] = useState("");
+  const [createAbbr, setCreateAbbr] = useState("");
+  const [createMembers, setCreateMembers] = useState("");
+  const [createValidFrom, setCreateValidFrom] = useState("");
+  const [confirmCreate, setConfirmCreate] = useState(false);
   const [currentName, setCurrentName] = useState("");
   const [currentAbbr, setCurrentAbbr] = useState("");
   const [currentMembers, setCurrentMembers] = useState("");
@@ -137,6 +146,40 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
     hydrateCurrentDraft(nextHistory);
     await onBandsChanged();
     onMessage(message);
+  };
+
+  const resetCreateDraft = () => {
+    setCreateIdRange("regular");
+    setCreateName("");
+    setCreateAbbr("");
+    setCreateMembers("");
+    setCreateValidFrom("");
+  };
+
+  const submitCreate = async () => {
+    const payload: ConsoleBandCreatePayload = {
+      id_range: createIdRange,
+      band_name: createName,
+      band_abbr: createAbbr,
+      members: parseMembers(createMembers),
+      valid_from: createValidFrom || null,
+    };
+    setSubmitting(true);
+    try {
+      const response = await createConsoleBand(payload, auth.csrfToken ?? "");
+      setSelectedBandId(response.item.band_id);
+      setHistory(response.history);
+      hydrateCurrentDraft(response.history);
+      setConfirmCreate(false);
+      setCreating(false);
+      resetCreateDraft();
+      await onBandsChanged();
+      onMessage(`已新增 Band #${response.item.band_id}（${response.item.band_name}）并初始化 V1`);
+    } catch (error) {
+      onMessage(`新增乐队失败：${errorMessage(error)}`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const initializeCurrent = async () => {
@@ -294,6 +337,10 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
     currentName.trim() === "" ||
     parseMembers(currentMembers).length === 0 ||
     Number(initialVersionNo) < 1;
+  const createDisabled =
+    submitting ||
+    createName.trim() === "" ||
+    parseMembers(createMembers).length === 0;
   const initialVersionLabel = `${currentName.trim()} V${initialVersionNo}`;
   const correctionChanges = buildBandCorrectionChanges(
     correctingVersion,
@@ -320,10 +367,53 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
             </option>
           ))}
         </select>
+        <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setCreating((current) => !current)}>
+          {creating ? "收起新增" : "新增 Band"}
+        </button>
         <button type="button" className="console-ghost-btn" disabled={loading} onClick={() => void runPreflight()}>
           回填预检
         </button>
       </div>
+
+      {creating && (
+        <div className="tour-admin-block">
+          <h3>新增 Band</h3>
+          <div className="tour-admin-fields band-admin-current-fields">
+            <label>
+              编号段
+              <select
+                value={createIdRange}
+                onChange={(event) => setCreateIdRange(event.target.value as ConsoleBandCreatePayload["id_range"])}
+              >
+                <option value="regular">常规编号（1–99）</option>
+                <option value="special">特殊编号（101+，100 保留）</option>
+              </select>
+            </label>
+            <label>
+              当前名称
+              <input value={createName} onChange={(event) => setCreateName(event.target.value)} />
+            </label>
+            <label>
+              缩写
+              <input value={createAbbr} onChange={(event) => setCreateAbbr(event.target.value)} />
+            </label>
+            <label>
+              生效日期（可空）
+              <input type="date" value={createValidFrom} onChange={(event) => setCreateValidFrom(event.target.value)} />
+            </label>
+            <label className="band-admin-members-field">
+              当前成员（每行一人）
+              <textarea rows={6} value={createMembers} onChange={(event) => setCreateMembers(event.target.value)} />
+            </label>
+          </div>
+          <p className="console-admin-hint">ID 由服务端按所选编号段连续分配；新增成功时同时建立当前名称与 V1 阵容历史。</p>
+          <div className="console-submit-row">
+            <button type="button" className="console-submit-btn" disabled={createDisabled} onClick={() => setConfirmCreate(true)}>
+              检查新增资料
+            </button>
+          </div>
+        </div>
+      )}
 
       {history && (
         <>
@@ -517,6 +607,27 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
             <div className="console-confirm-actions">
               <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirmInitialize(false)}>取消</button>
               <button type="button" className="console-submit-btn" disabled={submitting} onClick={() => void initializeCurrent()}>确认初始化</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmCreate && (
+        <div className="modal-mask" onClick={() => setConfirmCreate(false)}>
+          <div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="band-create-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head"><h2 id="band-create-title">确认新增 Band</h2></div>
+            <div className="console-confirm-body">
+              <p>
+                编号段：{createIdRange === "regular" ? "常规编号（1–99）" : "特殊编号（101+，100 保留）"}
+              </p>
+              <p>最终 ID 将由服务端在提交时分配。</p>
+              <p><strong>{createName.trim()} V1</strong></p>
+              <p>{parseMembers(createMembers).join(" / ")}</p>
+              <p>生效日期：{createValidFrom || "未设置"}</p>
+            </div>
+            <div className="console-confirm-actions">
+              <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirmCreate(false)}>返回修改</button>
+              <button type="button" className="console-submit-btn" disabled={submitting} onClick={() => void submitCreate()}>确认新增</button>
             </div>
           </div>
         </div>

@@ -25,6 +25,7 @@ const apiMocks = vi.hoisted(() => ({
   getConsoleSongs: vi.fn(),
   getConsoleBands: vi.fn(),
   getConsoleBandHistory: vi.fn(),
+  createConsoleBand: vi.fn(),
   initializeConsoleBandHistory: vi.fn(),
   createConsoleBandNameVersion: vi.fn(),
   createConsoleBandLineupVersion: vi.fn(),
@@ -64,6 +65,7 @@ vi.mock("../../api", () => ({
   getConsoleSongs: apiMocks.getConsoleSongs,
   getConsoleBands: apiMocks.getConsoleBands,
   getConsoleBandHistory: apiMocks.getConsoleBandHistory,
+  createConsoleBand: apiMocks.createConsoleBand,
   initializeConsoleBandHistory: apiMocks.initializeConsoleBandHistory,
   createConsoleBandNameVersion: apiMocks.createConsoleBandNameVersion,
   createConsoleBandLineupVersion: apiMocks.createConsoleBandLineupVersion,
@@ -105,6 +107,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs.mockReset();
     apiMocks.getConsoleBands.mockReset();
     apiMocks.getConsoleBandHistory.mockReset();
+    apiMocks.createConsoleBand.mockReset();
     apiMocks.initializeConsoleBandHistory.mockReset();
     apiMocks.createConsoleBandNameVersion.mockReset();
     apiMocks.createConsoleBandLineupVersion.mockReset();

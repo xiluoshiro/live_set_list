@@ -100,6 +100,19 @@ def _valid_venue_payload(**overrides):
     return payload
 
 
+def _valid_band_payload(**overrides):
+    """Return a minimal valid Band-create request body with optional field overrides."""
+    payload = {
+        "id_range": "regular",
+        "band_name": "Mock Band",
+        "band_abbr": "mock",
+        "members": ["Member A"],
+        "valid_from": None,
+    }
+    payload.update(overrides)
+    return payload
+
+
 def _valid_setlist_payload(**row_overrides):
     """Return a minimal valid setlist append request body with optional first-row overrides."""
     row = {
@@ -284,6 +297,7 @@ def test_console_lookup_mock_surfaces_database_errors(exc: Exception, expected_s
 @pytest.mark.parametrize(
     ("method", "path", "json_body"),
     [
+        ("post", "/api/console/bands", _valid_band_payload()),
         ("post", "/api/console/songs", _valid_song_payload()),
         ("post", "/api/console/venues", _valid_venue_payload()),
         ("post", "/api/console/lives", _valid_live_payload()),
@@ -307,6 +321,7 @@ def test_console_insert_mock_requires_authenticated_editor_role(method: str, pat
 @pytest.mark.parametrize(
     ("path", "json_body"),
     [
+        ("/api/console/bands", _valid_band_payload()),
         ("/api/console/songs", _valid_song_payload()),
         ("/api/console/venues", _valid_venue_payload()),
         ("/api/console/lives", _valid_live_payload()),
@@ -348,6 +363,8 @@ def test_console_update_live_mock_requires_valid_csrf():
 @pytest.mark.parametrize(
     ("path", "json_body"),
     [
+        ("/api/console/bands", _valid_band_payload(id_range="unknown")),
+        ("/api/console/bands", _valid_band_payload(members=[])),
         ("/api/console/songs", {}),
         ("/api/console/songs", _valid_song_payload(song_name="   ")),
         ("/api/console/songs", _valid_song_payload(cover="not-bool")),

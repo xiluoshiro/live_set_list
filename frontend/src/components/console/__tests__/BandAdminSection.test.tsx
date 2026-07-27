@@ -7,6 +7,7 @@ import { BandAdminSection } from "../BandAdminSection";
 
 const apiMocks = vi.hoisted(() => ({
   getConsoleBandHistory: vi.fn(),
+  createConsoleBand: vi.fn(),
   initializeConsoleBandHistory: vi.fn(),
   createConsoleBandNameVersion: vi.fn(),
   createConsoleBandLineupVersion: vi.fn(),
@@ -62,10 +63,51 @@ const initializedHistory = {
   ],
 };
 
+const createdSpecialHistory = {
+  band_id: 103,
+  current_name: "New Special Band",
+  current_abbr: "nsb",
+  current_members: ["Member A", "Member B"],
+  initialized: true,
+  name_versions: [{
+    name_version_id: 31,
+    band_name: "New Special Band",
+    band_abbr: "nsb",
+    valid_from: "2026-07-27",
+    valid_to: null,
+    note: "控制台新增 Band 并初始化 V1",
+    live_ids: [],
+  }],
+  lineup_versions: [{
+    lineup_version_id: 41,
+    version_no: 1,
+    version_label: "New Special Band V1",
+    valid_from: "2026-07-27",
+    valid_to: null,
+    predecessor_id: null,
+    change_type: "initial" as const,
+    note: "控制台新增 Band 并初始化 V1",
+    members: ["Member A", "Member B"],
+    added_members: ["Member A", "Member B"],
+    removed_members: [],
+    live_ids: [],
+  }],
+};
+
 describe("BandAdminSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     apiMocks.getConsoleBandHistory.mockResolvedValue(uninitializedHistory);
+    apiMocks.createConsoleBand.mockResolvedValue({
+      ok: true,
+      item: {
+        band_id: 103,
+        band_name: "New Special Band",
+        band_abbr: "nsb",
+        band_members: ["Member A", "Member B"],
+      },
+      history: createdSpecialHistory,
+    });
     apiMocks.initializeConsoleBandHistory.mockResolvedValue(initializedHistory);
     apiMocks.getBandHistoryBackfillPreflight.mockResolvedValue({
       ready: false,
@@ -82,6 +124,50 @@ describe("BandAdminSection", () => {
         band_name: "Unknown",
       }],
     });
+  });
+
+  // 测试点：新增 Band 可选择特殊编号段，经确认后提交并自动展示服务端返回的 V1 历史。
+  test("creates and selects a special-range band with initialized history", async () => {
+    const user = userEvent.setup();
+    const onBandsChanged = vi.fn().mockResolvedValue(undefined);
+    const onMessage = vi.fn();
+    render(
+      <BandAdminSection
+        bands={[{ band_id: 1, band_name: "Poppin'Party", band_abbr: "ppp", band_members: ["Kasumi", "Tae"] }]}
+        onMessage={onMessage}
+        onBandsChanged={onBandsChanged}
+      />,
+    );
+
+    await screen.findByDisplayValue("Poppin'Party");
+    await user.click(screen.getByRole("button", { name: "新增 Band" }));
+    const createBlock = screen.getByRole("heading", { name: "新增 Band" }).closest(".tour-admin-block");
+    expect(createBlock).not.toBeNull();
+    await user.selectOptions(within(createBlock as HTMLElement).getByLabelText("编号段"), "special");
+    await user.type(within(createBlock as HTMLElement).getByLabelText("当前名称"), "New Special Band");
+    await user.type(within(createBlock as HTMLElement).getByLabelText("缩写"), "nsb");
+    await user.type(within(createBlock as HTMLElement).getByLabelText("生效日期（可空）"), "2026-07-27");
+    await user.type(within(createBlock as HTMLElement).getByLabelText("当前成员（每行一人）"), "Member A\nMember B");
+    await user.click(within(createBlock as HTMLElement).getByRole("button", { name: "检查新增资料" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认新增 Band" });
+    expect(dialog).toHaveTextContent("特殊编号（101+，100 保留）");
+    expect(dialog).toHaveTextContent("New Special Band V1");
+    await user.click(within(dialog).getByRole("button", { name: "确认新增" }));
+
+    await waitFor(() => expect(apiMocks.createConsoleBand).toHaveBeenCalledWith(
+      {
+        id_range: "special",
+        band_name: "New Special Band",
+        band_abbr: "nsb",
+        members: ["Member A", "Member B"],
+        valid_from: "2026-07-27",
+      },
+      "csrf-token",
+    ));
+    expect(await screen.findByRole("table", { name: "乐队阵容时间线" })).toHaveTextContent("New Special Band V1");
+    expect(onBandsChanged).toHaveBeenCalledTimes(1);
+    expect(onMessage).toHaveBeenCalledWith("已新增 Band #103（New Special Band）并初始化 V1");
   });
 
   // 测试点：初始化时应由当前名称和阵容版本号自动生成版本标签，再经二次确认提交。

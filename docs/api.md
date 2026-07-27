@@ -69,6 +69,8 @@
   - `editor+` 查询控制台歌曲候选
 - `GET /api/console/bands`
   - `editor+` 查询控制台乐队与成员候选
+- `POST /api/console/bands`
+  - `editor+` 从常规或特殊编号段新增 Band，并原子建立当前名称与 V1 阵容历史
 - `GET /api/console/bands/{band_id}/history`
   - `editor+` 查询当前投影、历史名称、不可变阵容版本、成员差异与引用 Live
 - `POST /api/console/bands/{band_id}/initialize-current`
@@ -329,6 +331,14 @@
 - `POST /api/console/songs`
   - 要求 `band_id` 已存在
   - 歌曲唯一键冲突返回 `409`
+- `POST /api/console/bands`
+  - 请求使用 `id_range=regular|special` 选择编号段，不接受手工 Band ID
+  - `regular` 从 `1..99` 内现有最大 ID 继续递增；`special` 从 `101+` 内现有最大 ID 继续递增；两段不复用空洞、不互相溢出，`100` 永久保留
+  - ID 分配在 transaction advisory lock 内完成；常规段已到 `99` 时返回 `409`
+  - `band_name` 会 trim，并拒绝与当前或历史名称忽略大小写后的重复；`band_abbr` 可空且不要求唯一
+  - `members` 要求 `1..100` 个去空白后的非空、不重复名称；`valid_from` 可空
+  - 单一事务写入 `band_attrs`、当前名称版本、V1 阵容及成员，并记录 `band_create` 审计；任一步失败均整体回滚
+  - `band_id > 100` 只表示选择了特殊编号段；歌曲、Live、Tour、统计、筛选和历史版本仍与其他正数 Band 使用相同逻辑
 - 乐队历史写接口
   - 当前资料初始化会锁定目标 `band_attrs`；同一 Band 已存在名称或阵容版本时返回 `409`
   - 名称和阵容日期使用 `[valid_from, valid_to)`，服务端拒绝同一 Band 的重叠范围
