@@ -49,6 +49,7 @@ import { SectionTabs } from "./SectionTabs";
 import { LiveInsertTab } from "./console/LiveInsertTab";
 import { SongAdminSection } from "./console/SongAdminSection";
 import { BandAdminSection } from "./console/BandAdminSection";
+import { CompactConfirmationTable } from "./console/CompactConfirmationTable";
 import { PerformanceGroupAdminSection } from "./console/PerformanceGroupAdminSection";
 import { TourAdminSection } from "./console/TourAdminSection";
 import {
@@ -2849,26 +2850,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }
   };
 
-  const renderCompactConfirmation = (rows: Array<[string, string | number | boolean]>) => (
-    <div className="console-confirm-table-wrap">
-      <table className="console-admin-table console-confirm-table">
-        <tbody>
-          {rows.map(([label, value]) => (
-            <tr key={label}>
-              <th>{label}</th>
-              <td>{String(value)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-
   const renderPendingConfirmationBody = () => {
     if (!pendingConfirmation) return null;
 
     if (pendingConfirmation.kind === "venue") {
-      return renderCompactConfirmation([["venue_name", pendingConfirmation.payload.venue_name]]);
+      return (
+        <CompactConfirmationTable
+          rows={[["venue_name", pendingConfirmation.payload.venue_name]]}
+        />
+      );
     }
 
     if (pendingConfirmation.kind === "live_discard") {
@@ -2882,7 +2872,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         <>
           {pendingConfirmation.action === "update" ? (
             <UpdateDiffTable changes={pendingConfirmation.changes} ariaLabel="Live 修改内容" />
-          ) : renderCompactConfirmation([
+          ) : (
+            <CompactConfirmationTable
+              rows={[
               ["live_date", payload.live_date],
               ["live_title", payload.live_title],
               ["live_type", formatLiveType(payload.live_type)],
@@ -2899,7 +2891,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
                   .map((attendee) => `${attendee.band_id}: ${attendee.members.join(" / ")}`)
                   .join("; ") || "-",
               ],
-            ])}
+              ]}
+            />
+          )}
           {shouldWarnMissingEventBands && (
             <p className="console-admin-hint" role="status">
               提示：当前 Live 类型为活动，且未选择默认 Band，请确认是否需要补充。
@@ -2928,12 +2922,16 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       const payload = pendingConfirmation.payload;
       return pendingConfirmation.action === "update"
         ? <UpdateDiffTable changes={pendingConfirmation.changes} ariaLabel="歌曲修改内容" />
-        : renderCompactConfirmation([
-        ["song_name", payload.song_name],
-        ["band_id", payload.band_id],
-        ["band_name", pendingConfirmation.bandName],
-        ["cover", payload.cover],
-      ]);
+        : (
+          <CompactConfirmationTable
+            rows={[
+              ["song_name", payload.song_name],
+              ["band_id", payload.band_id],
+              ["band_name", pendingConfirmation.bandName],
+              ["cover", String(payload.cover)],
+            ]}
+          />
+        );
     }
 
     if (pendingConfirmation.kind === "batch_song") {
@@ -2987,12 +2985,14 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
     return (
       <>
-        {renderCompactConfirmation([
-          ["live_id", pendingConfirmation.live.live_id],
-          ["live_title", pendingConfirmation.live.live_title],
-          ["live_date", pendingConfirmation.live.live_date],
-          ["setlist_rows", pendingConfirmation.previewRows.length],
-        ])}
+        <CompactConfirmationTable
+          rows={[
+            ["live_id", pendingConfirmation.live.live_id],
+            ["live_title", pendingConfirmation.live.live_title],
+            ["live_date", pendingConfirmation.live.live_date],
+            ["setlist_rows", pendingConfirmation.previewRows.length],
+          ]}
+        />
         <div className="console-table-wrap console-confirm-setlist-wrap">
           <table className="console-admin-table console-confirm-setlist-table">
             <thead>
