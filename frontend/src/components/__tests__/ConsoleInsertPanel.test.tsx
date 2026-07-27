@@ -405,6 +405,54 @@ describe("ConsoleInsertPanel", () => {
     expect(within(resultTable).queryByRole("columnheader", { name: "song_id" })).not.toBeInTheDocument();
   });
 
+  // 测试点：写请求响应超时后若后端已持久化完全一致的数据，应按成功收口而不是诱导重复提交。
+  test("Setlist提交超时后会读取后端结果并确认已写入", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
+    apiMocks.appendConsoleLiveSetlist.mockRejectedValueOnce(new Error("Request timeout"));
+    apiMocks.getConsoleLiveSetlist.mockResolvedValueOnce({
+      live_id: 101,
+      band_lineup_contexts: [],
+      rows: [{
+        row_id: "persisted-row-1",
+        song_id: 901,
+        song_name: "BLACK SHOUT",
+        absolute_order: 1,
+        segment_type: "M",
+        sub_order: 1,
+        is_short: false,
+        band_member: { Roselia: ["湊友希那"] },
+        band_performances: [],
+        other_member: null,
+        comment: null,
+      }],
+    });
+
+    render(<ConsoleInsertPanel />);
+    await screen.findByLabelText("批量粘贴 Setlist 文本");
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+    await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await waitFor(() => expect(apiMocks.getConsoleLiveSetlist).toHaveBeenCalledWith(101));
+    expect(await screen.findByText("已确认 Live #101 的 1 条 Setlist 已写入（原提交响应未成功返回）。")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
+    expect(screen.queryByText(/未选择有效的 live_id/)).not.toBeInTheDocument();
+  });
+
   // 测试点：后继阵容与手工勾选成员应进入确认数据，交接共演的正式基准和实际成员也应原样提交。
   test("交接共演可选择新阵容为正式基准", async () => {
     const user = userEvent.setup();
@@ -1883,6 +1931,68 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("");
     expect(screen.getByRole("status")).toHaveTextContent("Live #101 已在另一标签页写入 Setlist");
     expect(apiMocks.getLiveDetail).not.toHaveBeenCalled();
+  });
+
+  // 测试点：候选刷新尚未完成时必须锁住提交，避免用已过期的 live_id 打开确认或继续写入。
+  test("刷新Setlist候选期间禁用提交", async () => {
+    const user = userEvent.setup();
+    let resolveRefresh: ((value: object) => void) | undefined;
+    const refreshPromise = new Promise<object>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
+    apiMocks.getConsoleSongs
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
+    apiMocks.getLives
+      .mockResolvedValueOnce({
+        items: [
+          { live_id: 101, live_date: "2026-03-30", live_title: "First Live", live_type: "oneman", bands: [], url: null, is_favorite: false },
+        ],
+        pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+      })
+      .mockReturnValueOnce(refreshPromise);
+
+    render(<ConsoleInsertPanel />);
+    await screen.findByRole("option", { name: "101 - First Live (2026-03-30)" });
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: "查询歌曲" }));
+    await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
+    expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled();
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: CONSOLE_LIVE_CHANGE_STORAGE_KEY,
+        newValue: JSON.stringify({
+          action: "setlist_appended",
+          liveId: 999,
+          changedAt: "2026-07-27T00:00:00.000Z",
+          nonce: "other-tab-loading",
+        }),
+      }));
+    });
+
+    await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("选择 live_id")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
+    expect(screen.queryByRole("dialog", { name: "确认提交 Setlist" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveRefresh?.({
+        items: [
+          { live_id: 101, live_date: "2026-03-30", live_title: "First Live", live_type: "oneman", bands: [], url: null, is_favorite: false },
+        ],
+        pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+      });
+      await refreshPromise;
+    });
   });
 
   // 测试点：批量确认框随内容自适应并限制最大高度，超长内容只在中部滚动。

@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthProvider";
 import {
   CONSOLE_LIVE_CHANGE_STORAGE_KEY,
   parseConsoleLiveChange,
+  publishConsoleLiveChange,
 } from "../consoleLiveSync";
 import {
   appendConsoleLiveSetlist,
@@ -29,6 +30,7 @@ import {
   type ConsoleEventAttendee,
   type ConsoleLiveCandidate,
   type ConsoleLiveSetlistAppendPayload,
+  type ConsoleLiveSetlistEditResponse,
   type ConsoleLiveSetlistRowPayload,
   type ConsoleLiveUpsertPayload,
   type ConsoleLiveUpdatePayload,
@@ -470,6 +472,87 @@ function buildSetlistUpdateChanges(
   return changes;
 }
 
+function normalizeSetlistPayloadForComparison(
+  payload: ConsoleLiveSetlistAppendPayload,
+): ConsoleLiveSetlistAppendPayload {
+  const normalizeStringList = (value: unknown): string[] => {
+    const values = Array.isArray(value) ? value : [value];
+    return [...new Set(values.map((item) => String(item ?? "").trim()).filter(Boolean))];
+  };
+  const normalizeBandMember = (
+    value: ConsoleLiveSetlistRowPayload["band_member"],
+  ): ConsoleLiveSetlistRowPayload["band_member"] => Object.fromEntries(
+    Object.entries(value)
+      .map(([bandName, members]) => [bandName.trim(), normalizeStringList(members)] as const)
+      .filter(([bandName, members]) => bandName !== "" && members.length > 0)
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+  const normalizeOtherMember = (
+    value: ConsoleLiveSetlistRowPayload["other_member"],
+  ): ConsoleLiveSetlistRowPayload["other_member"] => {
+    if (value === null || value === undefined) return null;
+    const entries = Object.entries(value)
+      .map(([memberName, members]) => {
+        const normalizedMembers = normalizeStringList(members);
+        const normalizedValue = normalizedMembers.length === 0
+          ? null
+          : normalizedMembers.length === 1
+            ? normalizedMembers[0]
+            : normalizedMembers;
+        return [memberName.trim(), normalizedValue] as const;
+      })
+      .filter(([memberName]) => memberName !== "")
+      .sort(([left], [right]) => left.localeCompare(right));
+    return entries.length > 0 ? Object.fromEntries(entries) : null;
+  };
+  return {
+    band_lineup_contexts: [...(payload.band_lineup_contexts ?? [])]
+      .sort((left, right) => left.band_id - right.band_id)
+      .map((context) => ({ ...context })),
+    setlist_rows: [...payload.setlist_rows]
+      .sort((left, right) => left.absolute_order - right.absolute_order)
+      .map((row) => {
+        const bandPerformances = [...(row.band_performances ?? [])]
+          .sort((left, right) => left.band_id - right.band_id)
+          .map((performance) => ({ ...performance, members: [...performance.members] }));
+        return {
+          song_id: row.song_id,
+          absolute_order: row.absolute_order,
+          segment_type: row.segment_type,
+          sub_order: row.sub_order,
+          is_short: row.is_short,
+          // 版本化阵容写入时，后端会按历史名称重建兼容字段；实际语义由 band_performances 决定。
+          band_member: bandPerformances.length > 0 ? {} : normalizeBandMember(row.band_member),
+          band_performances: bandPerformances,
+          other_member: normalizeOtherMember(row.other_member),
+          comment: row.comment ?? null,
+        };
+      }),
+  };
+}
+
+function persistedSetlistMatchesPayload(
+  persisted: ConsoleLiveSetlistEditResponse,
+  expected: ConsoleLiveSetlistAppendPayload,
+): boolean {
+  const persistedPayload: ConsoleLiveSetlistAppendPayload = {
+    band_lineup_contexts: persisted.band_lineup_contexts ?? [],
+    setlist_rows: persisted.rows.map((row) => ({
+      song_id: row.song_id,
+      absolute_order: row.absolute_order,
+      segment_type: row.segment_type,
+      sub_order: row.sub_order,
+      is_short: row.is_short,
+      band_member: row.band_member,
+      band_performances: row.band_performances ?? [],
+      other_member: row.other_member ?? null,
+      comment: row.comment ?? null,
+    })),
+  };
+  return JSON.stringify(normalizeSetlistPayloadForComparison(persistedPayload))
+    === JSON.stringify(normalizeSetlistPayloadForComparison(expected));
+}
+
 export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" }: ConsoleInsertPanelProps = {}) {
   const auth = useAuth();
   const [mode, setMode] = useState<ConsoleMode>(initialMode);
@@ -675,7 +758,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       && row.song_id.trim() === ""
       && (row.song_candidates?.length ?? 0) === 0,
   );
-  const selectedSetlistLive = [...setlistEditLives, ...lives].find((live) => live.live_id === selectedLiveId);
+  const selectedSetlistLive = (mode === "setlist_edit" ? setlistEditLives : lives)
+    .find((live) => live.live_id === selectedLiveId);
   const activeSetlistBands = useMemo(() => {
     const names = new Set(setlistRows.flatMap((row) => Object.keys(row.band_member)));
     return bands.filter((band) => band.band_id > 0 && names.has(band.band_name));
@@ -699,9 +783,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const isLiveSubmitBlocked = isLiveSubmitDisabled
     || (mode === "live_edit" && hasScheduleChanges && scheduleChangeKind === null);
   const hasExistingSetlist = (setlistDetailData?.detail_rows ?? []).length > 0;
-  // 校验规则 3：新增 Setlist 的“提交插入”要求每一行 song_name/sid/band_member 均非空。
+  // 校验规则 3：候选刷新期间或当前 live_id 已不在本页候选中时不可提交。
   const isSetlistSubmitDisabled =
-    selectedLiveId <= 0 ||
+    isLiveLoading ||
+    selectedSetlistLive === undefined ||
     setlistRows.length === 0 ||
     (mode === "setlist" && hasExistingSetlist) ||
     setlistRows.some((row) => {
@@ -2236,12 +2321,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     previewRows: SetlistConfirmRow[],
     csrfToken: string,
   ) => {
-    try {
-      const response = await appendConsoleLiveSetlist(
-        targetLive.live_id,
-        payload,
-        csrfToken,
-      );
+    const completeInsert = (message: string) => {
       const newBundle = {
         live: targetLive,
         setlist_rows: previewRows.map((row) => ({
@@ -2266,11 +2346,35 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       onLiveDataChanged?.();
       clearSetlistPastePreview();
       clearSetlistData();
-      setMessage(
+      setMessage(message);
+    };
+
+    try {
+      const response = await appendConsoleLiveSetlist(
+        targetLive.live_id,
+        payload,
+        csrfToken,
+      );
+      completeInsert(
         `已为Live #${targetLive.live_id} 插入 ${response.item.inserted_row_count} 条 setlist，总计 ${response.item.total_setlist_row_count} 条。`,
       );
     } catch (error) {
       const status = (error as { status?: number }).status;
+      const message = errorMessage(error);
+      if (status === 409 || message === "Request timeout") {
+        try {
+          const persisted = await getConsoleLiveSetlist(targetLive.live_id);
+          if (persistedSetlistMatchesPayload(persisted, payload)) {
+            publishConsoleLiveChange("setlist_appended", targetLive.live_id);
+            completeInsert(
+              `已确认 Live #${targetLive.live_id} 的 ${persisted.rows.length} 条 Setlist 已写入（原提交响应未成功返回）。`,
+            );
+            return;
+          }
+        } catch {
+          // 下方会按原始写请求错误提示；读取确认失败不能证明事务未提交。
+        }
+      }
       if (status === 409) {
         const remainingLives = lives.filter((live) => live.live_id !== targetLive.live_id);
         setLives(remainingLives);
@@ -2283,7 +2387,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         setSetlistCandidateRefreshKey((key) => key + 1);
         return;
       }
-      setMessage(`提交setlist失败：${errorMessage(error)}`);
+      if (message === "Request timeout") {
+        setMessage("提交setlist结果暂时未知：请求超时，且未能确认本次数据是否已经写入。请先刷新页面确认，避免重复提交。");
+        return;
+      }
+      setMessage(`提交setlist失败：${message}`);
     }
   };
 
