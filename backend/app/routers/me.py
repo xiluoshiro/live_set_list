@@ -60,14 +60,6 @@ LEFT JOIN performance_group_lives pgl
     ON pgl.live_id = l.id
 LEFT JOIN performance_group_attrs pg
     ON pg.id = pgl.group_id
-LEFT JOIN live_setlist ls
-    ON l.id = ls.live_id
-LEFT JOIN LATERAL (
-    SELECT jsonb_object_keys(ls.band_member) AS key
-    WHERE jsonb_typeof(ls.band_member) = 'object'
-) t ON true
-LEFT JOIN band_attrs b
-    ON b.band_name = t.key
 WHERE f.user_id = %s
 GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids,
          l.start_time, l.event_status, tour.id, tour.tour_title, pg.id, pg.group_title

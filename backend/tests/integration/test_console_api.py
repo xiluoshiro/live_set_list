@@ -9,6 +9,15 @@ TEST_DEFAULT_ADMIN_USERNAME = os.getenv("AUTH_DEFAULT_ADMIN_USERNAME", "admin").
 TEST_DEFAULT_ADMIN_PASSWORD = os.getenv("AUTH_DEFAULT_ADMIN_PASSWORD", "test-admin-pass")
 
 
+def _base_performance(band_id: int, members: list[str]) -> dict[str, object]:
+    return {
+        "band_id": band_id,
+        "lineup_usage": "base",
+        "handover_baseline": None,
+        "members": members,
+    }
+
+
 def _login_and_get_csrf_for(
     integration_test_client,
     *,
@@ -119,7 +128,6 @@ def test_console_lookup_endpoints_return_seeded_options(
                 "band_members": ["Yukina", "Sayo", "Lisa", "Ako", "Rinko"],
             }
         ],
-        "historical_default_band_selection_enabled": True,
     }
 
     assert venues_response.status_code == 200
@@ -630,7 +638,7 @@ def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
                     "segment_type": "EN",
                     "sub_order": 1,
                     "is_short": False,
-                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "band_performances": [_base_performance(1, ["Kasumi"])],
                     "other_member": {},
                     "comment": None,
                 }
@@ -659,6 +667,26 @@ def test_console_create_live_persists_live_row(
         username="editor_tester",
         password="editor-test-pass",
     )
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT band_id, band_name_version_id, lineup_version_id
+            FROM current_band_versions
+            WHERE band_id = ANY(%s)
+            ORDER BY band_id
+            """,
+            ([1, 3],),
+        )
+        expected_contexts = [
+            {
+                "band_id": int(row[0]),
+                "band_name_version_id": int(row[1]),
+                "base_lineup_version_id": int(row[2]),
+                "next_lineup_version_id": None,
+            }
+            for row in cursor.fetchall()
+        ]
 
     response = integration_test_client.post(
         "/api/console/lives",
@@ -692,7 +720,7 @@ def test_console_create_live_persists_live_row(
             "venue_id": 2,
             "default_band_ids": [1, 3],
             "event_attendees": [],
-            "band_lineup_contexts": [],
+            "band_lineup_contexts": expected_contexts,
             "event_status": "scheduled",
             "status_note": None,
             "date_phase": "past",
@@ -743,20 +771,28 @@ def test_console_create_live_persists_live_row(
             "live_type": "oneman",
             "default_band_ids": [1, 3],
             "event_attendees": [],
-            "band_lineup_contexts": [],
+            "band_lineup_contexts": expected_contexts,
             "event_status": "scheduled",
             "status_note": None,
         },
     )
 
 
-# 测试点：资料整理期可为无 Setlist 活动固化旧名称和旧阵容，成员校验与公开详情不得回退到当前 Band 投影。
-def test_console_create_event_persists_historical_default_band_context(
+# 测试点：写请求拒绝客户端历史上下文，普通历史日期不带上下文时仍由服务端锁定当前开放版本。
+def test_console_create_event_rejects_historical_default_band_context(
     integration_test_client,
     integration_admin_connection,
 ):
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
+        cursor.execute("DELETE FROM live_setlist_band_performance_members WHERE band_id = 3")
+        cursor.execute("DELETE FROM live_setlist_band_performances WHERE band_id = 3")
+        cursor.execute("DELETE FROM live_band_lineup_contexts WHERE band_id = 3")
+        cursor.execute(
+            "DELETE FROM band_lineup_version_members WHERE lineup_version_id IN (SELECT id FROM band_lineup_versions WHERE band_id = 3)"
+        )
+        cursor.execute("DELETE FROM band_lineup_versions WHERE band_id = 3")
+        cursor.execute("DELETE FROM band_name_versions WHERE band_id = 3")
         cursor.execute(
             """
             INSERT INTO band_name_versions (band_id, band_name, band_abbr, valid_from, valid_to, note)
@@ -785,9 +821,11 @@ def test_console_create_event_persists_historical_default_band_context(
                 predecessor_id, change_type, note
             )
             VALUES (3, 2, 'MyGO V2', '2021-01-01', NULL, %s, 'replacement', 'test current')
+            RETURNING id
             """,
             (old_lineup_version_id,),
         )
+        current_lineup_version_id = int(cursor.fetchone()[0])
         cursor.executemany(
             """
             INSERT INTO band_lineup_version_members (lineup_version_id, member_name, display_order)
@@ -796,6 +834,8 @@ def test_console_create_event_persists_historical_default_band_context(
             [
                 (old_lineup_version_id, "Old Vocal", 1),
                 (old_lineup_version_id, "Old Guitar", 2),
+                (current_lineup_version_id, "Current Vocal", 1),
+                (current_lineup_version_id, "Current Guitar", 2),
             ],
         )
 
@@ -827,30 +867,30 @@ def test_console_create_event_persists_historical_default_band_context(
         },
     )
 
-    assert response.status_code == 201
-    item = response.json()["item"]
-    live_id = item["live_id"]
-    assert item["event_attendees"] == [{
-        "band_id": 3,
-        "mode": "full",
-        "members": ["Old Vocal", "Old Guitar"],
-    }]
-    assert item["band_lineup_contexts"] == [{
-        "band_id": 3,
-        "band_name_version_id": old_name_version_id,
-        "base_lineup_version_id": old_lineup_version_id,
-        "next_lineup_version_id": None,
-    }]
+    assert response.status_code == 422
 
-    detail_response = integration_test_client.get(f"/api/lives/{live_id}")
-    assert detail_response.status_code == 200
-    assert detail_response.json()["band_names"] == ["MyGO old"]
-    assert detail_response.json()["event_attendees"] == [{
-        "band_id": 3,
-        "band_name": "MyGO old",
-        "mode": "full",
-        "members": ["Old Vocal", "Old Guitar"],
-    }]
+    current_response = integration_test_client.post(
+        "/api/console/lives",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "live_date": "2020-06-01",
+            "live_title": "Historical date with current Band",
+            "live_type": "event",
+            "url": "https://example.com/lives/current-default",
+            "opening_time": "18:00",
+            "start_time": "19:00",
+            "timezone": "+09:00",
+            "venue_id": 2,
+            "default_band_ids": [3],
+            "event_attendees": [
+                {"band_id": 3, "members": ["Current Vocal", "Current Guitar"]}
+            ],
+        },
+    )
+    assert current_response.status_code == 201
+    assert current_response.json()["item"]["band_lineup_contexts"][0][
+        "base_lineup_version_id"
+    ] == current_lineup_version_id
 
 
 # 测试点：更新活动为非活动时应原子清空出演成员，同时保留既有活动组关系和 Setlist 数据。
@@ -1036,7 +1076,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
                     "segment_type": "EN",
                     "sub_order": 1,
                     "is_short": False,
-                    "band_member": {"Poppin'Party": ["Kasumi", "Tae", "Saaya", "Arisa"]},
+                    "band_performances": [_base_performance(1, ["Kasumi", "Tae", "Saaya", "Arisa"])],
                     "other_member": {"嘉宾": ["MASKING", "LOCK"]},
                     "comment": "appended encore",
                 },
@@ -1046,7 +1086,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
                     "segment_type": "SP",
                     "sub_order": 1,
                     "is_short": True,
-                    "band_member": {"Roselia": ["Yukina", "Sayo", "Lisa"]},
+                    "band_performances": [_base_performance(2, ["Yukina", "Sayo", "Lisa"])],
                     "other_member": {"支援": []},
                     "comment": None,
                 },
@@ -1056,7 +1096,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
                     "segment_type": "M",
                     "sub_order": 1,
                     "is_short": False,
-                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "band_performances": [_base_performance(1, ["Kasumi"])],
                     "other_member": None,
                     "comment": None,
                 },
@@ -1094,7 +1134,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
             "EN",
             1,
             False,
-            {"Poppin'Party": ["Kasumi", "Tae", "Saaya", "Arisa"]},
+            None,
             {"嘉宾": ["MASKING", "LOCK"]},
             "appended encore",
         ),
@@ -1103,7 +1143,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
             "SP",
             1,
             True,
-            {"Roselia": ["Yukina", "Sayo", "Lisa"]},
+            None,
             {"支援": None},
             None,
         ),
@@ -1112,7 +1152,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
             "M",
             1,
             False,
-            {"Poppin'Party": ["Kasumi"]},
+            None,
             None,
             None,
         ),
@@ -1126,7 +1166,12 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "live_setlist_append",
         "41",
-        {"inserted_row_count": 3, "total_setlist_row_count": 3},
+        {
+            "inserted_row_count": 3,
+            "lineup_context_count": 3,
+            "total_setlist_row_count": 3,
+            "versioned_performance_count": 3,
+        },
     )
 
 
@@ -1143,6 +1188,14 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
     )
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
+        cursor.execute("DELETE FROM live_setlist_band_performance_members WHERE band_id = 1")
+        cursor.execute("DELETE FROM live_setlist_band_performances WHERE band_id = 1")
+        cursor.execute("DELETE FROM live_band_lineup_contexts WHERE band_id = 1")
+        cursor.execute(
+            "DELETE FROM band_lineup_version_members WHERE lineup_version_id IN (SELECT id FROM band_lineup_versions WHERE band_id = 1)"
+        )
+        cursor.execute("DELETE FROM band_lineup_versions WHERE band_id = 1")
+        cursor.execute("DELETE FROM band_name_versions WHERE band_id = 1")
         cursor.execute(
             """
             INSERT INTO band_name_versions (
@@ -1168,9 +1221,9 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
             """
             INSERT INTO band_lineup_versions (
                 band_id, version_no, version_label, valid_from, valid_to,
-                predecessor_id, change_type
+                predecessor_id, change_type, transition_live_id
             )
-            VALUES (1, 2, 'PPP V2', DATE '2018-01-01', NULL, %s, 'replacement')
+            VALUES (1, 2, 'PPP V2', DATE '2018-01-01', NULL, %s, 'replacement', 41)
             RETURNING id
             """,
             (base_version_id,),
@@ -1189,19 +1242,21 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
             """,
             (base_version_id, base_version_id, next_version_id, next_version_id),
         )
+        cursor.execute(
+            """
+            INSERT INTO live_band_lineup_contexts (
+                live_id, band_id, band_name_version_id,
+                base_lineup_version_id, next_lineup_version_id
+            )
+            VALUES (41, 1, %s, %s, %s)
+            """,
+            (name_version_id, base_version_id, next_version_id),
+        )
 
     response = integration_test_client.post(
         "/api/console/lives/41/setlist",
         headers={"X-CSRF-Token": csrf_token},
         json={
-            "band_lineup_contexts": [
-                {
-                    "band_id": 1,
-                    "band_name_version_id": name_version_id,
-                    "base_lineup_version_id": base_version_id,
-                    "next_lineup_version_id": next_version_id,
-                }
-            ],
             "setlist_rows": [
                 {
                     "song_id": 4,
@@ -1227,14 +1282,16 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
 
     assert response.status_code == 201
     assert edit_response.status_code == 200
-    assert edit_response.json()["band_lineup_contexts"] == [
-        {
-            "band_id": 1,
-            "band_name_version_id": name_version_id,
-            "base_lineup_version_id": base_version_id,
-            "next_lineup_version_id": next_version_id,
-        }
-    ]
+    edit_contexts = {
+        item["band_id"]: item for item in edit_response.json()["band_lineup_contexts"]
+    }
+    assert edit_contexts[1] == {
+        "band_id": 1,
+        "band_name_version_id": name_version_id,
+        "base_lineup_version_id": base_version_id,
+        "next_lineup_version_id": next_version_id,
+    }
+    assert 3 in edit_contexts
     assert edit_response.json()["rows"][0]["band_member"] == {
         "Poppin'Party historical": ["Kasumi", "Tae", "Rimi"]
     }
@@ -1268,12 +1325,14 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
             """
         )
         assert cursor.fetchone() == ("handover", "next", "former")
+        cursor.execute("SELECT band_member FROM live_setlist WHERE live_id = 41")
+        assert cursor.fetchone() == (None,)
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "live_setlist_append",
         "41",
         {
             "inserted_row_count": 1,
-            "lineup_context_count": 1,
+            "lineup_context_count": 2,
             "total_setlist_row_count": 1,
             "versioned_performance_count": 1,
         },
@@ -1298,14 +1357,17 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
     )
 
     assert metadata_response.status_code == 200
-    assert metadata_response.json()["item"]["band_lineup_contexts"] == [
-        {
-            "band_id": 1,
-            "band_name_version_id": name_version_id,
-            "base_lineup_version_id": base_version_id,
-            "next_lineup_version_id": next_version_id,
-        }
-    ]
+    metadata_contexts = {
+        item["band_id"]: item
+        for item in metadata_response.json()["item"]["band_lineup_contexts"]
+    }
+    assert metadata_contexts[1] == {
+        "band_id": 1,
+        "band_name_version_id": name_version_id,
+        "base_lineup_version_id": base_version_id,
+        "next_lineup_version_id": next_version_id,
+    }
+    assert metadata_contexts[3] == edit_contexts[3]
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
@@ -1355,7 +1417,7 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
                     "segment_type": "M",
                     "sub_order": 1,
                     "is_short": False,
-                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "band_performances": [_base_performance(1, ["Kasumi"])],
                     "other_member": {},
                     "comment": None,
                 }
@@ -1373,7 +1435,7 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
                     "segment_type": "M",
                     "sub_order": 1,
                     "is_short": False,
-                    "band_member": {"MyGO!!!!!": ["Tomori"]},
+                    "band_performances": [_base_performance(3, ["Tomori"])],
                     "other_member": {},
                     "comment": None,
                 },
@@ -1383,7 +1445,7 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
                     "segment_type": "M",
                     "sub_order": 2,
                     "is_short": False,
-                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "band_performances": [_base_performance(1, ["Kasumi"])],
                     "other_member": {},
                     "comment": None,
                 },
@@ -1428,7 +1490,7 @@ def test_console_append_live_setlist_rolls_back_when_one_row_is_invalid(
                     "segment_type": "EN",
                     "sub_order": 1,
                     "is_short": False,
-                    "band_member": {"Poppin'Party": ["Kasumi", "Tae"]},
+                    "band_performances": [_base_performance(1, ["Kasumi", "Tae"])],
                     "other_member": {},
                     "comment": "should rollback",
                 },
@@ -1438,7 +1500,7 @@ def test_console_append_live_setlist_rolls_back_when_one_row_is_invalid(
                     "segment_type": "SP",
                     "sub_order": 1,
                     "is_short": False,
-                    "band_member": {"Roselia": ["Yukina"]},
+                    "band_performances": [_base_performance(2, ["Yukina"])],
                     "other_member": {},
                     "comment": "missing song",
                 },
@@ -1480,7 +1542,7 @@ def test_console_append_live_setlist_stores_segment_type_raw(
                     "segment_type": "OP",
                     "sub_order": 1,
                     "is_short": False,
-                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "band_performances": [_base_performance(1, ["Kasumi"])],
                     "other_member": {},
                     "comment": "opening track",
                 },
@@ -1490,7 +1552,7 @@ def test_console_append_live_setlist_stores_segment_type_raw(
                     "segment_type": "WEN",
                     "sub_order": 1,
                     "is_short": False,
-                    "band_member": {"Roselia": ["Yukina"]},
+                    "band_performances": [_base_performance(2, ["Yukina"])],
                     "other_member": {},
                     "comment": "w encore",
                 },
@@ -1537,7 +1599,7 @@ def test_console_append_live_setlist_rejects_when_live_has_existing_rows(
                     "segment_type": "M",
                     "sub_order": 1,
                     "is_short": False,
-                    "band_member": {"Poppin'Party": ["Kasumi"]},
+                    "band_performances": [_base_performance(1, ["Kasumi"])],
                     "other_member": {},
                     "comment": None,
                 }

@@ -136,15 +136,15 @@ LiveSetList 已经能够按关键词、年份、Live 类型和乐队浏览 Live�
 
 ### 乐队归属保持一致
 
-- Live 已有 setlist 时，从 `live_setlist.band_member` 得到参与乐队。
+- Live 已有 Setlist 时，从 `live_setlist_band_performances` 得到稳定 `band_id` 的参与乐队。
 - Live 完全没有 setlist 时，才允许回退 `live_attrs.default_band_ids`。
 - 统计页、演出资料筛选和乐队浏览必须共享这一规则。
 
 乐队筛选还需要区分 Live 级与歌曲条目级语义：
 
 - Live 级统计先选出该乐队参与的 Live。
-- 歌曲统计只计算 `band_member` 中包含该乐队的 setlist 行，不能把同一场多乐队 Live 中其他乐队演唱的歌曲一并计入。
-- `song_list.band_id` 表示歌曲目录归属，`live_setlist.band_member` 表示该次 Live 条目的实际出演关系；按乐队统计现场歌曲时以后者为准。
+- 歌曲统计只计算版本化出演关系中包含该乐队的 Setlist 行，不能把同一场多乐队 Live 中其他乐队演唱的歌曲一并计入。
+- `song_list.band_id` 表示歌曲目录归属，`live_setlist_band_performances.band_id` 表示该次 Live 条目的实际出演关系；按乐队统计现场歌曲时以后者为准。
 - 一条 setlist 行若明确包含多个乐队，当前 S1 会分别计入对应乐队，因此乐队歌曲项合计可能大于全局去重歌曲数。
 
 ### 当前资料覆盖不等于现实全量

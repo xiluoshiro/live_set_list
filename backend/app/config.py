@@ -59,11 +59,6 @@ def cookie_secure_enabled() -> bool:
     return is_truthy_env("AUTH_COOKIE_SECURE", "false")
 
 
-def historical_default_band_selection_enabled() -> bool:
-    """Allow temporary manual selection of historical default Band versions."""
-    return is_truthy_env("ALLOW_HISTORICAL_DEFAULT_BAND_SELECTION", "true")
-
-
 def assert_production_security_config() -> None:
     if is_production() and not cookie_secure_enabled():
         raise RuntimeError("AUTH_COOKIE_SECURE=true is required when APP_ENV=production")

@@ -8,16 +8,16 @@ LiveListSort = Literal["date_desc", "date_asc"]
 
 
 def effective_band_ids_sql(*, live_alias: str, setlist_alias: str, band_alias: str) -> str:
-    """Build the shared list rule: default bands apply only while a live has no setlist rows."""
+    """Build the shared stable-band projection for a Live."""
     return f"""
-        CASE
-            WHEN COUNT({setlist_alias}.id) = 0 THEN {live_alias}.default_band_ids
-            ELSE COALESCE(
-                array_agg(DISTINCT {band_alias}.id ORDER BY {band_alias}.id)
-                    FILTER (WHERE {band_alias}.id IS NOT NULL),
-                ARRAY[]::int[]
-            )
-        END
+        COALESCE(
+            (
+                SELECT array_agg(effective.band_id ORDER BY effective.band_id)
+                FROM effective_live_bands effective
+                WHERE effective.live_id = {live_alias}.id
+            ),
+            ARRAY[]::int[]
+        )
     """
 
 
@@ -75,39 +75,26 @@ def build_live_where(filters: LiveListFilters) -> tuple[str, list[object]]:
                     FROM live_setlist filter_setlist
                     LEFT JOIN song_list filter_song
                         ON filter_song.id = filter_setlist.song_id
-                    LEFT JOIN LATERAL (
-                        SELECT jsonb_object_keys(filter_setlist.band_member) AS band_name
-                        WHERE jsonb_typeof(filter_setlist.band_member) = 'object'
-                    ) filter_band_name ON true
-                    LEFT JOIN band_attrs filter_band
-                        ON filter_band.band_name = filter_band_name.band_name
                     WHERE filter_setlist.live_id = l.id
                       AND (
                           filter_song.song_name ILIKE %s ESCAPE '\\'
-                          OR filter_band.band_name ILIKE %s ESCAPE '\\'
-                          OR filter_band.band_abbr ILIKE %s ESCAPE '\\'
                       )
                 )
-                OR (
-                    NOT EXISTS (
-                        SELECT 1
-                        FROM live_setlist default_band_setlist
-                        WHERE default_band_setlist.live_id = l.id
+                OR EXISTS (
+                    SELECT 1
+                    FROM effective_live_bands effective
+                    JOIN current_band_versions filter_band
+                      ON filter_band.band_id = effective.band_id
+                    WHERE effective.live_id = l.id
+                      AND (
+                          filter_band.band_name ILIKE %s ESCAPE '\\'
+                          OR filter_band.band_abbr ILIKE %s ESCAPE '\\'
+                      )
                     )
-                    AND EXISTS (
-                        SELECT 1
-                        FROM band_attrs default_band
-                        WHERE default_band.id = ANY(l.default_band_ids)
-                          AND (
-                              default_band.band_name ILIKE %s ESCAPE '\\'
-                              OR default_band.band_abbr ILIKE %s ESCAPE '\\'
-                          )
-                    )
-                )
             )
             """
         )
-        params.extend([pattern, pattern, pattern, pattern, pattern, pattern, pattern])
+        params.extend([pattern, pattern, pattern, pattern, pattern])
 
     if filters.year is not None:
         conditions.append("l.live_date >= %s AND l.live_date < %s")
@@ -122,25 +109,9 @@ def build_live_where(filters: LiveListFilters) -> tuple[str, list[object]]:
             """
             EXISTS (
                 SELECT 1
-                FROM band_attrs selected_band
-                WHERE selected_band.id = %s
-                  AND (
-                      EXISTS (
-                          SELECT 1
-                          FROM live_setlist filter_band_setlist
-                          WHERE filter_band_setlist.live_id = l.id
-                            AND jsonb_typeof(filter_band_setlist.band_member) = 'object'
-                            AND filter_band_setlist.band_member ? selected_band.band_name
-                      )
-                      OR (
-                          NOT EXISTS (
-                              SELECT 1
-                              FROM live_setlist default_band_setlist
-                              WHERE default_band_setlist.live_id = l.id
-                          )
-                          AND selected_band.id = ANY(l.default_band_ids)
-                      )
-                  )
+                FROM effective_live_bands effective
+                WHERE effective.live_id = l.id
+                  AND effective.band_id = %s
             )
             """
         )
@@ -242,14 +213,6 @@ def build_filtered_live_queries(
             matched.event_status,
             matched.was_rescheduled
         FROM matched_lives matched
-        LEFT JOIN live_setlist setlist
-            ON setlist.live_id = matched.id
-        LEFT JOIN LATERAL (
-            SELECT jsonb_object_keys(setlist.band_member) AS band_name
-            WHERE jsonb_typeof(setlist.band_member) = 'object'
-        ) band_name ON true
-        LEFT JOIN band_attrs band
-            ON band.band_name = band_name.band_name
         GROUP BY
             matched.id,
             matched.live_date,

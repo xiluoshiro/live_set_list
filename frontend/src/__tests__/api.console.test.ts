@@ -200,6 +200,12 @@ describe("console lookup api", () => {
       }));
     const { getConsoleLiveSetlist, updateConsoleLiveSetlist } = await import("../api");
     const requestPayload = {
+      band_lineup_contexts: [{
+        band_id: 2,
+        band_name_version_id: 20,
+        base_lineup_version_id: 21,
+        next_lineup_version_id: null,
+      }],
       setlist_rows: [{
         song_id: 1,
         absolute_order: 1,
@@ -207,6 +213,12 @@ describe("console lookup api", () => {
         sub_order: 1,
         is_short: false,
         band_member: { Roselia: ["湊友希那"] },
+        band_performances: [{
+          band_id: 2,
+          lineup_usage: "base" as const,
+          handover_baseline: null,
+          members: ["湊友希那"],
+        }],
         other_member: null,
         comment: null,
       }],
@@ -219,7 +231,23 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[1][0]).toBe("/api/console/lives/55/setlist");
     expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({
       method: "PUT",
-      body: JSON.stringify(requestPayload),
+      body: JSON.stringify({
+        setlist_rows: [{
+          song_id: 1,
+          absolute_order: 1,
+          segment_type: "M",
+          sub_order: 1,
+          is_short: false,
+          band_performances: [{
+            band_id: 2,
+            lineup_usage: "base",
+            handover_baseline: null,
+            members: ["湊友希那"],
+          }],
+          other_member: null,
+          comment: null,
+        }],
+      }),
     }));
   });
 
@@ -312,6 +340,12 @@ describe("console lookup api", () => {
     );
     const { appendConsoleLiveSetlist } = await import("../api");
     const requestPayload = {
+      band_lineup_contexts: [{
+        band_id: 2,
+        band_name_version_id: 20,
+        base_lineup_version_id: 21,
+        next_lineup_version_id: null,
+      }],
       setlist_rows: [
         {
           song_id: 901,
@@ -320,6 +354,12 @@ describe("console lookup api", () => {
           sub_order: 1,
           is_short: false,
           band_member: { Roselia: ["湊友希那"] },
+          band_performances: [{
+            band_id: 2,
+            lineup_usage: "base" as const,
+            handover_baseline: null,
+            members: ["湊友希那"],
+          }],
           other_member: {},
         },
       ],
@@ -333,7 +373,22 @@ describe("console lookup api", () => {
       credentials: "include",
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
-      body: JSON.stringify(requestPayload),
+      body: JSON.stringify({
+        setlist_rows: [{
+          song_id: 901,
+          absolute_order: 1,
+          segment_type: "M",
+          sub_order: 1,
+          is_short: false,
+          band_performances: [{
+            band_id: 2,
+            lineup_usage: "base",
+            handover_baseline: null,
+            members: ["湊友希那"],
+          }],
+          other_member: {},
+        }],
+      }),
     }));
   });
 

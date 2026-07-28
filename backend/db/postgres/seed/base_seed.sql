@@ -463,9 +463,91 @@ VALUES
         NULL
     );
 
+-- Every real Band has one open name/lineup version. Runtime code must not fall back
+-- to band_attrs.band_members after V25.
+INSERT INTO public.band_name_versions (band_id, band_name, band_abbr, valid_from, valid_to, note)
+SELECT id, band_name, NULLIF(band_abbr, ''), NULL, NULL, 'base seed current name'
+FROM public.band_attrs
+WHERE id > 0
+ORDER BY id;
+
+INSERT INTO public.band_lineup_versions (
+    band_id, version_no, version_label, valid_from, valid_to, predecessor_id, change_type, note
+)
+SELECT id, 1, band_name || ' V1', NULL, NULL, NULL, 'initial', 'base seed current lineup'
+FROM public.band_attrs
+WHERE id > 0
+ORDER BY id;
+
+INSERT INTO public.band_lineup_version_members (lineup_version_id, member_name, display_order)
+SELECT lineup.id, member.member_name, member.display_order::integer
+FROM public.band_lineup_versions lineup
+JOIN public.band_attrs band ON band.id = lineup.band_id
+CROSS JOIN LATERAL unnest(COALESCE(band.band_members, ARRAY[]::text[]))
+    WITH ORDINALITY member(member_name, display_order);
+
+WITH effective_pairs AS (
+    SELECT DISTINCT setlist.live_id, band.id AS band_id
+    FROM public.live_setlist setlist
+    CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) performed(band_name)
+    JOIN public.band_attrs band ON band.band_name = performed.band_name
+
+    UNION
+
+    SELECT live.id, default_band.band_id
+    FROM public.live_attrs live
+    CROSS JOIN LATERAL unnest(live.default_band_ids) default_band(band_id)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM public.live_setlist setlist WHERE setlist.live_id = live.id
+    )
+
+    UNION
+
+    SELECT live.id, attendee.band_id::integer
+    FROM public.live_attrs live
+    CROSS JOIN LATERAL jsonb_object_keys(
+        COALESCE(live.event_attendees, '{}'::jsonb)
+    ) attendee(band_id)
+)
+INSERT INTO public.live_band_lineup_contexts (
+    live_id, band_id, band_name_version_id, base_lineup_version_id, next_lineup_version_id, note
+)
+SELECT pairs.live_id, pairs.band_id, name_version.id, lineup.id, NULL, 'base seed current context'
+FROM effective_pairs pairs
+JOIN public.band_name_versions name_version ON name_version.band_id = pairs.band_id
+JOIN public.band_lineup_versions lineup ON lineup.band_id = pairs.band_id;
+
+INSERT INTO public.live_setlist_band_performances (
+    setlist_id, live_id, band_id, lineup_usage, handover_baseline
+)
+SELECT setlist.id, setlist.live_id, band.id, 'base', NULL
+FROM public.live_setlist setlist
+CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) performed(band_name)
+JOIN public.band_attrs band ON band.band_name = performed.band_name;
+
+INSERT INTO public.live_setlist_band_performance_members (
+    setlist_id, band_id, member_name, display_order, appearance_role
+)
+SELECT
+    setlist.id,
+    band.id,
+    member.member_name,
+    member.display_order::integer,
+    CASE
+        WHEN member.member_name = ANY(COALESCE(band.band_members, ARRAY[]::text[])) THEN NULL
+        ELSE 'guest'
+    END
+FROM public.live_setlist setlist
+CROSS JOIN LATERAL jsonb_each(setlist.band_member) performed(band_name, members)
+JOIN public.band_attrs band ON band.band_name = performed.band_name
+CROSS JOIN LATERAL jsonb_array_elements_text(performed.members)
+    WITH ORDINALITY member(member_name, display_order);
+
 SELECT setval('public.live_attrs_id_seq', (SELECT MAX(id) FROM public.live_attrs), true);
 SELECT setval('public.song_list_id_seq', (SELECT MAX(id) FROM public.song_list), true);
 SELECT setval('public.venue_list_id_seq', (SELECT MAX(id) FROM public.venue_list), true);
 SELECT setval('public.tour_attrs_id_seq', (SELECT MAX(id) FROM public.tour_attrs), true);
+SELECT setval('public.band_name_versions_id_seq', (SELECT MAX(id) FROM public.band_name_versions), true);
+SELECT setval('public.band_lineup_versions_id_seq', (SELECT MAX(id) FROM public.band_lineup_versions), true);
 
 COMMIT;

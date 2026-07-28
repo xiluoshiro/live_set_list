@@ -70,11 +70,6 @@ type LiveInsertTabProps = {
   hasExistingSetlist: boolean;
   onToggleBandForSetlistRow: (rowKey: number, bandName: string) => void;
   onToggleBandMemberForSetlistRow: (rowKey: number, bandName: string, memberName: string) => void;
-  onUpdateLineupContext: (
-    bandId: number,
-    field: "band_name_version_id" | "base_lineup_version_id" | "next_lineup_version_id",
-    value: number | null,
-  ) => void;
   onUpdateSetlistBandMode: (
     rowKey: number,
     bandName: string,
@@ -162,7 +157,6 @@ export function LiveInsertTab({
   hasExistingSetlist,
   onToggleBandForSetlistRow,
   onToggleBandMemberForSetlistRow,
-  onUpdateLineupContext,
   onUpdateSetlistBandMode,
   onUpdateSetlistHandoverBaseline,
   onUpdateOtherMemberEntry,
@@ -303,84 +297,35 @@ export function LiveInsertTab({
           <section className="tour-admin-block" aria-label="本场乐队阵容">
             <h3>本场乐队阵容</h3>
             <p className="console-admin-hint">
-              先确认历史名称与基础阵容；交接场再选择基础阵容的直接后继版本。
+              新录入默认使用当前开放版本；只有乐队管理中绑定的交接 Live 会自动显示旧版 → 新版。
             </p>
             {activeBandOptions.length === 0 ? (
               <p className="console-admin-hint">在下方任一曲目选择乐队后，这里会出现阵容设置。</p>
             ) : (
               <div className="console-table-wrap">
-                <table className="console-admin-table band-history-table">
+                <table className="console-admin-table band-history-table" aria-label="本场乐队阵容">
                   <thead>
-                    <tr><th>乐队</th><th>历史名称</th><th>基础阵容</th><th>交接后继阵容</th></tr>
+                    <tr><th>乐队</th><th>固化名称</th><th>基础阵容</th><th>交接后继阵容</th></tr>
                   </thead>
                   <tbody>
                     {activeBandOptions.map((band) => {
                       const history = bandHistories[band.band_id];
                       const context = lineupContexts[band.band_id];
-                      const nextOptions = history?.lineup_versions.filter(
-                        (version) => version.predecessor_id === context?.base_lineup_version_id,
-                      ) ?? [];
+                      const nameVersion = history?.name_versions.find(
+                        (version) => version.name_version_id === context?.band_name_version_id,
+                      );
+                      const baseVersion = history?.lineup_versions.find(
+                        (version) => version.lineup_version_id === context?.base_lineup_version_id,
+                      );
+                      const nextVersion = history?.lineup_versions.find(
+                        (version) => version.lineup_version_id === context?.next_lineup_version_id,
+                      );
                       return (
                         <tr key={band.band_id}>
                           <td>{band.band_name}</td>
-                          <td>
-                            {history && context ? (
-                              <select
-                                aria-label={`${band.band_name} 历史名称`}
-                                value={context.band_name_version_id}
-                                onChange={(event) => onUpdateLineupContext(
-                                  band.band_id,
-                                  "band_name_version_id",
-                                  Number(event.target.value),
-                                )}
-                              >
-                                {history.name_versions.map((version) => (
-                                  <option key={version.name_version_id} value={version.name_version_id}>
-                                    {version.band_name}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : "加载中…"}
-                          </td>
-                          <td>
-                            {history && context ? (
-                              <select
-                                aria-label={`${band.band_name} 基础阵容`}
-                                value={context.base_lineup_version_id}
-                                onChange={(event) => onUpdateLineupContext(
-                                  band.band_id,
-                                  "base_lineup_version_id",
-                                  Number(event.target.value),
-                                )}
-                              >
-                                {history.lineup_versions.map((version) => (
-                                  <option key={version.lineup_version_id} value={version.lineup_version_id}>
-                                    {version.version_label}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : "加载中…"}
-                          </td>
-                          <td>
-                            {history && context ? (
-                              <select
-                                aria-label={`${band.band_name} 交接后继阵容`}
-                                value={context.next_lineup_version_id ?? ""}
-                                onChange={(event) => onUpdateLineupContext(
-                                  band.band_id,
-                                  "next_lineup_version_id",
-                                  event.target.value ? Number(event.target.value) : null,
-                                )}
-                              >
-                                <option value="">无（普通 Live）</option>
-                                {nextOptions.map((version) => (
-                                  <option key={version.lineup_version_id} value={version.lineup_version_id}>
-                                    {version.version_label}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : "加载中…"}
-                          </td>
+                          <td>{history && context ? nameVersion?.band_name ?? history.current_name : "加载中…"}</td>
+                          <td>{history && context ? baseVersion?.version_label ?? "-" : "加载中…"}</td>
+                          <td>{history && context ? nextVersion?.version_label ?? "无（普通 Live）" : "加载中…"}</td>
                         </tr>
                       );
                     })}

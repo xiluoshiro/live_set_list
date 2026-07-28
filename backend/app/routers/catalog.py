@@ -79,12 +79,10 @@ WITH matched_live_ids AS (
         ON ls.live_id = l.id
     LEFT JOIN song_list s
         ON s.id = ls.song_id
-    LEFT JOIN LATERAL (
-        SELECT jsonb_object_keys(ls.band_member) AS band_name
-        WHERE jsonb_typeof(ls.band_member) = 'object'
-    ) bm ON true
-    LEFT JOIN band_attrs b
-        ON b.band_name = bm.band_name
+    LEFT JOIN effective_live_bands effective
+        ON effective.live_id = l.id
+    LEFT JOIN current_band_versions b
+        ON b.band_id = effective.band_id
     WHERE l.live_title ILIKE %s ESCAPE '\\'
        OR v.venue ILIKE %s ESCAPE '\\'
        OR s.song_name ILIKE %s ESCAPE '\\'
@@ -97,8 +95,8 @@ live_rows AS (
         l.live_date,
         l.live_title,
         COALESCE(
-            array_agg(DISTINCT b.id ORDER BY b.id)
-                FILTER (WHERE b.id IS NOT NULL),
+            array_agg(DISTINCT b.band_id ORDER BY b.band_id)
+                FILTER (WHERE b.band_id IS NOT NULL),
             ARRAY[]::int[]
         ) AS band_ids,
         l.url,
@@ -124,14 +122,10 @@ live_rows AS (
         ON pgl.live_id = l.id
     LEFT JOIN performance_group_attrs pg
         ON pg.id = pgl.group_id
-    LEFT JOIN live_setlist ls
-        ON l.id = ls.live_id
-    LEFT JOIN LATERAL (
-        SELECT jsonb_object_keys(ls.band_member) AS band_name
-        WHERE jsonb_typeof(ls.band_member) = 'object'
-    ) bm ON true
-    LEFT JOIN band_attrs b
-        ON b.band_name = bm.band_name
+    LEFT JOIN effective_live_bands effective
+        ON effective.live_id = l.id
+    LEFT JOIN current_band_versions b
+        ON b.band_id = effective.band_id
     GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, l.start_time, l.event_status,
              tour.id, tour.tour_title, pg.id, pg.group_title
 )
@@ -144,32 +138,21 @@ LIMIT %s
 
 SEARCH_BANDS_QUERY = """
 SELECT
-    b.id,
+    b.band_id,
     b.band_name,
     b.band_abbr,
     b.band_members,
     COUNT(DISTINCT l.id) AS live_count
-FROM band_attrs b
-LEFT JOIN live_attrs l
-    ON (
-        EXISTS (
-            SELECT 1 FROM live_setlist ls
-            WHERE ls.live_id = l.id
-              AND jsonb_typeof(ls.band_member) = 'object'
-              AND ls.band_member ? b.band_name
-        )
-        OR (
-            NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id)
-            AND b.id = ANY(l.default_band_ids)
-        )
-    )
-WHERE b.id > 0
+FROM current_band_versions b
+LEFT JOIN effective_live_bands effective ON effective.band_id = b.band_id
+LEFT JOIN live_attrs l ON l.id = effective.live_id
+WHERE b.band_id > 0
   AND (
       b.band_name ILIKE %s ESCAPE '\\'
       OR b.band_abbr ILIKE %s ESCAPE '\\'
   )
-GROUP BY b.id, b.band_name, b.band_abbr, b.band_members
-ORDER BY live_count DESC, b.band_name, b.id
+GROUP BY b.band_id, b.band_name, b.band_abbr, b.band_members
+ORDER BY live_count DESC, b.band_name, b.band_id
 LIMIT %s
 """
 
@@ -207,55 +190,38 @@ LIMIT %s
 
 BAND_LIST_QUERY = """
 SELECT
-    b.id,
+    b.band_id,
     b.band_name,
     b.band_abbr,
     b.band_members,
     COUNT(DISTINCT l.id) AS live_count
-FROM band_attrs b
-LEFT JOIN live_attrs l
-    ON (
-        EXISTS (
-            SELECT 1 FROM live_setlist ls
-            WHERE ls.live_id = l.id
-              AND jsonb_typeof(ls.band_member) = 'object'
-              AND ls.band_member ? b.band_name
-        )
-        OR (
-            NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id)
-            AND b.id = ANY(l.default_band_ids)
-        )
-    )
-WHERE b.id > 0
-GROUP BY b.id, b.band_name, b.band_abbr, b.band_members
-ORDER BY b.id
+FROM current_band_versions b
+LEFT JOIN effective_live_bands effective ON effective.band_id = b.band_id
+LEFT JOIN live_attrs l ON l.id = effective.live_id
+WHERE b.band_id > 0
+GROUP BY b.band_id, b.band_name, b.band_abbr, b.band_members
+ORDER BY b.band_id
 LIMIT %s
 """
 
 BAND_META_QUERY = """
 SELECT
-    b.id,
+    b.band_id,
     b.band_name,
     b.band_abbr,
     b.band_members,
     COUNT(DISTINCT l.id) AS live_count
-FROM band_attrs b
-LEFT JOIN live_attrs l
-    ON (
-        EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id AND jsonb_typeof(ls.band_member) = 'object' AND ls.band_member ? b.band_name)
-        OR (NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id) AND b.id = ANY(l.default_band_ids))
-    )
-WHERE b.id = %s
-GROUP BY b.id, b.band_name, b.band_abbr, b.band_members
+FROM current_band_versions b
+LEFT JOIN effective_live_bands effective ON effective.band_id = b.band_id
+LEFT JOIN live_attrs l ON l.id = effective.live_id
+WHERE b.band_id = %s
+GROUP BY b.band_id, b.band_name, b.band_abbr, b.band_members
 """
 
 BAND_LIVES_COUNT_QUERY = """
-SELECT COUNT(DISTINCT l.id)
-FROM live_attrs l
-JOIN band_attrs b
-    ON b.id = %s
-WHERE EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id AND jsonb_typeof(ls.band_member) = 'object' AND ls.band_member ? b.band_name)
-   OR (NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id) AND b.id = ANY(l.default_band_ids))
+SELECT COUNT(DISTINCT effective.live_id)
+FROM effective_live_bands effective
+WHERE effective.band_id = %s
 """
 
 BAND_LIVES_BAND_IDS_SQL = effective_band_ids_sql(live_alias="l", setlist_alias="ls", band_alias="b")
@@ -264,10 +230,9 @@ BAND_LIVES_PAGE_QUERY = f"""
 WITH matched_live_ids AS (
     SELECT DISTINCT l.id
     FROM live_attrs l
-    JOIN band_attrs selected_band
-        ON selected_band.id = %s
-    WHERE EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id AND jsonb_typeof(ls.band_member) = 'object' AND ls.band_member ? selected_band.band_name)
-       OR (NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = l.id) AND selected_band.id = ANY(l.default_band_ids))
+    JOIN effective_live_bands selected
+      ON selected.live_id = l.id
+     AND selected.band_id = %s
 ),
 live_rows AS (
     SELECT
@@ -298,14 +263,6 @@ live_rows AS (
         ON pgl.live_id = l.id
     LEFT JOIN performance_group_attrs pg
         ON pg.id = pgl.group_id
-    LEFT JOIN live_setlist ls
-        ON l.id = ls.live_id
-    LEFT JOIN LATERAL (
-        SELECT jsonb_object_keys(ls.band_member) AS band_name
-        WHERE jsonb_typeof(ls.band_member) = 'object'
-    ) bm ON true
-    LEFT JOIN band_attrs b
-        ON b.band_name = bm.band_name
     GROUP BY l.id, l.live_date, l.live_title, l.default_band_ids, l.url, l.live_type,
              l.start_time, l.event_status, tour.id, tour.tour_title, pg.id, pg.group_title
 )
@@ -581,20 +538,9 @@ def _statistics_candidate_sql(
     if band_id is not None:
         conditions.append(
             """EXISTS (
-                SELECT 1 FROM band_attrs selected_band
-                WHERE selected_band.id = %s
-                  AND (
-                    EXISTS (
-                      SELECT 1 FROM live_setlist band_ls
-                      WHERE band_ls.live_id = l.id
-                        AND jsonb_typeof(band_ls.band_member) = 'object'
-                        AND band_ls.band_member ? selected_band.band_name
-                    )
-                    OR (
-                      NOT EXISTS (SELECT 1 FROM live_setlist any_ls WHERE any_ls.live_id = l.id)
-                      AND selected_band.id = ANY(l.default_band_ids)
-                    )
-                  )
+                SELECT 1 FROM effective_live_bands effective
+                WHERE effective.live_id = l.id
+                  AND effective.band_id = %s
             )"""
         )
         params.append(band_id)
@@ -625,7 +571,7 @@ def get_catalog_statistics(
     performer_band_condition = ""
     performer_band_params: list[Any] = []
     if band_id is not None:
-        performer_band_condition = "AND performing_band.id = %s"
+        performer_band_condition = "AND performing_band.band_id = %s"
         performer_band_params.append(band_id)
 
     try:
@@ -637,21 +583,16 @@ def get_catalog_statistics(
                       COUNT(DISTINCT cl.id),
                       COUNT(DISTINCT cl.id) FILTER (WHERE ls.live_id IS NOT NULL),
                       COUNT(DISTINCT effective_band.band_id),
-                      COUNT(DISTINCT (effective_band.band_id, ls.song_id))
-                        FILTER (WHERE ls.song_id IS NOT NULL AND effective_band.band_id IS NOT NULL
-                          {"AND effective_band.band_id = %s" if band_id is not None else ""}),
+                      COUNT(DISTINCT (performance.band_id, ls.song_id))
+                        FILTER (WHERE ls.song_id IS NOT NULL AND performance.band_id IS NOT NULL
+                          {"AND performance.band_id = %s" if band_id is not None else ""}),
                       COUNT(DISTINCT cl.venue_id),
                       MIN(cl.live_date), MAX(cl.live_date)
                     FROM candidate_lives cl
                     LEFT JOIN live_setlist ls ON ls.live_id = cl.id
-                    LEFT JOIN LATERAL (
-                      SELECT DISTINCT b.id AS band_id
-                      FROM band_attrs b
-                      WHERE b.id > 0 AND (
-                        (jsonb_typeof(ls.band_member) = 'object' AND ls.band_member ? b.band_name)
-                        OR (ls.live_id IS NULL AND b.id = ANY(cl.default_band_ids))
-                      )
-                    ) effective_band ON true""",
+                    LEFT JOIN effective_live_bands effective_band ON effective_band.live_id = cl.id
+                    LEFT JOIN live_setlist_band_performances performance
+                      ON performance.setlist_id = ls.id""",
                     candidate_params + ([band_id] if band_id is not None else []),
                 )
                 overview_row = cur.fetchone()
@@ -673,16 +614,17 @@ def get_catalog_statistics(
 
                 cur.execute(
                     f"""WITH candidate_lives AS ({candidate_sql}), performances AS (
-                      SELECT s.id, s.song_name, performing_band.id AS band_id,
+                      SELECT s.id, s.song_name, performing_band.band_id,
                              performing_band.band_name, s.is_cover,
                              cl.id AS live_id, cl.live_date, cl.live_title, ls.id AS setlist_id
                       FROM candidate_lives cl
                       JOIN live_setlist ls ON ls.live_id = cl.id
                       JOIN song_list s ON s.id = ls.song_id
-                      JOIN LATERAL jsonb_object_keys(ls.band_member) performed_by(band_name)
-                        ON jsonb_typeof(ls.band_member) = 'object'
-                      JOIN band_attrs performing_band ON performing_band.band_name = performed_by.band_name
-                      WHERE performing_band.id > 0 {performer_band_condition}
+                      JOIN live_setlist_band_performances performance
+                        ON performance.setlist_id = ls.id
+                      JOIN current_band_versions performing_band
+                        ON performing_band.band_id = performance.band_id
+                      WHERE performing_band.band_id > 0 {performer_band_condition}
                     ), ranked AS (
                       SELECT *,
                         ROW_NUMBER() OVER (PARTITION BY band_id, id ORDER BY live_date, live_id) AS first_rank,
@@ -731,18 +673,19 @@ def get_catalog_statistics(
                         cover_condition = "" if cover_filter is None else "AND l.is_cover = %s"
                         cur.execute(
                             f"""WITH candidate_lives AS ({candidate_sql}), band_lives AS (
-                          SELECT cl.* FROM candidate_lives cl JOIN band_attrs b ON b.id = %s
-                          WHERE EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = cl.id
-                            AND jsonb_typeof(ls.band_member) = 'object' AND ls.band_member ? b.band_name)
-                             OR (NOT EXISTS (SELECT 1 FROM live_setlist ls WHERE ls.live_id = cl.id)
-                                 AND b.id = ANY(cl.default_band_ids))
+                          SELECT cl.* FROM candidate_lives cl
+                          JOIN effective_live_bands effective
+                            ON effective.live_id = cl.id
+                           AND effective.band_id = %s
                         ), song_plays AS (
                           SELECT s.id, s.song_name, s.is_cover, b.band_name, bl.id AS live_id,
                                  bl.live_date, bl.live_title
                           FROM band_lives bl
-                          JOIN band_attrs b ON b.id = %s
+                          JOIN current_band_versions b ON b.band_id = %s
                           JOIN live_setlist ls ON ls.live_id = bl.id
-                            AND jsonb_typeof(ls.band_member) = 'object' AND ls.band_member ? b.band_name
+                          JOIN live_setlist_band_performances performance
+                            ON performance.setlist_id = ls.id
+                           AND performance.band_id = b.band_id
                           JOIN song_list s ON s.id = ls.song_id
                         ), play_counts AS (
                           SELECT id, COUNT(DISTINCT live_id) AS live_count FROM song_plays GROUP BY id

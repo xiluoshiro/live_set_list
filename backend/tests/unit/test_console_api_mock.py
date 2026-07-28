@@ -8,6 +8,7 @@ from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled, UniqueViolation
 
 from app.auth import AuthSessionContext, AuthUser, get_current_auth_context, get_current_user
+from app.band_history_write import PersistedLineupContext
 from app.main import app
 
 
@@ -121,7 +122,14 @@ def _valid_setlist_payload(**row_overrides):
         "segment_type": "EN",
         "sub_order": 1,
         "is_short": False,
-        "band_member": {"Poppin'Party": ["Kasumi", "Tae"]},
+        "band_performances": [
+            {
+                "band_id": 1,
+                "lineup_usage": "base",
+                "handover_baseline": None,
+                "members": ["Kasumi", "Tae"],
+            }
+        ],
         "other_member": {},
         "comment": "mock encore",
     }
@@ -182,7 +190,6 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
     assert bands_response.status_code == 200
     assert bands_response.json() == {
         "items": [{"band_id": 2, "band_name": "Roselia", "band_abbr": "rsl", "band_members": ["Yukina", "Sayo"]}],
-        "historical_default_band_selection_enabled": True,
     }
     assert venues_response.status_code == 200
     assert venues_response.json() == {"items": [{"venue_id": 3, "venue_name": "Zepp Shinjuku"}]}
@@ -781,9 +788,28 @@ def test_console_create_live_mock_business_errors(payload: dict, expected_status
 def test_console_append_setlist_mock_success_inserts_rows_and_audits():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
-        fetchone_side_effect=[(1,), None, (4,)],
+        fetchone_side_effect=[
+            (1,),
+            None,
+            ("setlist-row-1",),
+            ("setlist-row-2",),
+            ("setlist-row-3",),
+            ("setlist-row-4",),
+            (4,),
+        ],
         fetchall_side_effect=[[(1,), (2,), (3,), (4,)], []],
     )
+    lineup_contexts = {
+        1: PersistedLineupContext(
+            band_id=1,
+            band_name_version_id=1,
+            band_name="Poppin'Party",
+            base_lineup_version_id=1,
+            base_members=("Kasumi", "Tae"),
+            next_lineup_version_id=None,
+            next_members=(),
+        )
+    }
     payload = {
         "setlist_rows": [
             _valid_setlist_payload(song_id=1, absolute_order=3, segment_type="EN")["setlist_rows"][0],
@@ -793,12 +819,17 @@ def test_console_append_setlist_mock_success_inserts_rows_and_audits():
         ]
     }
 
-    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+    with (
+        patch("app.routers.console_write.get_write_db_connection", return_value=conn),
+        patch("app.routers.console_write.load_lineup_contexts", return_value=lineup_contexts),
+    ):
         client = TestClient(app)
         response = client.post("/api/console/lives/1/setlist", json=payload, headers={"X-CSRF-Token": CSRF_TOKEN})
 
     insert_setlist_calls = [
-        execute_call for execute_call in cursor.execute.call_args_list if "INSERT INTO live_setlist" in execute_call.args[0]
+        execute_call
+        for execute_call in cursor.execute.call_args_list
+        if "INSERT INTO live_setlist (" in execute_call.args[0]
     ]
     assert response.status_code == 201
     assert response.json() == {
@@ -892,13 +923,27 @@ def test_console_append_setlist_mock_existing_setlist_rejects_with_409():
 def test_console_replace_setlist_mock_replaces_complete_collection():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
-        fetchone_side_effect=[(1,)],
+        fetchone_side_effect=[(1,), ("setlist-row-1",)],
         fetchall_side_effect=[[(1,)]],
     )
+    lineup_contexts = {
+        1: PersistedLineupContext(
+            band_id=1,
+            band_name_version_id=1,
+            band_name="Poppin'Party",
+            base_lineup_version_id=1,
+            base_members=("Kasumi", "Tae"),
+            next_lineup_version_id=None,
+            next_members=(),
+        )
+    }
     payload = _valid_setlist_payload(song_id=1, absolute_order=1, segment_type="M")
     payload["setlist_rows"][0]["comment"] = "Encore note"
 
-    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+    with (
+        patch("app.routers.console_write.get_write_db_connection", return_value=conn),
+        patch("app.routers.console_write.load_lineup_contexts", return_value=lineup_contexts),
+    ):
         client = TestClient(app)
         response = client.put(
             "/api/console/lives/1/setlist",

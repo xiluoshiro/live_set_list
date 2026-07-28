@@ -168,6 +168,36 @@ def test_catalog_statistics_limits_stale_song_kinds_independently(
             """,
             [(901, 901 + index, index + 1, index + 1) for index in range(12)],
         )
+        cursor.execute(
+            """
+            INSERT INTO live_band_lineup_contexts (
+                live_id, band_id, band_name_version_id, base_lineup_version_id
+            )
+            SELECT 901, 2, band_name_version_id, lineup_version_id
+            FROM current_band_versions
+            WHERE band_id = 2
+            """
+        )
+        cursor.execute(
+            """
+            INSERT INTO live_setlist_band_performances (
+                setlist_id, live_id, band_id, lineup_usage
+            )
+            SELECT id, live_id, 2, 'base'
+            FROM live_setlist
+            WHERE live_id = 901
+            """
+        )
+        cursor.execute(
+            """
+            INSERT INTO live_setlist_band_performance_members (
+                setlist_id, band_id, member_name, display_order
+            )
+            SELECT id, 2, 'Yukina', 1
+            FROM live_setlist
+            WHERE live_id = 901
+            """
+        )
 
     response = integration_test_client.get(
         "/api/catalog/statistics",

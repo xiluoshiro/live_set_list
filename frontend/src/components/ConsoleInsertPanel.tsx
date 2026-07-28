@@ -278,22 +278,27 @@ function getTodayDateInputValue(): string {
   return `${year}-${month}-${day}`;
 }
 
-function dateFallsInRange(date: string, validFrom: string | null, validTo: string | null): boolean {
-  return (validFrom === null || validFrom <= date) && (validTo === null || date < validTo);
-}
-
-function suggestLineupContext(
+function getAllowedLineupContext(
   history: ConsoleBandHistory,
-  liveDateValue: string,
+  liveId: number,
 ): ConsoleLiveBandLineupContext | null {
-  const nameVersion = [...history.name_versions]
-    .reverse()
-    .find((version) => dateFallsInRange(liveDateValue, version.valid_from, version.valid_to))
-    ?? history.name_versions[history.name_versions.length - 1];
-  const lineupVersion = [...history.lineup_versions]
-    .reverse()
-    .find((version) => dateFallsInRange(liveDateValue, version.valid_from, version.valid_to))
-    ?? history.lineup_versions[history.lineup_versions.length - 1];
+  const nameVersion = history.name_versions.find(
+    (version) => version.name_version_id === history.current_name_version_id,
+  ) ?? [...history.name_versions].reverse().find((version) => version.valid_to === null);
+  const transitionVersion = history.lineup_versions.find(
+    (version) => version.transition_live_id === liveId,
+  );
+  if (nameVersion && transitionVersion?.predecessor_id) {
+    return {
+      band_id: history.band_id,
+      band_name_version_id: nameVersion.name_version_id,
+      base_lineup_version_id: transitionVersion.predecessor_id,
+      next_lineup_version_id: transitionVersion.lineup_version_id,
+    };
+  }
+  const lineupVersion = history.lineup_versions.find(
+    (version) => version.lineup_version_id === history.current_lineup_version_id,
+  ) ?? [...history.lineup_versions].reverse().find((version) => version.valid_to === null);
   if (!nameVersion || !lineupVersion) return null;
   return {
     band_id: history.band_id,
@@ -646,7 +651,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [defaultBandLineupContexts, setDefaultBandLineupContexts] = useState<
     Record<number, ConsoleLiveBandLineupContext>
   >({});
-  const [historicalDefaultBandSelectionEnabled, setHistoricalDefaultBandSelectionEnabled] = useState(true);
   const [eventAttendees, setEventAttendees] = useState<Record<number, string[]>>({});
   const [eventStatus, setEventStatus] = useState<EventStatus>("scheduled");
   const [statusNote, setStatusNote] = useState("");
@@ -832,6 +836,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const isSetlistSubmitDisabled =
     isLiveLoading ||
     selectedSetlistLive === undefined ||
+    !usesVersionedLineups ||
     setlistRows.length === 0 ||
     (mode === "setlist" && hasExistingSetlist) ||
     setlistRows.some((row) => {
@@ -892,9 +897,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       }
       if (bandResult.status === "fulfilled" && bandResult.value.items.length > 0) {
         setBands(sortById(bandResult.value.items.map(toBandOption), (band) => band.band_id));
-        setHistoricalDefaultBandSelectionEnabled(
-          bandResult.value.historical_default_band_selection_enabled ?? true,
-        );
       }
       if (venueResult.status === "fulfilled" && venueResult.value.items.length > 0) {
         const nextVenues = sortById(venueResult.value.items.map(toVenueOption), (venue) => venue.venue_id);
@@ -1184,25 +1186,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     });
   };
 
-  const updateDefaultBandLineupContext = (
-    bandId: number,
-    field: "band_name_version_id" | "base_lineup_version_id",
-    value: number,
-  ) => {
-    setDefaultBandLineupContexts((current) => {
-      const context = current[bandId];
-      if (!context) return current;
-      return { ...current, [bandId]: { ...context, [field]: value, next_lineup_version_id: null } };
-    });
-    if (field === "base_lineup_version_id") {
-      setEventAttendees((current) => {
-        const next = { ...current };
-        delete next[bandId];
-        return next;
-      });
-    }
-  };
-
   const toggleEventAttendee = (bandId: number, memberName: string) => {
     setEventAttendees((current) => {
       const selected = current[bandId] ?? [];
@@ -1336,7 +1319,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           sub_order: row.sub_order,
           is_short: row.is_short,
           band_member: row.band_member,
-          ...(row.band_performances ? { band_performances: row.band_performances } : {}),
+          band_performances: row.band_performances,
           other_member: row.other_member,
           comment: row.comment,
         })),
@@ -1958,7 +1941,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   };
 
   useEffect(() => {
-    const liveDateValue = selectedSetlistLive?.live_date ?? liveDate;
     activeSetlistBands.forEach((band) => {
       const existingContext = lineupContexts[band.band_id];
       const existingHistory = bandHistories[band.band_id];
@@ -1973,7 +1955,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       }
       void ensureBandHistory(band.band_id).then((history) => {
         if (!history) return;
-        const resolvedContext = existingContext ?? suggestLineupContext(history, liveDateValue);
+        const resolvedContext = existingContext ?? getAllowedLineupContext(history, selectedLiveId);
         if (!resolvedContext) return;
         setLineupContexts((current) => current[band.band_id]
           ? current
@@ -1986,7 +1968,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         ));
       });
     });
-  }, [activeSetlistBands, bandHistories, lineupContexts, liveDate, selectedSetlistLive?.live_date]);
+  }, [activeSetlistBands, bandHistories, lineupContexts, selectedLiveId]);
 
   const toggleBandForSetlistRow = (rowKey: number, bandName: string) => {
     const matchedBand = bands.find((band) => band.band_name === bandName);
@@ -2005,8 +1987,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }
     void ensureBandHistory(matchedBand.band_id).then((history) => {
       if (!history) return;
-      const liveDateValue = selectedSetlistLive?.live_date ?? liveDate;
-      const context = lineupContexts[matchedBand.band_id] ?? suggestLineupContext(history, liveDateValue);
+      const context = lineupContexts[matchedBand.band_id] ?? getAllowedLineupContext(history, selectedLiveId);
       if (!context) {
         setMessage(`Band #${matchedBand.band_id} 尚未建立可用阵容版本。`);
         return;
@@ -2031,85 +2012,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           : item),
       );
     });
-  };
-
-  const updateLineupContext = (
-    bandId: number,
-    field: "band_name_version_id" | "base_lineup_version_id" | "next_lineup_version_id",
-    value: number | null,
-  ) => {
-    const currentContext = lineupContexts[bandId];
-    if (!currentContext || (field !== "next_lineup_version_id" && value === null)) return;
-    const nextContext = {
-      ...currentContext,
-      [field]: value,
-      ...(field === "base_lineup_version_id" ? { next_lineup_version_id: null } : {}),
-    };
-    setLineupContexts((current) => ({ ...current, [bandId]: nextContext }));
-    const band = bands.find((item) => item.band_id === bandId);
-    const history = bandHistories[bandId];
-    if (!band || !history) return;
-    if (field === "next_lineup_version_id" && value === null) {
-      const members = getLineupMembers(history, currentContext.base_lineup_version_id);
-      setSetlistRows((prev) =>
-        prev.map((row) => {
-          const performance = row.band_performances?.[band.band_name];
-          if (!performance || performance.lineup_usage === "base") return row;
-          return {
-            ...row,
-            band_member: { ...row.band_member, [band.band_name]: members },
-            band_performances: {
-              ...(row.band_performances ?? {}),
-              [band.band_name]: {
-                band_id: bandId,
-                lineup_usage: "base",
-                handover_baseline: null,
-                members: [...members],
-              },
-            },
-          };
-        }),
-      );
-      return;
-    }
-    if (field === "next_lineup_version_id") {
-      const members = getLineupMembers(history, Number(value));
-      setSetlistRows((prev) =>
-        prev.map((row) => {
-          const performance = row.band_performances?.[band.band_name];
-          if (!performance || performance.lineup_usage !== "next") return row;
-          return {
-            ...row,
-            band_member: { ...row.band_member, [band.band_name]: members },
-            band_performances: {
-              ...(row.band_performances ?? {}),
-              [band.band_name]: { ...performance, members: [...members] },
-            },
-          };
-        }),
-      );
-      return;
-    }
-    if (field !== "base_lineup_version_id") return;
-    const members = getLineupMembers(history, Number(value));
-    setSetlistRows((prev) =>
-      prev.map((row) => {
-        if (!row.band_member[band.band_name]) return row;
-        return {
-          ...row,
-          band_member: { ...row.band_member, [band.band_name]: members },
-          band_performances: {
-            ...(row.band_performances ?? {}),
-            [band.band_name]: {
-              band_id: bandId,
-              lineup_usage: "base",
-              handover_baseline: null,
-              members: [...members],
-            },
-          },
-        };
-      }),
-    );
   };
 
   const updateSetlistBandMode = (
@@ -2292,30 +2194,24 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         ...Object.keys(row.band_member),
         ...Object.keys(row.band_performances ?? {}),
       ]);
-      const bandPerformances = usesVersionedLineups
-        ? [...versionedBandNames].flatMap((bandName) => {
-            const band = bands.find((item) => item.band_name === bandName);
-            if (!band) return [];
-            const fallbackMembers = row.band_member[bandName] ?? [];
-            const performance = row.band_performances?.[bandName] ?? {
-              band_id: band.band_id,
-              lineup_usage: "base" as const,
-              handover_baseline: null,
-              members: [...fallbackMembers],
-            };
-            return [{ ...performance, members: [...performance.members] }];
-          })
-        : [];
-      const bandMember = usesVersionedLineups
-        ? Object.fromEntries(
-            bandPerformances.flatMap((performance) => {
-              const bandName = bands.find((band) => band.band_id === performance.band_id)?.band_name;
-              return bandName ? [[bandName, [...performance.members]]] : [];
-            }),
-          )
-        : Object.fromEntries(
-            Object.entries(row.band_member).map(([bandName, members]) => [bandName, [...members]]),
-          );
+      const bandPerformances = [...versionedBandNames].flatMap((bandName) => {
+        const band = bands.find((item) => item.band_name === bandName);
+        if (!band) return [];
+        const fallbackMembers = row.band_member[bandName] ?? [];
+        const performance = row.band_performances?.[bandName] ?? {
+          band_id: band.band_id,
+          lineup_usage: "base" as const,
+          handover_baseline: null,
+          members: [...fallbackMembers],
+        };
+        return [{ ...performance, members: [...performance.members] }];
+      });
+      const bandMember = Object.fromEntries(
+        bandPerformances.flatMap((performance) => {
+          const bandName = bands.find((band) => band.band_id === performance.band_id)?.band_name;
+          return bandName ? [[bandName, [...performance.members]]] : [];
+        }),
+      );
       return {
         song_id: Number(row.song_id),
         absolute_order: effectiveAbs[originalIndex],
@@ -2323,7 +2219,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         sub_order: effectiveSub[originalIndex],
         is_short: row.is_short,
         band_member: bandMember,
-        ...(usesVersionedLineups ? { band_performances: bandPerformances } : {}),
+        band_performances: bandPerformances,
         other_member: buildOtherMemberPayloadObject(row.other_member, otherMemberValueSeparator),
         comment: row.comment?.trim() || null,
       };
@@ -2334,13 +2230,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }));
 
     const payload: ConsoleLiveSetlistAppendPayload = {
-      ...(usesVersionedLineups
-        ? {
-            band_lineup_contexts: activeSetlistBands
-              .map((band) => lineupContexts[band.band_id])
-              .filter((context): context is ConsoleLiveBandLineupContext => context !== undefined),
-          }
-        : {}),
+      band_lineup_contexts: activeSetlistBands
+        .map((band) => lineupContexts[band.band_id])
+        .filter((context): context is ConsoleLiveBandLineupContext => context !== undefined),
       setlist_rows: setlistPayload,
     };
     setPendingConfirmation({
@@ -3174,7 +3066,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           defaultBandIds={defaultBandIds}
           defaultBandLineupContexts={defaultBandLineupContexts}
           bandHistories={bandHistories}
-          historicalDefaultBandSelectionEnabled={historicalDefaultBandSelectionEnabled}
           eventAttendees={eventAttendees}
           bandOptions={bands}
           venueQueryText={venueQueryText}
@@ -3238,7 +3129,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
             setVenueOpen(false);
           }}
           onToggleDefaultBand={toggleDefaultBand}
-          onUpdateDefaultBandLineupContext={updateDefaultBandLineupContext}
           onToggleEventAttendee={toggleEventAttendee}
           onQueryVid={queryVid}
           onInsertVenue={requestVenueConfirmation}
@@ -3317,7 +3207,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           hasExistingSetlist={hasExistingSetlist}
           onToggleBandForSetlistRow={toggleBandForSetlistRow}
           onToggleBandMemberForSetlistRow={toggleBandMemberForSetlistRow}
-          onUpdateLineupContext={updateLineupContext}
           onUpdateSetlistBandMode={updateSetlistBandMode}
           onUpdateSetlistHandoverBaseline={updateSetlistHandoverBaseline}
           onUpdateOtherMemberEntry={updateOtherMemberEntry}
@@ -3340,9 +3229,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onBandsChanged={async () => {
             const response = await getConsoleBands(undefined, 100);
             setBands(sortById(response.items.map(toBandOption), (band) => band.band_id));
-            setHistoricalDefaultBandSelectionEnabled(
-              response.historical_default_band_selection_enabled ?? true,
-            );
           }}
         />
       )}

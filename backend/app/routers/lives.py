@@ -49,7 +49,7 @@ CASE
         (
             SELECT jsonb_agg(
                 jsonb_build_object(
-                    'band_id', ba.id,
+                    'band_id', ba.band_id,
                     'band_name', COALESCE(name_version.band_name, ba.band_name),
                     'mode', CASE
                         WHEN context.base_lineup_version_id IS NOT NULL
@@ -72,17 +72,17 @@ CASE
                     END,
                     'members', attendee.members
                 )
-                ORDER BY ba.id
+                ORDER BY ba.band_id
             )
             FROM jsonb_each(l.event_attendees) attendee(band_id_text, members)
-            JOIN band_attrs ba
-                ON ba.id = CASE
+            JOIN current_band_versions ba
+                ON ba.band_id = CASE
                     WHEN attendee.band_id_text ~ '^[0-9]+$' THEN attendee.band_id_text::int
                     ELSE NULL
                 END
             LEFT JOIN live_band_lineup_contexts context
                 ON context.live_id = l.id
-               AND context.band_id = ba.id
+               AND context.band_id = ba.band_id
             LEFT JOIN band_name_versions name_version
                 ON name_version.id = context.band_name_version_id
             WHERE jsonb_typeof(attendee.members) = 'array'
@@ -122,14 +122,6 @@ LEFT JOIN performance_group_lives pgl
     ON pgl.live_id = l.id
 LEFT JOIN performance_group_attrs pg
     ON pg.id = pgl.group_id
-LEFT JOIN live_setlist ls
-    ON l.id = ls.live_id
-LEFT JOIN LATERAL (
-    SELECT jsonb_object_keys(ls.band_member) AS key
-    WHERE jsonb_typeof(ls.band_member) = 'object'
-) t ON true
-LEFT JOIN band_attrs b
-    ON b.band_name = t.key
 GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids,
          l.start_time, l.event_status, tour.id, tour.tour_title, pg.id, pg.group_title
 """
@@ -200,56 +192,20 @@ SELECT
     COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
     to_jsonb(l) ->> 'opening_time' AS opening_time,
     to_jsonb(l) ->> 'start_time' AS start_time,
-    CASE
-        WHEN EXISTS (SELECT 1 FROM live_setlist stl WHERE stl.live_id = l.id) THEN COALESCE(
-            (
-                SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-                FROM live_setlist stl
-                JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
-                    ON jsonb_typeof(stl.band_member) = 'object'
-                JOIN band_attrs ba
-                    ON ba.band_name = k.band_name
-                WHERE stl.live_id = l.id
-            ),
-            ARRAY[]::int[]
-        )
-        ELSE l.default_band_ids
-    END AS bands,
-    CASE
-        WHEN EXISTS (SELECT 1 FROM live_setlist stl WHERE stl.live_id = l.id) THEN COALESCE(
-            (
-                SELECT array_agg(
-                    x.band_name
-                    ORDER BY (x.band_id IS NULL), x.band_id, x.band_name
-                )
-                FROM (
-                    SELECT DISTINCT
-                        k.band_name AS band_name,
-                        ba.id AS band_id
-                    FROM live_setlist stl
-                    JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
-                        ON jsonb_typeof(stl.band_member) = 'object'
-                    LEFT JOIN band_attrs ba
-                        ON ba.band_name = k.band_name
-                    WHERE stl.live_id = l.id
-                ) x
-            ),
-            ARRAY[]::text[]
-        )
-        ELSE COALESCE(
-            (
-                SELECT array_agg(COALESCE(name_version.band_name, ba.band_name) ORDER BY ba.id)
-                FROM band_attrs ba
-                LEFT JOIN live_band_lineup_contexts context
-                    ON context.live_id = l.id
-                   AND context.band_id = ba.id
-                LEFT JOIN band_name_versions name_version
-                    ON name_version.id = context.band_name_version_id
-                WHERE ba.id = ANY(l.default_band_ids)
-            ),
-            ARRAY[]::text[]
-        )
-    END AS band_names,
+    COALESCE((
+        SELECT array_agg(effective.band_id ORDER BY effective.band_id)
+        FROM effective_live_bands effective
+        WHERE effective.live_id = l.id
+    ), ARRAY[]::int[]) AS bands,
+    COALESCE((
+        SELECT array_agg(COALESCE(name_version.band_name, current.band_name) ORDER BY effective.band_id)
+        FROM effective_live_bands effective
+        JOIN current_band_versions current ON current.band_id = effective.band_id
+        LEFT JOIN live_band_lineup_contexts context
+          ON context.live_id = l.id AND context.band_id = effective.band_id
+        LEFT JOIN band_name_versions name_version ON name_version.id = context.band_name_version_id
+        WHERE effective.live_id = l.id
+    ), ARRAY[]::text[]) AS band_names,
     to_jsonb(l) ->> 'url' AS url,
     l.live_type,
     tour.id AS tour_id,
@@ -298,7 +254,7 @@ LIVE_DETAIL_ROWS_QUERY = """
 SELECT
     concat(stl.segment_type, stl.sub_order)::text AS row_id,
     s.song_name,
-    stl.band_member,
+    NULL::jsonb AS band_member,
     stl.other_member,
     stl.is_short,
     s.is_cover,
@@ -321,56 +277,20 @@ SELECT
     COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
     to_jsonb(l) ->> 'opening_time' AS opening_time,
     to_jsonb(l) ->> 'start_time' AS start_time,
-    CASE
-        WHEN EXISTS (SELECT 1 FROM live_setlist stl WHERE stl.live_id = l.id) THEN COALESCE(
-            (
-                SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-                FROM live_setlist stl
-                JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
-                    ON jsonb_typeof(stl.band_member) = 'object'
-                JOIN band_attrs ba
-                    ON ba.band_name = k.band_name
-                WHERE stl.live_id = l.id
-            ),
-            ARRAY[]::int[]
-        )
-        ELSE l.default_band_ids
-    END AS bands,
-    CASE
-        WHEN EXISTS (SELECT 1 FROM live_setlist stl WHERE stl.live_id = l.id) THEN COALESCE(
-            (
-                SELECT array_agg(
-                    x.band_name
-                    ORDER BY (x.band_id IS NULL), x.band_id, x.band_name
-                )
-                FROM (
-                    SELECT DISTINCT
-                        k.band_name AS band_name,
-                        ba.id AS band_id
-                    FROM live_setlist stl
-                    JOIN LATERAL jsonb_object_keys(stl.band_member) k(band_name)
-                        ON jsonb_typeof(stl.band_member) = 'object'
-                    LEFT JOIN band_attrs ba
-                        ON ba.band_name = k.band_name
-                    WHERE stl.live_id = l.id
-                ) x
-            ),
-            ARRAY[]::text[]
-        )
-        ELSE COALESCE(
-            (
-                SELECT array_agg(COALESCE(name_version.band_name, ba.band_name) ORDER BY ba.id)
-                FROM band_attrs ba
-                LEFT JOIN live_band_lineup_contexts context
-                    ON context.live_id = l.id
-                   AND context.band_id = ba.id
-                LEFT JOIN band_name_versions name_version
-                    ON name_version.id = context.band_name_version_id
-                WHERE ba.id = ANY(l.default_band_ids)
-            ),
-            ARRAY[]::text[]
-        )
-    END AS band_names,
+    COALESCE((
+        SELECT array_agg(effective.band_id ORDER BY effective.band_id)
+        FROM effective_live_bands effective
+        WHERE effective.live_id = l.id
+    ), ARRAY[]::int[]) AS bands,
+    COALESCE((
+        SELECT array_agg(COALESCE(name_version.band_name, current.band_name) ORDER BY effective.band_id)
+        FROM effective_live_bands effective
+        JOIN current_band_versions current ON current.band_id = effective.band_id
+        LEFT JOIN live_band_lineup_contexts context
+          ON context.live_id = l.id AND context.band_id = effective.band_id
+        LEFT JOIN band_name_versions name_version ON name_version.id = context.band_name_version_id
+        WHERE effective.live_id = l.id
+    ), ARRAY[]::text[]) AS band_names,
     to_jsonb(l) ->> 'url' AS url,
     l.live_type,
     tour.id AS tour_id,
@@ -421,7 +341,7 @@ WITH row_base AS (
         stl.live_id,
         concat(stl.segment_type, stl.sub_order)::text AS row_id,
         s.song_name,
-        stl.band_member,
+        NULL::jsonb AS band_member,
         stl.other_member,
         stl.is_short,
         s.is_cover,
@@ -436,37 +356,13 @@ SELECT
     rb.live_id,
     rb.row_id,
     rb.song_name,
-    COALESCE(
-        jsonb_agg(
-            jsonb_build_object(
-                'band_id', ba.id,
-                'band_name', kv.key,
-                'total_count', {BAND_TOTAL_COUNT_SQL},
-                'present_members',
-                CASE
-                    WHEN jsonb_typeof(kv.value) = 'array' THEN kv.value
-                    WHEN kv.value IS NULL THEN '[]'::jsonb
-                    ELSE jsonb_build_array(kv.value)
-                END
-            )
-            ORDER BY (ba.id IS NULL), ba.id, kv.key
-        ) FILTER (WHERE kv.key IS NOT NULL),
-        '[]'::jsonb
-    ) AS band_members,
+    '[]'::jsonb AS band_members,
     rb.other_member,
     rb.is_short,
     rb.is_cover,
     rb.band_id,
     owner_band.band_name
 FROM row_base rb
-LEFT JOIN LATERAL jsonb_each(
-    CASE
-        WHEN jsonb_typeof(rb.band_member) = 'object' THEN rb.band_member
-        ELSE '{{}}'::jsonb
-    END
-) kv(key, value) ON true
-LEFT JOIN band_attrs ba
-    ON ba.band_name = kv.key
 LEFT JOIN band_attrs owner_band
     ON owner_band.id = rb.band_id
 GROUP BY
@@ -541,10 +437,10 @@ ORDER BY performance.live_id, setlist.absolute_order, performance.band_id
 
 BAND_ID_LOOKUP_QUERY = f"""
 SELECT
-    ba.id,
+    ba.band_id,
     ba.band_name,
     {BAND_TOTAL_COUNT_SQL} AS total_count
-FROM band_attrs ba
+FROM current_band_versions ba
 WHERE ba.band_name = ANY(%s)
 """
 

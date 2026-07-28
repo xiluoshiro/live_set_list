@@ -32,7 +32,6 @@ type LiveAdminSectionProps = {
   defaultBandIds: number[];
   defaultBandLineupContexts: Record<number, ConsoleLiveBandLineupContext>;
   bandHistories: Record<number, ConsoleBandHistory>;
-  historicalDefaultBandSelectionEnabled: boolean;
   eventAttendees: Record<number, string[]>;
   bandOptions: BandOption[];
   venueQueryText: string;
@@ -100,11 +99,6 @@ type LiveAdminSectionProps = {
   onOpenDefaultBandMenu: () => void;
   onSelectVenue: (venueId: number) => void;
   onToggleDefaultBand: (bandId: number) => void;
-  onUpdateDefaultBandLineupContext: (
-    bandId: number,
-    field: "band_name_version_id" | "base_lineup_version_id",
-    value: number,
-  ) => void;
   onToggleEventAttendee: (bandId: number, memberName: string) => void;
   onQueryVid: () => void;
   onInsertVenue: () => void;
@@ -135,7 +129,6 @@ export function LiveAdminSection({
   defaultBandIds,
   defaultBandLineupContexts,
   bandHistories,
-  historicalDefaultBandSelectionEnabled,
   eventAttendees,
   bandOptions,
   venueQueryText,
@@ -187,7 +180,6 @@ export function LiveAdminSection({
   onOpenDefaultBandMenu,
   onSelectVenue,
   onToggleDefaultBand,
-  onUpdateDefaultBandLineupContext,
   onToggleEventAttendee,
   onQueryVid,
   onInsertVenue,
@@ -563,45 +555,12 @@ export function LiveAdminSection({
                   />
                   <span>{band.band_id} - {displayName}</span>
                 </label>
-                {selected && historicalDefaultBandSelectionEnabled && history && context && (
-                  <div className="band-member-mode-controls" aria-label={`${band.band_name} 默认版本`}>
-                    <label>
-                      历史名称
-                      <select
-                        aria-label={`${band.band_name} 默认历史名称`}
-                        value={context.band_name_version_id}
-                        onChange={(event) => onUpdateDefaultBandLineupContext(
-                          band.band_id,
-                          "band_name_version_id",
-                          Number(event.target.value),
-                        )}
-                      >
-                        {history.name_versions.map((version) => (
-                          <option key={version.name_version_id} value={version.name_version_id}>
-                            {version.band_name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      基础阵容
-                      <select
-                        aria-label={`${band.band_name} 默认基础阵容`}
-                        value={context.base_lineup_version_id}
-                        onChange={(event) => onUpdateDefaultBandLineupContext(
-                          band.band_id,
-                          "base_lineup_version_id",
-                          Number(event.target.value),
-                        )}
-                      >
-                        {history.lineup_versions.map((version) => (
-                          <option key={version.lineup_version_id} value={version.lineup_version_id}>
-                            {version.version_label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
+                {selected && history && context && (
+                  <p className="console-admin-hint">
+                    当前版本：{displayName} · {history.lineup_versions.find(
+                      (version) => version.lineup_version_id === context.base_lineup_version_id,
+                    )?.version_label ?? "加载中"}
+                  </p>
                 )}
                 {liveType === "event" && selected && memberOptions.length > 0 && (
                   <div className="band-member-sub-list" role="group" aria-label={`${band.band_name} 出演成员`}>
