@@ -5,8 +5,8 @@ import { formatCompactDateRange } from "../dateFormat";
 import { getPerformanceGroupStatusPresentation } from "../liveStatus";
 import { ExternalLinkIcon } from "./ActionIcons";
 import { BandIconsCell } from "./BandIconsCell";
+import { CollectedLiveBadges } from "./CollectedLiveBadges";
 import { ContentState } from "./ContentState";
-import { LiveTypeBadge } from "./LiveTypeBadge";
 
 type TourCardGridProps = {
   tours: TourSummary[];
@@ -79,10 +79,10 @@ export function TourCardGrid({
                 <div className="live-card-footer">
                   <BandIconsCell icons={tour.bands.map((band) => band.band_id)} rowId={tour.tour_id} />
                   <span className="live-card-actions">
-                    <LiveTypeBadge value="other" label={`收录${tour.collected_live_count}`} />
-                    {(tour.cancelled_live_count ?? 0) > 0 && (
-                      <LiveTypeBadge value="cancelled" label={`取消${tour.cancelled_live_count ?? 0}`} />
-                    )}
+                    <CollectedLiveBadges
+                      collectedCount={tour.collected_live_count}
+                      cancelledCount={tour.cancelled_live_count}
+                    />
                     {tour.url ? (
                       <a
                         href={tour.url}
