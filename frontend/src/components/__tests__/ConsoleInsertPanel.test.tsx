@@ -578,8 +578,8 @@ describe("ConsoleInsertPanel", () => {
     ));
   });
 
-  // 测试点：历史基础阵容加载后应替换当前成员默认值；没有交接后继时不显示模式选择和新旧标记。
-  test("基础阵容默认选择未更换成员和旧成员且无后继时简化成员界面", async () => {
+  // 测试点：历史基础阵容应持续替换目录默认成员，重复解析也不能回退到最新阵容。
+  test("基础阵容默认成员在重复解析后仍保持历史版本", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{
@@ -654,6 +654,22 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByRole("checkbox", { name: "New Member" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Roselia 本曲模式")).not.toBeInTheDocument();
     expect(screen.queryByText("Old Member（旧）")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
+      target: { value: "<Roselia>\nM1. BLACK SHOUT" },
+    });
+    await user.click(screen.getByRole("button", { name: "解析" }));
+    await user.click(screen.getByRole("button", { name: "应用到表格" }));
+    const reapplyDialog = screen.getByRole("dialog", { name: "确认应用到表格" });
+    expect(within(reapplyDialog).getByText(
+      '{"Roselia":["Stable Member","Old Member"]}',
+    )).toBeInTheDocument();
+    await user.click(within(reapplyDialog).getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: "1支 / 2人" }));
+
+    expect(screen.getByRole("checkbox", { name: "Stable Member" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Old Member" })).toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: "New Member" })).not.toBeInTheDocument();
   });
 
   test("只读查询接口会加载候选数据并用于歌曲查询", async () => {
