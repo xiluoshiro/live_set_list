@@ -326,6 +326,50 @@ function getLineupMembers(history: ConsoleBandHistory | undefined, lineupVersion
   return history.lineup_versions.find((version) => version.lineup_version_id === lineupVersionId)?.members ?? [];
 }
 
+function applyKnownLineupDefaults(
+  rows: SetlistDraftRow[],
+  bands: BandOption[],
+  histories: Record<number, ConsoleBandHistory>,
+  contexts: Record<number, ConsoleLiveBandLineupContext>,
+): SetlistDraftRow[] {
+  let changed = false;
+  const nextRows = rows.map((row) => {
+    let nextRow = row;
+    bands.forEach((band) => {
+      const history = histories[band.band_id];
+      const context = contexts[band.band_id];
+      const selectedMembers = nextRow.band_member[band.band_name];
+      const catalogMembers = band.band_members ?? [];
+      const hasCatalogDefault =
+        history !== undefined
+        && context !== undefined
+        && nextRow.band_performances?.[band.band_name] === undefined
+        && selectedMembers !== undefined
+        && selectedMembers.length === catalogMembers.length
+        && selectedMembers.every((member) => catalogMembers.includes(member));
+      if (!hasCatalogDefault) return;
+
+      const baseMembers = getLineupMembers(history, context.base_lineup_version_id);
+      nextRow = {
+        ...nextRow,
+        band_member: { ...nextRow.band_member, [band.band_name]: baseMembers },
+        band_performances: {
+          ...(nextRow.band_performances ?? {}),
+          [band.band_name]: {
+            band_id: band.band_id,
+            lineup_usage: "base",
+            handover_baseline: null,
+            members: [...baseMembers],
+          },
+        },
+      };
+      changed = true;
+    });
+    return nextRow;
+  });
+  return changed ? nextRows : rows;
+}
+
 function deriveDatePhaseForOffset(liveDate: string, timezone: string): DatePhase {
   const match = timezone.match(/^([+-])(\d{2}):(\d{2})$/);
   if (!match) return "today";
@@ -1757,7 +1801,16 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }
 
     try {
-      const result = parseSetlistText(rawText, bands, setlistRowKey, otherMemberEntryKey);
+      const parsedResult = parseSetlistText(rawText, bands, setlistRowKey, otherMemberEntryKey);
+      const result = {
+        ...parsedResult,
+        rows: applyKnownLineupDefaults(
+          parsedResult.rows,
+          bands,
+          bandHistories,
+          lineupContexts,
+        ),
+      };
       setSetlistParseWarnings(result.warnings);
       setSetlistParsePreviewRows(result.rows);
       setSetlistParsePreviewOpen(false);
@@ -1907,41 +1960,33 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   useEffect(() => {
     const liveDateValue = selectedSetlistLive?.live_date ?? liveDate;
     activeSetlistBands.forEach((band) => {
-      if (lineupContexts[band.band_id]) return;
+      const existingContext = lineupContexts[band.band_id];
+      const existingHistory = bandHistories[band.band_id];
+      if (existingContext && existingHistory) {
+        setSetlistRows((current) => applyKnownLineupDefaults(
+          current,
+          [band],
+          { [band.band_id]: existingHistory },
+          { [band.band_id]: existingContext },
+        ));
+        return;
+      }
       void ensureBandHistory(band.band_id).then((history) => {
         if (!history) return;
-        const suggestedContext = suggestLineupContext(history, liveDateValue);
-        if (!suggestedContext) return;
+        const resolvedContext = existingContext ?? suggestLineupContext(history, liveDateValue);
+        if (!resolvedContext) return;
         setLineupContexts((current) => current[band.band_id]
           ? current
-          : { ...current, [band.band_id]: suggestedContext });
-        const catalogMembers = band.band_members ?? [];
-        const baseMembers = getLineupMembers(history, suggestedContext.base_lineup_version_id);
-        setSetlistRows((current) => current.map((row) => {
-          const selectedMembers = row.band_member[band.band_name];
-          const hasCatalogDefault =
-            row.band_performances?.[band.band_name] === undefined
-            && selectedMembers !== undefined
-            && selectedMembers.length === catalogMembers.length
-            && selectedMembers.every((member) => catalogMembers.includes(member));
-          if (!hasCatalogDefault) return row;
-          return {
-            ...row,
-            band_member: { ...row.band_member, [band.band_name]: baseMembers },
-            band_performances: {
-              ...(row.band_performances ?? {}),
-              [band.band_name]: {
-                band_id: band.band_id,
-                lineup_usage: "base",
-                handover_baseline: null,
-                members: [...baseMembers],
-              },
-            },
-          };
-        }));
+          : { ...current, [band.band_id]: resolvedContext });
+        setSetlistRows((current) => applyKnownLineupDefaults(
+          current,
+          [band],
+          { [band.band_id]: history },
+          { [band.band_id]: resolvedContext },
+        ));
       });
     });
-  }, [activeSetlistBands, lineupContexts, liveDate, selectedSetlistLive?.live_date]);
+  }, [activeSetlistBands, bandHistories, lineupContexts, liveDate, selectedSetlistLive?.live_date]);
 
   const toggleBandForSetlistRow = (rowKey: number, bandName: string) => {
     const matchedBand = bands.find((band) => band.band_name === bandName);
