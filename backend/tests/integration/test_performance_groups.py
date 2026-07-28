@@ -462,6 +462,277 @@ def test_catalog_performances_returns_mixed_items(
         cur.execute("DELETE FROM performance_group_attrs WHERE id = %s", (group_id,))
 
 
+# 测试点：活动组仅部分满足组合筛选时应逐场返回，并以单场日期时间参与分页排序。
+def test_catalog_performances_expands_partial_group_matches(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    live_ids = [9101, 9102, 9103]
+    with integration_admin_connection.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO live_attrs (
+                id, live_date, live_title, url, opening_time, start_time,
+                venue_id, live_type, default_band_ids
+            )
+            VALUES
+                (9101, DATE '2026-06-01', 'PartialProbe Opening', 'https://example.com/9101',
+                 TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
+                 1, 'oneman', ARRAY[1]),
+                (9102, DATE '2026-06-02', 'PartialProbe Finale', 'https://example.com/9102',
+                 TIME WITH TIME ZONE '18:00:00+09', TIME WITH TIME ZONE '19:00:00+09',
+                 2, 'oneman', ARRAY[2]),
+                (9103, DATE '2027-06-03', 'Unrelated Closing', 'https://example.com/9103',
+                 TIME WITH TIME ZONE '16:00:00+09', TIME WITH TIME ZONE '17:00:00+09',
+                 1, 'event', ARRAY[3])
+            """
+        )
+        cur.execute(
+            "INSERT INTO performance_group_attrs (group_title) VALUES ('Partial Container') RETURNING id"
+        )
+        group_id = int(cur.fetchone()[0])
+        cur.executemany(
+            "INSERT INTO performance_group_lives (group_id, live_id) VALUES (%s, %s)",
+            [(group_id, live_id) for live_id in live_ids],
+        )
+
+    response = integration_test_client.get(
+        "/api/catalog/performances",
+        params={
+            "scope": "all",
+            "page": 1,
+            "page_size": 20,
+            "q": "PartialProbe",
+            "sort": "date_desc",
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["pagination"]["total"] == 2
+    assert [item["live"]["live_id"] for item in payload["items"]] == [9102, 9101]
+    assert all(item["kind"] == "live" for item in payload["items"])
+    assert all(
+        item["live"]["performance_group"]
+        == {"group_id": group_id, "group_title": "Partial Container"}
+        for item in payload["items"]
+    )
+
+    ascending = integration_test_client.get(
+        "/api/catalog/performances",
+        params={
+            "scope": "all",
+            "page": 1,
+            "page_size": 20,
+            "q": "PartialProbe",
+            "sort": "date_asc",
+        },
+    )
+    assert ascending.status_code == 200, ascending.text
+    assert [item["live"]["live_id"] for item in ascending.json()["items"]] == [9101, 9102]
+
+    combined = integration_test_client.get(
+        "/api/catalog/performances",
+        params={
+            "scope": "all",
+            "page": 1,
+            "page_size": 20,
+            "q": "PartialProbe",
+            "year": 2026,
+            "live_type": "oneman",
+            "band_id": 1,
+        },
+    )
+    assert combined.status_code == 200, combined.text
+    assert combined.json()["pagination"]["total"] == 1
+    assert combined.json()["items"][0]["live"]["live_id"] == 9101
+
+    no_match = integration_test_client.get(
+        "/api/catalog/performances",
+        params={
+            "scope": "all",
+            "page": 1,
+            "page_size": 20,
+            "q": "MissingPartialProbe",
+        },
+    )
+    assert no_match.status_code == 200, no_match.text
+    assert no_match.json()["pagination"]["total"] == 0
+    assert no_match.json()["items"] == []
+
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("DELETE FROM performance_group_lives WHERE group_id = %s", (group_id,))
+        cur.execute("DELETE FROM performance_group_attrs WHERE id = %s", (group_id,))
+        cur.execute("DELETE FROM live_attrs WHERE id = ANY(%s)", (live_ids,))
+
+
+# 测试点：部分组展开后的每个 Live 都应独立计入 total，并正确跨越分页边界。
+def test_catalog_performances_paginates_expanded_group_lives(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    live_ids = list(range(9401, 9418))
+    with integration_admin_connection.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO live_attrs (
+                id, live_date, live_title, url, opening_time, start_time,
+                venue_id, live_type, default_band_ids
+            )
+            SELECT
+                live_id,
+                DATE '2030-01-01' + (live_id - 9401),
+                'PagingProbe ' || live_id,
+                'https://example.com/' || live_id,
+                TIME WITH TIME ZONE '17:00:00+09',
+                TIME WITH TIME ZONE '18:00:00+09',
+                1,
+                'oneman',
+                ARRAY[1]
+            FROM generate_series(9401, 9416) AS live_id
+            """
+        )
+        cur.execute(
+            """
+            INSERT INTO live_attrs (
+                id, live_date, live_title, url, opening_time, start_time,
+                venue_id, live_type, default_band_ids
+            )
+            VALUES (
+                9417, DATE '2030-01-17', 'Unrelated Paging Tail',
+                'https://example.com/9417',
+                TIME WITH TIME ZONE '17:00:00+09',
+                TIME WITH TIME ZONE '18:00:00+09',
+                1, 'oneman', ARRAY[1]
+            )
+            """
+        )
+        cur.execute(
+            "INSERT INTO performance_group_attrs (group_title) VALUES ('Paging Container') RETURNING id"
+        )
+        group_id = int(cur.fetchone()[0])
+        cur.execute(
+            """
+            INSERT INTO performance_group_lives (group_id, live_id)
+            SELECT %s, live_id
+            FROM generate_series(9401, 9417) AS live_id
+            """,
+            (group_id,),
+        )
+
+    first_page = integration_test_client.get(
+        "/api/catalog/performances",
+        params={
+            "scope": "all",
+            "page": 1,
+            "page_size": 15,
+            "q": "PagingProbe",
+            "sort": "date_desc",
+        },
+    )
+    assert first_page.status_code == 200, first_page.text
+    first_payload = first_page.json()
+    assert first_payload["pagination"] == {
+        "page": 1,
+        "page_size": 15,
+        "total": 16,
+        "total_pages": 2,
+    }
+    assert [item["live"]["live_id"] for item in first_payload["items"]] == list(
+        range(9416, 9401, -1)
+    )
+    assert all(item["kind"] == "live" for item in first_payload["items"])
+
+    second_page = integration_test_client.get(
+        "/api/catalog/performances",
+        params={
+            "scope": "all",
+            "page": 2,
+            "page_size": 15,
+            "q": "PagingProbe",
+            "sort": "date_desc",
+        },
+    )
+    assert second_page.status_code == 200, second_page.text
+    second_payload = second_page.json()
+    assert second_payload["pagination"]["total"] == 16
+    assert second_payload["pagination"]["total_pages"] == 2
+    assert [item["live"]["live_id"] for item in second_payload["items"]] == [9401]
+
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("DELETE FROM performance_group_lives WHERE group_id = %s", (group_id,))
+        cur.execute("DELETE FROM performance_group_attrs WHERE id = %s", (group_id,))
+        cur.execute("DELETE FROM live_attrs WHERE id = ANY(%s)", (live_ids,))
+
+
+# 测试点：全场命中或关键词直接命中组名时应继续返回完整活动组卡片数据。
+def test_catalog_performances_keeps_full_or_title_matched_group(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    live_ids = [9201, 9202]
+    with integration_admin_connection.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO live_attrs (
+                id, live_date, live_title, url, opening_time, start_time,
+                venue_id, live_type, default_band_ids
+            )
+            VALUES
+                (9201, DATE '2028-07-01', 'FullProbe Opening', 'https://example.com/9201',
+                 TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
+                 1, 'oneman', ARRAY[1]),
+                (9202, DATE '2028-07-02', 'FullProbe Finale', 'https://example.com/9202',
+                 TIME WITH TIME ZONE '18:00:00+09', TIME WITH TIME ZONE '19:00:00+09',
+                 2, 'oneman', ARRAY[1])
+            """
+        )
+        cur.execute(
+            "INSERT INTO performance_group_attrs (group_title) VALUES ('TitleProbe Activity') RETURNING id"
+        )
+        group_id = int(cur.fetchone()[0])
+        cur.executemany(
+            "INSERT INTO performance_group_lives (group_id, live_id) VALUES (%s, %s)",
+            [(group_id, live_id) for live_id in live_ids],
+        )
+
+    full_child_match = integration_test_client.get(
+        "/api/catalog/performances",
+        params={
+            "scope": "all",
+            "page": 1,
+            "page_size": 20,
+            "q": "FullProbe",
+        },
+    )
+    assert full_child_match.status_code == 200, full_child_match.text
+    assert full_child_match.json()["pagination"]["total"] == 1
+    assert full_child_match.json()["items"][0]["kind"] == "performance_group"
+    assert full_child_match.json()["items"][0]["performance_group"]["group_id"] == group_id
+
+    title_match = integration_test_client.get(
+        "/api/catalog/performances",
+        params={
+            "scope": "all",
+            "page": 1,
+            "page_size": 20,
+            "q": "TitleProbe",
+            "year": 2028,
+        },
+    )
+    assert title_match.status_code == 200, title_match.text
+    assert title_match.json()["pagination"]["total"] == 1
+    assert title_match.json()["items"][0]["kind"] == "performance_group"
+    assert title_match.json()["items"][0]["performance_group"]["live_count"] == 2
+
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("DELETE FROM performance_group_lives WHERE group_id = %s", (group_id,))
+        cur.execute("DELETE FROM performance_group_attrs WHERE id = %s", (group_id,))
+        cur.execute("DELETE FROM live_attrs WHERE id = ANY(%s)", (live_ids,))
+
+
 # 测试点：两场组删除一场后，级联关系不会让剩余 Live 从统一演出资料中消失。
 def test_deleting_live_cascades_to_performance_group_lives(
     integration_test_client,
@@ -508,7 +779,7 @@ def test_deleting_live_cascades_to_performance_group_lives(
         cursor.execute("DELETE FROM performance_group_attrs WHERE id = %s", (group_id,))
 
 
-# 测试点：scope=favorites 仅返回已收藏数据：全收藏返回活动组，部分收藏返回单个 Live。
+# 测试点：收藏范围只在全组收藏时聚合，部分收藏即使命中组名也只返回已收藏 Live。
 def test_catalog_performances_favorites_scope(
     integration_test_client,
     integration_admin_connection,
@@ -568,6 +839,23 @@ def test_catalog_performances_favorites_scope(
     # No group should appear (not fully favorited)
     group_items_after = [item for item in payload["items"] if item["kind"] == "performance_group"]
     assert len(group_items_after) == 0
+
+    title_match_response = integration_test_client.get(
+        "/api/catalog/performances",
+        params={
+            "scope": "favorites",
+            "page": 1,
+            "page_size": 20,
+            "q": "Fav Test Group",
+        },
+    )
+    assert title_match_response.status_code == 200, title_match_response.text
+    title_match_items = title_match_response.json()["items"]
+    assert [item["live"]["live_id"] for item in title_match_items] == [1]
+    assert title_match_items[0]["live"]["performance_group"] == {
+        "group_id": group_id,
+        "group_title": "Fav Test Group",
+    }
 
     # Cleanup
     with integration_admin_connection.cursor() as cur:
