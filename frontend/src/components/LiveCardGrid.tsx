@@ -1,6 +1,7 @@
 import { type MutableRefObject } from "react";
 import { ExternalLinkIcon, FavoriteIcon } from "./ActionIcons";
 import { BandIconsCell, type BandIconInput } from "./BandIconsCell";
+import { CollectedLiveBadges } from "./CollectedLiveBadges";
 import { ContentState } from "./ContentState";
 import { LiveTypeBadge } from "./LiveTypeBadge";
 import { formatLiveType } from "./console/constants";
@@ -155,13 +156,14 @@ export function LiveCardGrid({
               </button>
               <div className="live-card-footer">
                 <BandIconsCell icons={row.groupIcons} rowId={row.groupId ?? 0} />
-                <span className="live-card-count">
-                  {row.groupLiveCount !== null
-                    ? row.groupDayCount === 1
-                      ? `已收录 ${row.groupLiveCount} 场${row.groupCancelledLiveCount ? ` · 取消 ${row.groupCancelledLiveCount} 场` : ""}`
-                      : `已收录 ${row.groupDayCount} 日 · ${row.groupLiveCount} 场${row.groupCancelledLiveCount ? ` · 取消 ${row.groupCancelledLiveCount} 场` : ""}`
-                    : ""}
-                </span>
+                {row.groupLiveCount !== null && (
+                  <span className="live-card-actions">
+                    <CollectedLiveBadges
+                      collectedCount={row.groupLiveCount}
+                      cancelledCount={row.groupCancelledLiveCount}
+                    />
+                  </span>
+                )}
               </div>
             </article>
           ) : (

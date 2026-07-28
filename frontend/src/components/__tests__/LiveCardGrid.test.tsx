@@ -5,7 +5,7 @@ import { describe, expect, test, vi } from "vitest";
 import { formatCompactPerformanceDate, LiveCardGrid, type LiveRow } from "../LiveCardGrid";
 
 
-function makeGroupRow(): LiveRow {
+function makeGroupRow(overrides: Partial<LiveRow> = {}): LiveRow {
   return {
     kind: "performance_group",
     liveId: -1,
@@ -25,6 +25,7 @@ function makeGroupRow(): LiveRow {
     eventStatus: null,
     datePhase: null,
     wasRescheduled: false,
+    ...overrides,
   };
 }
 
@@ -137,7 +138,34 @@ test("hides favorite action for a cancelled live", () => {
 });
 
 
-// 测试点：全部取消的活动组显示取消标签与取消场数，但仍可进入详情查看各场资料。
+// 测试点：已结束活动组使用巡演同款紧凑收录标签，且没有取消场次时不显示取消标签。
+test("past performance group card uses compact collected badge", () => {
+  const { container } = render(
+    <LiveCardGrid
+      rows={[makeGroupRow({ groupCancelledLiveCount: 0 })]}
+      showStar={false}
+      isFavorite={() => false}
+      isSyncing={() => false}
+      onToggleStar={vi.fn()}
+      onOpenLive={vi.fn()}
+      onOpenGroup={vi.fn()}
+      loading={false}
+      loadError={null}
+      sentinelRef={createRef<HTMLDivElement>()}
+      loadingMore={false}
+      hasMore={false}
+      total={1}
+    />,
+  );
+
+  const card = container.querySelector("article");
+  expect(card).toHaveAttribute("data-status-tone", "past");
+  expect(screen.getByText("收录2")).toHaveClass("live-type-badge");
+  expect(screen.queryByText("取消0")).not.toBeInTheDocument();
+  expect(screen.queryByText("已收录 2 日 · 2 场")).not.toBeInTheDocument();
+});
+
+// 测试点：全部取消的活动组显示紧凑收录与取消标签，但仍可进入详情查看各场资料。
 test("cancelled performance group card stays aggregated and remains clickable", () => {
   const onOpenGroup = vi.fn();
   const { container } = render(
@@ -161,7 +189,9 @@ test("cancelled performance group card stays aggregated and remains clickable", 
   const card = container.querySelector("article");
   expect(card).toHaveAttribute("data-status-tone", "cancelled");
   expect(screen.getByText("已取消")).toBeInTheDocument();
-  expect(screen.getByText("已收录 2 日 · 2 场 · 取消 2 场")).toBeInTheDocument();
+  expect(screen.getByText("收录2")).toHaveClass("live-type-badge");
+  expect(screen.getByText("取消2")).toHaveClass("live-type-badge");
+  expect(screen.queryByText("已收录 2 日 · 2 场 · 取消 2 场")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "查看活动组《两日活动》详情，状态：已取消" }));
   expect(onOpenGroup).toHaveBeenCalledWith(3, "两日活动");
 });

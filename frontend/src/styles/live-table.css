@@ -476,7 +476,8 @@ tr.is-cancelled {
 }
 
 .live-type-badge {
-  padding: 3px 8px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, currentColor 34%, transparent);
   border-radius: var(--radius-pill);
   background: var(--live-type-other-bg);
   color: var(--live-type-other-text);
@@ -494,11 +495,6 @@ tr.is-cancelled {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.live-card-count {
-  color: var(--text-muted);
-  font-size: 13px;
 }
 
 .live-type-badge[data-tone="oneman"] {
