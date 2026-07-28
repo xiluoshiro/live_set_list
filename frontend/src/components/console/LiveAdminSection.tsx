@@ -463,6 +463,7 @@ export function LiveAdminSection({
               主办方正式改期
             </label>
             <input
+              className="venue-query-input"
               aria-label="排期变化说明"
               value={scheduleChangeNote}
               onChange={(event) => onScheduleChangeNoteChange(event.target.value)}

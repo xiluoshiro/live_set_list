@@ -150,7 +150,7 @@ describe("LiveAdminSection", () => {
     expect(screen.getByText("Live #55 有未保存修改")).toBeInTheDocument();
   });
 
-  // 测试点：日期阶段保持只读并暴露配色语义；只有排期变化时才显示改期类型。
+  // 测试点：日期阶段保持只读；排期变化控件仅在改期后出现，并复用现有输入框样式。
   test("shows read-only date phase and schedule change choices only after schedule edits", () => {
     const onScheduleChangeKindChange = vi.fn();
     renderSection(vi.fn(), {
@@ -164,6 +164,7 @@ describe("LiveAdminSection", () => {
     expect(screen.getByLabelText("日期阶段：进行中（只读）")).toHaveTextContent("进行中");
     expect(screen.getByLabelText("日期阶段：进行中（只读）")).toHaveAttribute("data-status-tone", "today");
     expect(screen.getByRole("radio", { name: "资料修正" })).toBeInTheDocument();
+    expect(screen.getByLabelText("排期变化说明")).toHaveClass("venue-query-input");
     fireEvent.click(screen.getByRole("radio", { name: "主办方正式改期" }));
     expect(onScheduleChangeKindChange).toHaveBeenCalledWith("reschedule");
   });

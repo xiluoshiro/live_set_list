@@ -45,6 +45,11 @@
   min-width: min(360px, 100%);
 }
 
+.live-schedule-change-editor > .live-management-label {
+  flex-basis: auto;
+  white-space: nowrap;
+}
+
 .live-admin-status-section {
   margin: 12px 0;
   padding: 14px;
