@@ -1,11 +1,8 @@
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
+
 import psycopg2
 import pytest
-
-from app.band_history_backfill import (
-    apply_legacy_band_history_backfill,
-    inspect_legacy_band_history_backfill,
-)
-
 
 pytestmark = pytest.mark.integration
 
@@ -13,6 +10,17 @@ pytestmark = pytest.mark.integration
 def _insert_band_history(integration_admin_connection) -> tuple[int, int, int]:
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
+        cursor.execute("DELETE FROM live_setlist_band_performance_members WHERE band_id = 1")
+        cursor.execute("DELETE FROM live_setlist_band_performances WHERE band_id = 1")
+        cursor.execute("DELETE FROM live_band_lineup_contexts WHERE band_id = 1")
+        cursor.execute(
+            """
+            DELETE FROM band_lineup_version_members
+            WHERE lineup_version_id IN (SELECT id FROM band_lineup_versions WHERE band_id = 1)
+            """
+        )
+        cursor.execute("DELETE FROM band_lineup_versions WHERE band_id = 1")
+        cursor.execute("DELETE FROM band_name_versions WHERE band_id = 1")
         cursor.execute(
             """
             INSERT INTO band_name_versions (
@@ -38,9 +46,9 @@ def _insert_band_history(integration_admin_connection) -> tuple[int, int, int]:
             """
             INSERT INTO band_lineup_versions (
                 band_id, version_no, version_label, valid_from, valid_to,
-                predecessor_id, change_type
+                predecessor_id, change_type, transition_live_id
             )
-            VALUES (1, 2, 'Poppin''Party V2', DATE '2018-01-01', NULL, %s, 'addition')
+            VALUES (1, 2, 'Poppin''Party V2', DATE '2018-01-01', NULL, %s, 'addition', 1)
             RETURNING id
             """,
             (base_version_id,),
@@ -311,6 +319,7 @@ def test_console_creates_band_in_selected_id_range_with_v1_history(
         cursor.execute(
             """
             SELECT
+                (SELECT COUNT(*) FROM band_attrs WHERE id IN (4, 101)),
                 (SELECT COUNT(*) FROM band_name_versions WHERE band_id IN (4, 101)),
                 (SELECT COUNT(*) FROM band_lineup_versions WHERE band_id IN (4, 101)),
                 (
@@ -319,10 +328,15 @@ def test_console_creates_band_in_selected_id_range_with_v1_history(
                     JOIN band_lineup_versions version ON version.id = member.lineup_version_id
                     WHERE version.band_id IN (4, 101)
                 ),
-                (SELECT COUNT(*) FROM audit_logs WHERE action = 'band_create')
+                (SELECT COUNT(*) FROM audit_logs WHERE action = 'band_create'),
+                (
+                    SELECT bool_and(band_members IS NULL)
+                    FROM band_attrs
+                    WHERE id IN (4, 101)
+                )
             """
         )
-        assert cursor.fetchone() == (2, 2, 3, 2)
+        assert cursor.fetchone() == (2, 2, 2, 3, 2, True)
 
 
 # 测试点：与当前或历史名称冲突时应返回 409，且不得留下 Band 或历史版本的部分数据。
@@ -355,6 +369,56 @@ def test_console_create_band_rejects_duplicate_name_without_partial_rows(
         assert cursor.fetchone()[0] == band_count_before
         cursor.execute("SELECT COUNT(*) FROM band_name_versions")
         assert cursor.fetchone()[0] == name_version_count_before
+
+
+# 测试点：新增 Band 在 V1 已插入但审计失败时，四张 band% 表必须随事务整体回滚。
+def test_console_create_band_rolls_back_all_version_tables_when_audit_fails(
+    integration_test_client,
+    integration_admin_connection,
+):
+    csrf_token = _login_editor(integration_test_client)
+    with patch(
+        "app.routers.console_bands._write_audit",
+        side_effect=RuntimeError("forced audit failure"),
+    ):
+        with pytest.raises(RuntimeError, match="forced audit failure"):
+            integration_test_client.post(
+                "/api/console/bands",
+                headers={"X-CSRF-Token": csrf_token},
+                json={
+                    "id_range": "regular",
+                    "band_name": "Rollback Probe Band",
+                    "band_abbr": "rollback",
+                    "members": ["Member A", "Member B"],
+                    "valid_from": "2026-07-29",
+                },
+            )
+
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM band_attrs WHERE band_name = 'Rollback Probe Band'),
+                (
+                    SELECT COUNT(*)
+                    FROM band_name_versions
+                    WHERE band_name = 'Rollback Probe Band'
+                ),
+                (
+                    SELECT COUNT(*)
+                    FROM band_lineup_versions
+                    WHERE version_label = 'Rollback Probe Band V1'
+                ),
+                (
+                    SELECT COUNT(*)
+                    FROM band_lineup_version_members member
+                    JOIN band_lineup_versions version
+                      ON version.id = member.lineup_version_id
+                    WHERE version.version_label = 'Rollback Probe Band V1'
+                )
+            """
+        )
+        assert cursor.fetchone() == (0, 0, 0, 0)
 
 
 # 测试点：常规编号达到 99 后必须明确报满，不得越界占用保留 ID 100 或自动切换特殊段。
@@ -391,184 +455,202 @@ def test_console_create_band_rejects_exhausted_regular_range(
         assert cursor.fetchone()[0] == 0
 
 
-# 测试点：控制台确认当前资料时应同步修正兼容投影、初始化名称与阵容版本并返回完整历史。
-def test_console_initializes_current_band_history_and_audits(
+# 测试点：旧资料初始化和原地修正入口退场后，不得再提供可变更历史版本的路由。
+def test_console_rejects_retired_band_history_mutation_routes(
     integration_test_client,
-    integration_admin_connection,
 ):
     csrf_token = _login_editor(integration_test_client)
-    response = integration_test_client.post(
+    initialize_response = integration_test_client.post(
         "/api/console/bands/1/initialize-current",
         headers={"X-CSRF-Token": csrf_token},
         json={
             "band_name": "Poppin'Party",
             "band_abbr": "ppp",
-            "members": ["Kasumi", "Tae", "Rimi", "Saaya", "Arisa"],
-            "version_no": 3,
-            "version_label": "Poppin'Party V3",
-            "valid_from": "2018-01-01",
-            "valid_to": None,
-            "note": "confirmed current roster",
+            "members": ["Kasumi"],
+        },
+    )
+    correction_response = integration_test_client.put(
+        "/api/console/bands/1/lineup-versions/1",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "version_label": "mutated",
+            "members": ["Kasumi"],
+        },
+    )
+
+    assert initialize_response.status_code == 404
+    assert correction_response.status_code == 404
+
+
+# 测试点：追加阵容必须自动闭合唯一开放版本、建立直接后继并一次性固化可空交接 Live。
+def test_console_appends_lineup_and_binds_transition_atomically(
+    integration_test_client,
+    integration_admin_connection,
+):
+    csrf_token = _login_editor(integration_test_client)
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT id FROM band_lineup_versions WHERE band_id = 1 AND valid_to IS NULL"
+        )
+        old_version_id = int(cursor.fetchone()[0])
+
+    response = integration_test_client.post(
+        "/api/console/bands/1/lineup-versions",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "version_label": "Poppin'Party V2",
+            "change_type": "addition",
+            "members": ["Kasumi", "Tae", "Rimi", "Saaya", "Arisa", "New Member"],
+            "valid_from": "2026-07-29",
+            "note": "member joined",
+            "transition_live_id": 1,
         },
     )
 
     assert response.status_code == 201
     history = response.json()["history"]
-    assert history["initialized"] is True
-    assert history["name_versions"][0]["band_name"] == "Poppin'Party"
-    assert history["lineup_versions"][0]["version_no"] == 3
-    assert history["lineup_versions"][0]["members"] == ["Kasumi", "Tae", "Rimi", "Saaya", "Arisa"]
-
+    new_version = next(item for item in history["lineup_versions"] if item["valid_to"] is None)
+    assert new_version["predecessor_id"] == old_version_id
+    assert new_version["transition_live_id"] == 1
+    assert history["current_lineup_version_id"] == new_version["lineup_version_id"]
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
+            "SELECT valid_to FROM band_lineup_versions WHERE id = %s",
+            (old_version_id,),
+        )
+        assert cursor.fetchone()[0].isoformat() == "2026-07-29"
+        cursor.execute(
             """
-            SELECT action, payload_json ->> 'version_label'
-            FROM audit_logs
-            WHERE action = 'band_history_initialize'
-            ORDER BY id DESC
-            LIMIT 1
+            SELECT base_lineup_version_id, next_lineup_version_id
+            FROM live_band_lineup_contexts
+            WHERE live_id = 1 AND band_id = 1
             """
         )
-        assert cursor.fetchone() == ("band_history_initialize", "Poppin'Party V3")
+        assert cursor.fetchone() == (old_version_id, new_version["lineup_version_id"])
 
-
-# 测试点：资料修正必须先确认精确受影响 Live 集合，并在成功后保留修正审计。
-def test_console_lineup_correction_requires_exact_impact_confirmation(
-    integration_test_client,
-    integration_admin_connection,
-):
-    _, base_version_id, _ = _insert_band_history(integration_admin_connection)
-    csrf_token = _login_editor(integration_test_client)
-
-    mismatch = integration_test_client.put(
-        f"/api/console/bands/1/lineup-versions/{base_version_id}",
-        headers={"X-CSRF-Token": csrf_token},
-        json={
-            "version_label": "Poppin'Party V1 corrected",
-            "members": ["Kasumi", "Tae"],
-            "valid_from": "2015-01-01",
-            "valid_to": "2018-01-01",
-            "note": "source correction",
-            "confirmed_live_ids": [],
-        },
-    )
-    assert mismatch.status_code == 409
-    assert "expected [1]" in mismatch.json()["detail"]
-
-    success = integration_test_client.put(
-        f"/api/console/bands/1/lineup-versions/{base_version_id}",
-        headers={"X-CSRF-Token": csrf_token},
-        json={
-            "version_label": "Poppin'Party V1 corrected",
-            "members": ["Kasumi", "Tae"],
-            "valid_from": "2015-01-01",
-            "valid_to": "2018-01-01",
-            "note": "source correction",
-            "confirmed_live_ids": [1],
-        },
-    )
-    assert success.status_code == 200
-    corrected = next(
-        item
-        for item in success.json()["history"]["lineup_versions"]
-        if item["lineup_version_id"] == base_version_id
-    )
-    assert corrected["change_type"] == "correction"
-    assert corrected["members"] == ["Kasumi", "Tae"]
-
-
-# 测试点：只读预检通过后，自动回填应一次性建立上下文、逐曲出演与成员关系并写审计。
-def test_legacy_band_history_backfill_preflight_and_apply(
-    integration_admin_connection,
-):
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cursor:
-        cursor.execute("DELETE FROM live_setlist")
         cursor.execute(
             """
-            INSERT INTO band_name_versions (band_id, band_name, band_abbr, valid_from)
-            VALUES (1, 'Poppin''Party', 'ppp', DATE '2018-01-01')
-            RETURNING id
+            SELECT id
+            FROM band_name_versions
+            WHERE band_id = 1 AND valid_to IS NULL
             """
         )
         name_version_id = int(cursor.fetchone()[0])
         cursor.execute(
             """
-            INSERT INTO band_lineup_versions (
-                band_id, version_no, version_label, valid_from, change_type
+            INSERT INTO live_band_lineup_contexts (
+                live_id, band_id, band_name_version_id,
+                base_lineup_version_id, next_lineup_version_id
             )
-            VALUES (1, 3, 'Poppin''Party V3', DATE '2018-01-01', 'initial')
-            RETURNING id
-            """
-        )
-        lineup_version_id = int(cursor.fetchone()[0])
-        cursor.executemany(
-            """
-            INSERT INTO band_lineup_version_members (
-                lineup_version_id, member_name, display_order
-            )
-            VALUES (%s, %s, %s)
+            VALUES (41, 1, %s, %s, %s)
+            ON CONFLICT (live_id, band_id) DO UPDATE
+            SET band_name_version_id = EXCLUDED.band_name_version_id,
+                base_lineup_version_id = EXCLUDED.base_lineup_version_id,
+                next_lineup_version_id = EXCLUDED.next_lineup_version_id
             """,
-            [
-                (lineup_version_id, "Kasumi", 1),
-                (lineup_version_id, "Tae", 2),
-            ],
-        )
-        cursor.execute(
-            """
-            INSERT INTO live_setlist (
-                id, live_id, song_id, absolute_order, segment_type, sub_order,
-                band_member
-            )
-            VALUES (
-                '11111111-1111-4111-8111-111111111111',
-                1, 1, 1, 'M', 1,
-                '{"Poppin''Party":["Kasumi","Tae"]}'::jsonb
-            )
-            """
+            (name_version_id, old_version_id, new_version["lineup_version_id"]),
         )
 
-        inspection = inspect_legacy_band_history_backfill(cursor)
-        assert inspection.summary == {
-            "ready": True,
-            "setlist_row_count": 1,
-            "performance_count": 1,
-            "member_count": 2,
-            "live_band_context_count": 1,
-            "mapped_band_ids": [1],
-            "issues": [],
-        }
-        integration_admin_connection.autocommit = False
-        summary = apply_legacy_band_history_backfill(cursor, audit_user_id=None)
-        assert summary["ready"] is True
+    unbound_response = integration_test_client.post(
+        "/api/console/lives/41/setlist",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "setlist_rows": [
+                {
+                    "song_id": 4,
+                    "absolute_order": 1,
+                    "segment_type": "M",
+                    "sub_order": 1,
+                    "is_short": False,
+                    "band_performances": [
+                        {
+                            "band_id": 1,
+                            "lineup_usage": "next",
+                            "handover_baseline": None,
+                            "members": ["Kasumi", "Tae", "Rimi", "Saaya", "Arisa", "New Member"],
+                        }
+                    ],
+                    "other_member": None,
+                    "comment": None,
+                }
+            ]
+        },
+    )
+    assert unbound_response.status_code == 400
+    assert "only on its bound transition Live" in unbound_response.json()["detail"]
 
+
+# 测试点：两个并发追加请求必须由 Band 行锁串行化，只能产生一个 V2 和一个开放版本。
+def test_console_concurrent_lineup_append_allows_only_one_successor(
+    integration_test_client,
+    integration_admin_connection,
+):
+    csrf_token = _login_editor(integration_test_client)
+    payload = {
+        "version_label": "Concurrent V2",
+        "change_type": "addition",
+        "members": ["Kasumi", "Tae", "Rimi", "Saaya", "Arisa", "Concurrent Member"],
+        "valid_from": "2026-07-29",
+        "note": "concurrent append probe",
+        "transition_live_id": None,
+    }
+
+    def append_version() -> int:
+        return integration_test_client.post(
+            "/api/console/bands/1/lineup-versions",
+            headers={"X-CSRF-Token": csrf_token},
+            json=payload,
+        ).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        statuses = sorted(executor.map(lambda _: append_version(), range(2)))
+
+    assert statuses == [201, 409]
+    with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT band_name_version_id, base_lineup_version_id, next_lineup_version_id
-            FROM live_band_lineup_contexts
-            WHERE live_id = 1 AND band_id = 1
+            SELECT
+                COUNT(*) FILTER (WHERE valid_to IS NULL),
+                COUNT(*) FILTER (WHERE predecessor_id IS NOT NULL),
+                COUNT(*)
+            FROM band_lineup_versions
+            WHERE band_id = 1
             """
         )
-        assert cursor.fetchone() == (name_version_id, lineup_version_id, None)
+        assert cursor.fetchone() == (1, 1, 2)
+
+
+# 测试点：交接 Live 不属于目标 Band 时，整个追加事务必须回滚且旧开放版本仍保持开放。
+def test_console_lineup_append_failure_rolls_back_old_valid_to(
+    integration_test_client,
+    integration_admin_connection,
+):
+    csrf_token = _login_editor(integration_test_client)
+    with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            """
-            SELECT lineup_usage
-            FROM live_setlist_band_performances
-            WHERE setlist_id = '11111111-1111-4111-8111-111111111111'
-            """
+            "SELECT id FROM band_lineup_versions WHERE band_id = 1 AND valid_to IS NULL"
         )
-        assert cursor.fetchone() == ("base",)
+        old_version_id = int(cursor.fetchone()[0])
+
+    response = integration_test_client.post(
+        "/api/console/bands/1/lineup-versions",
+        headers={"X-CSRF-Token": csrf_token},
+        json={
+            "version_label": "Invalid V2",
+            "change_type": "replacement",
+            "members": ["Kasumi"],
+            "valid_from": "2026-07-29",
+            "note": None,
+            "transition_live_id": 999999,
+        },
+    )
+
+    assert response.status_code == 400
+    with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            """
-            SELECT member_name
-            FROM live_setlist_band_performance_members
-            WHERE setlist_id = '11111111-1111-4111-8111-111111111111'
-            ORDER BY display_order
-            """
+            "SELECT valid_to FROM band_lineup_versions WHERE id = %s",
+            (old_version_id,),
         )
-        assert cursor.fetchall() == [("Kasumi",), ("Tae",)]
-        cursor.execute(
-            "SELECT COUNT(*) FROM audit_logs WHERE action = 'band_history_backfill'"
-        )
+        assert cursor.fetchone() == (None,)
+        cursor.execute("SELECT COUNT(*) FROM band_lineup_versions WHERE band_id = 1")
         assert cursor.fetchone() == (1,)
-        integration_admin_connection.commit()

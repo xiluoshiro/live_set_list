@@ -45,6 +45,8 @@ def _version_members(cur: Any, lineup_version_id: int) -> tuple[str, ...]:
 def validate_lineup_contexts(
     cur: Any,
     contexts: Sequence[ConsoleLiveBandLineupContextRequest],
+    *,
+    live_id: int | None = None,
 ) -> dict[int, PersistedLineupContext]:
     validated: dict[int, PersistedLineupContext] = {}
     for context in contexts:
@@ -104,6 +106,77 @@ def validate_lineup_contexts(
             next_lineup_version_id=context.next_lineup_version_id,
             next_members=next_members,
         )
+        if live_id is None:
+            continue
+
+        cur.execute(
+            """
+            SELECT 1
+            FROM live_band_lineup_contexts persisted
+            WHERE persisted.live_id = %s
+              AND persisted.band_id = %s
+              AND persisted.band_name_version_id = %s
+              AND persisted.base_lineup_version_id = %s
+              AND persisted.next_lineup_version_id IS NOT DISTINCT FROM %s
+            """,
+            (
+                live_id,
+                context.band_id,
+                context.band_name_version_id,
+                context.base_lineup_version_id,
+                context.next_lineup_version_id,
+            ),
+        )
+        if cur.fetchone() is not None:
+            continue
+
+        if context.next_lineup_version_id is not None:
+            cur.execute(
+                """
+                SELECT 1
+                FROM band_lineup_versions next_version
+                JOIN current_band_versions current
+                  ON current.band_id = next_version.band_id
+                WHERE next_version.id = %s
+                  AND next_version.band_id = %s
+                  AND next_version.predecessor_id = %s
+                  AND next_version.transition_live_id = %s
+                  AND current.band_name_version_id = %s
+                """,
+                (
+                    context.next_lineup_version_id,
+                    context.band_id,
+                    context.base_lineup_version_id,
+                    live_id,
+                    context.band_name_version_id,
+                ),
+            )
+            if cur.fetchone() is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Band {context.band_id} can use next/handover only on its bound transition Live",
+                )
+            continue
+
+        cur.execute(
+            """
+            SELECT 1
+            FROM current_band_versions current
+            WHERE current.band_id = %s
+              AND current.band_name_version_id = %s
+              AND current.lineup_version_id = %s
+            """,
+            (
+                context.band_id,
+                context.band_name_version_id,
+                context.base_lineup_version_id,
+            ),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"New Setlist rows must use the current lineup for Band {context.band_id}",
+            )
     return validated
 
 
@@ -168,8 +241,7 @@ def replace_lineup_contexts(
 def build_band_performances(
     performances: Sequence[ConsoleLiveBandPerformanceRequest],
     contexts: dict[int, PersistedLineupContext],
-) -> tuple[dict[str, list[str]], list[PersistedBandPerformance]]:
-    legacy_band_members: dict[str, list[str]] = {}
+) -> list[PersistedBandPerformance]:
     persisted: list[PersistedBandPerformance] = []
     for performance in performances:
         context = contexts.get(performance.band_id)
@@ -208,12 +280,6 @@ def build_band_performances(
             else:
                 appearance_roles[member] = "guest"
 
-        if context.band_name in legacy_band_members:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Historical Band name is ambiguous in this setlist row: {context.band_name}",
-            )
-        legacy_band_members[context.band_name] = list(performance.members)
         persisted.append(
             PersistedBandPerformance(
                 band_id=performance.band_id,
@@ -223,7 +289,7 @@ def build_band_performances(
                 appearance_roles=appearance_roles,
             )
         )
-    return legacy_band_members, persisted
+    return persisted
 
 
 def persist_band_performances(

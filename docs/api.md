@@ -73,18 +73,12 @@
   - `editor+` 从常规或特殊编号段新增 Band，并原子建立当前名称与 V1 阵容历史
 - `GET /api/console/bands/{band_id}/history`
   - `editor+` 查询当前投影、历史名称、不可变阵容版本、成员差异与引用 Live
-- `POST /api/console/bands/{band_id}/initialize-current`
-  - `editor+` 确认并修正当前 Band 投影，同时创建首个名称和阵容版本
 - `POST /api/console/bands/{band_id}/name-versions`
-  - `editor+` 新增历史或当前名称版本；设为当前时同步更新 `band_attrs` 兼容投影
+  - `editor+` 追加一个当前名称版本；服务端自动闭合原开放版本并同步稳定 Band 名称投影
 - `POST /api/console/bands/{band_id}/lineup-versions`
-  - `editor+` 新增不可变阵容版本；设为当前时同步更新成员兼容投影
-- `GET /api/console/bands/{band_id}/lineup-versions/{lineup_version_id}/impact`
-  - `editor+` 查询资料修正将影响的 Live 和 Setlist 行数
-- `PUT /api/console/bands/{band_id}/lineup-versions/{lineup_version_id}`
-  - `editor+` 开发整理期资料修正；必须回传精确受影响 Live 集合作二次确认
-- `GET /api/console/bands/history/backfill-preflight`
-  - `editor+` 只读检查旧 `band_member` 是否可无歧义回填到稳定 Band/阵容关系
+  - `editor+` 追加不可变阵容版本；服务端锁定开放版本、自动闭合有效期和分配版本号，可绑定一场已关联该 Band 的交接 Live
+- `GET /api/console/bands/{band_id}/transition-live-candidates`
+  - `editor+` 按日期查询该 Band 可绑定的既有交接 Live；最终保存显式 `live_id`
 - `GET /api/console/venues`
   - `editor+` 查询控制台场地候选
 - `GET /api/console/lives`
@@ -157,11 +151,11 @@
 - `live_type` 只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
 - Live 列表项、收藏列表项、乐队 Live、catalog 搜索 Live、单详情和批量详情都会返回 `tour` 与 `performance_group` 反向引用；未归属时为 `null`，已归属时分别返回 `{tour_id, tour_title}` 与 `{group_id, group_title}`
 - 所有公开 Live 列表项都会返回人工状态 `event_status`、按 Live 当地日期计算的 `date_phase`，以及是否存在正式改期历史的 `was_rescheduled`
-- `band_id` 必须大于等于 `1`；有 setlist 时按 `live_setlist.band_member` 判断，无 setlist 时按 `live_attrs.default_band_ids` 判断
+- `band_id` 必须大于等于 `1`；有 Setlist 时按版本化逐曲出演关系判断，无 Setlist 时按 `live_attrs.default_band_ids` 判断
 - `sort` 只允许 `date_desc` 或 `date_asc`，默认 `date_desc`
 - 多个筛选条件按 AND 组合；文本值使用参数绑定并转义 `%`、`_`、`\`
 - 当请求页码超过最后一页时，后端会自动钳制到最后一页
-- `bands` 在 Live 存在任意 setlist 行时来自 `live_setlist.band_member` 聚合；仅在完全没有 setlist 行时回退到 `live_attrs.default_band_ids`
+- `bands` 在 Live 存在任意 Setlist 行时来自 `live_setlist_band_performances` 聚合；仅在完全没有 Setlist 行时回退到 `live_attrs.default_band_ids`
 - 一旦存在任意 setlist 行，即使无法聚合出有效乐队，也不会再回退 `default_band_ids`
 - `bands` 会去重并按升序返回
 - `url` 当前来自 `live_attrs.url`
@@ -176,7 +170,7 @@
 - 无法映射到 `band_id` 的乐队名称排在 `band_names` 末尾
 - `band_members` 优先按 `band_id` 升序排列，无法映射到 `band_id` 的项目排在后面
 - `band_members[].present_count = present_members.length`
-- 已完成历史关系回填的行优先读取持久化的 Live 阵容上下文、逐曲阵容用法和实际出演成员，不再使用当前 `band_attrs.band_members` 反推历史阵容
+- 详情只读取持久化的 Live 阵容上下文、逐曲阵容用法和实际出演成员，不再从旧成员 JSON 反推历史阵容
 - `lineup_usage` 为 `base|next|handover`；`lineup_version` 是本场基础版本，交接场还会返回 `next_lineup_version`
 - `handover` 行额外返回 `handover_baseline=base|next`，明确旧阵容或新阵容是满员判断的正式基准；其他模式返回 `null`
 - `attendance_status` 为 `full|full_plus|partial|unknown`，由预期成员集合与实际出演成员集合比较得到
@@ -191,7 +185,7 @@
 - `is_favorite` 会按当前登录用户的 `user_live_favorites` 计算；匿名请求统一返回 `false`
 - 无 Setlist 时，单条与批量详情的 `bands/band_names` 会回退 `default_band_ids`，与列表有效 Band 规则一致
 - `event_attendees` 只在 `live_type=event` 时返回内容；每项包含 `band_id/band_name/mode/members`
-- `mode=full|partial` 不持久化；有默认 Band 阵容上下文时按固化基础阵容做成员集合比较，旧兼容数据才回退当前 `band_attrs.band_members`
+- `mode=full|partial` 不持久化；按固化基础阵容做成员集合比较，新建活动上下文统一使用当前开放阵容
 - 详情返回 `event_status/date_phase/status_note/was_rescheduled`；`schedule_history` 只包含正式改期前的快照，前端仅展示实际变化的标题、日期、时间或场地，不包含资料修正
 
 ### 3. `POST /api/lives/details:batch`
@@ -243,12 +237,12 @@
   - 场地分组匹配 `venue`
   - Live 结果按 `live_date DESC, id DESC` 排序
   - 乐队、歌曲、场地分组优先按关联 Live 数降序排序
-  - 乐队结果额外返回 `band_members`；`live_count` 与 Live 列表使用同一有效 Band 规则：存在 Setlist 时按 `live_setlist.band_member`，完全没有 Setlist 时回退 `default_band_ids`
+  - 乐队结果额外返回当前开放阵容的 `band_members`；`live_count` 与 Live 列表统一读取 `effective_live_bands`
 - `GET /api/catalog/bands`
   - `limit` 范围是 `1..100`，默认 `20`
   - 当前只返回 `band_attrs.id > 0` 的乐队
   - 返回默认成员目录 `band_members`
-  - `live_count` 与 Live 列表使用同一有效 Band 规则：存在 Setlist 时按 `live_setlist.band_member`，完全没有 Setlist 时回退 `live_attrs.default_band_ids`
+  - `live_count` 与 Live 列表使用同一 `effective_live_bands` 规则
   - 当前列表按 `band_attrs.id` 排序
 - `GET /api/catalog/bands/{band_id}/lives`
   - `band_id` 必须大于等于 `1`
@@ -256,7 +250,7 @@
   - 页码超过最后一页时会自动钳制到最后一页
   - 未找到乐队时返回 `404`
   - `band` 返回 `band_members`；页面可展示该乐队的默认成员目录
-  - Live 匹配与 `live_count` 使用同一有效 Band 规则：存在 Setlist 时按 `live_setlist.band_member`，完全没有 Setlist 时回退 `default_band_ids`
+  - Live 匹配与 `live_count` 使用同一 `effective_live_bands` 规则
   - Live 结果按 `live_date DESC, id DESC` 排序
 - `GET /api/catalog/performances`
   - `scope` 只允许 `all` 或 `favorites`，默认 `all`；`favorites` 要求当前 session 已登录
@@ -300,7 +294,7 @@
   - `scope` 只允许 `all` 或 `favorites`，默认 `all`；`favorites` 要求当前 session 已登录，不接受外部 `user_id`
   - 可选筛选为 `year`、`live_type`、`band_id`；`limit` 范围为 `5..50`，默认 `10`，只限制已选乐队时的歌曲 Top N 和久未演唱列表
   - 全部 / 收藏只改变候选 Live 集合，概览、年份分布、类型分布和歌曲聚合共用同一查询口径
-  - 有 setlist 时按 `live_setlist.band_member` 判断实际参与乐队；完全没有 setlist 时才回退 `live_attrs.default_band_ids`
+  - 按 `effective_live_bands` 判断实际参与乐队；该视图仅在完全没有 Setlist 时回退 `live_attrs.default_band_ids`
   - `overview.song_count` 按 `(实际演唱乐队, song_id)` 去重；同一歌曲被多支乐队演唱时会形成多个乐队歌曲项
   - `top_songs.band_id / band_name` 表示该次统计中的实际演唱乐队，不表示 `song_list.band_id` 中的歌曲目录归属
   - 未指定 `band_id` 时，先在每支乐队内部按出现 Live 数、setlist 条目数、歌名和 `song_id` 排名，只返回每队第 1 名，最终按 `band_id` 升序
@@ -340,11 +334,11 @@
   - 单一事务写入 `band_attrs`、当前名称版本、V1 阵容及成员，并记录 `band_create` 审计；任一步失败均整体回滚
   - `band_id > 100` 只表示选择了特殊编号段；歌曲、Live、Tour、统计、筛选和历史版本仍与其他正数 Band 使用相同逻辑
 - 乐队历史写接口
-  - 当前资料初始化会锁定目标 `band_attrs`；同一 Band 已存在名称或阵容版本时返回 `409`
-  - 名称和阵容日期使用 `[valid_from, valid_to)`，服务端拒绝同一 Band 的重叠范围
-  - 创建当前阵容时要求直接前驱为当前开放版本，并在同一事务关闭旧范围、更新兼容投影和写审计
-  - 资料修正只用于纠正资料错误，先通过 impact 接口展示引用范围；确认 Live 集合不一致时返回 `409`
-  - 第一版不提供名称或阵容顶层版本删除接口
+  - 历史名称与阵容版本只读；旧资料初始化、回填预检、impact 和原地修正入口已移除
+  - `POST /api/console/bands/{band_id}/lineup-versions` 只接受标签、成员、变化类型、生效日、备注和可空 `transition_live_id`
+  - 服务端锁定 Band 与唯一开放阵容，自动设置旧版 `valid_to`、下一 `version_no` 和直接前驱；失败时整体回滚
+  - `addition/removal/replacement` 可绑定一场已关联该 Band 的交接 Live；`correction` 是追加式资料修正，禁止绑定交接
+  - `GET /api/console/bands/{band_id}/transition-live-candidates?live_date=...` 按日期返回已关联且未取消的候选
 - `PUT /api/console/songs/{song_id}`
   - 与新增歌曲共用字段契约；目标歌曲或 Band 不存在返回 `404`
   - 成功后写 `song_update` 审计
@@ -360,8 +354,7 @@
   - `live_type` 必填，只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
   - `default_band_ids` 可选，最多 100 项；后端要求每项为已存在的正数 `band_attrs.id`，并去重、升序后写入
   - `default_band_ids` 只在该 Live 尚无任何 setlist 行时作为列表 Band 使用
-  - 无 Setlist Live 可同时提交 `band_lineup_contexts`，为默认 Band 固化历史名称与一个基础阵容；不接受交接后继版本
-  - `ALLOW_HISTORICAL_DEFAULT_BAND_SELECTION=true` 时控制台临时开放旧版本人工选择；关闭后新增选择只允许当前开放版本，已经固化的旧上下文继续保留
+  - 新选择的默认 Band 一律固化唯一当前开放名称与阵容；已经存在的历史上下文保持不变
   - 成功响应返回后端已经验证并保存的 `default_band_ids` 与 `band_lineup_contexts`
   - `event_attendees` 只允许活动类型提交；每项 Band 必须属于 `default_band_ids`，成员按已固化基础阵容校验，未固化版本的兼容请求才回退当前成员目录
   - `event_attendees[].members` 始终保存完整名单；响应额外返回计算得到的 `mode=partial|full`
@@ -387,17 +380,17 @@
   - 如果目标 Live 已有任何 setlist 行，返回 `409`
   - 请求体内 `absolute_order` 不能重复
   - 所有 `song_id` 都必须存在
-  - 兼容请求仍可只提交 `band_member`；版本化请求提交 Live 级 `band_lineup_contexts` 和逐行 `band_performances`
-  - `band_lineup_contexts` 固化历史名称、基础阵容和可选直接后继阵容；后继版本必须属于同一 Band 且直接跟随基础版本
+  - 请求不再接受 `band_member`；逐行必须提交稳定 `band_id` 的 `band_performances`
+  - 普通新行由服务端补齐当前开放上下文；只有版本创建时绑定的交接 Live 可使用直接后继上下文
   - `band_performances[].lineup_usage` 为 `base|next|handover`；`handover` 必须额外提交 `handover_baseline=base|next`，其他模式禁止携带该字段
   - 实际出演 `members` 必须非空且不得重复；后端根据正式基准计算 `former|incoming|guest`，不接受前端提交满员状态
-  - 版本化请求在同一事务内写新关系，并以所选历史名称同步生成兼容 `band_member` JSON
+  - 新行只写版本化出演关系，`live_setlist.band_member` 保持 `NULL`
   - 后端按 `absolute_order` 升序写入
 - `GET /api/console/lives/{live_id}/setlist`
   - 返回 Live 级 `band_lineup_contexts` 和完整原始可编辑行；行内同时包含兼容成员 JSON、版本化 `band_performances`、交接基准和实际成员
 - `PUT /api/console/lives/{live_id}/setlist`
   - 与新增 Setlist 共用行字段和校验；请求集合至少保留一行
-  - 在单一事务内锁定 Live、校验全部歌曲和版本关系、替换完整行集合、双写成员数据并写 `live_setlist_update` 审计
+  - 在单一事务内锁定 Live、校验全部歌曲和版本关系、替换完整行集合并写 `live_setlist_update` 审计
 - `POST /api/console/tours`、`PUT /api/console/tours/{tour_id}`
   - `band_ids` 可为空，最多 100 个已存在且不重复的正数 ID；后端按 Band ID 排序
   - `band_ids` 非空时，每个 Band 必须至少出现在一场所选 Live 中；为空时数据库关系保持空集合

@@ -1,26 +1,22 @@
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled, UniqueViolation
 from psycopg2.extras import Json
 
 from app.auth import AuthSessionContext, assert_valid_csrf, get_current_auth_context, require_role
-from app.band_history_backfill import inspect_legacy_band_history_backfill
 from app.db import get_db_connection, get_write_db_connection
 from app.logging_config import get_logger
 from app.schemas.band_history import (
-    BandHistoryBackfillPreflightResponse,
     ConsoleBandCreateRequest,
     ConsoleBandCreateResponse,
     ConsoleBandHistoryMutationResponse,
     ConsoleBandHistoryResponse,
-    ConsoleBandInitializeRequest,
-    ConsoleBandLineupCorrectionRequest,
-    ConsoleBandLineupImpactResponse,
     ConsoleBandLineupVersionCreateRequest,
     ConsoleBandNameVersionCreateRequest,
+    ConsoleBandTransitionLiveCandidate,
 )
 
 
@@ -151,66 +147,28 @@ def _ensure_band_name_available(cur: Any, band_name: str) -> None:
 def _ensure_real_band(cur: Any, band_id: int, *, lock: bool = False) -> tuple[str, str, list[str]]:
     suffix = " FOR UPDATE" if lock else ""
     cur.execute(
-        f"SELECT band_name, band_abbr, band_members FROM band_attrs WHERE id = %s AND id > 0{suffix}",
+        f"SELECT band_name, band_abbr FROM band_attrs WHERE id = %s AND id > 0{suffix}",
         (band_id,),
     )
     row = cur.fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Band id {band_id} not found")
-    return str(row[0]), str(row[1]), [str(member) for member in (row[2] or [])]
-
-
-def _ranges_overlap(
-    cur: Any,
-    *,
-    table_name: str,
-    band_id: int,
-    valid_from: date | None,
-    valid_to: date | None,
-    exclude_id: int | None = None,
-) -> bool:
-    id_column = "id"
-    query = f"""
-        SELECT 1
-        FROM {table_name}
-        WHERE band_id = %s
-          AND daterange(
-                COALESCE(valid_from, '-infinity'::date),
-                COALESCE(valid_to, 'infinity'::date),
-                '[)'
-              ) && daterange(
-                COALESCE(%s::date, '-infinity'::date),
-                COALESCE(%s::date, 'infinity'::date),
-                '[)'
-              )
-    """
-    params: list[Any] = [band_id, valid_from, valid_to]
-    if exclude_id is not None:
-        query += f" AND {id_column} <> %s"
-        params.append(exclude_id)
-    query += " LIMIT 1"
-    cur.execute(query, params)
-    return cur.fetchone() is not None
-
-
-def _lineup_impact(cur: Any, lineup_version_id: int) -> tuple[list[int], int]:
     cur.execute(
         """
-        SELECT
-            COALESCE(array_agg(DISTINCT context.live_id ORDER BY context.live_id), ARRAY[]::integer[]),
-            COUNT(DISTINCT performance.setlist_id)
-        FROM live_band_lineup_contexts context
-        LEFT JOIN live_setlist_band_performances performance
-          ON performance.live_id = context.live_id
-         AND performance.band_id = context.band_id
-        WHERE context.base_lineup_version_id = %s
-           OR context.next_lineup_version_id = %s
+        SELECT band_name, band_abbr, band_members
+        FROM current_band_versions
+        WHERE band_id = %s
         """,
-        (lineup_version_id, lineup_version_id),
+        (band_id,),
     )
-    row = cur.fetchone()
-    assert row is not None
-    return [int(value) for value in (row[0] or [])], int(row[1])
+    current_row = cur.fetchone()
+    if current_row is None:
+        raise HTTPException(status_code=409, detail=f"Band id {band_id} has no current version projection")
+    return (
+        str(current_row[0]),
+        str(current_row[1] or ""),
+        [str(member) for member in (current_row[2] or [])],
+    )
 
 
 def _load_history(cur: Any, band_id: int) -> dict[str, Any]:
@@ -247,6 +205,7 @@ def _load_history(cur: Any, band_id: int) -> dict[str, Any]:
             version.valid_to,
             version.predecessor_id,
             version.change_type,
+            version.transition_live_id,
             version.note,
             ARRAY(
                 SELECT member.member_name
@@ -268,7 +227,7 @@ def _load_history(cur: Any, band_id: int) -> dict[str, Any]:
         (band_id,),
     )
     lineup_rows = cur.fetchall()
-    members_by_id = {int(row[0]): [str(member) for member in (row[8] or [])] for row in lineup_rows}
+    members_by_id = {int(row[0]): [str(member) for member in (row[9] or [])] for row in lineup_rows}
     lineups: list[dict[str, Any]] = []
     for row in lineup_rows:
         members = members_by_id[int(row[0])]
@@ -284,20 +243,27 @@ def _load_history(cur: Any, band_id: int) -> dict[str, Any]:
                 "valid_to": row[4],
                 "predecessor_id": int(row[5]) if row[5] is not None else None,
                 "change_type": str(row[6]),
-                "note": row[7],
+                "transition_live_id": int(row[7]) if row[7] is not None else None,
+                "note": row[8],
                 "members": members,
                 "added_members": [member for member in members if member not in predecessor_set],
                 "removed_members": [
                     member for member in (predecessor_members or []) if member not in member_set
                 ],
-                "live_ids": [int(value) for value in (row[9] or [])],
+                "live_ids": [int(value) for value in (row[10] or [])],
             }
         )
+    current_name_row = next((row for row in name_rows if row[4] is None), None)
+    current_lineup_row = next((row for row in lineup_rows if row[4] is None), None)
+    if current_name_row is None or current_lineup_row is None:
+        raise HTTPException(status_code=409, detail="Band must have exactly one current name and lineup")
     return {
         "band_id": band_id,
         "current_name": current_name,
         "current_abbr": current_abbr,
         "current_members": current_members,
+        "current_name_version_id": int(current_name_row[0]),
+        "current_lineup_version_id": int(current_lineup_row[0]),
         "initialized": bool(name_rows) and bool(lineup_rows),
         "name_versions": [
             {
@@ -337,9 +303,9 @@ def create_band(
                 cur.execute(
                     """
                     INSERT INTO band_attrs (id, band_abbr, band_name, band_members)
-                    VALUES (%s, %s, %s, %s)
+                    VALUES (%s, %s, %s, NULL)
                     """,
-                    (band_id, payload.band_abbr, payload.band_name, payload.members),
+                    (band_id, payload.band_abbr, payload.band_name),
                 )
                 name_version_id, lineup_version_id = _insert_initial_band_history(
                     cur,
@@ -398,21 +364,6 @@ def create_band(
 
 
 @router.get(
-    "/bands/history/backfill-preflight",
-    response_model=BandHistoryBackfillPreflightResponse,
-    summary="预检旧 Setlist 阵容关系回填",
-)
-def preflight_band_history_backfill(_: Any = Depends(require_role("editor"))):
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                return inspect_legacy_band_history_backfill(cur).summary
-    except (QueryCanceled, OperationalError, Error) as exc:
-        logger.exception("preflight_band_history_backfill failed")
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-
-
-@router.get(
     "/bands/{band_id}/history",
     response_model=ConsoleBandHistoryResponse,
     summary="查询乐队名称与阵容历史",
@@ -433,85 +384,6 @@ def get_band_history(
 
 
 @router.post(
-    "/bands/{band_id}/initialize-current",
-    response_model=ConsoleBandHistoryMutationResponse,
-    status_code=201,
-    summary="确认当前乐队资料并初始化版本",
-)
-def initialize_current_band_history(
-    payload: ConsoleBandInitializeRequest,
-    request: Request,
-    band_id: int = Path(..., ge=1),
-    _: Any = Depends(require_role("editor")),
-    context: AuthSessionContext = Depends(get_current_auth_context),
-):
-    assert_valid_csrf(request, context)
-    try:
-        with get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                before_name, before_abbr, before_members = _ensure_real_band(cur, band_id, lock=True)
-                cur.execute(
-                    """
-                    SELECT EXISTS (SELECT 1 FROM band_name_versions WHERE band_id = %s),
-                           EXISTS (SELECT 1 FROM band_lineup_versions WHERE band_id = %s)
-                    """,
-                    (band_id, band_id),
-                )
-                initialized_row = cur.fetchone()
-                assert initialized_row is not None
-                if bool(initialized_row[0]) or bool(initialized_row[1]):
-                    raise HTTPException(status_code=409, detail="Band history is already initialized")
-
-                cur.execute(
-                    """
-                    UPDATE band_attrs
-                    SET band_name = %s, band_abbr = %s, band_members = %s
-                    WHERE id = %s
-                    """,
-                    (payload.band_name, payload.band_abbr, payload.members, band_id),
-                )
-                name_version_id, lineup_version_id = _insert_initial_band_history(
-                    cur,
-                    band_id=band_id,
-                    band_name=payload.band_name,
-                    band_abbr=payload.band_abbr,
-                    members=payload.members,
-                    version_no=payload.version_no,
-                    version_label=payload.version_label,
-                    valid_from=payload.valid_from,
-                    valid_to=payload.valid_to,
-                    note=payload.note,
-                )
-                _write_audit(
-                    cur,
-                    user_id=context.user.id,
-                    action="band_history_initialize",
-                    band_id=band_id,
-                    payload={
-                        "before": {
-                            "band_name": before_name,
-                            "band_abbr": before_abbr,
-                            "members": before_members,
-                        },
-                        "name_version_id": name_version_id,
-                        "lineup_version_id": lineup_version_id,
-                        "version_no": payload.version_no,
-                        "version_label": payload.version_label,
-                        "members": payload.members,
-                    },
-                )
-                history = _load_history(cur, band_id)
-    except HTTPException:
-        raise
-    except UniqueViolation as exc:
-        raise HTTPException(status_code=409, detail="Band version number already exists") from exc
-    except (QueryCanceled, OperationalError, Error) as exc:
-        logger.exception("initialize_current_band_history failed band_id=%s", band_id)
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-    return {"ok": True, "history": history}
-
-
-@router.post(
     "/bands/{band_id}/name-versions",
     response_model=ConsoleBandHistoryMutationResponse,
     status_code=201,
@@ -529,41 +401,32 @@ def create_band_name_version(
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
                 _ensure_real_band(cur, band_id, lock=True)
-                closed_version_id: int | None = None
-                if payload.make_current:
-                    cur.execute(
-                        """
-                        SELECT id, valid_from
-                        FROM band_name_versions
-                        WHERE band_id = %s AND valid_to IS NULL
-                        ORDER BY valid_from DESC NULLS LAST, id DESC
-                        LIMIT 1
-                        """,
-                        (band_id,),
-                    )
-                    open_row = cur.fetchone()
-                    if open_row is not None:
-                        if open_row[1] is not None and payload.valid_from <= open_row[1]:
-                            raise HTTPException(status_code=409, detail="New current name must start after the open version")
-                        closed_version_id = int(open_row[0])
-                        cur.execute(
-                            "UPDATE band_name_versions SET valid_to = %s WHERE id = %s",
-                            (payload.valid_from, closed_version_id),
-                        )
-                if _ranges_overlap(
-                    cur,
-                    table_name="band_name_versions",
-                    band_id=band_id,
-                    valid_from=payload.valid_from,
-                    valid_to=payload.valid_to,
-                ):
-                    raise HTTPException(status_code=409, detail="Band name version date range overlaps an existing version")
+                _ensure_band_name_available(cur, payload.band_name)
+                cur.execute(
+                    """
+                    SELECT id, valid_from
+                    FROM band_name_versions
+                    WHERE band_id = %s AND valid_to IS NULL
+                    FOR UPDATE
+                    """,
+                    (band_id,),
+                )
+                open_rows = cur.fetchall()
+                if len(open_rows) != 1:
+                    raise HTTPException(status_code=409, detail="Band must have exactly one open name version")
+                closed_version_id = int(open_rows[0][0])
+                if open_rows[0][1] is not None and payload.valid_from <= open_rows[0][1]:
+                    raise HTTPException(status_code=409, detail="New name valid_from must be later than the open version")
+                cur.execute(
+                    "UPDATE band_name_versions SET valid_to = %s WHERE id = %s",
+                    (payload.valid_from, closed_version_id),
+                )
                 cur.execute(
                     """
                     INSERT INTO band_name_versions (
                         band_id, band_name, band_abbr, valid_from, valid_to, note
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, NULL, %s)
                     RETURNING id
                     """,
                     (
@@ -571,16 +434,14 @@ def create_band_name_version(
                         payload.band_name,
                         payload.band_abbr,
                         payload.valid_from,
-                        payload.valid_to,
                         payload.note,
                     ),
                 )
                 version_id = int(cur.fetchone()[0])
-                if payload.make_current:
-                    cur.execute(
-                        "UPDATE band_attrs SET band_name = %s, band_abbr = %s WHERE id = %s",
-                        (payload.band_name, payload.band_abbr or "", band_id),
-                    )
+                cur.execute(
+                    "UPDATE band_attrs SET band_name = %s, band_abbr = %s WHERE id = %s",
+                    (payload.band_name, payload.band_abbr or "", band_id),
+                )
                 _write_audit(
                     cur,
                     user_id=context.user.id,
@@ -590,7 +451,7 @@ def create_band_name_version(
                         "name_version_id": version_id,
                         "closed_name_version_id": closed_version_id,
                         "band_name": payload.band_name,
-                        "make_current": payload.make_current,
+                        "valid_from": payload.valid_from.isoformat(),
                     },
                 )
                 history = _load_history(cur, band_id)
@@ -620,61 +481,69 @@ def create_band_lineup_version(
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
                 _ensure_real_band(cur, band_id, lock=True)
-                if payload.predecessor_id is not None:
-                    cur.execute(
-                        "SELECT band_id FROM band_lineup_versions WHERE id = %s",
-                        (payload.predecessor_id,),
-                    )
-                    predecessor_row = cur.fetchone()
-                    if predecessor_row is None:
-                        raise HTTPException(status_code=404, detail="Predecessor lineup version not found")
-                    if int(predecessor_row[0]) != band_id:
-                        raise HTTPException(status_code=400, detail="Predecessor belongs to another Band")
                 cur.execute(
-                    "SELECT COALESCE(MAX(version_no), 0) FROM band_lineup_versions WHERE band_id = %s",
+                    """
+                    SELECT id, version_no, valid_from
+                    FROM band_lineup_versions
+                    WHERE band_id = %s AND valid_to IS NULL
+                    FOR UPDATE
+                    """,
                     (band_id,),
                 )
-                max_row = cur.fetchone()
-                assert max_row is not None
-                version_no = payload.version_no or int(max_row[0]) + 1
-                closed_version_id: int | None = None
-                if payload.make_current:
+                open_rows = cur.fetchall()
+                if len(open_rows) != 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Band must have exactly one open lineup version",
+                    )
+                open_version_id = int(open_rows[0][0])
+                version_no = int(open_rows[0][1]) + 1
+                open_valid_from = open_rows[0][2]
+                if open_valid_from is not None and payload.valid_from <= open_valid_from:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="New lineup valid_from must be later than the open version",
+                    )
+
+                if payload.transition_live_id is not None:
                     cur.execute(
                         """
-                        SELECT id, valid_from
-                        FROM band_lineup_versions
-                        WHERE band_id = %s AND valid_to IS NULL
-                        ORDER BY version_no DESC, id DESC
-                        LIMIT 1
+                        SELECT live.id
+                        FROM live_attrs live
+                        JOIN effective_live_bands effective ON effective.live_id = live.id
+                        LEFT JOIN live_band_lineup_contexts context
+                          ON context.live_id = live.id
+                         AND context.band_id = effective.band_id
+                        WHERE live.id = %s
+                          AND effective.band_id = %s
+                          AND live.event_status <> 'cancelled'
+                          AND (
+                              context.live_id IS NULL
+                              OR (
+                                  context.base_lineup_version_id = %s
+                                  AND context.next_lineup_version_id IS NULL
+                              )
+                          )
                         """,
-                        (band_id,),
+                        (payload.transition_live_id, band_id, open_version_id),
                     )
-                    open_row = cur.fetchone()
-                    if open_row is not None:
-                        if open_row[1] is not None and payload.valid_from <= open_row[1]:
-                            raise HTTPException(status_code=409, detail="New current lineup must start after the open version")
-                        closed_version_id = int(open_row[0])
-                        if payload.predecessor_id != closed_version_id:
-                            raise HTTPException(status_code=400, detail="New current lineup must reference the open version")
-                        cur.execute(
-                            "UPDATE band_lineup_versions SET valid_to = %s WHERE id = %s",
-                            (payload.valid_from, closed_version_id),
+                    if cur.fetchone() is None:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Transition Live must already exist and be associated with this Band",
                         )
-                if _ranges_overlap(
-                    cur,
-                    table_name="band_lineup_versions",
-                    band_id=band_id,
-                    valid_from=payload.valid_from,
-                    valid_to=payload.valid_to,
-                ):
-                    raise HTTPException(status_code=409, detail="Band lineup version date range overlaps an existing version")
+
+                cur.execute(
+                    "UPDATE band_lineup_versions SET valid_to = %s WHERE id = %s",
+                    (payload.valid_from, open_version_id),
+                )
                 cur.execute(
                     """
                     INSERT INTO band_lineup_versions (
                         band_id, version_no, version_label, valid_from, valid_to,
-                        predecessor_id, change_type, note
+                        predecessor_id, change_type, transition_live_id, note
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, NULL, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -682,9 +551,9 @@ def create_band_lineup_version(
                         version_no,
                         payload.version_label,
                         payload.valid_from,
-                        payload.valid_to,
-                        payload.predecessor_id,
+                        open_version_id,
                         payload.change_type,
+                        payload.transition_live_id,
                         payload.note,
                     ),
                 )
@@ -701,23 +570,49 @@ def create_band_lineup_version(
                         for index, member in enumerate(payload.members, start=1)
                     ],
                 )
-                if payload.make_current:
-                    cur.execute(
-                        "UPDATE band_attrs SET band_members = %s WHERE id = %s",
-                        (payload.members, band_id),
-                    )
-                predecessor_members: list[str] = []
-                if payload.predecessor_id is not None:
+                if payload.transition_live_id is not None:
                     cur.execute(
                         """
-                        SELECT member_name
-                        FROM band_lineup_version_members
-                        WHERE lineup_version_id = %s
-                        ORDER BY display_order
+                        INSERT INTO live_band_lineup_contexts (
+                            live_id,
+                            band_id,
+                            band_name_version_id,
+                            base_lineup_version_id,
+                            next_lineup_version_id,
+                            note
+                        )
+                        SELECT
+                            %s,
+                            %s,
+                            current.band_name_version_id,
+                            %s,
+                            %s,
+                            'Band lineup transition'
+                        FROM current_band_versions current
+                        WHERE current.band_id = %s
+                        ON CONFLICT (live_id, band_id) DO UPDATE
+                        SET base_lineup_version_id = EXCLUDED.base_lineup_version_id,
+                            next_lineup_version_id = EXCLUDED.next_lineup_version_id,
+                            note = EXCLUDED.note
                         """,
-                        (payload.predecessor_id,),
+                        (
+                            payload.transition_live_id,
+                            band_id,
+                            open_version_id,
+                            version_id,
+                            band_id,
+                        ),
                     )
-                    predecessor_members = [str(row[0]) for row in cur.fetchall()]
+                cur.execute(
+                    """
+                    SELECT member_name
+                    FROM band_lineup_version_members
+                    WHERE lineup_version_id = %s
+                    ORDER BY display_order
+                    """,
+                    (open_version_id,),
+                )
+                predecessor_members = [str(row[0]) for row in cur.fetchall()]
                 _write_audit(
                     cur,
                     user_id=context.user.id,
@@ -725,15 +620,17 @@ def create_band_lineup_version(
                     band_id=band_id,
                     payload={
                         "lineup_version_id": version_id,
-                        "closed_lineup_version_id": closed_version_id,
-                        "predecessor_id": payload.predecessor_id,
+                        "closed_lineup_version_id": open_version_id,
+                        "predecessor_id": open_version_id,
                         "version_no": version_no,
                         "version_label": payload.version_label,
                         "added_members": [member for member in payload.members if member not in predecessor_members],
                         "removed_members": [
                             member for member in predecessor_members if member not in set(payload.members)
                         ],
-                        "make_current": payload.make_current,
+                        "valid_from": payload.valid_from.isoformat(),
+                        "change_type": payload.change_type,
+                        "transition_live_id": payload.transition_live_id,
                     },
                 )
                 history = _load_history(cur, band_id)
@@ -748,155 +645,49 @@ def create_band_lineup_version(
 
 
 @router.get(
-    "/bands/{band_id}/lineup-versions/{lineup_version_id}/impact",
-    response_model=ConsoleBandLineupImpactResponse,
-    summary="预览阵容资料修正影响范围",
+    "/bands/{band_id}/transition-live-candidates",
+    response_model=list[ConsoleBandTransitionLiveCandidate],
+    summary="按日期查询可绑定的交接 Live",
 )
-def get_lineup_correction_impact(
+def get_transition_live_candidates(
     band_id: int = Path(..., ge=1),
-    lineup_version_id: int = Path(..., ge=1),
+    live_date: date = Query(...),
     _: Any = Depends(require_role("editor")),
 ):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                _ensure_real_band(cur, band_id)
                 cur.execute(
-                    "SELECT 1 FROM band_lineup_versions WHERE id = %s AND band_id = %s",
-                    (lineup_version_id, band_id),
+                    """
+                    SELECT live.id, live.live_title, live.live_date
+                    FROM live_attrs live
+                    JOIN effective_live_bands effective ON effective.live_id = live.id
+                    JOIN current_band_versions current ON current.band_id = effective.band_id
+                    LEFT JOIN live_band_lineup_contexts context
+                      ON context.live_id = live.id
+                     AND context.band_id = effective.band_id
+                    WHERE effective.band_id = %s
+                      AND live.live_date = %s
+                      AND live.event_status <> 'cancelled'
+                      AND (
+                          context.live_id IS NULL
+                          OR (
+                              context.base_lineup_version_id = current.lineup_version_id
+                              AND context.next_lineup_version_id IS NULL
+                          )
+                      )
+                    ORDER BY live.id
+                    """,
+                    (band_id, live_date),
                 )
-                if cur.fetchone() is None:
-                    raise HTTPException(status_code=404, detail="Lineup version not found")
-                live_ids, row_count = _lineup_impact(cur, lineup_version_id)
+                rows = cur.fetchall()
     except HTTPException:
         raise
     except (QueryCanceled, OperationalError, Error) as exc:
-        logger.exception("get_lineup_correction_impact failed band_id=%s", band_id)
+        logger.exception("get_transition_live_candidates failed band_id=%s", band_id)
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-    return {
-        "band_id": band_id,
-        "lineup_version_id": lineup_version_id,
-        "live_ids": live_ids,
-        "setlist_row_count": row_count,
-    }
-
-
-@router.put(
-    "/bands/{band_id}/lineup-versions/{lineup_version_id}",
-    response_model=ConsoleBandHistoryMutationResponse,
-    summary="资料修正乐队阵容版本",
-)
-def correct_band_lineup_version(
-    payload: ConsoleBandLineupCorrectionRequest,
-    request: Request,
-    band_id: int = Path(..., ge=1),
-    lineup_version_id: int = Path(..., ge=1),
-    _: Any = Depends(require_role("editor")),
-    context: AuthSessionContext = Depends(get_current_auth_context),
-):
-    assert_valid_csrf(request, context)
-    try:
-        with get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                _ensure_real_band(cur, band_id, lock=True)
-                cur.execute(
-                    """
-                    SELECT version_label, valid_from, valid_to
-                    FROM band_lineup_versions
-                    WHERE id = %s AND band_id = %s
-                    FOR UPDATE
-                    """,
-                    (lineup_version_id, band_id),
-                )
-                version_row = cur.fetchone()
-                if version_row is None:
-                    raise HTTPException(status_code=404, detail="Lineup version not found")
-                live_ids, setlist_row_count = _lineup_impact(cur, lineup_version_id)
-                if payload.confirmed_live_ids != live_ids:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=f"Affected Live confirmation mismatch; expected {live_ids}",
-                    )
-                if _ranges_overlap(
-                    cur,
-                    table_name="band_lineup_versions",
-                    band_id=band_id,
-                    valid_from=payload.valid_from,
-                    valid_to=payload.valid_to,
-                    exclude_id=lineup_version_id,
-                ):
-                    raise HTTPException(status_code=409, detail="Band lineup version date range overlaps an existing version")
-                cur.execute(
-                    """
-                    SELECT member_name
-                    FROM band_lineup_version_members
-                    WHERE lineup_version_id = %s
-                    ORDER BY display_order
-                    """,
-                    (lineup_version_id,),
-                )
-                previous_members = [str(row[0]) for row in cur.fetchall()]
-                cur.execute(
-                    """
-                    UPDATE band_lineup_versions
-                    SET version_label = %s,
-                        valid_from = %s,
-                        valid_to = %s,
-                        change_type = 'correction',
-                        note = %s
-                    WHERE id = %s
-                    """,
-                    (
-                        payload.version_label,
-                        payload.valid_from,
-                        payload.valid_to,
-                        payload.note,
-                        lineup_version_id,
-                    ),
-                )
-                cur.execute(
-                    "DELETE FROM band_lineup_version_members WHERE lineup_version_id = %s",
-                    (lineup_version_id,),
-                )
-                cur.executemany(
-                    """
-                    INSERT INTO band_lineup_version_members (
-                        lineup_version_id, member_name, display_order
-                    )
-                    VALUES (%s, %s, %s)
-                    """,
-                    [
-                        (lineup_version_id, member, index)
-                        for index, member in enumerate(payload.members, start=1)
-                    ],
-                )
-                if version_row[2] is None:
-                    cur.execute(
-                        "UPDATE band_attrs SET band_members = %s WHERE id = %s",
-                        (payload.members, band_id),
-                    )
-                _write_audit(
-                    cur,
-                    user_id=context.user.id,
-                    action="band_lineup_version_correct",
-                    band_id=band_id,
-                    payload={
-                        "lineup_version_id": lineup_version_id,
-                        "affected_live_ids": live_ids,
-                        "affected_setlist_row_count": setlist_row_count,
-                        "before": {
-                            "version_label": str(version_row[0]),
-                            "members": previous_members,
-                        },
-                        "after": {
-                            "version_label": payload.version_label,
-                            "members": payload.members,
-                        },
-                    },
-                )
-                history = _load_history(cur, band_id)
-    except HTTPException:
-        raise
-    except (QueryCanceled, OperationalError, Error) as exc:
-        logger.exception("correct_band_lineup_version failed band_id=%s", band_id)
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-    return {"ok": True, "history": history}
+    return [
+        {"live_id": int(row[0]), "live_name": str(row[1]), "live_date": row[2]}
+        for row in rows
+    ]

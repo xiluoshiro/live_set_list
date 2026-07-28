@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.lives import DatePhase, EventStatus, LiveScheduleHistoryItem
 
@@ -85,10 +85,6 @@ class ConsoleBandItem(BaseModel):
 
 class ConsoleBandListResponse(BaseModel):
     items: list[ConsoleBandItem] = Field(..., description="Bands available for console lookup")
-    historical_default_band_selection_enabled: bool = Field(
-        default=True,
-        description="Temporary console capability for choosing historical default Band versions",
-    )
 
 
 class ConsoleVenueItem(BaseModel):
@@ -150,6 +146,8 @@ class ConsoleLiveBandLineupContextRequest(BaseModel):
 
 
 class ConsoleLiveBaseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., min_length=1, max_length=255, description="Live title")
     url: str = Field(..., min_length=1, max_length=2048, description="Live URL")
@@ -173,11 +171,6 @@ class ConsoleLiveBaseRequest(BaseModel):
         max_length=100,
         description="Event-only Band member attendance; mode is computed and is not accepted as input.",
     )
-    band_lineup_contexts: list[ConsoleLiveBandLineupContextRequest] = Field(
-        default_factory=list,
-        max_length=100,
-        description="Persisted name and base-lineup versions for default Bands while the Live has no Setlist.",
-    )
     event_status: EventStatus = Field(default="scheduled", description="Persisted event status")
     status_note: str | None = Field(default=None, max_length=2000, description="Optional status explanation")
 
@@ -200,20 +193,6 @@ class ConsoleLiveBaseRequest(BaseModel):
         if any(band_id <= 0 for band_id in value):
             raise ValueError("default_band_ids must contain only positive band IDs")
         return sorted(set(value))
-
-    @field_validator("band_lineup_contexts")
-    @classmethod
-    def validate_context_band_ids(
-        cls,
-        value: list[ConsoleLiveBandLineupContextRequest],
-    ) -> list[ConsoleLiveBandLineupContextRequest]:
-        """Reject duplicate Bands and unsupported transitions in default-only Live contexts."""
-        band_ids = [context.band_id for context in value]
-        if len(set(band_ids)) != len(band_ids):
-            raise ValueError("band_lineup_contexts must not contain duplicate band_id values")
-        if any(context.next_lineup_version_id is not None for context in value):
-            raise ValueError("default Band contexts must not contain next_lineup_version_id")
-        return value
 
     @field_validator("status_note")
     @classmethod
@@ -337,15 +316,17 @@ class ConsoleLiveBandPerformanceRequest(BaseModel):
 
 
 class ConsoleLiveSetlistRowRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     song_id: int = Field(..., ge=1, description="song_list.id")
     absolute_order: int = Field(..., ge=1, description="Absolute order in the setlist")
     segment_type: str = Field(..., min_length=1, max_length=32, description="Segment code or canonical segment type")
     sub_order: int = Field(..., ge=1, description="Sub-order within the segment")
     is_short: bool = Field(default=False, description="Whether the row is a short version")
-    band_member: dict[str, list[str] | str] = Field(default_factory=dict, description="Compatibility Band member payload")
     band_performances: list[ConsoleLiveBandPerformanceRequest] = Field(
-        default_factory=list,
-        description="Versioned Band performances; preferred over band_member when present",
+        ...,
+        min_length=1,
+        description="Versioned Band performances",
     )
     other_member: dict[str, list[str] | str | None] | None = Field(default=None, description="Other member payload")
     comment: str | None = Field(default=None, max_length=1024, description="Optional row comment")
@@ -367,8 +348,6 @@ class ConsoleLiveSetlistRowRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_band_payload(self) -> "ConsoleLiveSetlistRowRequest":
-        if not self.band_member and not self.band_performances:
-            raise ValueError("band_member or band_performances must not be empty")
         band_ids = [performance.band_id for performance in self.band_performances]
         if len(set(band_ids)) != len(band_ids):
             raise ValueError("band_performances must not contain duplicate band_id values")
@@ -376,26 +355,13 @@ class ConsoleLiveSetlistRowRequest(BaseModel):
 
 
 class ConsoleLiveSetlistAppendRequest(BaseModel):
-    band_lineup_contexts: list[ConsoleLiveBandLineupContextRequest] = Field(
-        default_factory=list,
-        max_length=100,
-    )
+    model_config = ConfigDict(extra="forbid")
+
     setlist_rows: list[ConsoleLiveSetlistRowRequest] = Field(
         ...,
         min_length=1,
         description="New setlist rows to append to the target live",
     )
-
-    @field_validator("band_lineup_contexts")
-    @classmethod
-    def validate_context_band_ids(
-        cls,
-        value: list[ConsoleLiveBandLineupContextRequest],
-    ) -> list[ConsoleLiveBandLineupContextRequest]:
-        band_ids = [context.band_id for context in value]
-        if len(set(band_ids)) != len(band_ids):
-            raise ValueError("band_lineup_contexts must not contain duplicate band_id values")
-        return value
 
 
 class ConsoleLiveSetlistAppendItem(BaseModel):
@@ -412,6 +378,10 @@ class ConsoleLiveSetlistAppendResponse(BaseModel):
 class ConsoleLiveSetlistEditRow(ConsoleLiveSetlistRowRequest):
     row_id: str = Field(..., description="Persisted live_setlist UUID")
     song_name: str = Field(..., description="Persisted song title")
+    band_member: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Read-only display projection rebuilt from versioned Band performances",
+    )
 
 
 class ConsoleLiveSetlistEditResponse(BaseModel):

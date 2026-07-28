@@ -119,7 +119,7 @@ def test_create_console_tour_persists_complete_collection_and_audit():
     assert any("ORDER BY l.live_date, l.start_time, l.id" in sql for sql in executed_sql)
 
 
-# 测试点：取消场次的显式巡演乐队校验应把 default_band_ids 与已有 Setlist 乐队合并，避免取消资料被误拦截。
+# 测试点：取消场次的显式巡演乐队校验也应统一读取 effective_live_bands。
 def test_cancelled_tour_stop_validation_includes_default_bands():
     _authenticate_editor()
     conn, cursor = _connection_mock()
@@ -139,8 +139,8 @@ def test_cancelled_tour_stop_validation_includes_default_bands():
         for call in cursor.execute.call_args_list
         if "ORDER BY l.live_date, l.start_time, l.id" in str(call.args[0])
     )
-    assert "WHEN l.event_status = 'cancelled'" in validation_sql
-    assert "l.default_band_ids" in validation_sql
+    assert "FROM effective_live_bands effective" in validation_sql
+    assert "effective.live_id = l.id" in validation_sql
 
 
 # 测试点：请求中的重复 Band 或 Live 应在写库前由 schema 拒绝。

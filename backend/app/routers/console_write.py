@@ -17,7 +17,6 @@ from app.band_history_write import (
     replace_lineup_contexts,
     validate_lineup_contexts,
 )
-from app.config import historical_default_band_selection_enabled
 from app.db import get_write_db_connection
 from app.logging_config import get_logger
 from app.live_status import build_public_live_status
@@ -123,20 +122,6 @@ def _to_string_list(raw: Any) -> list[str]:
     return []
 
 
-def _normalize_band_member_payload(raw: Mapping[str, Any]) -> dict[str, list[str]]:
-    """Coerce band_member into the JSON shape expected by live_setlist.band_member."""
-    normalized: dict[str, list[str]] = {}
-    for band_name, members_raw in raw.items():
-        normalized_band_name = str(band_name).strip()
-        members = _to_string_list(members_raw)
-        if normalized_band_name == "" or len(members) == 0:
-            continue
-        normalized[normalized_band_name] = members
-    if len(normalized) == 0:
-        _raise_business_error(status.HTTP_400_BAD_REQUEST, "band_member must contain at least one band with members")
-    return normalized
-
-
 def _normalize_other_member_payload(raw: Mapping[str, Any] | None) -> dict[str, str | list[str] | None] | None:
     """Coerce optional other_member input into the compact JSON shape stored in the DB."""
     if raw is None:
@@ -172,30 +157,10 @@ def _validate_and_normalize_live_relations(
     if payload.default_band_ids:
         cur.execute(
             """
-            SELECT
-                band.id,
-                band.band_members,
-                current_name.id,
-                current_lineup.id
-            FROM band_attrs band
-            LEFT JOIN LATERAL (
-                SELECT version.id
-                FROM band_name_versions version
-                WHERE version.band_id = band.id
-                  AND version.valid_to IS NULL
-                ORDER BY version.valid_from DESC NULLS LAST, version.id DESC
-                LIMIT 1
-            ) current_name ON true
-            LEFT JOIN LATERAL (
-                SELECT version.id
-                FROM band_lineup_versions version
-                WHERE version.band_id = band.id
-                  AND version.valid_to IS NULL
-                ORDER BY version.version_no DESC, version.id DESC
-                LIMIT 1
-            ) current_lineup ON true
-            WHERE band.id = ANY(%s)
-            ORDER BY band.id
+            SELECT band_id, band_members, band_name_version_id, lineup_version_id
+            FROM current_band_versions
+            WHERE band_id = ANY(%s)
+            ORDER BY band_id
             """,
             (payload.default_band_ids,),
         )
@@ -210,24 +175,21 @@ def _validate_and_normalize_live_relations(
             missing_text = ", ".join(str(band_id) for band_id in missing_band_ids)
             raise HTTPException(status_code=404, detail=f"Band ids not found: {missing_text}")
 
-    requested_context_band_ids = {context.band_id for context in payload.band_lineup_contexts}
-    unexpected_context_band_ids = sorted(requested_context_band_ids - set(payload.default_band_ids))
-    if unexpected_context_band_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Default Band contexts are not selected: {', '.join(map(str, unexpected_context_band_ids))}",
-        )
-
-    resolved_context_requests = list(payload.band_lineup_contexts)
     current_context_ids = {
         int(row[0]): (int(row[2]), int(row[3]))
         for row in band_rows
         if len(row) > 3 and row[2] is not None and row[3] is not None
     }
-    historical_selection_enabled = historical_default_band_selection_enabled()
+    existing_contexts = existing_contexts or {}
+    resolved_contexts = {
+        band_id: context
+        for band_id, context in existing_contexts.items()
+        if band_id in set(payload.default_band_ids)
+    }
+    current_context_requests: list[ConsoleLiveBandLineupContextRequest] = []
     for band_id, version_ids in current_context_ids.items():
-        if band_id not in requested_context_band_ids:
-            resolved_context_requests.append(
+        if band_id not in resolved_contexts:
+            current_context_requests.append(
                 ConsoleLiveBandLineupContextRequest(
                     band_id=band_id,
                     band_name_version_id=version_ids[0],
@@ -235,24 +197,7 @@ def _validate_and_normalize_live_relations(
                     next_lineup_version_id=None,
                 )
             )
-
-    resolved_contexts = validate_lineup_contexts(cur, resolved_context_requests)
-    if not historical_selection_enabled:
-        existing_contexts = existing_contexts or {}
-        for band_id, resolved in resolved_contexts.items():
-            existing = existing_contexts.get(band_id)
-            if (
-                existing is not None
-                and existing.band_name_version_id == resolved.band_name_version_id
-                and existing.base_lineup_version_id == resolved.base_lineup_version_id
-            ):
-                continue
-            current_ids = current_context_ids.get(band_id)
-            if current_ids != (resolved.band_name_version_id, resolved.base_lineup_version_id):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Historical default Band selection is disabled for Band {band_id}",
-                )
+    resolved_contexts.update(validate_lineup_contexts(cur, current_context_requests))
 
     normalized_event_attendees: list[dict[str, Any]] = []
     persisted_event_attendees: dict[str, list[str]] = {}
@@ -293,6 +238,83 @@ def _serialize_lineup_contexts(
         }
         for context in sorted(contexts.values(), key=lambda item: item.band_id)
     ]
+
+
+def _ensure_current_performance_contexts(
+    cur: Any,
+    *,
+    live_id: int,
+    contexts: dict[int, PersistedLineupContext],
+    band_ids: set[int],
+) -> bool:
+    missing_band_ids = sorted(band_ids - set(contexts))
+    if not missing_band_ids:
+        return False
+    cur.execute(
+        """
+        SELECT band_id, band_name_version_id, lineup_version_id
+        FROM current_band_versions
+        WHERE band_id = ANY(%s)
+        ORDER BY band_id
+        """,
+        (missing_band_ids,),
+    )
+    rows = cur.fetchall()
+    found_ids = {int(row[0]) for row in rows}
+    unavailable_ids = [band_id for band_id in missing_band_ids if band_id not in found_ids]
+    if unavailable_ids:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Bands have no current lineup version: {', '.join(map(str, unavailable_ids))}",
+        )
+    requests = [
+        ConsoleLiveBandLineupContextRequest(
+            band_id=int(row[0]),
+            band_name_version_id=int(row[1]),
+            base_lineup_version_id=int(row[2]),
+            next_lineup_version_id=None,
+        )
+        for row in rows
+    ]
+    contexts.update(validate_lineup_contexts(cur, requests, live_id=live_id))
+    return True
+
+
+def _validate_transition_performance_bindings(
+    cur: Any,
+    *,
+    live_id: int,
+    rows: list[dict[str, Any]],
+    contexts: dict[int, PersistedLineupContext],
+) -> None:
+    transition_band_ids = {
+        performance.band_id
+        for row in rows
+        for performance in row["band_performances"]
+        if performance.lineup_usage in {"next", "handover"}
+    }
+    for band_id in sorted(transition_band_ids):
+        context = contexts.get(band_id)
+        if context is None or context.next_lineup_version_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Band {band_id} has no transition lineup context for Live {live_id}",
+            )
+        cur.execute(
+            """
+            SELECT 1
+            FROM band_lineup_versions
+            WHERE id = %s
+              AND band_id = %s
+              AND transition_live_id = %s
+            """,
+            (context.next_lineup_version_id, band_id, live_id),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Band {band_id} can use next/handover only on its bound transition Live",
+            )
 
 
 def _build_live_mutation_item(
@@ -801,7 +823,7 @@ def update_live(
                 if has_setlist:
                     normalized_event_attendees, persisted_event_attendees, _ = _validate_and_normalize_live_relations(
                         cur,
-                        payload.model_copy(update={"band_lineup_contexts": []}),
+                        payload,
                         existing_contexts=existing_lineup_contexts,
                     )
                     lineup_contexts = existing_lineup_contexts
@@ -988,7 +1010,6 @@ def append_live_setlist(
             "segment_type": _normalize_segment_type(row.segment_type),
             "sub_order": row.sub_order,
             "is_short": row.is_short,
-            "band_member": row.band_member,
             "band_performances": row.band_performances,
             "other_member": _normalize_other_member_payload(row.other_member),
             "comment": row.comment,
@@ -1029,32 +1050,33 @@ def append_live_setlist(
                         detail=f"absolute_order already exists for live {live_id}: {conflict_text}",
                     )
 
-                has_requested_performances = any(
-                    row["band_performances"] for row in normalized_rows
+                lineup_contexts = load_lineup_contexts(cur, live_id)
+                requested_band_ids = {
+                    performance.band_id
+                    for row in normalized_rows
+                    for performance in row["band_performances"]
+                }
+                added_current_contexts = _ensure_current_performance_contexts(
+                    cur,
+                    live_id=live_id,
+                    contexts=lineup_contexts,
+                    band_ids=requested_band_ids,
                 )
-                if payload.band_lineup_contexts:
-                    lineup_contexts = validate_lineup_contexts(cur, payload.band_lineup_contexts)
+                _validate_transition_performance_bindings(
+                    cur,
+                    live_id=live_id,
+                    rows=normalized_rows,
+                    contexts=lineup_contexts,
+                )
+                if added_current_contexts:
                     replace_lineup_contexts(cur, live_id, lineup_contexts)
-                elif has_requested_performances:
-                    lineup_contexts = load_lineup_contexts(cur, live_id)
-                else:
-                    lineup_contexts = {}
 
                 for normalized_row in sorted(normalized_rows, key=lambda item: item["absolute_order"]):
                     band_performances = normalized_row["band_performances"]
-                    if band_performances:
-                        band_member, persisted_performances = build_band_performances(
-                            band_performances,
-                            lineup_contexts,
-                        )
-                    else:
-                        if lineup_contexts:
-                            raise HTTPException(
-                                status_code=400,
-                                detail="band_performances are required when the Live has lineup contexts",
-                            )
-                        band_member = _normalize_band_member_payload(normalized_row["band_member"])
-                        persisted_performances = []
+                    persisted_performances = build_band_performances(
+                        band_performances,
+                        lineup_contexts,
+                    )
                     insert_values = (
                         live_id,
                         normalized_row["song_id"],
@@ -1062,7 +1084,7 @@ def append_live_setlist(
                         normalized_row["segment_type"],
                         normalized_row["sub_order"],
                         normalized_row["is_short"],
-                        Json(band_member),
+                        None,
                         Json(normalized_row["other_member"]) if normalized_row["other_member"] is not None else None,
                         normalized_row["comment"],
                     )
@@ -1109,7 +1131,7 @@ def append_live_setlist(
                 versioned_performance_count = sum(
                     len(row["band_performances"]) for row in normalized_rows
                 )
-                if payload.band_lineup_contexts or versioned_performance_count > 0:
+                if versioned_performance_count > 0:
                     audit_payload.update({
                         "lineup_context_count": len(lineup_contexts),
                         "versioned_performance_count": versioned_performance_count,
@@ -1175,7 +1197,6 @@ def replace_live_setlist(
             "segment_type": _normalize_segment_type(row.segment_type),
             "sub_order": row.sub_order,
             "is_short": row.is_short,
-            "band_member": row.band_member,
             "band_performances": row.band_performances,
             "other_member": _normalize_other_member_payload(row.other_member),
             "comment": row.comment,
@@ -1192,36 +1213,36 @@ def replace_live_setlist(
                 missing_song_ids = [song_id for song_id in song_ids if song_id not in existing_song_ids]
                 if missing_song_ids:
                     raise HTTPException(status_code=404, detail=f"Song ids not found: {', '.join(map(str, missing_song_ids))}")
-                has_requested_performances = any(
-                    row["band_performances"] for row in normalized_rows
+                lineup_contexts = load_lineup_contexts(cur, live_id)
+                requested_band_ids = {
+                    performance.band_id
+                    for row in normalized_rows
+                    for performance in row["band_performances"]
+                }
+                added_current_contexts = _ensure_current_performance_contexts(
+                    cur,
+                    live_id=live_id,
+                    contexts=lineup_contexts,
+                    band_ids=requested_band_ids,
                 )
-                if payload.band_lineup_contexts:
-                    lineup_contexts = validate_lineup_contexts(cur, payload.band_lineup_contexts)
-                elif has_requested_performances:
-                    lineup_contexts = load_lineup_contexts(cur, live_id)
-                else:
-                    lineup_contexts = {}
-                prepared_rows: list[tuple[dict[str, Any], dict[str, list[str]], list[Any]]] = []
+                _validate_transition_performance_bindings(
+                    cur,
+                    live_id=live_id,
+                    rows=normalized_rows,
+                    contexts=lineup_contexts,
+                )
+                prepared_rows: list[tuple[dict[str, Any], list[Any]]] = []
                 for normalized_row in normalized_rows:
                     band_performances = normalized_row["band_performances"]
-                    if band_performances:
-                        band_member, persisted_performances = build_band_performances(
-                            band_performances,
-                            lineup_contexts,
-                        )
-                    else:
-                        if lineup_contexts:
-                            raise HTTPException(
-                                status_code=400,
-                                detail="band_performances are required when the Live has lineup contexts",
-                            )
-                        band_member = _normalize_band_member_payload(normalized_row["band_member"])
-                        persisted_performances = []
-                    prepared_rows.append((normalized_row, band_member, persisted_performances))
+                    persisted_performances = build_band_performances(
+                        band_performances,
+                        lineup_contexts,
+                    )
+                    prepared_rows.append((normalized_row, persisted_performances))
                 cur.execute("DELETE FROM live_setlist WHERE live_id = %s", (live_id,))
-                if payload.band_lineup_contexts:
+                if added_current_contexts:
                     replace_lineup_contexts(cur, live_id, lineup_contexts)
-                for normalized_row, band_member, persisted_performances in sorted(
+                for normalized_row, persisted_performances in sorted(
                     prepared_rows,
                     key=lambda item: item[0]["absolute_order"],
                 ):
@@ -1232,7 +1253,7 @@ def replace_live_setlist(
                         normalized_row["segment_type"],
                         normalized_row["sub_order"],
                         normalized_row["is_short"],
-                        Json(band_member),
+                        None,
                         Json(normalized_row["other_member"]) if normalized_row["other_member"] is not None else None,
                         normalized_row["comment"],
                     )
@@ -1270,7 +1291,7 @@ def replace_live_setlist(
                 versioned_performance_count = sum(
                     len(row["band_performances"]) for row in normalized_rows
                 )
-                if payload.band_lineup_contexts or versioned_performance_count > 0:
+                if versioned_performance_count > 0:
                     audit_payload.update({
                         "lineup_context_count": len(lineup_contexts),
                         "versioned_performance_count": versioned_performance_count,

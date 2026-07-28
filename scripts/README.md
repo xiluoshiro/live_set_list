@@ -116,22 +116,6 @@ python scripts/recovery_db.py <arguments> [--force]
 
 - [recovery/README.md](D:/Code/PythonCode/5%20LiveSetList/recovery/README.md)
 
-## 乐队历史关系回填
-
-完成控制台“乐队管理”中的当前资料确认和版本初始化后，先执行只读预检：
-
-```powershell
-python scripts/band_history_backfill.py preflight
-```
-
-预检会输出明确的 host、port、database、目标计数与所有阻断项，不写数据库。只有 `ready=true` 时才允许执行自动回填：
-
-```powershell
-python scripts/band_history_backfill.py apply --confirm APPLY_LEGACY_BAND_HISTORY_BACKFILL
-```
-
-apply 在一个事务中锁定旧 Setlist、重新执行同一预检、建立 Live/Band 上下文及逐曲出演/成员关系，并写 `band_history_backfill` 审计。目标关系表非空、历史名称无法唯一映射、开放阵容不唯一或成员无法由阵容解释时都会停止。该脚本不包含 2015 年 Poppin'Party 的 V1 手工改绑；自动回填完成后必须按设计文档单独预览和审计该操作。
-
 ## 从生产 VM 覆盖本地主库
 
 仅在明确允许覆盖本地 `live_statistic` 时使用：

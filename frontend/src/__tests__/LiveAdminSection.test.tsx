@@ -44,7 +44,6 @@ function renderSection(
       defaultBandIds={[3]}
       defaultBandLineupContexts={{}}
       bandHistories={{}}
-      historicalDefaultBandSelectionEnabled={false}
       eventAttendees={options.eventAttendees ?? {}}
       bandOptions={[
         { band_id: 0, band_name: "Other bands", band_abbr: "", band_members: [] },
@@ -95,7 +94,6 @@ function renderSection(
       onOpenDefaultBandMenu={vi.fn()}
       onSelectVenue={vi.fn()}
       onToggleDefaultBand={onToggleDefaultBand}
-      onUpdateDefaultBandLineupContext={vi.fn()}
       onToggleEventAttendee={onToggleEventAttendee}
       onQueryVid={vi.fn()}
       onInsertVenue={vi.fn()}

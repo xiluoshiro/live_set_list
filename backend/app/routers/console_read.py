@@ -7,7 +7,6 @@ from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled
 
 from app.auth import require_role
-from app.config import historical_default_band_selection_enabled
 from app.db import get_db_connection
 from app.logging_config import get_logger
 from app.live_status import build_public_live_status
@@ -39,7 +38,7 @@ CASE
         (
             SELECT jsonb_agg(
                 jsonb_build_object(
-                    'band_id', ba.id,
+                    'band_id', ba.band_id,
                     'mode', CASE
                         WHEN context.base_lineup_version_id IS NOT NULL
                              AND jsonb_array_length(attendee.members) = (
@@ -61,17 +60,17 @@ CASE
                     END,
                     'members', attendee.members
                 )
-                ORDER BY ba.id
+                ORDER BY ba.band_id
             )
             FROM jsonb_each(l.event_attendees) attendee(band_id_text, members)
-            JOIN band_attrs ba
-                ON ba.id = CASE
+            JOIN current_band_versions ba
+                ON ba.band_id = CASE
                     WHEN attendee.band_id_text ~ '^[0-9]+$' THEN attendee.band_id_text::int
                     ELSE NULL
                 END
             LEFT JOIN live_band_lineup_contexts context
                 ON context.live_id = l.id
-               AND context.band_id = ba.id
+               AND context.band_id = ba.band_id
             WHERE jsonb_typeof(attendee.members) = 'array'
         ),
         '[]'::jsonb
@@ -393,7 +392,6 @@ def get_editable_live_setlist(
                         ls.segment_type,
                         ls.sub_order,
                         ls.is_short,
-                        ls.band_member,
                         ls.other_member,
                         ls.comment
                     FROM live_setlist AS ls
@@ -410,8 +408,11 @@ def get_editable_live_setlist(
                         context.band_id,
                         context.band_name_version_id,
                         context.base_lineup_version_id,
-                        context.next_lineup_version_id
+                        context.next_lineup_version_id,
+                        name_version.band_name
                     FROM live_band_lineup_contexts context
+                    JOIN band_name_versions name_version
+                      ON name_version.id = context.band_name_version_id
                     WHERE context.live_id = %s
                     ORDER BY context.band_id
                     """,
@@ -459,6 +460,7 @@ def get_editable_live_setlist(
                 "members": [str(member) for member in members],
             }
         )
+    band_names_by_id = {int(row[0]): str(row[4]) for row in lineup_context_rows}
     return {
         "live_id": live_id,
         "band_lineup_contexts": [
@@ -479,10 +481,14 @@ def get_editable_live_setlist(
                 "segment_type": str(row[4]),
                 "sub_order": int(row[5]),
                 "is_short": bool(row[6]),
-                "band_member": row[7],
+                "band_member": {
+                    band_names_by_id[performance["band_id"]]: performance["members"]
+                    for performance in performances_by_setlist_id.get(str(row[0]), [])
+                    if performance["band_id"] in band_names_by_id
+                },
                 "band_performances": performances_by_setlist_id.get(str(row[0]), []),
-                "other_member": row[8],
-                "comment": row[9],
+                "other_member": row[7],
+                "comment": row[8],
             }
             for row in rows
         ],
@@ -676,11 +682,11 @@ def list_bands(
                     pattern = _build_lookup_pattern(query_text)
                     cur.execute(
                         """
-                        SELECT id, band_name, band_abbr, band_members
-                        FROM band_attrs
+                        SELECT band_id, band_name, band_abbr, band_members
+                        FROM current_band_versions
                         WHERE band_name ILIKE %s ESCAPE '\\'
                            OR band_abbr ILIKE %s ESCAPE '\\'
-                        ORDER BY band_name, id
+                        ORDER BY band_name, band_id
                         LIMIT %s
                         """,
                         (pattern, pattern, limit),
@@ -688,9 +694,9 @@ def list_bands(
                 else:
                     cur.execute(
                         """
-                        SELECT id, band_name, band_abbr, band_members
-                        FROM band_attrs
-                        ORDER BY band_name, id
+                        SELECT band_id, band_name, band_abbr, band_members
+                        FROM current_band_versions
+                        ORDER BY band_name, band_id
                         LIMIT %s
                         """,
                         (limit,),
@@ -718,7 +724,6 @@ def list_bands(
             }
             for row in rows
         ],
-        "historical_default_band_selection_enabled": historical_default_band_selection_enabled(),
     }
 
 

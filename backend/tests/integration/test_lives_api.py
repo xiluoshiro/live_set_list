@@ -36,6 +36,7 @@ def _seed_versioned_detail_relations(integration_admin_connection, live_ids: lis
             CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) AS item(band_name)
             JOIN band_attrs band ON band.band_name = item.band_name
             WHERE setlist.live_id = ANY(%s)
+            ON CONFLICT DO NOTHING
             """,
             (live_ids,),
         )
@@ -53,6 +54,7 @@ def _seed_versioned_detail_relations(integration_admin_connection, live_ids: lis
             CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) AS item(band_name)
             JOIN band_attrs band ON band.band_name = item.band_name
             WHERE setlist.live_id = ANY(%s)
+            ON CONFLICT DO NOTHING
             """,
             (live_ids,),
         )
@@ -67,6 +69,7 @@ def _seed_versioned_detail_relations(integration_admin_connection, live_ids: lis
             CROSS JOIN LATERAL unnest(band.band_members) WITH ORDINALITY
                 AS member(member_name, display_order)
             ORDER BY version.band_id, member.display_order
+            ON CONFLICT DO NOTHING
             """
         )
         cursor.execute(
@@ -83,6 +86,7 @@ def _seed_versioned_detail_relations(integration_admin_connection, live_ids: lis
             JOIN band_name_versions name_version ON name_version.band_id = band.id
             JOIN band_lineup_versions lineup_version ON lineup_version.band_id = band.id
             WHERE setlist.live_id = ANY(%s)
+            ON CONFLICT DO NOTHING
             """,
             (live_ids,),
         )
@@ -96,6 +100,7 @@ def _seed_versioned_detail_relations(integration_admin_connection, live_ids: lis
             CROSS JOIN LATERAL jsonb_each(setlist.band_member) AS item(band_name, members)
             JOIN band_attrs band ON band.band_name = item.band_name
             WHERE setlist.live_id = ANY(%s)
+            ON CONFLICT DO NOTHING
             """,
             (live_ids,),
         )
@@ -118,6 +123,7 @@ def _seed_versioned_detail_relations(integration_admin_connection, live_ids: lis
                 END
             ) WITH ORDINALITY AS member(member_name, display_order)
             WHERE setlist.live_id = ANY(%s)
+            ON CONFLICT DO NOTHING
             """,
             (live_ids,),
         )
@@ -392,6 +398,7 @@ def test_get_live_detail_applies_cross_band_cover_rules(
             """
         )
 
+    _seed_versioned_detail_relations(integration_admin_connection, [1])
     response = integration_test_client.get("/api/lives/1")
 
     assert response.status_code == 200
@@ -419,27 +426,22 @@ def test_get_live_detail_unmapped_band_uses_fallback_rules(
     integration_test_client,
     integration_admin_connection,
 ):
-    # 测试点：未映射 band_name 没有可靠阵容时应返回 band_id=None 与 unknown。
+    # 测试点：旧 JSON 中没有稳定 band_id 映射的乐队不得再进入公开出演真源。
     _seed_versioned_detail_relations(integration_admin_connection, [2])
     response = integration_test_client.get("/api/lives/2")
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["bands"] == [1, 3]
-    assert payload["band_names"] == ["Poppin'Party", "MyGO!!!!!", "Special Guest Band"]
+    assert payload["band_names"] == ["Poppin'Party", "MyGO!!!!!"]
 
     first_row = payload["detail_rows"][0]
     assert first_row["row_id"] == "main1"
-    assert [band["band_name"] for band in first_row["band_members"]] == ["MyGO!!!!!", "Special Guest Band"]
+    assert [band["band_name"] for band in first_row["band_members"]] == ["MyGO!!!!!"]
     assert first_row["band_members"][0]["band_id"] == 3
     assert first_row["band_members"][0]["present_count"] == 3
     assert first_row["band_members"][0]["total_count"] == 5
     assert first_row["band_members"][0]["is_full"] is False
-    assert first_row["band_members"][1]["band_id"] is None
-    assert first_row["band_members"][1]["present_count"] == 1
-    assert first_row["band_members"][1]["total_count"] == 0
-    assert first_row["band_members"][1]["attendance_status"] == "unknown"
-    assert first_row["band_members"][1]["is_full"] is False
     assert first_row["other_members"] == [{"key": "支援", "value": ["Keyboard"]}]
 
 
@@ -464,16 +466,12 @@ def test_get_live_details_batch_returns_seeded_items_and_missing_ids(
     assert first_item["opening_time"] == "15:00:00+09"
     assert first_item["start_time"] == "16:00:00+09"
     assert first_item["bands"] == [1, 3]
-    assert first_item["band_names"] == ["Poppin'Party", "MyGO!!!!!", "Special Guest Band"]
+    assert first_item["band_names"] == ["Poppin'Party", "MyGO!!!!!"]
 
     first_row = first_item["detail_rows"][0]
     assert first_row["row_id"] == "main1"
     assert first_row["band_members"][0]["band_name"] == "MyGO!!!!!"
     assert first_row["band_members"][0]["total_count"] == 5
-    assert first_row["band_members"][1]["band_id"] is None
-    assert first_row["band_members"][1]["band_name"] == "Special Guest Band"
-    assert first_row["band_members"][1]["total_count"] == 0
-    assert first_row["band_members"][1]["attendance_status"] == "unknown"
     assert first_row["other_members"] == [{"key": "支援", "value": ["Keyboard"]}]
 
 

@@ -78,40 +78,11 @@ def _validate_tour_relations(
         """
         SELECT
             l.id,
-            CASE
-                WHEN l.event_status = 'cancelled'
-                THEN ARRAY(
-                    SELECT DISTINCT effective_band_id
-                    FROM unnest(
-                        l.default_band_ids
-                        || COALESCE(
-                            (
-                                SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-                                FROM live_setlist stop_setlist
-                                JOIN LATERAL jsonb_object_keys(stop_setlist.band_member) k(band_name)
-                                    ON jsonb_typeof(stop_setlist.band_member) = 'object'
-                                JOIN band_attrs ba ON ba.band_name = k.band_name
-                                WHERE stop_setlist.live_id = l.id
-                            ),
-                            ARRAY[]::int[]
-                        )
-                    ) AS effective_band_id
-                    ORDER BY effective_band_id
-                )
-                WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
-                THEN COALESCE(
-                    (
-                        SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-                        FROM live_setlist stop_setlist
-                        JOIN LATERAL jsonb_object_keys(stop_setlist.band_member) k(band_name)
-                            ON jsonb_typeof(stop_setlist.band_member) = 'object'
-                        JOIN band_attrs ba ON ba.band_name = k.band_name
-                        WHERE stop_setlist.live_id = l.id
-                    ),
-                    ARRAY[]::int[]
-                )
-                ELSE l.default_band_ids
-            END AS band_ids
+            COALESCE((
+                SELECT array_agg(effective.band_id ORDER BY effective.band_id)
+                FROM effective_live_bands effective
+                WHERE effective.live_id = l.id
+            ), ARRAY[]::int[]) AS band_ids
         FROM live_attrs l
         WHERE l.id = ANY(%s)
         ORDER BY l.live_date, l.start_time, l.id
@@ -232,21 +203,11 @@ def get_tour_live_candidates(
                         v.venue,
                         NULL::integer AS tour_id,
                         NULL::text AS tour_title,
-                        CASE
-                            WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
-                            THEN COALESCE(
-                                (
-                                    SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-                                    FROM live_setlist candidate_setlist
-                                    JOIN LATERAL jsonb_object_keys(candidate_setlist.band_member) k(band_name)
-                                        ON jsonb_typeof(candidate_setlist.band_member) = 'object'
-                                    JOIN band_attrs ba ON ba.band_name = k.band_name
-                                    WHERE candidate_setlist.live_id = l.id
-                                ),
-                                ARRAY[]::int[]
-                            )
-                            ELSE l.default_band_ids
-                        END AS band_ids
+                        COALESCE((
+                            SELECT array_agg(effective.band_id ORDER BY effective.band_id)
+                            FROM effective_live_bands effective
+                            WHERE effective.live_id = l.id
+                        ), ARRAY[]::int[]) AS band_ids
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     {where_sql}
@@ -313,21 +274,11 @@ def get_console_tour(
                         l.live_title,
                         v.venue,
                         tl.stop_label,
-                        CASE
-                            WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
-                            THEN COALESCE(
-                                (
-                                    SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-                                    FROM live_setlist edit_setlist
-                                    JOIN LATERAL jsonb_object_keys(edit_setlist.band_member) k(band_name)
-                                        ON jsonb_typeof(edit_setlist.band_member) = 'object'
-                                    JOIN band_attrs ba ON ba.band_name = k.band_name
-                                    WHERE edit_setlist.live_id = l.id
-                                ),
-                                ARRAY[]::int[]
-                            )
-                            ELSE l.default_band_ids
-                        END AS band_ids
+                        COALESCE((
+                            SELECT array_agg(effective.band_id ORDER BY effective.band_id)
+                            FROM effective_live_bands effective
+                            WHERE effective.live_id = l.id
+                        ), ARRAY[]::int[]) AS band_ids
                     FROM tour_lives tl
                     JOIN live_attrs l ON l.id = tl.live_id
                     LEFT JOIN venue_list v ON v.id = l.venue_id

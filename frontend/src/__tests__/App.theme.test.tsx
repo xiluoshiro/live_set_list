@@ -39,12 +39,8 @@ vi.mock("../api", () => ({
   getConsoleBands: vi.fn().mockResolvedValue({ items: [] }),
   getConsoleBandHistory: vi.fn(),
   createConsoleBand: vi.fn(),
-  initializeConsoleBandHistory: vi.fn(),
-  createConsoleBandNameVersion: vi.fn(),
   createConsoleBandLineupVersion: vi.fn(),
-  getConsoleBandLineupImpact: vi.fn(),
-  correctConsoleBandLineupVersion: vi.fn(),
-  getBandHistoryBackfillPreflight: vi.fn(),
+  getConsoleBandTransitionLiveCandidates: vi.fn(),
   getConsoleVenues: vi.fn().mockResolvedValue({ items: [] }),
 }));
 

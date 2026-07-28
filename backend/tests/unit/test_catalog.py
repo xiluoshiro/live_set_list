@@ -77,7 +77,7 @@ def test_search_catalog_blank_query_returns_400():
 
 
 def test_list_catalog_bands_uses_public_band_query():
-    # 测试点：乐队浏览应返回默认成员，并只在无 Setlist 时把 default_band_ids 计入关联 Live。
+    # 测试点：乐队浏览应从当前开放版本取成员，并统一使用 effective_live_bands 统计关联 Live。
     conn, cursor = _build_connection_mock()
     cursor.fetchall.return_value = [
         (1, "Poppin'Party", "PoPiPa", ["Kasumi"], 12),
@@ -93,12 +93,12 @@ def test_list_catalog_bands_uses_public_band_query():
         {"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "band_members": ["Kasumi"], "live_count": 12},
         {"band_id": 2, "band_name": "Roselia", "band_abbr": "Roselia", "band_members": ["Yukina"], "live_count": 8},
     ]
-    assert "WHERE b.id > 0" in BAND_LIST_QUERY
-    assert "ORDER BY b.id" in BAND_LIST_QUERY
-    assert "NOT EXISTS (SELECT 1 FROM live_setlist" in BAND_LIST_QUERY
-    assert "b.id = ANY(l.default_band_ids)" in BAND_LIST_QUERY
-    assert "selected_band.id = ANY(l.default_band_ids)" in BAND_LIVES_PAGE_QUERY
-    assert "WHEN COUNT(ls.id) = 0 THEN l.default_band_ids" in BAND_LIVES_PAGE_QUERY
+    assert "FROM current_band_versions b" in BAND_LIST_QUERY
+    assert "WHERE b.band_id > 0" in BAND_LIST_QUERY
+    assert "ORDER BY b.band_id" in BAND_LIST_QUERY
+    assert "LEFT JOIN effective_live_bands effective" in BAND_LIST_QUERY
+    assert "JOIN effective_live_bands selected" in BAND_LIVES_PAGE_QUERY
+    assert "effective_live_bands effective" in BAND_LIVES_PAGE_QUERY
     assert cursor.execute.call_args_list == [call(BAND_LIST_QUERY, (30,))]
 
 

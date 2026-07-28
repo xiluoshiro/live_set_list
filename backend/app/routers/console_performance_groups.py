@@ -207,21 +207,11 @@ def get_performance_group_live_candidates(
                         l.live_title,
                         l.start_time::text,
                         v.venue,
-                        CASE
-                            WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
-                            THEN COALESCE(
-                                (
-                                    SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-                                    FROM live_setlist candidate_setlist
-                                    JOIN LATERAL jsonb_object_keys(candidate_setlist.band_member) k(band_name)
-                                        ON jsonb_typeof(candidate_setlist.band_member) = 'object'
-                                    JOIN band_attrs ba ON ba.band_name = k.band_name
-                                    WHERE candidate_setlist.live_id = l.id
-                                ),
-                                ARRAY[]::int[]
-                            )
-                            ELSE l.default_band_ids
-                        END AS band_ids
+                        COALESCE((
+                            SELECT array_agg(effective.band_id ORDER BY effective.band_id)
+                            FROM effective_live_bands effective
+                            WHERE effective.live_id = l.id
+                        ), ARRAY[]::int[]) AS band_ids
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     {where_sql}
@@ -283,21 +273,11 @@ def get_console_performance_group(
                         l.live_title,
                         to_jsonb(l) ->> 'start_time' AS start_time,
                         v.venue,
-                        CASE
-                            WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
-                            THEN COALESCE(
-                                (
-                                    SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-                                    FROM live_setlist edit_setlist
-                                    JOIN LATERAL jsonb_object_keys(edit_setlist.band_member) k(band_name)
-                                        ON jsonb_typeof(edit_setlist.band_member) = 'object'
-                                    JOIN band_attrs ba ON ba.band_name = k.band_name
-                                    WHERE edit_setlist.live_id = l.id
-                                ),
-                                ARRAY[]::int[]
-                            )
-                            ELSE l.default_band_ids
-                        END AS band_ids
+                        COALESCE((
+                            SELECT array_agg(effective.band_id ORDER BY effective.band_id)
+                            FROM effective_live_bands effective
+                            WHERE effective.live_id = l.id
+                        ), ARRAY[]::int[]) AS band_ids
                     FROM performance_group_lives pgl
                     JOIN live_attrs l ON l.id = pgl.live_id
                     LEFT JOIN venue_list v ON v.id = l.venue_id

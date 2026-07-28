@@ -41,27 +41,15 @@ HAVING COUNT(DISTINCT l.id) >= 2
 """
 
 PERFORMANCE_GROUP_BANDS_QUERY = """
-SELECT ba.id, ba.band_name, ba.band_abbr
+SELECT ba.band_id, ba.band_name, ba.band_abbr
 FROM (
-    SELECT DISTINCT setlist_band.id
+    SELECT DISTINCT effective.band_id
     FROM performance_group_lives pgl
-    JOIN live_setlist ls ON ls.live_id = pgl.live_id
-    JOIN LATERAL jsonb_object_keys(ls.band_member) k(band_name)
-        ON jsonb_typeof(ls.band_member) = 'object'
-    JOIN band_attrs setlist_band ON setlist_band.band_name = k.band_name
+    JOIN effective_live_bands effective ON effective.live_id = pgl.live_id
     WHERE pgl.group_id = %s
-    UNION
-    SELECT DISTINCT unnest(fallback_live.default_band_ids) AS id
-    FROM performance_group_lives pgl
-    JOIN live_attrs fallback_live ON fallback_live.id = pgl.live_id
-    WHERE pgl.group_id = %s
-      AND NOT EXISTS (
-          SELECT 1 FROM live_setlist any_setlist
-          WHERE any_setlist.live_id = fallback_live.id
-      )
 ) aggregated_band_ids
-JOIN band_attrs ba ON ba.id = aggregated_band_ids.id
-ORDER BY ba.id
+JOIN current_band_versions ba ON ba.band_id = aggregated_band_ids.band_id
+ORDER BY ba.band_id
 """
 
 PERFORMANCE_GROUP_VENUES_QUERY = """
@@ -82,21 +70,11 @@ SELECT
     l.live_type,
     to_jsonb(l) ->> 'start_time' AS start_time,
     COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
-    CASE
-        WHEN EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id)
-        THEN COALESCE(
-            (
-                SELECT array_agg(DISTINCT ba.id ORDER BY ba.id)
-                FROM live_setlist group_setlist
-                JOIN LATERAL jsonb_object_keys(group_setlist.band_member) k(band_name)
-                    ON jsonb_typeof(group_setlist.band_member) = 'object'
-                JOIN band_attrs ba ON ba.band_name = k.band_name
-                WHERE group_setlist.live_id = l.id
-            ),
-            ARRAY[]::int[]
-        )
-        ELSE l.default_band_ids
-    END AS bands,
+    COALESCE((
+        SELECT array_agg(effective.band_id ORDER BY effective.band_id)
+        FROM effective_live_bands effective
+        WHERE effective.live_id = l.id
+    ), ARRAY[]::int[]) AS bands,
     l.url,
     EXISTS (SELECT 1 FROM live_setlist any_setlist WHERE any_setlist.live_id = l.id) AS has_setlist,
     l.event_status,
@@ -150,7 +128,7 @@ def get_performance_group_detail(
                 if header_row is None:
                     raise HTTPException(status_code=404, detail=f"Performance group id {group_id} not found")
 
-                cur.execute(PERFORMANCE_GROUP_BANDS_QUERY, (group_id, group_id))
+                cur.execute(PERFORMANCE_GROUP_BANDS_QUERY, (group_id,))
                 band_rows = cur.fetchall()
 
                 cur.execute(PERFORMANCE_GROUP_VENUES_QUERY, (group_id,))
@@ -278,14 +256,14 @@ def _build_catalog_performances_queries(
 
 
 LIVE_BAND_AGG_SQL = """
-CASE
-    WHEN COUNT(ls.id) = 0 THEN sl.default_band_ids
-    ELSE COALESCE(
-        array_agg(DISTINCT ba.id ORDER BY ba.id)
-            FILTER (WHERE ba.id IS NOT NULL),
-        ARRAY[]::int[]
-    )
-END
+COALESCE(
+    (
+        SELECT array_agg(effective.band_id ORDER BY effective.band_id)
+        FROM effective_live_bands effective
+        WHERE effective.live_id = sl.id
+    ),
+    ARRAY[]::int[]
+)
 """
 
 
@@ -500,38 +478,20 @@ def _build_scope_queries(
                 sl.event_status,
                 sl.was_rescheduled
             FROM selected_lives sl
-            LEFT JOIN live_setlist ls ON ls.live_id = sl.id
-            LEFT JOIN LATERAL (
-                SELECT jsonb_object_keys(ls.band_member) AS band_name
-                WHERE jsonb_typeof(ls.band_member) = 'object'
-            ) bm ON true
-            LEFT JOIN band_attrs ba ON ba.band_name = bm.band_name
             GROUP BY sl.id, sl.live_date, sl.start_time, sl.live_title, sl.url, sl.live_type,
                      sl.default_band_ids, sl.tour_id, sl.tour_title,
                      sl.performance_group_id, sl.group_title, sl.event_status,
                      sl.was_rescheduled
         ),
         group_bands AS (
-            SELECT grouped_band.group_id, ba.id AS band_id, ba.band_name, ba.band_abbr
+            SELECT grouped_band.group_id, ba.band_id, ba.band_name, ba.band_abbr
             FROM (
-                SELECT DISTINCT full_group.group_id, setlist_band.id AS band_id
+                SELECT DISTINCT full_group.group_id, effective.band_id
                 FROM full_group_matches full_group
                 JOIN performance_group_lives pgl ON pgl.group_id = full_group.group_id
-                JOIN live_setlist ls ON ls.live_id = pgl.live_id
-                JOIN LATERAL jsonb_object_keys(ls.band_member) member_name(band_name)
-                    ON jsonb_typeof(ls.band_member) = 'object'
-                JOIN band_attrs setlist_band ON setlist_band.band_name = member_name.band_name
-                UNION
-                SELECT DISTINCT full_group.group_id, unnest(fallback_live.default_band_ids) AS band_id
-                FROM full_group_matches full_group
-                JOIN performance_group_lives pgl ON pgl.group_id = full_group.group_id
-                JOIN live_attrs fallback_live ON fallback_live.id = pgl.live_id
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM live_setlist any_setlist
-                    WHERE any_setlist.live_id = fallback_live.id
-                )
+                JOIN effective_live_bands effective ON effective.live_id = pgl.live_id
             ) grouped_band
-            JOIN band_attrs ba ON ba.id = grouped_band.band_id
+            JOIN current_band_versions ba ON ba.band_id = grouped_band.band_id
         ),
         group_venues AS (
             SELECT DISTINCT full_group.group_id,

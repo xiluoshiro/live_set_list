@@ -26,12 +26,8 @@ const apiMocks = vi.hoisted(() => ({
   getConsoleBands: vi.fn(),
   getConsoleBandHistory: vi.fn(),
   createConsoleBand: vi.fn(),
-  initializeConsoleBandHistory: vi.fn(),
-  createConsoleBandNameVersion: vi.fn(),
   createConsoleBandLineupVersion: vi.fn(),
-  getConsoleBandLineupImpact: vi.fn(),
-  correctConsoleBandLineupVersion: vi.fn(),
-  getBandHistoryBackfillPreflight: vi.fn(),
+  getConsoleBandTransitionLiveCandidates: vi.fn(),
   getConsoleLive: vi.fn(),
   getConsoleLiveCandidates: vi.fn(),
   getConsoleVenues: vi.fn(),
@@ -66,12 +62,8 @@ vi.mock("../../api", () => ({
   getConsoleBands: apiMocks.getConsoleBands,
   getConsoleBandHistory: apiMocks.getConsoleBandHistory,
   createConsoleBand: apiMocks.createConsoleBand,
-  initializeConsoleBandHistory: apiMocks.initializeConsoleBandHistory,
-  createConsoleBandNameVersion: apiMocks.createConsoleBandNameVersion,
   createConsoleBandLineupVersion: apiMocks.createConsoleBandLineupVersion,
-  getConsoleBandLineupImpact: apiMocks.getConsoleBandLineupImpact,
-  correctConsoleBandLineupVersion: apiMocks.correctConsoleBandLineupVersion,
-  getBandHistoryBackfillPreflight: apiMocks.getBandHistoryBackfillPreflight,
+  getConsoleBandTransitionLiveCandidates: apiMocks.getConsoleBandTransitionLiveCandidates,
   getConsoleLive: apiMocks.getConsoleLive,
   getConsoleLiveCandidates: apiMocks.getConsoleLiveCandidates,
   getConsoleVenues: apiMocks.getConsoleVenues,
@@ -85,6 +77,42 @@ function getTodayDateInputValue(): string {
   const month = String(today.getMonth() + 1).padStart(2, "0");
   const day = String(today.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function currentRoseliaHistory(bandId = 2) {
+  return {
+    band_id: bandId,
+    current_name: "Roselia",
+    current_abbr: "ロゼリア",
+    current_members: ["湊友希那"],
+    current_name_version_id: 20,
+    current_lineup_version_id: 21,
+    initialized: true,
+    name_versions: [{
+      name_version_id: 20,
+      band_name: "Roselia",
+      band_abbr: "ロゼリア",
+      valid_from: "2015-01-01",
+      valid_to: null,
+      note: null,
+      live_ids: [],
+    }],
+    lineup_versions: [{
+      lineup_version_id: 21,
+      version_no: 1,
+      version_label: "Roselia V1",
+      valid_from: "2015-01-01",
+      valid_to: null,
+      predecessor_id: null,
+      change_type: "initial",
+      transition_live_id: null,
+      note: null,
+      members: ["湊友希那"],
+      added_members: ["湊友希那"],
+      removed_members: [],
+      live_ids: [],
+    }],
+  };
 }
 
 describe("ConsoleInsertPanel", () => {
@@ -108,12 +136,8 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleBands.mockReset();
     apiMocks.getConsoleBandHistory.mockReset();
     apiMocks.createConsoleBand.mockReset();
-    apiMocks.initializeConsoleBandHistory.mockReset();
-    apiMocks.createConsoleBandNameVersion.mockReset();
     apiMocks.createConsoleBandLineupVersion.mockReset();
-    apiMocks.getConsoleBandLineupImpact.mockReset();
-    apiMocks.correctConsoleBandLineupVersion.mockReset();
-    apiMocks.getBandHistoryBackfillPreflight.mockReset();
+    apiMocks.getConsoleBandTransitionLiveCandidates.mockReset();
     apiMocks.getConsoleLive.mockReset();
     apiMocks.getConsoleLiveCandidates.mockReset();
     apiMocks.getConsoleVenues.mockReset();
@@ -346,6 +370,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
     });
+    apiMocks.getConsoleBandHistory.mockResolvedValue(currentRoseliaHistory());
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
@@ -363,6 +388,7 @@ describe("ConsoleInsertPanel", () => {
     await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
     expect(screen.getByRole("button", { name: "批量插入" })).toBeDisabled();
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
+    await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
     expect(apiMocks.appendConsoleLiveSetlist).not.toHaveBeenCalled();
@@ -375,6 +401,12 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.appendConsoleLiveSetlist).toHaveBeenCalledWith(
       101,
       {
+        band_lineup_contexts: [{
+          band_id: 2,
+          band_name_version_id: 20,
+          base_lineup_version_id: 21,
+          next_lineup_version_id: null,
+        }],
         setlist_rows: [
           {
             song_id: 901,
@@ -383,6 +415,12 @@ describe("ConsoleInsertPanel", () => {
             sub_order: 1,
             is_short: false,
             band_member: { Roselia: ["湊友希那"] },
+            band_performances: [{
+              band_id: 2,
+              lineup_usage: "base",
+              handover_baseline: null,
+              members: ["湊友希那"],
+            }],
             other_member: null,
             comment: null,
           },
@@ -414,13 +452,19 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
     });
+    apiMocks.getConsoleBandHistory.mockResolvedValue(currentRoseliaHistory());
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
     apiMocks.appendConsoleLiveSetlist.mockRejectedValueOnce(new Error("Request timeout"));
     apiMocks.getConsoleLiveSetlist.mockResolvedValueOnce({
       live_id: 101,
-      band_lineup_contexts: [],
+      band_lineup_contexts: [{
+        band_id: 2,
+        band_name_version_id: 20,
+        base_lineup_version_id: 21,
+        next_lineup_version_id: null,
+      }],
       rows: [{
         row_id: "persisted-row-1",
         song_id: 901,
@@ -430,7 +474,12 @@ describe("ConsoleInsertPanel", () => {
         sub_order: 1,
         is_short: false,
         band_member: { Roselia: ["湊友希那"] },
-        band_performances: [],
+        band_performances: [{
+          band_id: 2,
+          lineup_usage: "base",
+          handover_baseline: null,
+          members: ["湊友希那"],
+        }],
         other_member: null,
         comment: null,
       }],
@@ -446,6 +495,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "确认提交" }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
+    await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
@@ -472,6 +522,8 @@ describe("ConsoleInsertPanel", () => {
       current_name: "Roselia",
       current_abbr: "ロゼリア",
       current_members: ["New Member"],
+      current_name_version_id: 20,
+      current_lineup_version_id: 22,
       initialized: true,
       name_versions: [{
         name_version_id: 20,
@@ -505,6 +557,7 @@ describe("ConsoleInsertPanel", () => {
           valid_to: null,
           predecessor_id: 21,
           change_type: "replacement",
+          transition_live_id: 101,
           note: null,
           members: ["New Member"],
           added_members: ["New Member"],
@@ -526,8 +579,9 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
-    await user.selectOptions(await screen.findByLabelText("Roselia 基础阵容"), "21");
-    await user.selectOptions(screen.getByLabelText("Roselia 交接后继阵容"), "22");
+    const lineupTable = await screen.findByRole("table", { name: "本场乐队阵容" });
+    expect(lineupTable).toHaveTextContent("Roselia V1");
+    expect(lineupTable).toHaveTextContent("Roselia V2");
     await user.click(screen.getByRole("button", { name: "1支 / 1人" }));
     await user.selectOptions(screen.getByLabelText("Roselia 本曲模式"), "next");
     await user.click(screen.getByRole("checkbox", { name: "Old Member（旧）" }));
@@ -535,6 +589,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
+    await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     const nextLineupDialog = screen.getByRole("dialog", { name: "确认提交 Setlist" });
     expect(within(nextLineupDialog).getByText('{"Roselia":["New Member","Old Member"]}')).toBeInTheDocument();
@@ -545,6 +600,7 @@ describe("ConsoleInsertPanel", () => {
     await user.selectOptions(screen.getByLabelText("Roselia 交接正式基准"), "next");
     await user.click(screen.getByRole("checkbox", { name: "New Member（新）" }));
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
@@ -578,8 +634,8 @@ describe("ConsoleInsertPanel", () => {
     ));
   });
 
-  // 测试点：历史基础阵容应持续替换目录默认成员，重复解析也不能回退到最新阵容。
-  test("基础阵容默认成员在重复解析后仍保持历史版本", async () => {
+  // 测试点：普通 Live 必须始终使用当前开放阵容，重复解析也不能按 Live 日期回退旧版本。
+  test("普通Live重复解析仍保持当前开放阵容", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{
@@ -594,6 +650,8 @@ describe("ConsoleInsertPanel", () => {
       current_name: "Roselia",
       current_abbr: "ロゼリア",
       current_members: ["Stable Member", "New Member"],
+      current_name_version_id: 20,
+      current_lineup_version_id: 22,
       initialized: true,
       name_versions: [{
         name_version_id: 20,
@@ -645,13 +703,13 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
-    expect(await screen.findByLabelText("Roselia 基础阵容")).toHaveValue("21");
+    expect(await screen.findByRole("table", { name: "本场乐队阵容" })).toHaveTextContent("Roselia V2");
     await waitFor(() => expect(screen.getByRole("button", { name: "1支 / 2人" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "1支 / 2人" }));
 
     expect(screen.getByRole("checkbox", { name: "Stable Member" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Old Member" })).toBeChecked();
-    expect(screen.queryByRole("checkbox", { name: "New Member" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "New Member" })).toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: "Old Member" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Roselia 本曲模式")).not.toBeInTheDocument();
     expect(screen.queryByText("Old Member（旧）")).not.toBeInTheDocument();
 
@@ -662,14 +720,14 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
     const reapplyDialog = screen.getByRole("dialog", { name: "确认应用到表格" });
     expect(within(reapplyDialog).getByText(
-      '{"Roselia":["Stable Member","Old Member"]}',
+      '{"Roselia":["Stable Member","New Member"]}',
     )).toBeInTheDocument();
     await user.click(within(reapplyDialog).getByRole("button", { name: "确认提交" }));
     await user.click(screen.getByRole("button", { name: "1支 / 2人" }));
 
     expect(screen.getByRole("checkbox", { name: "Stable Member" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Old Member" })).toBeChecked();
-    expect(screen.queryByRole("checkbox", { name: "New Member" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "New Member" })).toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: "Old Member" })).not.toBeInTheDocument();
   });
 
   test("只读查询接口会加载候选数据并用于歌曲查询", async () => {
@@ -759,6 +817,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 9, band_name: "Roselia", band_abbr: "rsl", band_members: ["湊友希那"] }],
     });
+    apiMocks.getConsoleBandHistory.mockResolvedValue(currentRoseliaHistory(9));
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
@@ -781,6 +840,7 @@ describe("ConsoleInsertPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("905")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
+    await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
     const dialog = screen.getByRole("dialog", { name: /确认提交 Setlist/ });
@@ -814,6 +874,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 9, band_name: "Roselia", band_abbr: "rsl", band_members: ["湊友希那"] }],
     });
+    apiMocks.getConsoleBandHistory.mockResolvedValue(currentRoseliaHistory(9));
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
@@ -845,6 +906,7 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "歌曲查询结果" })).not.toBeInTheDocument());
     expect(screen.getByText("907")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
+    await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
     const confirmDialog = screen.getByRole("dialog", { name: /确认提交 Setlist/ });
@@ -1316,8 +1378,8 @@ describe("ConsoleInsertPanel", () => {
     ));
   });
 
-  // 测试点：临时历史入口应把默认 Band 的旧名称、旧阵容和对应活动成员作为同一固化上下文提交。
-  test("无Setlist活动可临时选择默认Band旧版本", async () => {
+  // 测试点：历史版本选择入口永久移除，无 Setlist 活动也只能提交当前名称、阵容和成员。
+  test("无Setlist活动只提交默认Band当前版本", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -1327,13 +1389,14 @@ describe("ConsoleInsertPanel", () => {
         band_abbr: "mygo",
         band_members: ["Current Vocal"],
       }],
-      historical_default_band_selection_enabled: true,
     });
     apiMocks.getConsoleBandHistory.mockResolvedValue({
       band_id: 3,
       current_name: "MyGO!!!!!",
       current_abbr: "mygo",
       current_members: ["Current Vocal"],
+      current_name_version_id: 20,
+      current_lineup_version_id: 22,
       initialized: true,
       name_versions: [
         {
@@ -1392,24 +1455,23 @@ describe("ConsoleInsertPanel", () => {
     await user.selectOptions(screen.getByDisplayValue("专场"), "event");
     await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
     await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
-    await user.selectOptions(await screen.findByLabelText("MyGO!!!!! 默认历史名称"), "19");
-    await user.selectOptions(screen.getByLabelText("MyGO!!!!! 默认基础阵容"), "21");
+    expect(screen.queryByLabelText("MyGO!!!!! 默认历史名称")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("MyGO!!!!! 默认基础阵容")).not.toBeInTheDocument();
     const memberGroup = screen.getByRole("group", { name: "MyGO!!!!! 出演成员" });
-    await user.click(within(memberGroup).getByRole("checkbox", { name: "Old Vocal" }));
-    await user.click(within(memberGroup).getByRole("checkbox", { name: "Old Guitar" }));
-    await user.type(screen.getByPlaceholderText("请输入Live标题"), "Historical Event");
-    await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/historical-event");
+    await user.click(within(memberGroup).getByRole("checkbox", { name: "Current Vocal" }));
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), "Current Event");
+    await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/current-event");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
       expect.objectContaining({
         default_band_ids: [3],
-        event_attendees: [{ band_id: 3, members: ["Old Vocal", "Old Guitar"] }],
+        event_attendees: [{ band_id: 3, members: ["Current Vocal"] }],
         band_lineup_contexts: [{
           band_id: 3,
-          band_name_version_id: 19,
-          base_lineup_version_id: 21,
+          band_name_version_id: 20,
+          base_lineup_version_id: 22,
           next_lineup_version_id: null,
         }],
       }),
@@ -1423,7 +1485,6 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["Current Vocal"] }],
-      historical_default_band_selection_enabled: false,
     });
     apiMocks.getConsoleBandHistory.mockResolvedValue({
       band_id: 3,
@@ -1609,6 +1670,9 @@ describe("ConsoleInsertPanel", () => {
   // 测试点：Setlist 管理只查已有数据、复用 Live 管理候选栏，更新时仍提交完整目标集合。
   test("Setlist管理加载并更新既有Setlist", async () => {
     const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
+    });
     apiMocks.getConsoleLiveCandidates.mockResolvedValue({
       items: [{
         live_id: 55,
@@ -1624,6 +1688,12 @@ describe("ConsoleInsertPanel", () => {
     });
     apiMocks.getConsoleLiveSetlist.mockResolvedValue({
       live_id: 55,
+      band_lineup_contexts: [{
+        band_id: 2,
+        band_name_version_id: 20,
+        base_lineup_version_id: 21,
+        next_lineup_version_id: null,
+      }],
       rows: [{
         row_id: "00000000-0000-0000-0000-000000000055",
         song_id: 901,
@@ -1633,10 +1703,17 @@ describe("ConsoleInsertPanel", () => {
         sub_order: 1,
         is_short: false,
         band_member: { Roselia: ["湊友希那"] },
+        band_performances: [{
+          band_id: 2,
+          lineup_usage: "base",
+          handover_baseline: null,
+          members: ["湊友希那"],
+        }],
         other_member: null,
         comment: null,
       }],
     });
+    apiMocks.getConsoleBandHistory.mockResolvedValue(currentRoseliaHistory());
 
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await user.click(screen.getByRole("tab", { name: "Setlist管理" }));
@@ -1660,6 +1737,7 @@ describe("ConsoleInsertPanel", () => {
       "comment",
     ]);
     await user.type(screen.getByLabelText("comment-1"), "Encore note");
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存修改" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "保存修改" }));
     const dialog = screen.getByRole("dialog", { name: "确认更新 Setlist" });
     const diffTable = within(dialog).getByRole("table", { name: "Setlist 修改内容" });
@@ -1672,6 +1750,12 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.updateConsoleLiveSetlist).toHaveBeenCalledWith(
       55,
       {
+        band_lineup_contexts: [{
+          band_id: 2,
+          band_name_version_id: 20,
+          base_lineup_version_id: 21,
+          next_lineup_version_id: null,
+        }],
         setlist_rows: [{
           song_id: 901,
           absolute_order: 1,
@@ -1679,6 +1763,12 @@ describe("ConsoleInsertPanel", () => {
           sub_order: 1,
           is_short: false,
           band_member: { Roselia: ["湊友希那"] },
+          band_performances: [{
+            band_id: 2,
+            lineup_usage: "base",
+            handover_baseline: null,
+            members: ["湊友希那"],
+          }],
           other_member: null,
           comment: "Encore note",
         }],
@@ -1962,6 +2052,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
     });
+    apiMocks.getConsoleBandHistory.mockResolvedValue(currentRoseliaHistory());
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
