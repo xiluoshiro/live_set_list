@@ -936,6 +936,18 @@
 .timezone-input-group {
   display: flex;
   width: 100%;
+  border-radius: 7px;
+}
+
+.timezone-input-group:focus-within {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--accent-focus-ring);
+}
+
+.timezone-input-group > :focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .console-admin-table .timezone-input-group select {
