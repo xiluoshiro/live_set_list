@@ -233,18 +233,19 @@ def test_filters_band_id_filter_standalone_lives():
     assert response.status_code == 200
 
 
-# 测试点：过滤条件也应匹配 group：当 group 内有任何 child live 匹配时，group 应出现在结果中。
-def test_filters_match_groups_when_any_child_live_matches():
+# 测试点：活动组仅部分命中筛选时，接口应返回带活动组引用的单场 Live。
+def test_filters_expand_partially_matching_group_into_lives():
     conn, cursor = _build_connection_mock()
-    cursor.fetchone.return_value = (2,)
+    cursor.fetchone.return_value = (1,)
     cursor.fetchall.return_value = [
-        _group_row(
-            5, "Matching Group", date(2026, 4, 1), date(2026, 4, 2), 2, 2,
-            "multi_day",
-            [{"band_id": 2, "band_name": "Roselia", "band_abbr": "rsl"}],
-            ["Venue"],
+        _live_row(
+            400,
+            date(2026, 4, 1),
+            "Matching Child Live",
+            [2],
+            group_id=5,
+            group_title="Matching Group",
         ),
-        _live_row(400, date(2026, 4, 3), "Non-Match Live", [1]),
     ]
 
     with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
@@ -253,9 +254,13 @@ def test_filters_match_groups_when_any_child_live_matches():
         )
 
     assert response.status_code == 200
-    items = response.json()["items"]
-    kinds = [item["kind"] for item in items]
-    assert "performance_group" in kinds
+    item = response.json()["items"][0]
+    assert item["kind"] == "live"
+    assert item["live"]["live_id"] == 400
+    assert item["live"]["performance_group"] == {
+        "group_id": 5,
+        "group_title": "Matching Group",
+    }
 
 
 # 测试点：sort=date_desc 应按最后一场日期、开演时间倒序，ID 只作稳定兜底。

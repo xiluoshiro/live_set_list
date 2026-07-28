@@ -260,12 +260,12 @@
   - Live 结果按 `live_date DESC, id DESC` 排序
 - `GET /api/catalog/performances`
   - `scope` 只允许 `all` 或 `favorites`，默认 `all`；`favorites` 要求当前 session 已登录
-  - 支持 `q/year/live_type/band_id/sort`，含义与演出资料现有筛选一致；活动组只要任一子 Live 或组名命中就返回完整组
-  - 服务端先生成独立 Live / 完整活动组 / 部分收藏单场的联合投影，再 count 和分页，禁止前端按当前页临时合并
-  - `scope=all` 中，有效活动组返回一个 `kind=performance_group` 项，组内 Live 不重复作为同级项返回
-  - `scope=favorites` 中，组内全部 Live 已收藏时返回组项；部分收藏时仅返回已收藏子 Live；一场未收藏则不会伪造组收藏
+  - 支持 `q/year/live_type/band_id/sort`，含义与演出资料现有筛选一致；全部场次命中或关键词直接命中组名时返回完整组，只有部分场次命中时逐场返回
+  - 服务端先生成独立 Live / 完整活动组 / 部分命中单场的联合投影，再 count 和分页，禁止前端按当前页临时合并
+  - `scope=all` 中，无筛选、全部场次命中或组名命中时返回一个 `kind=performance_group`；其他部分命中返回带活动组反向引用的 `kind=live`
+  - `scope=favorites` 中，组内全部 Live 已收藏且满足完整组展示规则时返回组项；部分收藏时仅返回实际命中的已收藏子 Live，组名命中也不会带出未收藏场次
   - 活动组因 Live 删除只剩一场时不再作为有效组，剩余 Live 自动恢复为独立 `kind=live` 项
-  - 默认倒序使用组 `end_date` / Live 日期及对应开演时间，升序使用组 `start_date` / Live 日期及对应开演时间；只有日期和开演时间都相同时才以实体 ID 保持稳定
+  - 默认倒序使用完整组 `end_date` / 单场 Live 日期及对应开演时间，升序使用完整组 `start_date` / 单场 Live 日期及对应开演时间；只有日期和开演时间都相同时才以实体 ID 保持稳定
 - `GET /api/catalog/performance-groups/{group_id}`
   - 只对至少两场的有效活动组返回详情；不存在或无效组返回 `404`
   - 子 Live 按 `live_date ASC, start_time ASC, live_id ASC` 返回

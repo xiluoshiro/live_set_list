@@ -1112,6 +1112,72 @@ describe("App", () => {
     expect(within(card).queryByText("2026-08-01 ~ 2026-08-01")).not.toBeInTheDocument();
   });
 
+  // 测试点：活动组部分命中时，表格和卡片模式都复用普通 Live 展示并可逐场打开详情。
+  test("演出资料部分命中的活动组逐场展示", async () => {
+    const fullGroupResponse: PerformancesResponse = {
+      items: [{
+        kind: "performance_group",
+        performance_group: {
+          kind: "performance_group",
+          group_id: 93,
+          group_title: "部分命中测试组",
+          start_date: "2026-09-01",
+          end_date: "2026-09-03",
+          day_count: 3,
+          live_count: 3,
+          display_type: "multi_day",
+          bands: [{ band_id: 1, band_name: "Band 1", band_abbr: "B1" }],
+          venues: ["测试场地"],
+        },
+      }],
+      pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+    };
+    const partialResponse: PerformancesResponse = {
+      items: [9302, 9301].map((liveId, index) => ({
+        kind: "live" as const,
+        live: {
+          live_id: liveId,
+          live_date: `2026-09-0${2 - index}`,
+          live_title: `ChildProbe DAY ${2 - index}`,
+          live_type: "oneman",
+          bands: [1],
+          url: `https://example.com/live/${liveId}`,
+          is_favorite: false,
+          performance_group: {
+            group_id: 93,
+            group_title: "部分命中测试组",
+          },
+        },
+      })),
+      pagination: { page: 1, page_size: 20, total: 2, total_pages: 1 },
+    };
+    getPerformancesMock.mockImplementation((_page, _pageSize, _scope, filters) =>
+      Promise.resolve(filters?.q === "ChildProbe" ? partialResponse : fullGroupResponse),
+    );
+
+    const user = userEvent.setup();
+    renderApp();
+    await openAllContent(user);
+    expect(await screen.findByRole("button", { name: "部分命中测试组" })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("关键词"), "ChildProbe");
+    await user.click(screen.getByRole("button", { name: "搜索" }));
+
+    expect(await screen.findByRole("button", { name: "ChildProbe DAY 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ChildProbe DAY 2" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "部分命中测试组" })).not.toBeInTheDocument();
+    expect(screen.getByText("总计 2 条")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "卡片" }));
+    expect(document.querySelectorAll(".live-card")).toHaveLength(2);
+    expect(
+      screen.queryByRole("button", { name: /查看活动组《部分命中测试组》详情/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /查看《ChildProbe DAY 1》详情/ }));
+    await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(9301));
+  });
+
   // 测试点：巡演资料复用演出卡片流的筛选、总计和单页布局，不再暴露翻页控件。
   test("巡演资料页签展示聚合资料并支持独立筛选", async () => {
     const user = userEvent.setup();
