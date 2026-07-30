@@ -1318,15 +1318,16 @@
           <div id="chapter-list"></div>
         </section>
 
-        <aside class="notes" aria-label="曲目注释">
+        <aside class="notes" id="track-notes" aria-label="曲目详情" hidden>
           <div class="notes-inner">
-            <p class="notes-label">TRACK DATA</p>
-            <p class="notes-code" id="notes-code">选择曲目</p>
-            <h3 id="notes-title">出演与版本信息会在这里展开</h3>
-            <hr class="notes-rule" />
-            <div class="notes-body" id="notes-body">
-              <p>点击任一曲目，可以查看完整演出者、翻唱标记、阵容用法和特殊出演情况。</p>
+            <div class="notes-head">
+              <p class="notes-label">TRACK DATA</p>
+              <button class="notes-close" id="notes-close" type="button">关闭</button>
             </div>
+            <p class="notes-code" id="notes-code"></p>
+            <h3 id="notes-title"></h3>
+            <hr class="notes-rule" />
+            <div class="notes-body" id="notes-body"></div>
             <div class="detail-tags" id="notes-tags"></div>
           </div>
         </aside>
@@ -1806,6 +1807,8 @@
         statusNote: document.querySelector("#status-note"),
         history: document.querySelector("#history-list"),
         readingLayout: document.querySelector("#reading-layout"),
+        notes: document.querySelector("#track-notes"),
+        notesClose: document.querySelector("#notes-close"),
         chapterNav: document.querySelector("#chapter-nav"),
         bandLegend: document.querySelector("#band-legend"),
         contentsSummary: document.querySelector("#contents-summary"),
@@ -1846,10 +1849,6 @@
           .replaceAll("<", "&lt;")
           .replaceAll(">", "&gt;")
           .replaceAll('"', "&quot;");
-      }
-
-      function chapterIndexLabel(index) {
-        return String(index + 1).padStart(2, "0");
       }
 
       function bandColor(name) {
@@ -2012,9 +2011,9 @@
 
       function renderNotes(track) {
         if (!track) {
-          elements.notesCode.textContent = "选择曲目";
-          elements.notesTitle.textContent = "出演与版本信息会在这里展开";
-          elements.notesBody.innerHTML = "<p>点击任一曲目，可以查看演出者、翻唱标记与阵容用法；超长出演名录默认收起，按需展开。</p>";
+          elements.notesCode.textContent = "";
+          elements.notesTitle.textContent = "";
+          elements.notesBody.innerHTML = "";
           elements.notesTags.innerHTML = "";
           return;
         }
@@ -2027,31 +2026,45 @@
           .join("");
       }
 
-      function selectTrack(button, track, inlineDetail) {
-        const wasActive = button === activeTrackButton;
+      function setTrackDetailVisibility(visible) {
+        elements.notes.hidden = !visible;
+        elements.readingLayout.classList.toggle("has-track-detail", visible);
+      }
 
-        if (activeTrackButton) {
-          activeTrackButton.setAttribute("aria-expanded", "false");
-          activeTrackButton.closest(".track").querySelector(".track-inline-detail").hidden = true;
-        }
-
-        if (wasActive) {
-          activeTrackButton = null;
+      function clearTrackSelection({ restoreFocus = false } = {}) {
+        if (!activeTrackButton) {
+          setTrackDetailVisibility(false);
           renderNotes(null);
           return;
         }
+
+        const previousButton = activeTrackButton;
+        previousButton.setAttribute("aria-expanded", "false");
+        previousButton.closest(".track").querySelector(".track-inline-detail").hidden = true;
+        activeTrackButton = null;
+        setTrackDetailVisibility(false);
+        renderNotes(null);
+        if (restoreFocus) previousButton.focus();
+      }
+
+      function selectTrack(button, track, inlineDetail) {
+        const wasActive = button === activeTrackButton;
+
+        if (activeTrackButton) clearTrackSelection();
+
+        if (wasActive) return;
 
         activeTrackButton = button;
         button.setAttribute("aria-expanded", "true");
         inlineDetail.hidden = false;
         renderNotes(track);
+        setTrackDetailVisibility(true);
       }
 
       function buildChapters(scenario, scenarioKey) {
+        clearTrackSelection();
         elements.chapterNav.innerHTML = "";
         elements.chapterList.innerHTML = "";
-        activeTrackButton = null;
-        renderNotes(null);
 
         scenario.chapters.forEach((chapter, chapterIndex) => {
           const chapterId = `chapter-${scenarioKey}-${chapterIndex + 1}`;
@@ -2064,7 +2077,6 @@
           article.className = "chapter";
           article.id = chapterId;
           article.innerHTML = `
-            <span class="chapter-mark">${chapterIndexLabel(chapterIndex)}</span>
             <div class="chapter-main">
               <header class="chapter-head">
                 <div>
@@ -2245,6 +2257,10 @@
         const pressed = elements.favorite.getAttribute("aria-pressed") === "true";
         elements.favorite.setAttribute("aria-pressed", String(!pressed));
         elements.favorite.textContent = pressed ? "收藏" : "已收藏";
+      });
+
+      elements.notesClose.addEventListener("click", () => {
+        clearTrackSelection({ restoreFocus: true });
       });
 
       elements.share.addEventListener("click", async () => {
