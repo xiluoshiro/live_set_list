@@ -21,6 +21,9 @@ function renderSection(
     eventStatus?: "scheduled" | "postponed" | "cancelled";
     scheduleChangeKind?: "correction" | "reschedule" | null;
     onScheduleChangeKindChange?: ReturnType<typeof vi.fn>;
+    defaultBandIds?: number[];
+    defaultBandLineupContexts?: ComponentProps<typeof LiveAdminSection>["defaultBandLineupContexts"];
+    bandHistories?: ComponentProps<typeof LiveAdminSection>["bandHistories"];
   } = {},
 ) {
   const onToggleEventAttendee = options.onToggleEventAttendee ?? vi.fn();
@@ -41,9 +44,9 @@ function renderSection(
       timezoneMinute=":00"
       timezoneMinuteDisabled={false}
       selectedVenueId={1}
-      defaultBandIds={[3]}
-      defaultBandLineupContexts={{}}
-      bandHistories={{}}
+      defaultBandIds={options.defaultBandIds ?? [3]}
+      defaultBandLineupContexts={options.defaultBandLineupContexts ?? {}}
+      bandHistories={options.bandHistories ?? {}}
       eventAttendees={options.eventAttendees ?? {}}
       bandOptions={[
         { band_id: 0, band_name: "Other bands", band_abbr: "", band_members: [] },
@@ -119,6 +122,58 @@ describe("LiveAdminSection", () => {
 
     fireEvent.click(within(group).getByRole("checkbox", { name: /Poppin'Party/ }));
     expect(onToggleDefaultBand).toHaveBeenCalledWith(1);
+  });
+
+  // 测试点：已选默认 Band 只显示具体阵容标签，不重复拼接当前名称和“当前版本”前缀。
+  test("shows only the selected default Band lineup label", () => {
+    renderSection(vi.fn(), {
+      defaultBandIds: [1],
+      defaultBandLineupContexts: {
+        1: {
+          band_id: 1,
+          band_name_version_id: 11,
+          base_lineup_version_id: 21,
+          next_lineup_version_id: null,
+        },
+      },
+      bandHistories: {
+        1: {
+          band_id: 1,
+          current_name: "Poppin'Party",
+          current_abbr: "ppp",
+          current_members: [],
+          initialized: true,
+          name_versions: [{
+            name_version_id: 11,
+            band_name: "Poppin'Party",
+            band_abbr: "ppp",
+            valid_from: null,
+            valid_to: null,
+            note: null,
+            live_ids: [],
+          }],
+          lineup_versions: [{
+            lineup_version_id: 21,
+            version_no: 3,
+            version_label: "Poppin'Party V3",
+            valid_from: null,
+            valid_to: null,
+            predecessor_id: null,
+            change_type: "initial",
+            note: null,
+            members: [],
+            added_members: [],
+            removed_members: [],
+            live_ids: [],
+          }],
+        },
+      },
+    });
+
+    const group = screen.getByRole("group", { name: "default_band_ids" });
+    expect(within(group).getByText("Poppin'Party V3")).toBeInTheDocument();
+    expect(within(group).queryByText(/当前版本/)).not.toBeInTheDocument();
+    expect(within(group).queryByText(/Poppin'Party · Poppin'Party V3/)).not.toBeInTheDocument();
   });
 
   // 测试点：活动类型应在已选默认 Band 下复用成员二级复选列表，并回传具体成员切换。
