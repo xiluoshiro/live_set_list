@@ -1,69 +1,94 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>演出详情复杂场景预览</title>
-    <link rel="stylesheet" href="../../../../frontend/src/styles/theme.css" />
-    <link rel="stylesheet" href="../../../../frontend/src/styles/base.css" />
+    <meta
+      name="description"
+      content="LiveSetList 演出详情复杂场景预览，展示完整歌单与参与摘录两类数据语义。"
+    />
+    <title>LiveSetList · 演出详情动态预览</title>
     <link rel="stylesheet" href="./preview.css" />
   </head>
   <body>
+    <a class="skip-link" href="#setlist-content">跳到歌单</a>
+    <div class="page-progress" aria-hidden="true"></div>
+
     <header class="site-topbar">
       <a class="site-brand" href="#preview" aria-label="返回演出详情预览顶部">
         <span class="brand-mark" aria-hidden="true">★</span>
-        <span>BanG Dream! Live 资料库</span>
+        <span class="brand-copy">
+          <strong>LiveSetList</strong>
+          <small>BanG Dream! Live Archive</small>
+        </span>
       </a>
+
       <nav class="top-nav" aria-label="主导航">
-        <span class="active">演出资料</span>
-        <span>巡演资料</span>
-        <span>数据统计</span>
-        <span>乐队浏览</span>
+        <a class="active" href="#setlist-content">演出资料</a>
+        <a href="#detail-aside">巡演资料</a>
+        <a href="#detail-aside">数据统计</a>
+        <a href="#detail-aside">乐队浏览</a>
       </nav>
-      <button class="icon-action theme-toggle" type="button" aria-label="切换深浅主题" title="切换深浅主题">
+
+      <button class="text-action theme-toggle" type="button" aria-label="切换为亮色主题">
         <span aria-hidden="true">◐</span>
+        <span class="theme-label">亮色</span>
       </button>
     </header>
 
-    <div class="preview-toolbar" id="preview">
-      <div>
-        <strong>演出详情复杂场景预览</strong>
-        <span>真实生产数据样例，独立设计稿</span>
-      </div>
-      <div class="segmented scenario-toggle" role="group" aria-label="预览场景">
-        <button type="button" data-scenario="full" class="active" aria-pressed="true">完整歌单</button>
-        <button type="button" data-scenario="extract" aria-pressed="false">参与摘录</button>
-      </div>
-    </div>
-
-    <main class="preview-shell">
+    <main id="preview">
       <section class="detail-hero" aria-labelledby="live-title">
-        <div class="hero-head">
-          <button class="icon-action back-action" type="button" aria-label="返回列表" title="返回列表">←</button>
-          <div class="hero-title-wrap">
-            <h1 id="live-title"></h1>
-            <a class="source-link" href="#source" aria-label="打开资料来源" title="打开资料来源">↗</a>
+        <div class="hero-stage">
+          <div class="hero-kicker">
+            <button class="back-action" type="button">返回演出列表</button>
+            <span>EVENT DETAIL</span>
           </div>
-          <div class="hero-actions">
-            <button class="icon-action favorite-action" type="button" aria-label="加入收藏" title="加入收藏">♡</button>
-            <button class="icon-action more-action" type="button" aria-label="更多操作" title="更多操作">•••</button>
+
+          <div class="hero-heading">
+            <div class="hero-title-wrap">
+              <p>BanG Dream! LIVE ARCHIVE</p>
+              <h1 id="live-title"></h1>
+            </div>
+            <a class="source-link" href="#coverage-strip">资料来源</a>
           </div>
+
+          <div class="hero-actions" aria-label="演出操作">
+            <button class="favorite-action" type="button" aria-pressed="false">收藏演出</button>
+            <button class="more-action" type="button" aria-expanded="false" aria-controls="band-popover">更多操作</button>
+          </div>
+
+          <div class="hero-meta" id="hero-meta"></div>
         </div>
 
-        <div class="hero-meta" id="hero-meta"></div>
         <div class="coverage-strip" id="coverage-strip"></div>
       </section>
 
-      <section class="content-controls" aria-label="歌单显示设置">
-        <div class="control-group">
-          <span class="control-label">内容范围</span>
-          <div class="segmented scope-toggle" role="group" aria-label="内容范围"></div>
+      <section class="control-dock" aria-label="预览和歌单显示设置">
+        <div class="control-intro">
+          <strong>探索演出记录</strong>
+          <span>切换数据场景、内容范围与阅读方式</span>
         </div>
-        <div class="control-group">
-          <span class="control-label">展示方式</span>
-          <div class="segmented view-toggle" role="group" aria-label="展示方式">
-            <button type="button" data-view="timeline" class="active" aria-pressed="true">章节歌单</button>
-            <button type="button" data-view="table" aria-pressed="false">紧凑表格</button>
+
+        <div class="control-cluster">
+          <div class="control-group">
+            <span class="control-label">数据场景</span>
+            <div class="segmented scenario-toggle" role="group" aria-label="预览场景">
+              <button type="button" data-scenario="full" class="active" aria-pressed="true">完整歌单</button>
+              <button type="button" data-scenario="extract" aria-pressed="false">参与摘录</button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <span class="control-label">内容范围</span>
+            <div class="segmented scope-toggle" role="group" aria-label="内容范围"></div>
+          </div>
+
+          <div class="control-group">
+            <span class="control-label">阅读方式</span>
+            <div class="segmented view-toggle" role="group" aria-label="阅读方式">
+              <button type="button" data-view="timeline" class="active" aria-pressed="true">舞台流程</button>
+              <button type="button" data-view="table" aria-pressed="false">数据表格</button>
+            </div>
           </div>
         </div>
       </section>
@@ -87,7 +112,7 @@
             <span class="drawer-code" id="drawer-code"></span>
             <h2 id="drawer-title"></h2>
           </div>
-          <button class="icon-action drawer-close" type="button" aria-label="关闭出演详情">×</button>
+          <button class="drawer-close" type="button" aria-label="关闭出演详情">关闭</button>
         </div>
         <div class="drawer-body" id="drawer-body"></div>
       </aside>

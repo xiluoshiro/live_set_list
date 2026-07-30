@@ -373,8 +373,10 @@ function renderScopeToggle() {
   `;
   scopeToggle.querySelectorAll("[data-scope]").forEach((button) => {
     button.addEventListener("click", () => {
-      activeScope = button.dataset.scope;
-      render();
+      transitionRender(() => {
+        activeScope = button.dataset.scope;
+        render();
+      });
     });
   });
 }
@@ -425,6 +427,8 @@ function renderActBlock(block, index) {
     <section
       class="act-block ${isCollab ? "collaboration-block" : ""} ${isAllCast ? "all-cast-block" : ""}"
       id="block-${index}"
+      data-block-label="${htmlEscape(label)}"
+      data-block-range="${htmlEscape(blockRange(block))}"
       style="--band-color:${color}"
     >
       <header class="act-block-head">
@@ -499,6 +503,8 @@ function renderExtractTimeline() {
     section.querySelector(".song-row").outerHTML = renderSongRow(item, { bandIds: item.bandIds, kind: block.kind });
     if (item.code === "M43") {
       section.style.setProperty("--band-color", "#d7832f");
+      section.dataset.blockLabel = "FINALE COLLABORATION";
+      section.dataset.blockRange = "M43";
       section.querySelector(".act-title strong").textContent = "FINALE COLLABORATION";
       section.querySelector(".act-title span").textContent = "RAISE A SUILEN 与其他出演 12项";
     }
@@ -566,6 +572,11 @@ function renderTable() {
 function renderAside() {
   if (activeScenario === "extract") {
     asideElement.innerHTML = `
+      <section class="aside-panel performance-position" style="--active-band:${bands[6].color}">
+        <span>CURRENT SECTION</span>
+        <strong id="active-block-name">${activeView === "table" ? "数据表格" : "RAISE A SUILEN"}</strong>
+        <small id="active-block-range">${activeView === "table" ? "全部已收录曲目" : "M12"}</small>
+      </section>
       <section class="aside-panel">
         <h2>参与概览</h2>
         <div class="overview-grid">
@@ -589,7 +600,23 @@ function renderAside() {
   const visibleBlocks = activeScope === "ras"
     ? fullBlocks.map((block, index) => ({ block, index })).filter(({ block }) => block.bandIds.includes(6))
     : fullBlocks.map((block, index) => ({ block, index }));
+  const firstVisible = visibleBlocks[0];
+  const firstLabel = firstVisible.block.kind === "all_cast"
+    ? "All Cast Finale"
+    : firstVisible.block.kind === "collaboration"
+      ? "Collaboration"
+      : bands[firstVisible.block.bandIds[0]].name;
+  const firstColor = firstVisible.block.kind === "all_cast"
+    ? "#f31864"
+    : firstVisible.block.kind === "collaboration"
+      ? "#7a5bc7"
+      : bands[firstVisible.block.bandIds[0]].color;
   asideElement.innerHTML = `
+    <section class="aside-panel performance-position" style="--active-band:${firstColor}">
+      <span>CURRENT SECTION</span>
+      <strong id="active-block-name">${htmlEscape(activeView === "table" ? "数据表格" : firstLabel)}</strong>
+      <small id="active-block-range">${htmlEscape(activeView === "table" ? "全部可见曲目" : blockRange(firstVisible.block))}</small>
+    </section>
     <section class="aside-panel">
       <h2>演出概览</h2>
       <div class="overview-grid">
@@ -647,10 +674,10 @@ function performerEntry({ name, members = [], status = "", bandId = null, missin
       <span class="performer-logo">${logo}</span>
       <span class="performer-copy">
         <strong>${htmlEscape(name)}</strong>
-        ${members.length ? `<span>${members.map(htmlEscape).join(" · ")}</span>` : ""}
+        ${members.length ? `<span>${members.map(htmlEscape).join(" / ")}</span>` : ""}
         ${
           missing.length
-            ? `<button class="missing-disclosure" type="button" data-missing="${encodeURIComponent(missing.join(" · "))}">未参加 ${missing.length}人，展开查看</button>`
+            ? `<button class="missing-disclosure" type="button" data-missing="${encodeURIComponent(missing.join(" / "))}">未参加 ${missing.length}人，展开查看</button>`
             : ""
         }
       </span>
@@ -755,43 +782,154 @@ function render() {
   afterRender();
 }
 
+const motionQuery = window.matchMedia("(prefers-reduced-motion: no-preference)");
+let activeBlockObserver = null;
+
+function transitionRender(update) {
+  if (!motionQuery.matches || typeof document.startViewTransition !== "function") {
+    update();
+    return;
+  }
+  document.startViewTransition(update);
+}
+
+function prepareReveal() {
+  if (!motionQuery.matches) return;
+
+  const contentItems = [
+    ...contentElement.querySelectorAll(".act-block, .gap-marker, .compact-table-wrap"),
+    ...asideElement.querySelectorAll(".aside-panel"),
+  ];
+  contentItems.forEach((element, index) => {
+    element.classList.add("reveal");
+    element.style.setProperty("--reveal-delay", `${Math.min(index, 5) * 45}ms`);
+    element.addEventListener(
+      "animationend",
+      () => {
+        element.classList.remove("reveal");
+        element.style.removeProperty("--reveal-delay");
+      },
+      { once: true },
+    );
+  });
+}
+
+function prepareActiveBlockTracking() {
+  if (activeBlockObserver) activeBlockObserver.disconnect();
+  const blocks = [...contentElement.querySelectorAll(".act-block")];
+  if (!blocks.length) return;
+
+  const nameElement = asideElement.querySelector("#active-block-name");
+  const rangeElement = asideElement.querySelector("#active-block-range");
+  const positionElement = asideElement.querySelector(".performance-position");
+
+  activeBlockObserver = new IntersectionObserver(
+    (entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((left, right) => Math.abs(left.boundingClientRect.top) - Math.abs(right.boundingClientRect.top));
+      if (!visible.length) return;
+
+      const current = visible[0].target;
+      blocks.forEach((block) => block.classList.toggle("is-current", block === current));
+      asideElement.querySelectorAll(".aside-index a").forEach((link) => {
+        link.classList.toggle("is-active", link.getAttribute("href") === `#${current.id}`);
+      });
+      if (nameElement) nameElement.textContent = current.dataset.blockLabel ?? "歌单区段";
+      if (rangeElement) rangeElement.textContent = current.dataset.blockRange ?? "";
+      if (positionElement) {
+        positionElement.style.setProperty(
+          "--active-band",
+          current.style.getPropertyValue("--band-color") || "var(--accent)",
+        );
+      }
+    },
+    { rootMargin: "-24% 0px -58% 0px", threshold: 0 },
+  );
+
+  blocks.forEach((block) => activeBlockObserver.observe(block));
+}
+
+function afterRender() {
+  prepareReveal();
+  prepareActiveBlockTracking();
+}
+
+function syncThemeButton() {
+  const root = document.documentElement;
+  const button = document.querySelector(".theme-toggle");
+  const label = button.querySelector(".theme-label");
+  const nextIsLight = root.dataset.theme === "dark";
+  label.textContent = nextIsLight ? "亮色" : "深色";
+  button.setAttribute("aria-label", `切换为${nextIsLight ? "亮色" : "深色"}主题`);
+}
+
 document.querySelectorAll("[data-scenario]").forEach((button) => {
   button.addEventListener("click", () => {
-    activeScenario = button.dataset.scenario;
-    activeScope = "all";
-    document.querySelectorAll("[data-scenario]").forEach((item) => {
-      const active = item === button;
-      item.classList.toggle("active", active);
-      item.setAttribute("aria-pressed", String(active));
+    transitionRender(() => {
+      activeScenario = button.dataset.scenario;
+      activeScope = "all";
+      document.querySelectorAll("[data-scenario]").forEach((item) => {
+        const active = item === button;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-pressed", String(active));
+      });
+      render();
     });
-    render();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    document.querySelector(".detail-hero").scrollIntoView({
+      behavior: motionQuery.matches ? "smooth" : "auto",
+      block: "start",
+    });
   });
 });
 
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
-    activeView = button.dataset.view;
-    document.querySelectorAll("[data-view]").forEach((item) => {
-      const active = item === button;
-      item.classList.toggle("active", active);
-      item.setAttribute("aria-pressed", String(active));
+    transitionRender(() => {
+      activeView = button.dataset.view;
+      document.querySelectorAll("[data-view]").forEach((item) => {
+        const active = item === button;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-pressed", String(active));
+      });
+      render();
     });
-    render();
   });
 });
 
 document.querySelector(".theme-toggle").addEventListener("click", () => {
-  const root = document.documentElement;
-  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+  transitionRender(() => {
+    const root = document.documentElement;
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    syncThemeButton();
+  });
 });
 
 document.querySelector(".favorite-action").addEventListener("click", (event) => {
   const button = event.currentTarget;
-  const active = button.textContent === "♥";
-  button.textContent = active ? "♡" : "♥";
-  button.setAttribute("aria-label", active ? "加入收藏" : "取消收藏");
-  button.style.color = active ? "" : "var(--accent-primary)";
+  const active = button.getAttribute("aria-pressed") === "true";
+  button.setAttribute("aria-pressed", String(!active));
+  button.textContent = active ? "收藏演出" : "取消收藏";
+});
+
+const moreButton = document.querySelector(".more-action");
+const popover = document.querySelector("#band-popover");
+
+moreButton.addEventListener("click", () => {
+  const expanded = moreButton.getAttribute("aria-expanded") === "true";
+  moreButton.setAttribute("aria-expanded", String(!expanded));
+  if (expanded) {
+    popover.hidden = true;
+    return;
+  }
+  const rect = moreButton.getBoundingClientRect();
+  popover.innerHTML = `
+    <strong>关于这份预览</strong>
+    <span>完整歌单与参与摘录使用不同的数据语义，未收录区段不会被误写成折叠内容。</span>
+  `;
+  popover.style.top = `${Math.min(rect.bottom + 10, window.innerHeight - 150)}px`;
+  popover.style.right = `${Math.max(12, window.innerWidth - rect.right)}px`;
+  popover.hidden = false;
 });
 
 drawer.querySelector(".drawer-close").addEventListener("click", closeDrawer);
@@ -799,135 +937,38 @@ drawerMask.addEventListener("click", (event) => {
   if (event.target === drawerMask) closeDrawer();
 });
 
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !drawerMask.hidden) closeDrawer();
+document.addEventListener("click", (event) => {
+  if (popover.hidden || event.target === moreButton || popover.contains(event.target)) return;
+  popover.hidden = true;
+  moreButton.setAttribute("aria-expanded", "false");
 });
 
-/* ============================================================
-   Motion layer (2026-07-30)
-   视口渐入 / 按钮涟漪 / 滚动视差 / 顶栏阴影 / Hero 星光。
-   全部 honoring prefers-reduced-motion；动画仅 transform/opacity。
-   滚动监听采用 passive + rAF 节流，只写 CSS 变量（视差无法用
-   IntersectionObserver 表达，无框架场景下这是最小实现）。
-   ============================================================ */
-
-const motionOK = window.matchMedia("(prefers-reduced-motion: no-preference)").matches;
-
-/* ---------- 视口渐入：IO 触发，stagger 由组内索引决定 ---------- */
-
-const revealObserver = motionOK
-  ? new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          const el = entry.target;
-          el.classList.add("is-visible");
-          revealObserver.unobserve(el);
-          // 过渡结束后移除类，避免 reveal 的 transition-delay 干扰后续悬停过渡
-          el.addEventListener("transitionend", function done(event) {
-            if (event.propertyName !== "transform") return;
-            el.removeEventListener("transitionend", done);
-            el.classList.remove("reveal", "is-visible");
-            el.style.removeProperty("--reveal-delay");
-          });
-        });
-      },
-      { threshold: 0.12, rootMargin: "0px 0px -6% 0px" },
-    )
-  : null;
-
-function prepareReveal() {
-  if (!revealObserver) return;
-  const groups = [
-    [document.querySelector(".detail-hero"), document.querySelector(".content-controls")],
-    [...contentElement.querySelectorAll(".act-block, .gap-marker, .compact-table-wrap")],
-    ...[...asideElement.querySelectorAll(".aside-panel")].map((panel) => [panel]),
-  ];
-  groups.forEach((group) => {
-    group.filter(Boolean).forEach((el, index) => {
-      el.classList.add("reveal");
-      el.style.setProperty("--reveal-delay", `${Math.min(index, 6) * 55}ms`);
-      revealObserver.observe(el);
-    });
-  });
-}
-
-/* ---------- 按钮涟漪：事件委托，键盘触发时居中 ---------- */
-
-const RIPPLE_SELECTOR = ".icon-action, .segmented button, .song-row, .aside-index a, .missing-disclosure";
-
-if (motionOK) {
-  document.addEventListener("click", (event) => {
-    const host = event.target.closest(RIPPLE_SELECTOR);
-    if (!(host instanceof HTMLElement) || host.disabled) return;
-    const rect = host.getBoundingClientRect();
-    const isKeyboard = event.detail === 0;
-    const x = isKeyboard ? rect.width / 2 : event.clientX - rect.left;
-    const y = isKeyboard ? rect.height / 2 : event.clientY - rect.top;
-    const size = Math.max(rect.width, rect.height) * 2;
-    const ripple = document.createElement("span");
-    ripple.className = "ripple";
-    ripple.setAttribute("aria-hidden", "true");
-    ripple.style.width = ripple.style.height = `${size}px`;
-    ripple.style.left = `${x - size / 2}px`;
-    ripple.style.top = `${y - size / 2}px`;
-    host.appendChild(ripple);
-    ripple.addEventListener("animationend", () => ripple.remove(), { once: true });
-  });
-}
-
-/* ---------- 滚动视差 + 顶栏投影 ---------- */
-
-const heroSection = document.querySelector(".detail-hero");
-const topbar = document.querySelector(".site-topbar");
-let scrollTicking = false;
-
-function updateScrollFx() {
-  const y = window.scrollY;
-  topbar.classList.toggle("is-scrolled", y > 8);
-  if (motionOK && heroSection) {
-    heroSection.style.setProperty("--hero-shift", `${Math.min(y * 0.18, 60)}px`);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    if (!drawerMask.hidden) closeDrawer();
+    if (!popover.hidden) {
+      popover.hidden = true;
+      moreButton.setAttribute("aria-expanded", "false");
+      moreButton.focus();
+    }
+    return;
   }
-  scrollTicking = false;
-}
 
-window.addEventListener(
-  "scroll",
-  () => {
-    if (scrollTicking) return;
-    scrollTicking = true;
-    requestAnimationFrame(updateScrollFx);
-  },
-  { passive: true },
-);
-updateScrollFx();
+  if (event.key !== "Tab" || drawerMask.hidden) return;
+  const focusable = [...drawer.querySelectorAll("button, a[href], [tabindex]:not([tabindex='-1'])")].filter(
+    (element) => !element.disabled && element.offsetParent !== null,
+  );
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
 
-/* ---------- Hero 星光（BanG Dream! キラキラ 母题，纯装饰） ---------- */
-
-if (motionOK && heroSection) {
-  const SPARKS = [
-    { top: "14%", right: "11%", size: 14, delay: 0 },
-    { top: "60%", right: "5%", size: 9, delay: 1.3 },
-    { top: "30%", left: "3.5%", size: 11, delay: 2.2 },
-  ];
-  SPARKS.forEach(({ top, right, left, size, delay }) => {
-    const spark = document.createElement("span");
-    spark.className = "hero-sparkle";
-    spark.textContent = "✦";
-    spark.setAttribute("aria-hidden", "true");
-    spark.style.top = top;
-    if (right) spark.style.right = right;
-    if (left) spark.style.left = left;
-    spark.style.setProperty("--spark-size", `${size}px`);
-    spark.style.setProperty("--spark-delay", `${delay}s`);
-    heroSection.appendChild(spark);
-  });
-}
-
-/* ---------- render 后的动效钩子 ---------- */
-
-function afterRender() {
-  prepareReveal();
-}
-
+syncThemeButton();
 render();
