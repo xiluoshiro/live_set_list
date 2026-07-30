@@ -167,7 +167,7 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
 
     with patch("app.routers.console_read.get_db_connection", side_effect=[songs_conn, bands_conn, venues_conn]):
         client = TestClient(app)
-        songs_response = client.get("/api/console/songs?q=BanG&limit=10&page=1")
+        songs_response = client.get("/api/console/songs?q=BanG&band_id=1&limit=10&page=1")
         bands_response = client.get("/api/console/bands?q=rsl&limit=10")
         venues_response = client.get("/api/console/venues?q=Zepp&limit=10")
 
@@ -269,6 +269,7 @@ def test_console_live_edit_reads_candidates_and_detail():
         "/api/console/venues?limit=101",
         "/api/console/songs?limit=abc",
         "/api/console/songs?page=0",
+        "/api/console/songs?band_id=-1",
     ],
 )
 def test_console_lookup_mock_rejects_invalid_limit(path: str):

@@ -277,7 +277,8 @@
 }
 
 .tour-admin-toolbar select,
-.tour-candidate-search input {
+.tour-candidate-search input,
+.tour-candidate-search select {
   min-width: min(420px, 100%);
 }
 
@@ -405,6 +406,7 @@
 .tour-admin-fields textarea,
 .tour-admin-fields select,
 .tour-candidate-search input,
+.tour-candidate-search select,
 .tour-stop-table input,
 .tour-admin-toolbar select {
   border: 1px solid var(--border-strong);
@@ -1039,6 +1041,12 @@
 
 .song-candidate-col-cover {
   width: 72px;
+}
+
+.tour-candidate-search .song-band-filter {
+  flex: 0 1 240px;
+  width: min(240px, 100%);
+  min-width: min(240px, 100%);
 }
 
 @media (max-width: 720px) {

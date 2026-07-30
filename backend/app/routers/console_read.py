@@ -499,7 +499,7 @@ def get_editable_live_setlist(
     "/songs",
     response_model=ConsoleSongListResponse,
     summary="查询歌曲候选",
-    description="`editor+` 用户查询控制台录入时可选择的歌曲。`q` 为空时返回默认候选列表。",
+    description="`editor+` 用户查询控制台录入时可选择的歌曲。支持按歌名前缀和归属 Band 筛选。",
     responses={
         401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
         403: {"model": AuthErrorResponse, "description": "缺少权限"},
@@ -512,11 +512,14 @@ def list_songs(
     q: str | None = Query(default=None, max_length=255, description="Song title prefix"),
     limit: int = Query(default=20, ge=1, le=100, description="Maximum number of songs to return"),
     page: int = Query(default=1, ge=1, description="Result page"),
+    band_id: int | None = Query(default=None, ge=0, description="Owning band_attrs.id"),
     _: Any = Depends(require_role("editor")),
 ):
     """Return song_list rows for the console song selector without mutating any data."""
     query_text = _normalize_lookup_query(q)
     normalized_query_text = normalize_song_lookup_text(query_text)
+    band_filter_sql = " AND band_id = %s" if band_id is not None else ""
+    band_filter_params = (band_id,) if band_id is not None else ()
 
     try:
         with get_db_connection() as conn:
@@ -572,11 +575,16 @@ def list_songs(
                         {normalized_song_list_sql}
                         SELECT COUNT(*)
                         FROM normalized_song_list
-                        WHERE song_name ILIKE %s ESCAPE '\\'
-                           OR normalized_song_name ILIKE %s ESCAPE '\\'
+                        WHERE (
+                            song_name ILIKE %s ESCAPE '\\'
+                            OR normalized_song_name ILIKE %s ESCAPE '\\'
+                        )
+                        {band_filter_sql}
                         """,
-                        (*normalization_params, *prefix_params),
+                        (*normalization_params, *prefix_params, *band_filter_params),
                     )
+                elif band_id is not None:
+                    cur.execute("SELECT COUNT(*) FROM song_list WHERE band_id = %s", (band_id,))
                 else:
                     cur.execute("SELECT COUNT(*) FROM song_list")
                 total_row = cur.fetchone()
@@ -591,8 +599,11 @@ def list_songs(
                         {normalized_song_list_sql}
                         SELECT id, song_name, band_id, is_cover, band_name
                         FROM normalized_song_list
-                        WHERE song_name ILIKE %s ESCAPE '\\'
-                           OR normalized_song_name ILIKE %s ESCAPE '\\'
+                        WHERE (
+                            song_name ILIKE %s ESCAPE '\\'
+                            OR normalized_song_name ILIKE %s ESCAPE '\\'
+                        )
+                        {band_filter_sql}
                         ORDER BY
                             CASE
                                 WHEN song_name ILIKE %s ESCAPE '\\' THEN 0
@@ -606,11 +617,24 @@ def list_songs(
                         (
                             *normalization_params,
                             *prefix_params,
+                            *band_filter_params,
                             _build_exact_lookup_pattern(query_text),
                             _build_exact_lookup_pattern(normalized_query_text),
                             limit,
                             offset,
                         ),
+                    )
+                elif band_id is not None:
+                    cur.execute(
+                        """
+                        SELECT s.id, s.song_name, s.band_id, s.is_cover, b.band_name
+                        FROM song_list AS s
+                        JOIN band_attrs AS b ON b.id = s.band_id
+                        WHERE s.band_id = %s
+                        ORDER BY s.song_name, s.id
+                        LIMIT %s OFFSET %s
+                        """,
+                        (band_id, limit, offset),
                     )
                 else:
                     cur.execute(
@@ -625,15 +649,33 @@ def list_songs(
                     )
                 rows = cur.fetchall()
     except QueryCanceled as exc:
-        logger.exception("list_songs timeout q=%s limit=%s page=%s", query_text, limit, page)
+        logger.exception(
+            "list_songs timeout q=%s band_id=%s limit=%s page=%s",
+            query_text,
+            band_id,
+            limit,
+            page,
+        )
         raise HTTPException(status_code=504, detail="Database query timeout") from exc
     except OperationalError as exc:
-        logger.exception("list_songs operational error q=%s limit=%s page=%s", query_text, limit, page)
+        logger.exception(
+            "list_songs operational error q=%s band_id=%s limit=%s page=%s",
+            query_text,
+            band_id,
+            limit,
+            page,
+        )
         if "timeout expired" in str(exc).lower():
             raise HTTPException(status_code=504, detail="Database connection timeout") from exc
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     except Error as exc:
-        logger.exception("list_songs failed q=%s limit=%s page=%s", query_text, limit, page)
+        logger.exception(
+            "list_songs failed q=%s band_id=%s limit=%s page=%s",
+            query_text,
+            band_id,
+            limit,
+            page,
+        )
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
     return {

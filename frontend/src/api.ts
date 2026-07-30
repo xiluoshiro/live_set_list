@@ -1217,7 +1217,7 @@ export async function favoriteLivesBatch(
   return expectJsonResponse<FavoriteBatchResponse>(response);
 }
 
-function consoleLookupQuery(q?: string, limit = 20, page?: number): string {
+function consoleLookupQuery(q?: string, limit = 20, page?: number, bandId?: number): string {
   const query = new URLSearchParams({
     limit: String(limit),
   });
@@ -1228,11 +1228,19 @@ function consoleLookupQuery(q?: string, limit = 20, page?: number): string {
   if (page !== undefined) {
     query.set("page", String(page));
   }
+  if (bandId !== undefined) {
+    query.set("band_id", String(bandId));
+  }
   return query.toString();
 }
 
-export async function getConsoleSongs(q?: string, limit = 20, page?: number): Promise<ConsoleSongListResponse> {
-  const response = await fetchWithTimeout(`${BASE_URL}/api/console/songs?${consoleLookupQuery(q, limit, page)}`, undefined, {
+export async function getConsoleSongs(
+  q?: string,
+  limit = 20,
+  page?: number,
+  bandId?: number,
+): Promise<ConsoleSongListResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/songs?${consoleLookupQuery(q, limit, page, bandId)}`, undefined, {
     requestKind: "console_songs",
   });
   return expectJsonResponse<ConsoleSongListResponse>(response);
