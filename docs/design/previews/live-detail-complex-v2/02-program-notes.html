@@ -234,12 +234,6 @@
         overflow-wrap: anywhere;
       }
 
-      .cover.is-long-title h1 {
-        max-width: 23ch;
-        font-size: clamp(2.65rem, 4.8vw, 5.4rem);
-        line-height: 0.96;
-      }
-
       .cover-summary {
         max-width: 39rem;
         margin: 0;
@@ -984,8 +978,7 @@
           border-bottom: 1px solid var(--ink);
         }
 
-        .cover h1,
-        .cover.is-long-title h1 {
+        .cover h1 {
           max-width: 19ch;
           margin: 0;
           font-size: clamp(2.55rem, 10vw, 4.4rem);
@@ -1322,7 +1315,7 @@
           <div class="notes-inner">
             <div class="notes-head">
               <p class="notes-label">TRACK DATA</p>
-              <button class="notes-close" id="notes-close" type="button">关闭</button>
+              <button class="notes-close" id="notes-close" type="button">返回歌单</button>
             </div>
             <p class="notes-code" id="notes-code"></p>
             <h3 id="notes-title"></h3>
@@ -1573,7 +1566,7 @@
           date: "2024-11-23",
           title: "ANIMAX MUSIX 2024 FALL",
           series: "ANIMAX MUSIX",
-          summary: "数据库收录 8 曲并保留 M19 至 M72 的原始序号；终曲含 2 个版本化 Band 与 20 组其他出演。",
+          summary: "数据库收录 8 曲并保留 M19 至 M72 的原始序号；终曲含 2 个本地 Band 与 20 组其他出演。",
           contentsSummary: "8 曲按原始 absolute_order 排列；编号缺口来自活动中未纳入当前收录范围的曲目，并非页面漏排。",
           programSummary: "展示数据库收录的 8 曲，保留活动原始编号。M19 至 M72 之间的缺号不做重新编号。",
           venue: "横浜アリーナ",
@@ -1619,14 +1612,15 @@
             },
             {
               title: "Cross-over",
-              range: "M51 / M72",
-              note: "部分出演与 20 组终曲名录",
+              range: "M51, M72",
+              note: "外部两组合唱 / 外部全员合唱",
               songs: [
                 {
                   code: "M51",
                   title: "私は最強",
                   performers: ["Poppin'Party"],
                   otherMembers: [{ key: "鈴木このみ", value: [] }],
+                  collaboration: "external-2",
                   tags: ["翻唱", "部分出演"],
                   note: "Poppin'Party 仅记录愛美出演；其他出演为鈴木このみ。",
                 },
@@ -1634,6 +1628,7 @@
                   code: "M72",
                   title: "only my railgun",
                   performers: ["Poppin'Party", "Ave Mujica"],
+                  collaboration: "external-all",
                   otherMembers: [
                     { key: "ASCA", value: [] },
                     { key: "ASOBI同盟", value: ["とくみくす", "りみー"] },
@@ -1666,7 +1661,7 @@
                     { key: "鈴木愛奈", value: [] },
                   ],
                   tags: ["翻唱", "联合终章"],
-                  note: "版本化 Band 保留为 Poppin'Party 与 Ave Mujica；20 组其他出演以独立名录按需展开。",
+                  note: "Poppin'Party 与 Ave Mujica 作为本地 Band 收录；20 组其他出演以独立名录按需展开。",
                 },
               ],
             },
@@ -1901,6 +1896,36 @@
         return `${performers.length} 组联合出演`;
       }
 
+      const collaborationLabels = {
+        "internal-2": {
+          short: "内部 2 组",
+          label: "内部两组合唱",
+        },
+        "internal-3-4": {
+          short: "内部 3-4 组",
+          label: "内部 3-4 组合唱",
+        },
+        "external-2": {
+          short: "外部 2 组",
+          label: "外部两组合唱",
+        },
+        "external-all": {
+          short: "外部全员",
+          label: "外部全员合唱",
+        },
+      };
+
+      function collaborationSpec(track) {
+        if (track.collaboration && collaborationLabels[track.collaboration]) {
+          return collaborationLabels[track.collaboration];
+        }
+        if (track.performers.length === 2) return collaborationLabels["internal-2"];
+        if (track.performers.length >= 3 && track.performers.length <= 4) {
+          return collaborationLabels["internal-3-4"];
+        }
+        return null;
+      }
+
       function rosterListMarkup(items) {
         const rows = items
           .map((item) => {
@@ -1927,20 +1952,26 @@
 
       function performerMarkup(performers) {
         if (performers.length <= 3) {
-          return `<p class="detail-copy"><strong>版本化 Band：</strong>${escapeHtml(performers.join(" / "))}</p>`;
+          return `<p class="detail-copy"><strong>演出 Band：</strong>${escapeHtml(performers.join(" / "))}</p>`;
         }
 
         const preview = performers.slice(0, 2).join(" / ");
         const items = performers.map((performer) => ({ key: performer, value: [] }));
         return `
           <p class="roster-summary">
-            <strong>版本化 Band：</strong>${escapeHtml(preview)}，另 ${performers.length - 2} 组
+            <strong>演出 Band：</strong>${escapeHtml(preview)}，另 ${performers.length - 2} 组
           </p>
           <details class="roster-disclosure">
-            <summary><span>展开完整 Band 名录（${performers.length} 组）</span></summary>
+            <summary><span>展开完整演出 Band（${performers.length} 组）</span></summary>
             ${rosterListMarkup(items)}
           </details>
         `;
+      }
+
+      function collaborationMarkup(track) {
+        const spec = collaborationSpec(track);
+        if (!spec) return "";
+        return `<p class="collaboration-spec"><strong>合唱规格：</strong>${escapeHtml(spec.label)}</p>`;
       }
 
       function otherMemberMarkup(otherMembers = []) {
@@ -1996,6 +2027,7 @@
             ? `<p class="detail-copy">本条没有额外阵容或版本备注。</p>`
             : "";
         return [
+          collaborationMarkup(track),
           performerMarkup(track.performers),
           noteLine,
           otherMemberMarkup(track.otherMembers),
@@ -2020,6 +2052,7 @@
 
         elements.notesCode.textContent = track.code;
         elements.notesTitle.textContent = track.title;
+        elements.notes.style.setProperty("--detail-color", bandColor(track.performers[0]));
         elements.notesBody.innerHTML = detailBodyMarkup(track);
         elements.notesTags.innerHTML = (track.tags ?? [])
           .map((tag) => `<span class="detail-tag">${escapeHtml(tag)}</span>`)
@@ -2079,11 +2112,11 @@
           article.innerHTML = `
             <div class="chapter-main">
               <header class="chapter-head">
-                <div>
+                <div class="chapter-title-line">
                   <h3>${escapeHtml(chapter.title)}</h3>
-                  <p>${escapeHtml(chapter.note)}</p>
+                  <span class="chapter-range">${escapeHtml(chapter.range)}</span>
                 </div>
-                <span class="chapter-range">${escapeHtml(chapter.range)}</span>
+                <p>${escapeHtml(chapter.note)}</p>
               </header>
               <div class="tracks"></div>
             </div>
@@ -2096,11 +2129,14 @@
             row.dataset.bandCount = String(track.performers.length);
             row.style.setProperty("--track-primary", bandColor(track.performers[0]));
             const otherCount = (track.otherMembers ?? []).length;
-            const tagsText = otherCount > 0
-              ? `其他 ${otherCount}`
-              : (track.tags ?? []).length > 0
-                ? track.tags.join(" / ")
-                : "查看";
+            const collaboration = collaborationSpec(track);
+            const tagsText = collaboration
+              ? collaboration.short
+              : otherCount > 0
+                ? `其他 ${otherCount}`
+                : (track.tags ?? []).length > 0
+                  ? track.tags.join(" / ")
+                  : "查看";
             row.innerHTML = `
               <button class="track-main" type="button" aria-expanded="false">
                 ${bandRailMarkup(track.performers)}
@@ -2166,7 +2202,6 @@
         elements.book.setAttribute("aria-labelledby", selectedButton?.id ?? "");
         selectedButton?.scrollIntoView({ block: "nearest", inline: "nearest" });
 
-        elements.cover.classList.toggle("is-long-title", scenario.title.length >= 40);
         elements.series.textContent = scenario.series;
         elements.title.textContent = scenario.title;
         elements.summary.textContent = scenario.summary;
@@ -2174,8 +2209,16 @@
           .map((reference) => `<span>${escapeHtml(reference)}</span>`)
           .join("");
         elements.references.hidden = scenario.references.length === 0;
-        elements.dateDay.innerHTML = `${month}<br />${day}`;
-        elements.dateYear.innerHTML = `${year}<br />${escapeHtml(scenario.statusLabel)}`;
+        elements.dateDay.setAttribute("aria-label", `${Number(month)} 月 ${Number(day)} 日`);
+        elements.dateDay.innerHTML = `
+          <span>${month}</span>
+          <span class="date-separator" aria-hidden="true">/</span>
+          <span>${day}</span>
+        `;
+        elements.dateYear.innerHTML = `
+          <span>${year}</span>
+          <span>${escapeHtml(scenario.statusLabel)}</span>
+        `;
         elements.venue.textContent = scenario.venue;
         elements.opening.textContent = scenario.opening;
         elements.start.textContent = scenario.start;
@@ -2261,6 +2304,12 @@
 
       elements.notesClose.addEventListener("click", () => {
         clearTrackSelection({ restoreFocus: true });
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && activeTrackButton) {
+          clearTrackSelection({ restoreFocus: true });
+        }
       });
 
       elements.share.addEventListener("click", async () => {
