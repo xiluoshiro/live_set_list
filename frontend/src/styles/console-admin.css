@@ -1291,6 +1291,10 @@
   font-weight: 600;
 }
 
+.band-member-block > .console-admin-hint {
+  margin-bottom: 0;
+}
+
 .band-member-mode-controls {
   margin: 8px 0 0 20px;
   display: grid;
@@ -1314,6 +1318,10 @@
   display: grid;
   gap: 4px;
   padding-left: 20px;
+}
+
+.band-member-block > .console-admin-hint + .band-member-sub-list {
+  margin-top: 0;
 }
 
 .band-member-sub-list label {
