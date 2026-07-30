@@ -1237,7 +1237,7 @@
     <section class="scenario-bar" aria-labelledby="scenario-title">
       <div class="scenario-copy">
         <strong id="scenario-title">歌单场景索引</strong>
-        <span>常规、多 Band、阵容交接与无歌单状态并列，用同一套时间线检验极端数据。</span>
+        <span>常规、多 Band、阵容交接、合同场与无歌单状态并列，用一根连续主轴检验极端数据。</span>
       </div>
       <div class="scenario-tabs" role="tablist" aria-label="选择演出数据场景">
         <button type="button" role="tab" aria-selected="true" data-scenario="regular">
@@ -1255,6 +1255,14 @@
         <button type="button" role="tab" aria-selected="false" data-scenario="handover">
           Roselia 阵容交接
           <span>18 曲 · 满员 +1</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="galaxy">
+          GALAXY TO GALAXY
+          <span>25 曲 · 单轴交汇</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="dreams">
+          DREAMS GO ON
+          <span>21 曲 · 单轴接力</span>
         </button>
         <button type="button" role="tab" aria-selected="false" data-scenario="postponed">
           延期无歌单
@@ -1741,9 +1749,240 @@
                   title: "BLACK SHOUT",
                   performers: ["Roselia"],
                   tags: ["阵容交接", "满员+1"],
-                  note: "以 Roselia V1 的 5 人阵容为满员基准，V2 新成员中島由貴共同出演，实际记录 6 人。",
+                  note: "以 Roselia V1 的 5 人阵容为基准，V2 新成员中島由貴共同出演，实际记录 6 人。",
+                  lineupTransition: {
+                    base: "Roselia V1",
+                    next: "Roselia V2",
+                    incoming: "中島由貴",
+                    baseCount: 5,
+                    incomingCount: 1,
+                    followup: "EN2 是新旧阵容重叠演出；EN3 仍按 Roselia V1 记录。",
+                  },
                 },
                 { code: "EN3", title: "陽だまりロードナイト", performers: ["Roselia"] },
+              ],
+            },
+          ],
+          attendees: [],
+        },
+        galaxy: {
+          liveId: 233,
+          date: "2023-02-04",
+          title: "BanG Dream! 11th☆LIVE DAY1 : Poppin'Party×RAISE A SUILEN「GALAXY to GALAXY」",
+          series: "BanG Dream! 11th☆LIVE",
+          summary: "25 曲包含 MyGO!!!!! 开场，以及 Poppin'Party 与 RAISE A SUILEN 的交替区块和 8 次交叉出演。",
+          contentsSummary: "一根主轴贯穿完整歌单；纯色表示当前 Band，颜色在交叉出演与段落交接处连续过渡。",
+          programSummary: "25 曲按数据库 absolute_order 展示。章节只标出演区块，主轴渐变负责显示 Band 之间的交接。",
+          venue: "有明アリーナ",
+          opening: "17:00 JP",
+          start: "18:00 JP",
+          type: "合同公演",
+          status: "scheduled",
+          statusLabel: "已结束",
+          statusNote: "",
+          history: [],
+          source: "https://bang-dream.com/11th-live/",
+          references: ["活动组：BanG Dream! 11th☆LIVE", "交叉出演：8 曲"],
+          gradientBands: ["RAISE A SUILEN", "Poppin'Party"],
+          chapters: [
+            {
+              title: "Opening act / MyGO!!!!!",
+              range: "OP1-OP3",
+              note: "开场演出 / 3 曲",
+              songs: [
+                { code: "OP1", title: "迷星叫", performers: ["MyGO!!!!!"] },
+                { code: "OP2", title: "名無声", performers: ["MyGO!!!!!"] },
+                { code: "OP3", title: "影色舞", performers: ["MyGO!!!!!"] },
+              ],
+            },
+            {
+              title: "RAISE A SUILEN / First block",
+              range: "M1-M3",
+              note: "交叉出演 1 曲",
+              songs: [
+                { code: "M1", title: "DEAD HEAT BEAT", performers: ["RAISE A SUILEN"] },
+                { code: "M2", title: "HELL! or HELL?", performers: ["RAISE A SUILEN"] },
+                {
+                  code: "M3",
+                  title: "A DECLARATION OF ×××",
+                  performers: ["RAISE A SUILEN", "Poppin'Party"],
+                  tags: ["部分出演", "交叉段"],
+                  note: "RAISE A SUILEN 为完整阵容；Poppin'Party 记录西本りみ出演。",
+                },
+              ],
+            },
+            {
+              title: "Poppin'Party / First block",
+              range: "M4-M9",
+              note: "交叉出演 1 曲",
+              songs: [
+                { code: "M4", title: "Moonlight Walk", performers: ["Poppin'Party"] },
+                { code: "M5", title: "イニシャル", performers: ["Poppin'Party"] },
+                { code: "M6", title: "Time Lapse", performers: ["Poppin'Party"] },
+                { code: "M7", title: "ぽっぴん'しゃっふる", performers: ["Poppin'Party"] },
+                { code: "M8", title: "What's the POPIPA!?", performers: ["Poppin'Party"] },
+                {
+                  code: "M9",
+                  title: "ぽっぴん'どりーむ！",
+                  performers: ["Poppin'Party", "RAISE A SUILEN"],
+                  tags: ["部分出演", "交叉段"],
+                  note: "Poppin'Party 为完整阵容；RAISE A SUILEN 记录倉知玲鳳、紡木吏佐出演。",
+                },
+              ],
+            },
+            {
+              title: "RAISE A SUILEN / Second block",
+              range: "M10-M16",
+              note: "交叉出演 2 曲",
+              songs: [
+                { code: "M10", title: "!NVADE SHOW!", performers: ["RAISE A SUILEN"] },
+                { code: "M11", title: "THE WAY OF LIFE", performers: ["RAISE A SUILEN"] },
+                {
+                  code: "M12",
+                  title: "灼熱 Bonfire!",
+                  performers: ["RAISE A SUILEN", "Poppin'Party"],
+                  tags: ["部分出演", "交叉段"],
+                  note: "RAISE A SUILEN 为完整阵容；Poppin'Party 记录愛美、伊藤彩沙出演。",
+                },
+                { code: "M13", title: "Beautiful Birthday", performers: ["RAISE A SUILEN"] },
+                { code: "M14", title: "Light a fire", performers: ["RAISE A SUILEN"] },
+                { code: "M15", title: "DRIVE US CRAZY", performers: ["RAISE A SUILEN"] },
+                {
+                  code: "M16",
+                  title: "R·I·O·T",
+                  performers: ["RAISE A SUILEN", "Poppin'Party"],
+                  tags: ["部分出演", "交叉段"],
+                  note: "RAISE A SUILEN 为完整阵容；Poppin'Party 记录大塚紗英出演。",
+                },
+              ],
+            },
+            {
+              title: "Poppin'Party / Second block",
+              range: "M17-M20",
+              note: "交叉出演 2 曲",
+              songs: [
+                {
+                  code: "M17",
+                  title: "Returns",
+                  performers: ["Poppin'Party", "RAISE A SUILEN"],
+                  tags: ["部分出演", "交叉段"],
+                  note: "Poppin'Party 为完整阵容；RAISE A SUILEN 记录 Raychell 出演。",
+                },
+                {
+                  code: "M18",
+                  title: "Step×Step!",
+                  performers: ["Poppin'Party", "RAISE A SUILEN"],
+                  tags: ["部分出演", "交叉段"],
+                  note: "Poppin'Party 为完整阵容；RAISE A SUILEN 记录小原莉子出演。",
+                },
+                { code: "M19", title: "ミライトレイン", performers: ["Poppin'Party"] },
+                { code: "M20", title: "ティアドロップス", performers: ["Poppin'Party"] },
+              ],
+            },
+            {
+              title: "Encore / Joint",
+              range: "EN1-EN2",
+              note: "双 Band 完整阵容",
+              songs: [
+                { code: "EN1", title: "ときめきエクスペリエンス！", performers: ["Poppin'Party", "RAISE A SUILEN"] },
+                { code: "EN2", title: "EXPOSE ‘Burn out!!!’", performers: ["Poppin'Party", "RAISE A SUILEN"] },
+              ],
+            },
+          ],
+          attendees: [],
+        },
+        dreams: {
+          liveId: 49,
+          date: "2026-05-03",
+          title: "Poppin'Party×Roselia 合同ライブ「DREAMS GO ON」",
+          series: "Poppin'Party×Roselia 合同ライブ",
+          summary: "21 曲从 Roselia、Poppin'Party 独立区块进入逐曲交替，再以互换翻唱和双 Band 合演完成安可。",
+          contentsSummary: "粉色与蓝色共用一根连续主轴；交替段直接换色，合演曲在同一轴线上完成完整渐变。",
+          programSummary: "21 曲完整收录。M12-M17 的逐曲交替与 EN1-EN3 的互换、合演由同一套单轴时间线表达。",
+          venue: "有明アリーナ",
+          opening: "16:30 JP",
+          start: "18:00 JP",
+          type: "合同公演",
+          status: "scheduled",
+          statusLabel: "已结束",
+          statusNote: "",
+          history: [],
+          source: "https://bang-dream.com/events/ppp-roselia2026/",
+          references: ["逐曲交替：M12-M17", "互换翻唱：EN1-EN2"],
+          gradientBands: ["Poppin'Party", "Roselia"],
+          chapters: [
+            {
+              title: "Roselia / Opening block",
+              range: "M1-M6",
+              note: "开场合作 1 曲",
+              songs: [
+                {
+                  code: "M1",
+                  title: "BLACK SHOUT",
+                  performers: ["Roselia", "Poppin'Party"],
+                  tags: ["部分出演", "开场合作"],
+                  note: "Roselia 为完整阵容；Poppin'Party 记录愛美出演。",
+                },
+                { code: "M2", title: "Requiem for Fate", performers: ["Roselia"] },
+                { code: "M3", title: "Steadfast Spirits", performers: ["Roselia"] },
+                { code: "M4", title: "Talk to My Tone", performers: ["Roselia"] },
+                { code: "M5", title: "Song I am.", performers: ["Roselia"] },
+                { code: "M6", title: "ROZEN HORIZON", performers: ["Roselia"] },
+              ],
+            },
+            {
+              title: "Poppin'Party / Main block",
+              range: "M7-M11",
+              note: "5 曲",
+              songs: [
+                { code: "M7", title: "Dreamers Go!", performers: ["Poppin'Party"] },
+                { code: "M8", title: "どきどきデエト", performers: ["Poppin'Party"] },
+                { code: "M9", title: "Hello! Wink!", performers: ["Poppin'Party"] },
+                { code: "M10", title: "Moonlight Walk", performers: ["Poppin'Party"] },
+                { code: "M11", title: "Drive Your Heart", performers: ["Poppin'Party"] },
+              ],
+            },
+            {
+              title: "Band relay",
+              range: "M12-M17",
+              note: "Roselia / Poppin'Party 逐曲交替",
+              songs: [
+                { code: "M12", title: "R", performers: ["Roselia"] },
+                { code: "M13", title: "Light Delight", performers: ["Poppin'Party"] },
+                { code: "M14", title: "ZEAL of proud", performers: ["Roselia"] },
+                { code: "M15", title: "Live Beyond!!", performers: ["Poppin'Party"] },
+                { code: "M16", title: "Sing Alive", performers: ["Roselia"] },
+                { code: "M17", title: "ティアドロップス", performers: ["Poppin'Party"] },
+              ],
+            },
+            {
+              title: "Joint",
+              range: "M18",
+              note: "双 Band 合演",
+              songs: [
+                { code: "M18", title: "FIRE BIRD", performers: ["Poppin'Party", "Roselia"] },
+              ],
+            },
+            {
+              title: "Encore / Song exchange",
+              range: "EN1-EN3",
+              note: "互换翻唱后合演",
+              songs: [
+                {
+                  code: "EN1",
+                  title: "BRAVE JEWEL",
+                  performers: ["Poppin'Party"],
+                  tags: ["短版", "翻唱"],
+                  note: "Poppin'Party 翻唱 Roselia 曲目。",
+                },
+                {
+                  code: "EN2",
+                  title: "ときめきエクスペリエンス！",
+                  performers: ["Roselia"],
+                  tags: ["短版", "翻唱"],
+                  note: "Roselia 翻唱 Poppin'Party 曲目。",
+                },
+                { code: "EN3", title: "キズナミュージック♪", performers: ["Poppin'Party", "Roselia"] },
               ],
             },
           ],
@@ -1866,14 +2105,74 @@
         return bandVisuals[name]?.color ?? "#244fc9";
       }
 
-      function bandRailMarkup(performers) {
-        const cores = performers
-          .map(
-            (performer) =>
-              `<span class="track-rail-core" style="--band-color:${bandColor(performer)}"></span>`,
-          )
-          .join("");
-        return `<span class="track-rail" aria-hidden="true">${cores}</span>`;
+      function railPalette(track, scenario) {
+        const gradientBands = scenario.gradientBands ?? [];
+        const scenarioPerformers = gradientBands.filter((band) => track.performers.includes(band));
+        const otherPerformers = track.performers.filter((band) => !gradientBands.includes(band));
+        const orderedPerformers = scenarioPerformers.length > 0
+          ? [...scenarioPerformers, ...otherPerformers]
+          : track.performers;
+        const colors = orderedPerformers.map(bandColor);
+
+        if (track.lineupTransition) {
+          colors.push("#7183dc");
+        }
+
+        return [...new Set(colors)];
+      }
+
+      function blendRailColors(colors) {
+        if (colors.length === 0) return "#244fc9";
+        if (colors.length === 1) return colors[0];
+        return `color-mix(in srgb, ${colors[0]} 50%, ${colors.at(-1)})`;
+      }
+
+      function bridgeRailColors(left, right) {
+        if (!left || !right || left === right) return left || right || "#244fc9";
+        return `color-mix(in srgb, ${left} 50%, ${right})`;
+      }
+
+      function railGradient(palette, topColor, bottomColor) {
+        if (palette.length <= 1) {
+          const color = palette[0] ?? "#244fc9";
+          return `linear-gradient(180deg, ${topColor} 0%, ${color} 34%, ${color} 66%, ${bottomColor} 100%)`;
+        }
+
+        const innerStops = palette
+          .map((color, index) => {
+            const position = 28 + (44 * index) / Math.max(1, palette.length - 1);
+            return `${color} ${position}%`;
+          })
+          .join(", ");
+        return `linear-gradient(180deg, ${topColor} 0%, ${innerStops}, ${bottomColor} 100%)`;
+      }
+
+      function bandRailMarkup(track, scenario, previousTrack, nextTrack) {
+        const palette = railPalette(track, scenario);
+        const currentColor = blendRailColors(palette);
+        const previousColor = previousTrack
+          ? blendRailColors(railPalette(previousTrack, scenario))
+          : currentColor;
+        const nextColor = nextTrack
+          ? blendRailColors(railPalette(nextTrack, scenario))
+          : currentColor;
+        const topColor = bridgeRailColors(previousColor, currentColor);
+        const bottomColor = bridgeRailColors(currentColor, nextColor);
+        const stateClass = track.lineupTransition
+          ? "is-handover"
+          : palette.length > 1
+            ? "is-shared"
+            : "is-solo";
+
+        return `
+          <span
+            class="track-rail track-rail-continuous ${stateClass}"
+            style="--rail-fill:${railGradient(palette, topColor, bottomColor)}"
+            aria-hidden="true"
+          >
+            <span class="track-rail-fill"></span>
+          </span>
+        `;
       }
 
       function renderBandLegend(scenario) {
@@ -1885,10 +2184,16 @@
             });
           });
         });
+        const orderedNames = scenario.gradientBands
+          ? [
+              ...scenario.gradientBands,
+              ...names.filter((name) => !scenario.gradientBands.includes(name)),
+            ]
+          : names;
         elements.bandLegend.innerHTML = `
           <p>Band timeline</p>
           <ul>
-            ${names
+            ${orderedNames
               .map(
                 (name) => `
                   <li>
@@ -1899,6 +2204,17 @@
               )
               .join("")}
           </ul>
+          ${scenario.gradientBands
+            ? `
+              <div
+                class="band-legend-gradient"
+                style="--rail-a:${bandColor(scenario.gradientBands[0])};--rail-b:${bandColor(scenario.gradientBands[1])}"
+              >
+                <span class="band-legend-gradient-rail" aria-hidden="true"></span>
+                <span>单轴连续换色；完整渐变表示共同出演。</span>
+              </div>
+            `
+            : ""}
         `;
       }
 
@@ -1995,6 +2311,28 @@
         return `<p class="collaboration-spec"><strong>合唱规格：</strong>${escapeHtml(spec.label)}</p>`;
       }
 
+      function lineupTransitionMarkup(track) {
+        const transition = track.lineupTransition;
+        if (!transition) return "";
+        return `
+          <section class="lineup-transition" aria-label="阵容交接">
+            <div class="lineup-transition-formula">
+              <span>
+                <strong>${escapeHtml(transition.baseCount)}</strong>
+                <small>${escapeHtml(transition.base)} 基准</small>
+              </span>
+              <b aria-hidden="true">+</b>
+              <span>
+                <strong>${escapeHtml(transition.incomingCount)}</strong>
+                <small>${escapeHtml(transition.next)} 新成员</small>
+              </span>
+            </div>
+            <p><strong>先行加入：</strong>${escapeHtml(transition.incoming)}</p>
+            <p>${escapeHtml(transition.followup)}</p>
+          </section>
+        `;
+      }
+
       function otherMemberMarkup(otherMembers = []) {
         if (otherMembers.length === 0) return "";
 
@@ -2048,6 +2386,7 @@
             ? `<p class="detail-copy">本条没有额外阵容或版本备注。</p>`
             : "";
         return [
+          lineupTransitionMarkup(track),
           collaborationMarkup(track),
           performerMarkup(track.performers),
           noteLine,
@@ -2144,14 +2483,22 @@
           `;
 
           const tracks = article.querySelector(".tracks");
-          chapter.songs.forEach((track) => {
+          chapter.songs.forEach((track, trackIndex) => {
+            const previousTrack = chapter.songs[trackIndex - 1] ?? null;
+            const nextTrack = chapter.songs[trackIndex + 1] ?? null;
             const row = document.createElement("div");
             row.className = "track";
             row.dataset.bandCount = String(track.performers.length);
+            if (track.lineupTransition) row.dataset.lineupTransition = "true";
+            if (scenario.gradientBands?.some((band) => track.performers.includes(band))) {
+              row.dataset.railMode = "gradient";
+            }
             row.style.setProperty("--track-primary", bandColor(track.performers[0]));
             const otherCount = (track.otherMembers ?? []).length;
             const collaboration = collaborationSpec(track);
-            const tagsText = collaboration
+            const tagsText = track.lineupTransition
+              ? "V1 + V2 接点"
+              : collaboration
               ? collaboration.short
               : otherCount > 0
                 ? `其他 ${otherCount}`
@@ -2159,8 +2506,8 @@
                   ? track.tags.join(" / ")
                   : "查看";
             row.innerHTML = `
+              ${bandRailMarkup(track, scenario, previousTrack, nextTrack)}
               <button class="track-main" type="button" aria-expanded="false">
-                ${bandRailMarkup(track.performers)}
                 <span class="track-code">${escapeHtml(track.code)}</span>
                 <span class="track-title">${escapeHtml(track.title)}</span>
                 <span class="track-performer">${escapeHtml(performerSummary(track.performers))}</span>
