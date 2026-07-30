@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="LiveSetList 演出详情方向探索：彩色曲目档案。" />
+    <title>彩色曲目档案 | LiveSetList</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #fff9fc;
+        --white: #fff;
+        --ink: #202236;
+        --soft: #6d6f80;
+        --accent: #ed0a62;
+        --ras: #16b8bd;
+        --afterglow: #df3444;
+        --yume: #ef8294;
+        --hello: #efb900;
+        font-family:
+          "Arial Rounded MT Bold", "Avenir Next", "Noto Sans SC", "Noto Sans JP",
+          "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--paper);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 8% 16%, rgb(237 10 98 / 0.055) 0 0.22rem, transparent 0.24rem),
+          radial-gradient(circle at 86% 7%, rgb(22 184 189 / 0.07) 0 0.28rem, transparent 0.3rem),
+          var(--paper);
+        background-size: 5.5rem 5.5rem, 7rem 7rem, auto;
+      }
+
+      button,
+      a {
+        color: inherit;
+        font: inherit;
+      }
+
+      .mast {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 4.5rem;
+        padding: 0.75rem clamp(1rem, 4vw, 4rem);
+        border-bottom: 2px solid var(--accent);
+        background: rgb(255 249 252 / 0.94);
+      }
+
+      .mast strong {
+        color: var(--accent);
+        font-size: 1.05rem;
+        letter-spacing: -0.04em;
+      }
+
+      .mast nav {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+      }
+
+      .mast a {
+        font-size: 0.78rem;
+        text-decoration: none;
+      }
+
+      .mast .all {
+        padding: 0.55rem 0.9rem;
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        background: var(--white);
+      }
+
+      .event {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(19rem, 0.45fr);
+        gap: clamp(2rem, 6vw, 7rem);
+        align-items: end;
+        padding: clamp(2.5rem, 7vw, 7rem) clamp(1rem, 4vw, 4rem) 2.5rem;
+        border-bottom: 2px solid var(--accent);
+      }
+
+      .event h1 {
+        max-width: 16ch;
+        margin: 0;
+        font-size: clamp(3.4rem, 8.5vw, 9.5rem);
+        font-weight: 850;
+        letter-spacing: -0.075em;
+        line-height: 0.87;
+      }
+
+      .event h1 span {
+        color: var(--accent);
+      }
+
+      .event-info {
+        display: grid;
+        gap: 1.4rem;
+        align-content: end;
+      }
+
+      .event-info p {
+        margin: 0;
+        color: var(--soft);
+        line-height: 1.6;
+      }
+
+      .event-meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1px;
+        overflow: hidden;
+        border: 1px solid var(--accent);
+        background: var(--accent);
+      }
+
+      .event-meta dl {
+        min-height: 4.3rem;
+        margin: 0;
+        padding: 0.75rem;
+        background: var(--white);
+      }
+
+      .event-meta dt {
+        margin-bottom: 0.25rem;
+        color: var(--accent);
+        font-size: 0.67rem;
+      }
+
+      .event-meta dd {
+        margin: 0;
+        font-size: 0.84rem;
+        line-height: 1.35;
+      }
+
+      .event-actions {
+        display: flex;
+        gap: 0.6rem;
+      }
+
+      .event-actions button {
+        min-height: 2.65rem;
+        padding: 0.55rem 1rem;
+        border: 1px solid var(--accent);
+        border-radius: 999px;
+        color: var(--accent);
+        background: var(--white);
+        cursor: pointer;
+      }
+
+      .event-actions button:first-child {
+        color: #fff;
+        background: var(--accent);
+      }
+
+      .event-actions button:active {
+        transform: scale(0.98);
+      }
+
+      .setlist-map {
+        display: grid;
+        grid-template-columns: 4fr 3fr 3fr 4fr;
+        min-height: 5rem;
+        margin: 0 clamp(1rem, 4vw, 4rem);
+        border-right: 1px solid var(--ink);
+        border-left: 1px solid var(--ink);
+      }
+
+      .setlist-map a {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6rem;
+        padding: 0.8rem;
+        border-right: 1px solid var(--ink);
+        text-decoration: none;
+        background: color-mix(in srgb, var(--band) 18%, var(--white));
+      }
+
+      .setlist-map a:last-child {
+        border-right: 0;
+      }
+
+      .setlist-map a:hover,
+      .setlist-map a:focus-visible {
+        color: #fff;
+        background: var(--band);
+        outline: 0;
+      }
+
+      .setlist-map strong {
+        font-size: 0.75rem;
+      }
+
+      .setlist-map span {
+        font-size: 0.65rem;
+      }
+
+      .songs-wrap {
+        padding: 2rem clamp(1rem, 4vw, 4rem) 5rem;
+      }
+
+      .songs-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 2rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .songs-head h2 {
+        margin: 0;
+        font-size: clamp(2.7rem, 6vw, 6.5rem);
+        letter-spacing: -0.065em;
+        line-height: 0.9;
+      }
+
+      .songs-head p {
+        max-width: 27rem;
+        margin: 0;
+        color: var(--soft);
+        line-height: 1.55;
+      }
+
+      .acts {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.25rem;
+      }
+
+      .act {
+        scroll-margin-top: 1rem;
+        border: 2px solid var(--ink);
+        background: var(--white);
+        --band: var(--accent);
+      }
+
+      .act.ras {
+        --band: var(--ras);
+      }
+
+      .act.afterglow {
+        --band: var(--afterglow);
+      }
+
+      .act.yume {
+        --band: var(--yume);
+      }
+
+      .act.hello {
+        --band: var(--hello);
+      }
+
+      .act:target {
+        box-shadow: 0.55rem 0.55rem 0 var(--band);
+      }
+
+      .act-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: center;
+        min-height: 5.3rem;
+        padding: 1rem;
+        border-bottom: 2px solid var(--ink);
+        background: var(--band);
+      }
+
+      .act-head h3 {
+        margin: 0;
+        color: #fff;
+        font-size: clamp(1.2rem, 2.2vw, 2rem);
+        letter-spacing: -0.035em;
+        text-wrap: balance;
+      }
+
+      .act-head span {
+        padding: 0.35rem 0.55rem;
+        border: 1px solid #fff;
+        border-radius: 999px;
+        color: #fff;
+        font-size: 0.66rem;
+        white-space: nowrap;
+      }
+
+      .track-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .track {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 0.8rem;
+        align-items: start;
+        min-height: 7.2rem;
+        padding: 1rem;
+        border: 0;
+        border-right: 1px solid var(--ink);
+        border-bottom: 1px solid var(--ink);
+        text-align: left;
+        background: var(--white);
+        cursor: pointer;
+      }
+
+      .track:nth-child(2n) {
+        border-right: 0;
+      }
+
+      .track:nth-last-child(-n + 2) {
+        border-bottom: 0;
+      }
+
+      .track:hover,
+      .track:focus-visible {
+        background: color-mix(in srgb, var(--band) 13%, var(--white));
+        outline: 0;
+      }
+
+      .track .code {
+        color: var(--band);
+        font-size: clamp(1.25rem, 2vw, 2rem);
+        font-weight: 850;
+        line-height: 1;
+      }
+
+      .track .title {
+        align-self: center;
+        font-size: clamp(0.9rem, 1.45vw, 1.15rem);
+        font-weight: 700;
+        line-height: 1.35;
+      }
+
+      .track.wide {
+        grid-column: 1 / -1;
+        min-height: 5.7rem;
+        border-right: 0;
+      }
+
+      .continuation {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        padding: 1rem 0;
+        border-top: 2px solid var(--accent);
+        color: var(--accent);
+        font-weight: 750;
+      }
+
+      @media (max-width: 900px) {
+        .event {
+          grid-template-columns: 1fr;
+          align-items: start;
+        }
+
+        .event-info {
+          max-width: 36rem;
+        }
+
+        .acts {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 650px) {
+        .mast nav a:not(.all) {
+          display: none;
+        }
+
+        .event {
+          gap: 1.25rem;
+          padding-top: 2rem;
+          padding-bottom: 1.5rem;
+        }
+
+        .event h1 {
+          font-size: clamp(3.05rem, 15.5vw, 5rem);
+        }
+
+        .event-info {
+          gap: 0.85rem;
+        }
+
+        .event-info p {
+          line-height: 1.45;
+        }
+
+        .event-meta dl {
+          min-height: 3.65rem;
+          padding: 0.6rem;
+        }
+
+        .event-actions button {
+          min-height: 2.45rem;
+        }
+
+        .setlist-map {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .setlist-map a:nth-child(2) {
+          border-right: 0;
+        }
+
+        .setlist-map a:nth-child(-n + 2) {
+          border-bottom: 1px solid var(--ink);
+        }
+
+        .songs-head {
+          display: block;
+        }
+
+        .songs-head p {
+          margin-top: 1rem;
+        }
+
+        .track-list {
+          grid-template-columns: 1fr;
+        }
+
+        .track,
+        .track:nth-child(2n),
+        .track:nth-last-child(-n + 2) {
+          min-height: 5.4rem;
+          border-right: 0;
+          border-bottom: 1px solid var(--ink);
+        }
+
+        .track:last-child {
+          border-bottom: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        * {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="mast">
+      <strong>LiveSetList</strong>
+      <nav aria-label="方向与页面导航">
+        <a href="#setlist">歌单</a>
+        <a href="#event">演出资料</a>
+        <a class="all" href="./index.html">全部方向</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="event" id="event" aria-labelledby="event-title">
+        <h1 id="event-title">In the name of <span>BanG Dream!</span></h1>
+        <div class="event-info">
+          <p>十周年多乐队纪念演出。以乐队色彩区分章节，让曲目顺序成为页面最醒目的内容。</p>
+          <div class="event-meta">
+            <dl><dt>日期</dt><dd>2026-02-28</dd></dl>
+            <dl><dt>场地</dt><dd>Kアリーナ横浜</dd></dl>
+            <dl><dt>开场</dt><dd>13:30 JP</dd></dl>
+            <dl><dt>开演</dt><dd>15:00 JP</dd></dl>
+          </div>
+          <div class="event-actions">
+            <button type="button" aria-pressed="false">收藏演出</button>
+            <button type="button">分享</button>
+          </div>
+        </div>
+      </section>
+
+      <nav class="setlist-map" aria-label="歌单章节">
+        <a href="#color-ras" style="--band: var(--ras)"><strong>RAISE A SUILEN</strong><span>M1-M4</span></a>
+        <a href="#color-afterglow" style="--band: var(--afterglow)"><strong>Afterglow</strong><span>M5-M7</span></a>
+        <a href="#color-yume" style="--band: var(--yume)"><strong>夢限大みゅーたいぷ</strong><span>M8-M10</span></a>
+        <a href="#color-hello" style="--band: var(--hello)"><strong>ハロー、ハッピーワールド！</strong><span>M11-M14</span></a>
+      </nav>
+
+      <section class="songs-wrap" id="setlist" aria-labelledby="songs-title">
+        <header class="songs-head">
+          <h2 id="songs-title">曲目档案</h2>
+          <p>同一场演出中的不同 Band 不再被压成统一灰色列表，而是直接参与歌单结构。</p>
+        </header>
+
+        <div class="acts">
+          <article class="act ras" id="color-ras">
+            <header class="act-head"><h3>RAISE A SUILEN</h3><span>M1-M4</span></header>
+            <div class="track-list">
+              <button class="track" type="button"><span class="code">M1</span><span class="title">R·I·O·T</span></button>
+              <button class="track" type="button"><span class="code">M2</span><span class="title">V.I.P MONSTER</span></button>
+              <button class="track" type="button"><span class="code">M3</span><span class="title">OUTSIDER RODEO</span></button>
+              <button class="track" type="button"><span class="code">M4</span><span class="title">HELL! or HELL?</span></button>
+            </div>
+          </article>
+
+          <article class="act afterglow" id="color-afterglow">
+            <header class="act-head"><h3>Afterglow</h3><span>M5-M7</span></header>
+            <div class="track-list">
+              <button class="track" type="button"><span class="code">M5</span><span class="title">燦々</span></button>
+              <button class="track" type="button"><span class="code">M6</span><span class="title">Hey-day狂騒曲(カプリチオ)</span></button>
+              <button class="track wide" type="button"><span class="code">M7</span><span class="title">Scarlet Sky</span></button>
+            </div>
+          </article>
+
+          <article class="act yume" id="color-yume">
+            <header class="act-head"><h3>夢限大みゅーたいぷ</h3><span>M8-M10</span></header>
+            <div class="track-list">
+              <button class="track" type="button"><span class="code">M8</span><span class="title">夢現妄想世界</span></button>
+              <button class="track" type="button"><span class="code">M9</span><span class="title">チューニング</span></button>
+              <button class="track wide" type="button"><span class="code">M10</span><span class="title">コミュ着火Fire!</span></button>
+            </div>
+          </article>
+
+          <article class="act hello" id="color-hello">
+            <header class="act-head"><h3>ハロー、ハッピーワールド！</h3><span>M11-M14</span></header>
+            <div class="track-list">
+              <button class="track" type="button"><span class="code">M11</span><span class="title">えがおのオーケストラっ！</span></button>
+              <button class="track" type="button"><span class="code">M12</span><span class="title">ゴーカ！ごーかい！？ファントムシーフ！</span></button>
+              <button class="track" type="button"><span class="code">M13</span><span class="title">サンバロハッピ〜！</span></button>
+              <button class="track" type="button"><span class="code">M14</span><span class="title">うぃーきゃん☆フレフレっ！</span></button>
+            </div>
+          </article>
+        </div>
+
+        <div class="continuation">
+          <span>后续将继续到 M41</span>
+          <span>当前展示 14 曲</span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="LiveSetList 演出详情页的四个全新视觉方向骨架，用于比较信息架构与歌单阅读体验。"
+    />
+    <title>LiveSetList 演出详情方向探索</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          "Segoe UI", "Noto Sans SC", "Noto Sans JP", system-ui, sans-serif;
+        color: #171717;
+        background: #f2f2ef;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .page-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) minmax(18rem, 0.7fr);
+        gap: 3rem;
+        max-width: 1480px;
+        margin: 0 auto;
+        padding: 4.5rem 2rem 3rem;
+        border-bottom: 1px solid #bcbcb6;
+      }
+
+      .page-head h1 {
+        max-width: 13ch;
+        margin: 0;
+        font-size: clamp(2.8rem, 6vw, 6.8rem);
+        font-weight: 650;
+        letter-spacing: -0.065em;
+        line-height: 0.94;
+      }
+
+      .page-head p {
+        align-self: end;
+        max-width: 34rem;
+        margin: 0;
+        color: #555550;
+        font-size: 1rem;
+        line-height: 1.7;
+      }
+
+      .directions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1px;
+        max-width: 1480px;
+        margin: 0 auto 5rem;
+        background: #bcbcb6;
+        border: solid #bcbcb6;
+        border-width: 0 1px 1px;
+      }
+
+      .direction {
+        min-width: 0;
+        padding: 1.5rem;
+        background: #f8f8f5;
+      }
+
+      .direction-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: start;
+        min-height: 8.5rem;
+      }
+
+      .direction h2 {
+        margin: 0 0 0.55rem;
+        font-size: clamp(1.5rem, 2.5vw, 2.5rem);
+        letter-spacing: -0.035em;
+      }
+
+      .direction p {
+        max-width: 38rem;
+        margin: 0;
+        color: #61615c;
+        line-height: 1.55;
+      }
+
+      .open-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 2.5rem;
+        padding: 0.55rem 0.9rem;
+        border: 1px solid #20201e;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .open-link:hover,
+      .open-link:focus-visible {
+        color: #fff;
+        background: #20201e;
+      }
+
+      .preview {
+        position: relative;
+        height: min(34rem, 65vw);
+        min-height: 25rem;
+        overflow: hidden;
+        border: 1px solid #c9c9c2;
+        background: #fff;
+      }
+
+      .preview iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+
+      .preview-link {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+      }
+
+      .preview-link:focus-visible {
+        outline: 4px solid #ef145f;
+        outline-offset: -4px;
+      }
+
+      @media (max-width: 900px) {
+        .page-head,
+        .directions {
+          grid-template-columns: 1fr;
+        }
+
+        .page-head {
+          gap: 2rem;
+          padding: 3rem 1.25rem 2rem;
+        }
+
+        .directions {
+          margin-bottom: 2rem;
+          border-right: 0;
+          border-left: 0;
+        }
+
+        .direction {
+          padding: 1.25rem;
+        }
+
+        .preview {
+          height: 32rem;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .direction-head {
+          grid-template-columns: 1fr;
+          min-height: 0;
+          margin-bottom: 1.25rem;
+        }
+
+        .open-link {
+          width: fit-content;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="page-head">
+      <h1>同一份歌单，四种阅读语气</h1>
+      <p>
+        这些页面只验证框架、排版密度和视觉方向。暂不实现完整数据切换、歌曲抽屉和滚动动效。
+        点击任一预览可单独打开。
+      </p>
+    </header>
+
+    <main class="directions">
+      <article class="direction">
+        <header class="direction-head">
+          <div>
+            <h2>瑞士演出谱</h2>
+            <p>冷静、精确、高密度。用严格网格和歌单地图承载复杂演出顺序。</p>
+          </div>
+          <a class="open-link" href="./01-live-score.html">单独查看</a>
+        </header>
+        <div class="preview">
+          <iframe src="./01-live-score.html" title="瑞士演出谱预览" loading="eager"></iframe>
+          <a class="preview-link" href="./01-live-score.html" aria-label="打开瑞士演出谱"></a>
+        </div>
+      </article>
+
+      <article class="direction">
+        <header class="direction-head">
+          <div>
+            <h2>纸本节目册</h2>
+            <p>更像收藏用的现场刊物。强调标题、曲序和章节之间的编辑节奏。</p>
+          </div>
+          <a class="open-link" href="./02-program-notes.html">单独查看</a>
+        </header>
+        <div class="preview">
+          <iframe src="./02-program-notes.html" title="纸本节目册预览" loading="eager"></iframe>
+          <a class="preview-link" href="./02-program-notes.html" aria-label="打开纸本节目册"></a>
+        </div>
+      </article>
+
+      <article class="direction">
+        <header class="direction-head">
+          <div>
+            <h2>彩色曲目档案</h2>
+            <p>借用 BanG Dream! 的明快色彩与线框节奏，让乐队归属直接塑造页面。</p>
+          </div>
+          <a class="open-link" href="./03-chromatic-archive.html">单独查看</a>
+        </header>
+        <div class="preview">
+          <iframe src="./03-chromatic-archive.html" title="彩色曲目档案预览" loading="eager"></iframe>
+          <a class="preview-link" href="./03-chromatic-archive.html" aria-label="打开彩色曲目档案"></a>
+        </div>
+      </article>
+
+      <article class="direction">
+        <header class="direction-head">
+          <div>
+            <h2>夜间曲序台账</h2>
+            <p>暗色、克制、近似制作团队使用的运行表，但仍以普通观众阅读为优先。</p>
+          </div>
+          <a class="open-link" href="./04-night-ledger.html">单独查看</a>
+        </header>
+        <div class="preview">
+          <iframe src="./04-night-ledger.html" title="夜间曲序台账预览" loading="eager"></iframe>
+          <a class="preview-link" href="./04-night-ledger.html" aria-label="打开夜间曲序台账"></a>
+        </div>
+      </article>
+    </main>
+  </body>
+</html>

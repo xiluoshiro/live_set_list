@@ -120,7 +120,8 @@ def build_live_where(filters: LiveListFilters) -> tuple[str, list[object]]:
     if filters.without_setlist:
         conditions.append(
             """
-            NOT EXISTS (
+            l.event_status <> 'cancelled'
+            AND NOT EXISTS (
                 SELECT 1
                 FROM live_setlist missing_setlist
                 WHERE missing_setlist.live_id = l.id

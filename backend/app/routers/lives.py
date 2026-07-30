@@ -157,11 +157,12 @@ LEFT JOIN performance_group_lives pgl
     ON pgl.live_id = l.id
 LEFT JOIN performance_group_attrs pg
     ON pg.id = pgl.group_id
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM live_setlist ls
-    WHERE ls.live_id = l.id
-)
+WHERE l.event_status <> 'cancelled'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM live_setlist ls
+      WHERE ls.live_id = l.id
+  )
 """
 
 LIVES_WITHOUT_SETLIST_COUNT_QUERY = f"""
