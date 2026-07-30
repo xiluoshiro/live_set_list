@@ -33,6 +33,16 @@ function dateText(value: string | null): string {
   return value ?? "开放";
 }
 
+const LINEUP_CHANGE_TYPE_LABELS: Record<
+  ConsoleBandLineupVersionPayload["change_type"],
+  string
+> = {
+  addition: "增加",
+  removal: "减少",
+  replacement: "更换",
+  correction: "追加式资料修正",
+};
+
 export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdminSectionProps) {
   const auth = useAuth();
   const realBands = useMemo(
@@ -356,10 +366,14 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
             <div className="console-confirm-body">
               <CompactConfirmationTable ariaLabel="阵容版本变化确认" rows={[
                 ["版本", `V${currentLineup.version_no} → V${currentLineup.version_no + 1}`],
+                ["版本标签", lineupLabel.trim() || "-"],
+                ["变化类型", LINEUP_CHANGE_TYPE_LABELS[lineupChangeType]],
                 ["旧版本有效期", `${dateText(currentLineup.valid_from)} → ${lineupValidFrom}`],
                 ["新版本有效期", `${lineupValidFrom} → 开放`],
+                ["新版本成员", parseMembers(lineupMembers).join(" / ")],
                 ["增加成员", addedMembers.join(" / ") || "-"],
                 ["移除成员", removedMembers.join(" / ") || "-"],
+                ["备注", lineupNote.trim() || "-"],
                 ["交接 Live", selectedTransition ? `#${selectedTransition.live_id} ${selectedTransition.live_name}` : "无"],
               ]} />
             </div>

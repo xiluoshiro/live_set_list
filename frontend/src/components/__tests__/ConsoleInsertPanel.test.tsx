@@ -1109,6 +1109,28 @@ describe("ConsoleInsertPanel", () => {
     expect(await screen.findByText("第 1 / 1 页，共 2 条")).toBeInTheDocument();
   });
 
+  // 测试点：新增 Live 确认框必须回显人工演出状态及其对外说明。
+  test("新增Live确认框回显演出状态和状态说明", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleVenues.mockResolvedValue({
+      items: [{ venue_id: 88, venue_name: "New Venue" }],
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+
+    await user.click(await screen.findByRole("button", { name: "88 - New Venue" }));
+    await user.selectOptions(screen.getByDisplayValue("专场"), "event");
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), "Cancelled Live");
+    await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/cancelled");
+    await user.selectOptions(screen.getByLabelText("人工状态"), "cancelled");
+    await user.type(screen.getByLabelText("状态说明"), "主办方公告取消");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认新增 Live" });
+    expect(within(dialog).getByRole("row", { name: "event_status 已取消" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("row", { name: "status_note 主办方公告取消" })).toBeInTheDocument();
+  });
+
   // 测试点：关闭清空选项时，新增 Live 成功后应保留当前草稿、Venue 查询和 Venue 选择以便连续录入。
   test("新增Live关闭清空选项后保留录入数据", async () => {
     const user = userEvent.setup();

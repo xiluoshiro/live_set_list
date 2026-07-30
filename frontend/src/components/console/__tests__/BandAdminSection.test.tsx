@@ -112,7 +112,7 @@ describe("BandAdminSection", () => {
     expect(onBandsChanged).toHaveBeenCalledTimes(1);
   });
 
-  // 测试点：阵容时间线没有原地修正按钮，追加确认必须展示自动闭合、成员差异和唯一交接 Live。
+  // 测试点：追加阵容确认必须回显完整提交资料、自动闭合、成员差异和唯一交接 Live。
   test("appends a locked successor with an optional transition Live", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBandTransitionLiveCandidates.mockResolvedValue([
@@ -152,6 +152,7 @@ describe("BandAdminSection", () => {
     await user.selectOptions(screen.getByLabelText("变化类型"), "addition");
     await user.type(screen.getByLabelText("生效日期"), "2026-07-29");
     await user.type(screen.getByLabelText("新版本成员（每行一人）"), "\nNew Member");
+    await user.type(screen.getByLabelText("备注"), "正式新增成员");
     await user.type(screen.getByLabelText("交接 Live 日期（可空）"), "2026-07-28");
     await user.click(screen.getByRole("button", { name: "查询候选" }));
     await screen.findByRole("option", { name: "#55 Transition Show" });
@@ -161,7 +162,11 @@ describe("BandAdminSection", () => {
     const dialog = screen.getByRole("dialog", { name: "确认追加阵容版本" });
     const table = within(dialog).getByRole("table", { name: "阵容版本变化确认" });
     expect(table).toHaveTextContent("V3 → V4");
+    expect(within(table).getByRole("row", { name: "版本标签 Poppin'Party V4" })).toBeInTheDocument();
+    expect(within(table).getByRole("row", { name: "变化类型 增加" })).toBeInTheDocument();
+    expect(within(table).getByRole("row", { name: "新版本成员 Kasumi / Tae / New Member" })).toBeInTheDocument();
     expect(table).toHaveTextContent("New Member");
+    expect(within(table).getByRole("row", { name: "备注 正式新增成员" })).toBeInTheDocument();
     expect(table).toHaveTextContent("#55 Transition Show");
     await user.click(within(dialog).getByRole("button", { name: "确认追加" }));
 
@@ -172,7 +177,7 @@ describe("BandAdminSection", () => {
         change_type: "addition",
         members: ["Kasumi", "Tae", "New Member"],
         valid_from: "2026-07-29",
-        note: null,
+        note: "正式新增成员",
         transition_live_id: 55,
       },
       "csrf-token",

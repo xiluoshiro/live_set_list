@@ -68,6 +68,7 @@ import {
   getDerivedSegments,
   normalizeSongLookupText,
 } from "./console/helpers";
+import { EVENT_STATUS_LABELS } from "../liveStatus";
 import { parseSetlistText } from "./console/setlistParser/parseSetlistText";
 import type { ParsedSetlistWarning } from "./console/setlistParser/types";
 import type {
@@ -412,6 +413,8 @@ function livePayloadEquals(left: ConsoleLiveUpsertPayload | null, right: Console
 
 function formatLivePayloadValue(field: keyof ConsoleLiveUpsertPayload, value: ConsoleLiveUpsertPayload[keyof ConsoleLiveUpsertPayload]): string {
   if (field === "default_band_ids") return (value as number[]).join(", ") || "-";
+  if (field === "event_status") return EVENT_STATUS_LABELS[(value as EventStatus | undefined) ?? "scheduled"];
+  if (field === "status_note") return formatConfirmationValue(value);
   if (field === "event_attendees") {
     return (value as ConsoleLiveUpsertPayload["event_attendees"])
       .map((attendee) => `${attendee.band_id}: ${attendee.members.join(" / ")}`)
@@ -2831,6 +2834,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
                   .map((attendee) => `${attendee.band_id}: ${attendee.members.join(" / ")}`)
                   .join("; ") || "-",
               ],
+              ["event_status", EVENT_STATUS_LABELS[payload.event_status ?? "scheduled"]],
+              ["status_note", payload.status_note],
               ]}
             />
           )}
