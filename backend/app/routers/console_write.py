@@ -1084,7 +1084,6 @@ def append_live_setlist(
                         normalized_row["segment_type"],
                         normalized_row["sub_order"],
                         normalized_row["is_short"],
-                        None,
                         Json(normalized_row["other_member"]) if normalized_row["other_member"] is not None else None,
                         normalized_row["comment"],
                     )
@@ -1093,9 +1092,9 @@ def append_live_setlist(
                             """
                             INSERT INTO live_setlist (
                                 live_id, song_id, absolute_order, segment_type, sub_order,
-                                is_short, band_member, other_member, comment
+                                is_short, other_member, comment
                             )
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                             RETURNING id::text
                             """,
                             insert_values,
@@ -1112,9 +1111,9 @@ def append_live_setlist(
                             """
                             INSERT INTO live_setlist (
                                 live_id, song_id, absolute_order, segment_type, sub_order,
-                                is_short, band_member, other_member, comment
+                                is_short, other_member, comment
                             )
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                             """,
                             insert_values,
                         )
@@ -1253,7 +1252,6 @@ def replace_live_setlist(
                         normalized_row["segment_type"],
                         normalized_row["sub_order"],
                         normalized_row["is_short"],
-                        None,
                         Json(normalized_row["other_member"]) if normalized_row["other_member"] is not None else None,
                         normalized_row["comment"],
                     )
@@ -1262,9 +1260,9 @@ def replace_live_setlist(
                             """
                             INSERT INTO live_setlist (
                                 live_id, song_id, absolute_order, segment_type, sub_order,
-                                is_short, band_member, other_member, comment
+                                is_short, other_member, comment
                             )
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                             RETURNING id::text
                             """,
                             insert_values,
@@ -1281,9 +1279,9 @@ def replace_live_setlist(
                             """
                             INSERT INTO live_setlist (
                                 live_id, song_id, absolute_order, segment_type, sub_order,
-                                is_short, band_member, other_member, comment
+                                is_short, other_member, comment
                             )
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                             """,
                             insert_values,
                         )

@@ -328,15 +328,22 @@ def test_console_creates_band_in_selected_id_range_with_v1_history(
                     JOIN band_lineup_versions version ON version.id = member.lineup_version_id
                     WHERE version.band_id IN (4, 101)
                 ),
-                (SELECT COUNT(*) FROM audit_logs WHERE action = 'band_create'),
-                (
-                    SELECT bool_and(band_members IS NULL)
-                    FROM band_attrs
-                    WHERE id IN (4, 101)
-                )
+                (SELECT COUNT(*) FROM audit_logs WHERE action = 'band_create')
             """
         )
-        assert cursor.fetchone() == (2, 2, 2, 3, 2, True)
+        assert cursor.fetchone() == (2, 2, 2, 3, 2)
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND (
+                  (table_name = 'band_attrs' AND column_name = 'band_members')
+                  OR (table_name = 'live_setlist' AND column_name = 'band_member')
+              )
+            """
+        )
+        assert cursor.fetchone() == (0,)
 
 
 # 测试点：与当前或历史名称冲突时应返回 409，且不得留下 Band 或历史版本的部分数据。
@@ -429,8 +436,8 @@ def test_console_create_band_rejects_exhausted_regular_range(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
-            INSERT INTO band_attrs (id, band_abbr, band_name, band_members)
-            VALUES (99, 'last', 'Last Regular Band', ARRAY['Last Member'])
+            INSERT INTO band_attrs (id, band_abbr, band_name)
+            VALUES (99, 'last', 'Last Regular Band')
             """
         )
     integration_admin_connection.commit()

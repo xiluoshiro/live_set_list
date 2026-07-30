@@ -1119,7 +1119,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT absolute_order, segment_type, sub_order, is_short, band_member, other_member, comment
+            SELECT absolute_order, segment_type, sub_order, is_short, other_member, comment
             FROM live_setlist
             WHERE live_id = %s
             ORDER BY absolute_order
@@ -1134,7 +1134,6 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
             "EN",
             1,
             False,
-            None,
             {"嘉宾": ["MASKING", "LOCK"]},
             "appended encore",
         ),
@@ -1143,7 +1142,6 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
             "SP",
             1,
             True,
-            None,
             {"支援": None},
             None,
         ),
@@ -1152,7 +1150,6 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
             "M",
             1,
             False,
-            None,
             None,
             None,
         ),
@@ -1325,8 +1322,16 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
             """
         )
         assert cursor.fetchone() == ("handover", "next", "former")
-        cursor.execute("SELECT band_member FROM live_setlist WHERE live_id = 41")
-        assert cursor.fetchone() == (None,)
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'live_setlist'
+              AND column_name = 'band_member'
+            """
+        )
+        assert cursor.fetchone() == (0,)
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "live_setlist_append",
         "41",

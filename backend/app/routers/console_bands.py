@@ -302,8 +302,8 @@ def create_band(
                 version_label = f"{payload.band_name} V1"
                 cur.execute(
                     """
-                    INSERT INTO band_attrs (id, band_abbr, band_name, band_members)
-                    VALUES (%s, %s, %s, NULL)
+                    INSERT INTO band_attrs (id, band_abbr, band_name)
+                    VALUES (%s, %s, %s)
                     """,
                     (band_id, payload.band_abbr, payload.band_name),
                 )

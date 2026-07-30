@@ -7,7 +7,6 @@ from psycopg2.errors import QueryCanceled
 
 from app.main import app
 from app.routers.lives import (
-    BAND_ID_LOOKUP_QUERY,
     BATCH_LIVE_DETAIL_HEADERS_QUERY,
     BATCH_LIVE_DETAIL_ROWS_QUERY,
     LIVE_DETAIL_HEADER_QUERY,
@@ -32,7 +31,6 @@ def _build_connection_mock(count_value: int, rows: list[tuple]):
 def _build_detail_connection_mock(
     header_row: tuple | None,
     detail_rows: list[tuple],
-    band_lookup_rows: list[tuple],
     performance_rows: list[tuple] | None = None,
 ):
     conn = MagicMock()
@@ -40,7 +38,7 @@ def _build_detail_connection_mock(
     conn.__enter__.return_value = conn
     conn.cursor.return_value.__enter__.return_value = cursor
     cursor.fetchone.return_value = header_row
-    cursor.fetchall.side_effect = [detail_rows, performance_rows or [], band_lookup_rows]
+    cursor.fetchall.side_effect = [detail_rows, performance_rows or []]
     return conn, cursor
 
 
@@ -290,7 +288,7 @@ def test_get_lives_empty_result_returns_page_1_and_empty_items():
 
 
 def test_get_live_detail_success_maps_rows_and_rules():
-    # 测试点：详情接口按固化阵容集合计算 full/partial，并将缺少可靠版本的乐队标记为 unknown。
+    # 测试点：详情接口只按固化版本化出演计算 full/partial，缺少出演关系的行保持空集合。
     header_row = (
         40,
         "2026-03-28",
@@ -311,14 +309,12 @@ def test_get_live_detail_success_maps_rows_and_rules():
         (
             "M1",
             "Song 1",
-            {"Poppin'Party": ["A", "B", "C", "D", "E"], "Afterglow": ["A", "B", "C", "D"]},
             {"键盘支援": "远程连线", "嘉宾": "[\"Ommy\", \"荒幡亮平\"]"},
             True,
             True,
         ),
-        ("EN1", "Song 2", {"Unknown Band": ["Solo"]}, None, False, True),
+        ("EN1", "Song 2", None, False, True),
     ]
-    band_lookup_rows = [(1, "Poppin'Party", 5), (2, "Afterglow", 6)]
     performance_rows = [
         (
             40, "M1", 1, "Poppin'Party", "base", None, 11, "Poppin'Party V1",
@@ -332,7 +328,6 @@ def test_get_live_detail_success_maps_rows_and_rules():
     conn, cursor = _build_detail_connection_mock(
         header_row,
         detail_rows,
-        band_lookup_rows,
         performance_rows,
     )
 
@@ -382,15 +377,11 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert second_row["comments"] == ["翻唱"]
     assert second_row["cover_band"] is None
     assert second_row["other_members"] == []
-    assert second_row["band_members"][0]["band_id"] is None
-    assert second_row["band_members"][0]["total_count"] == 0
-    assert second_row["band_members"][0]["attendance_status"] == "unknown"
-    assert second_row["band_members"][0]["is_full"] is False
+    assert second_row["band_members"] == []
 
     assert cursor.execute.call_args_list[0] == call(LIVE_DETAIL_HEADER_QUERY, (40,))
     assert cursor.execute.call_args_list[1] == call(LIVE_DETAIL_ROWS_QUERY, (40,))
     assert cursor.execute.call_args_list[2] == call(LIVE_DETAIL_PERFORMANCES_QUERY, ([40],))
-    assert cursor.execute.call_args_list[3] == call(BAND_ID_LOOKUP_QUERY, (["Afterglow", "Poppin'Party", "Unknown Band"],))
 
 
 # 测试点：handover 可明确选择旧阵容为正式基准，并将新阵容新增成员分类为 incoming。
@@ -412,7 +403,7 @@ def test_get_live_detail_handover_returns_full_plus_and_incoming_member():
         None,
     )
     detail_rows = [
-        ("M1", "Handover Song", {"Roselia": ["A", "B", "C", "D", "E", "F"]}, None, False, False),
+        ("M1", "Handover Song", None, False, False),
     ]
     performance_rows = [
         (
@@ -424,7 +415,6 @@ def test_get_live_detail_handover_returns_full_plus_and_incoming_member():
     conn, _ = _build_detail_connection_mock(
         header_row,
         detail_rows,
-        [(4, "Roselia", 5)],
         performance_rows,
     )
 
@@ -457,8 +447,7 @@ def test_get_live_detail_handover_can_use_next_lineup_as_baseline():
     ]
     conn, _ = _build_detail_connection_mock(
         header_row,
-        [("M1", "Handover Song", {"Roselia": ["A", "B", "C", "D", "E", "F"]}, None, False, False)],
-        [(4, "Roselia", 5)],
+        [("M1", "Handover Song", None, False, False)],
         performance_rows,
     )
 
@@ -570,7 +559,7 @@ def test_get_live_detail_db_errors_log_context(exc, expected_status, expected_de
 
 
 def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
-    # 测试点：band_names 顺序与 bands（band_id 升序）一致，未映射 band_id 的名称置于末尾。
+    # 测试点：查询层返回的 band_names 稳定顺序应由详情接口原样去重保留。
     header_row = (
         88,
         "2026-03-28",
@@ -579,7 +568,7 @@ def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
         "16:00",
         "17:00",
         [30, 10, 20],
-        ["未映射A", "Band20", "Band10", "未映射B", "Band30"],
+        ["Band10", "Band20", "Band30", "未映射A", "未映射B"],
         "https://example.com/live/88",
         "oneman",
         None,
@@ -588,10 +577,9 @@ def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
         None,
     )
     detail_rows = [
-        ("M1", "Song 1", {"Band30": ["A"], "Band10": ["B"], "Band20": ["C"]}, None, False, False),
+        ("M1", "Song 1", None, False, False),
     ]
-    band_lookup_rows = [(10, "Band10", 5), (20, "Band20", 5), (30, "Band30", 5)]
-    conn, _ = _build_detail_connection_mock(header_row, detail_rows, band_lookup_rows)
+    conn, _ = _build_detail_connection_mock(header_row, detail_rows)
 
     with patch("app.routers.lives.get_db_connection", return_value=conn):
         client = TestClient(app)
@@ -603,8 +591,8 @@ def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
     assert payload["band_names"] == ["Band10", "Band20", "Band30", "未映射A", "未映射B"]
 
 
-def test_get_live_detail_new_fields_and_total_count_fallback_rules():
-    # 测试点：新增 header 字段与 Band 顺序保持稳定，缺少固化阵容时统一返回 unknown。
+def test_get_live_detail_new_fields_without_versioned_performances():
+    # 测试点：新增 header 字段保持稳定，缺少版本化出演时不得从已删除的旧 JSON 猜测成员。
     header_row = (
         66,
         "2026-04-01",
@@ -613,7 +601,7 @@ def test_get_live_detail_new_fields_and_total_count_fallback_rules():
         "00:00",
         "23:59",
         [3, 1, 3, 2],
-        ["Band2", "未映射", "Band1", "Band1", "Band3"],
+        ["Band1", "Band2", "Band3", "未映射"],
         "https://example.com/live/66?from=test",
         "festival",
         None,
@@ -625,14 +613,12 @@ def test_get_live_detail_new_fields_and_total_count_fallback_rules():
         (
             "M1",
             "Song 1",
-            {"Band3": ["A", "B"], "Band1": ["C"], "Band2": ["H", "I", "J", "K"]},
             None,
             False,
             False,
         )
     ]
-    band_lookup_rows = [(1, "Band1", 1), (2, "Band2", 0), (3, "Band3", 7)]
-    conn, _ = _build_detail_connection_mock(header_row, detail_rows, band_lookup_rows)
+    conn, _ = _build_detail_connection_mock(header_row, detail_rows)
 
     with patch("app.routers.lives.get_db_connection", return_value=conn):
         client = TestClient(app)
@@ -647,15 +633,7 @@ def test_get_live_detail_new_fields_and_total_count_fallback_rules():
     assert payload["bands"] == [1, 2, 3]
     assert payload["band_names"] == ["Band1", "Band2", "Band3", "未映射"]
 
-    band_members = payload["detail_rows"][0]["band_members"]
-    assert [item["band_name"] for item in band_members] == ["Band1", "Band2", "Band3"]
-    assert band_members[0]["total_count"] == 0
-    assert band_members[0]["attendance_status"] == "unknown"
-    assert band_members[0]["is_full"] is False
-    assert band_members[1]["total_count"] == 0
-    assert band_members[1]["is_full"] is False
-    assert band_members[2]["total_count"] == 0
-    assert band_members[2]["is_full"] is False
+    assert payload["detail_rows"][0]["band_members"] == []
 
 
 def test_get_live_details_batch_success_and_partial_missing():
@@ -669,7 +647,6 @@ def test_get_live_details_batch_success_and_partial_missing():
             2,
             "A1",
             "Song A",
-            [{"band_id": 2, "band_name": "Afterglow", "total_count": 6, "present_members": ["A", "B", "C", "D", "E"]}],
             {"嘉宾": "Guest A"},
             True,
             True,
@@ -680,7 +657,6 @@ def test_get_live_details_batch_success_and_partial_missing():
             1,
             "B1",
             "Song B",
-            [{"band_id": 1, "band_name": "Poppin'Party", "total_count": 5, "present_members": ["A", "B", "C", "D"]}],
             None,
             False,
             False,
@@ -731,7 +707,7 @@ def test_get_live_details_batch_success_and_partial_missing():
 
 
 def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
-    # 测试点：批量详情中 band_names 也遵循 bands 升序，且未映射名称统一后置。
+    # 测试点：批量详情应保留查询层按 band_id 排好的 band_names，并去除重复名称。
     header_rows = [
         (
             8,
@@ -741,7 +717,7 @@ def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
             "15:00",
             "16:00",
             [30, 10, 20],
-            ["未映射A", "Band20", "Band10", "未映射B", "Band30"],
+            ["Band10", "Band20", "Band30", "未映射A", "未映射B"],
             "https://example.com/live/8",
             "multi_act",
             None,
@@ -755,11 +731,6 @@ def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
             8,
             "A1",
             "Song A",
-            [
-                {"band_id": 20, "band_name": "Band20", "total_count": 5, "present_members": ["A"]},
-                {"band_id": 30, "band_name": "Band30", "total_count": 5, "present_members": ["B"]},
-                {"band_id": 10, "band_name": "Band10", "total_count": 5, "present_members": ["C"]},
-            ],
             None,
             False,
             False,
@@ -777,8 +748,8 @@ def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
     assert payload["items"][0]["band_names"] == ["Band10", "Band20", "Band30", "未映射A", "未映射B"]
 
 
-def test_get_live_details_batch_new_fields_and_total_count_fallback_rules():
-    # 测试点：批量详情与单条详情一致，缺少固化阵容时不再按当前人数猜测满员。
+def test_get_live_details_batch_new_fields_without_versioned_performances():
+    # 测试点：批量详情与单条详情一致，缺少版本化出演时成员集合必须为空。
     header_rows = [
         (
             66,
@@ -788,7 +759,7 @@ def test_get_live_details_batch_new_fields_and_total_count_fallback_rules():
             "00:00",
             "23:59",
             [3, 1, 3, 2],
-            ["Band2", "未映射", "Band1", "Band1", "Band3"],
+            ["Band1", "Band2", "Band3", "未映射"],
             "https://example.com/live/66?batch=true",
             "oneman",
             None,
@@ -802,11 +773,6 @@ def test_get_live_details_batch_new_fields_and_total_count_fallback_rules():
             66,
             "M1",
             "Song 1",
-            [
-                {"band_id": 3, "band_name": "Band3", "total_count": 0, "present_members": ["A", "B"]},
-                {"band_id": 1, "band_name": "Band1", "total_count": 1, "present_members": ["C"]},
-                {"band_id": 2, "band_name": "Band2", "total_count": 6, "present_members": ["H", "I", "J", "K", "L", "M"]},
-            ],
             None,
             False,
             False,
@@ -828,15 +794,7 @@ def test_get_live_details_batch_new_fields_and_total_count_fallback_rules():
     assert item["bands"] == [1, 2, 3]
     assert item["band_names"] == ["Band1", "Band2", "Band3", "未映射"]
 
-    band_members = item["detail_rows"][0]["band_members"]
-    assert [band["band_name"] for band in band_members] == ["Band1", "Band2", "Band3"]
-    assert band_members[0]["total_count"] == 0
-    assert band_members[0]["attendance_status"] == "unknown"
-    assert band_members[0]["is_full"] is False
-    assert band_members[1]["total_count"] == 0
-    assert band_members[1]["is_full"] is False
-    assert band_members[2]["total_count"] == 0
-    assert band_members[2]["is_full"] is False
+    assert item["detail_rows"][0]["band_members"] == []
 
 
 def test_get_live_details_batch_invalid_live_id_returns_400():
@@ -908,8 +866,8 @@ def test_get_live_details_batch_db_error_returns_500():
     assert "Database error" in response.json()["detail"]
 
 
-def test_get_live_details_batch_normalizes_band_and_other_members():
-    # 测试点：批量接口应过滤非法 Band 项，并将无版本的合法项规范化为 unknown。
+def test_get_live_details_batch_normalizes_other_members_without_legacy_band_data():
+    # 测试点：批量接口只规范化 other_member，且不得从旧 Band JSON 合成出演。
     header_rows = [
         (1, "2026-03-28", "Live 1", "场地 1", "16:30", "17:30", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman", None, None, None, None),
     ]
@@ -918,11 +876,6 @@ def test_get_live_details_batch_normalizes_band_and_other_members():
             1,
             "M1",
             "Song X",
-            [
-                123,
-                {"band_id": "not-int", "band_name": "Afterglow", "total_count": "not-int", "present_members": "Ran"},
-                {"band_id": 1, "band_name": None, "total_count": 5, "present_members": ["A", "B"]},
-            ],
             {"嘉宾": "[\"Alice\", \"Bob\"]", "支援": "\"Solo\""},
             False,
             False,
@@ -939,24 +892,7 @@ def test_get_live_details_batch_normalizes_band_and_other_members():
     assert payload["missing_live_ids"] == []
 
     row = payload["items"][0]["detail_rows"][0]
-    assert row["band_members"] == [
-        {
-            "band_id": None,
-            "band_name": "Afterglow",
-            "lineup_usage": None,
-            "handover_baseline": None,
-            "lineup_version": None,
-            "next_lineup_version": None,
-            "attendance_status": "unknown",
-            "expected_count": 0,
-            "present_members": ["Ran"],
-            "present_count": 1,
-            "missing_members": [],
-            "extra_members": [],
-            "total_count": 0,
-            "is_full": False,
-        }
-    ]
+    assert row["band_members"] == []
     other_member_map = {item["key"]: item["value"] for item in row["other_members"]}
     assert other_member_map["嘉宾"] == ["Alice", "Bob"]
     assert other_member_map["支援"] == ["Solo"]
