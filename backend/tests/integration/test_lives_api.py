@@ -62,7 +62,7 @@ def test_get_lives_includes_seeded_live_without_setlist(integration_test_client)
 
 
 def test_get_lives_without_setlist_excludes_seeded_lives_with_rows(integration_test_client):
-    # 测试点：without_setlist 候选只包含没有任何 setlist 行的 Live，并保留默认 Band。
+    # 测试点：without_setlist 候选只包含未取消且没有任何 setlist 行的 Live，并保留默认 Band。
     response = integration_test_client.get("/api/lives?page=1&page_size=20&without_setlist=true")
 
     assert response.status_code == 200
@@ -74,6 +74,29 @@ def test_get_lives_without_setlist_excludes_seeded_lives_with_rows(integration_t
         "page_size": 20,
         "total": 1,
         "total_pages": 1,
+    }
+
+
+# 测试点：已取消 Live 即使没有 setlist，也不会进入控制台新增 Setlist 的候选结果。
+def test_get_lives_without_setlist_excludes_cancelled_lives(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("UPDATE live_attrs SET event_status = 'cancelled' WHERE id = 41")
+
+    response = integration_test_client.get("/api/lives?page=1&page_size=20&without_setlist=true")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [],
+        "pagination": {
+            "page": 1,
+            "page_size": 20,
+            "total": 0,
+            "total_pages": 1,
+        },
     }
 
 

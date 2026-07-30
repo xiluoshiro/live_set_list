@@ -145,7 +145,7 @@
 自动文档能看到字段结构，但以下规则更值得额外说明：
 
 - `page_size` 当前只允许 `15` 或 `20`
-- `without_setlist=true` 时，仅返回尚无 `live_setlist` 数据的 Live，并在数据库分页前优先排列非 `event` 类型；控制台“新增 Setlist”候选使用该筛选
+- `without_setlist=true` 时，仅返回状态非“已取消”且尚无 `live_setlist` 数据的 Live，并在数据库分页前优先排列非 `event` 类型；控制台“新增 Setlist”候选使用该筛选
 - `q` 会 trim；空字符串等同于未传，最大长度为 `255`，匹配 Live 标题、场地、歌曲、乐队名和乐队缩写
 - `year` 范围为 `1900..2100`
 - `live_type` 只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`

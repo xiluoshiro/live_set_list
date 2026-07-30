@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="LiveSetList 演出详情方向探索：瑞士演出谱。" />
+    <title>瑞士演出谱 | LiveSetList</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f5f5f1;
+        --ink: #161616;
+        --muted: #666661;
+        --line: #b9b9b2;
+        --accent: #e90055;
+        --ras: #15aeb1;
+        --afterglow: #d72f40;
+        --yume: #e2667a;
+        --hello: #d79e00;
+        font-family:
+          "Arial Nova", "Helvetica Neue", "Noto Sans SC", "Noto Sans JP", Arial,
+          sans-serif;
+        background: var(--paper);
+        color: var(--ink);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(90deg, transparent 0 calc(25% - 1px), rgb(0 0 0 / 0.055) calc(25% - 1px) 25%, transparent 25%),
+          var(--paper);
+      }
+
+      button,
+      a {
+        color: inherit;
+        font: inherit;
+      }
+
+      a {
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.2em;
+      }
+
+      .skip {
+        position: fixed;
+        top: 0.75rem;
+        left: 0.75rem;
+        z-index: 10;
+        padding: 0.65rem 0.9rem;
+        color: #fff;
+        background: var(--accent);
+        transform: translateY(-160%);
+      }
+
+      .skip:focus {
+        transform: translateY(0);
+      }
+
+      .utility {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 3.6rem;
+        padding: 0.75rem 1.5rem;
+        border-bottom: 1px solid var(--ink);
+        background: var(--paper);
+      }
+
+      .brand {
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        text-decoration: none;
+      }
+
+      .utility nav {
+        display: flex;
+        gap: 1.25rem;
+        color: var(--muted);
+        font-size: 0.83rem;
+      }
+
+      .utility nav a:first-child {
+        color: var(--ink);
+      }
+
+      .page {
+        display: grid;
+        grid-template-columns: minmax(15rem, 25vw) minmax(31rem, 1fr) minmax(9rem, 13vw);
+        min-height: calc(100dvh - 3.6rem);
+      }
+
+      .event {
+        position: sticky;
+        top: 0;
+        align-self: start;
+        min-height: calc(100dvh - 3.6rem);
+        padding: 2rem 1.5rem;
+        border-right: 1px solid var(--ink);
+      }
+
+      .back {
+        display: inline-block;
+        margin-bottom: clamp(3rem, 9vh, 7rem);
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .event h1 {
+        max-width: 13ch;
+        margin: 0;
+        font-size: clamp(2.2rem, 4.2vw, 5.4rem);
+        font-weight: 780;
+        letter-spacing: -0.07em;
+        line-height: 0.92;
+      }
+
+      .event-name-jp {
+        display: block;
+        margin-top: 1.25rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.45;
+      }
+
+      .event-meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+        margin: 2.25rem 0 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--line);
+      }
+
+      .event-meta dl {
+        margin: 0;
+      }
+
+      .event-meta dt {
+        margin-bottom: 0.25rem;
+        color: var(--muted);
+        font-size: 0.7rem;
+      }
+
+      .event-meta dd {
+        margin: 0;
+        font-size: 0.9rem;
+        line-height: 1.35;
+      }
+
+      .event-actions {
+        display: flex;
+        gap: 0.6rem;
+      }
+
+      .event-actions button {
+        min-height: 2.6rem;
+        padding: 0.55rem 0.8rem;
+        border: 1px solid var(--ink);
+        border-radius: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .event-actions .primary {
+        color: #fff;
+        background: var(--ink);
+      }
+
+      .event-actions button:active {
+        transform: translateY(1px);
+      }
+
+      .setlist {
+        min-width: 0;
+        padding: 1rem clamp(1rem, 3vw, 3rem) 6rem;
+      }
+
+      .setlist-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 2rem;
+        align-items: end;
+        min-height: 10rem;
+        padding: 1.5rem 0;
+        border-bottom: 4px solid var(--ink);
+      }
+
+      .setlist-head h2 {
+        margin: 0;
+        font-size: clamp(3.7rem, 8vw, 8.6rem);
+        font-weight: 760;
+        letter-spacing: -0.08em;
+        line-height: 0.78;
+      }
+
+      .setlist-head p {
+        max-width: 14rem;
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.55;
+      }
+
+      .act {
+        scroll-margin-top: 1rem;
+        margin-top: 3.4rem;
+        --band: var(--accent);
+      }
+
+      .act:target {
+        outline: 3px solid var(--band);
+        outline-offset: 0.6rem;
+      }
+
+      .act.ras {
+        --band: var(--ras);
+      }
+
+      .act.afterglow {
+        --band: var(--afterglow);
+      }
+
+      .act.yume {
+        --band: var(--yume);
+      }
+
+      .act.hello {
+        --band: var(--hello);
+      }
+
+      .act-head {
+        display: grid;
+        grid-template-columns: 5rem minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: baseline;
+        padding-bottom: 0.8rem;
+        border-bottom: 1px solid var(--ink);
+      }
+
+      .act-head .range {
+        color: var(--band);
+        font-size: 0.76rem;
+        font-weight: 800;
+      }
+
+      .act-head h3 {
+        margin: 0;
+        font-size: clamp(1.35rem, 2.3vw, 2.3rem);
+        letter-spacing: -0.045em;
+      }
+
+      .act-head .count {
+        color: var(--muted);
+        font-size: 0.75rem;
+      }
+
+      .song-list {
+        display: grid;
+      }
+
+      .song {
+        display: grid;
+        grid-template-columns: 5rem minmax(0, 1fr) minmax(8rem, 12rem);
+        gap: 1rem;
+        align-items: center;
+        min-height: 4.4rem;
+        padding: 0.75rem 0;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .song:hover,
+      .song:focus-visible {
+        background: linear-gradient(90deg, color-mix(in srgb, var(--band) 15%, transparent), transparent 58%);
+        outline: 0;
+      }
+
+      .song:hover .song-title,
+      .song:focus-visible .song-title {
+        transform: translateX(0.35rem);
+      }
+
+      .song-code {
+        color: var(--band);
+        font: 700 0.76rem/1 "IBM Plex Mono", Consolas, monospace;
+      }
+
+      .song-title {
+        min-width: 0;
+        font-size: clamp(1rem, 1.6vw, 1.32rem);
+        font-weight: 650;
+        letter-spacing: -0.025em;
+        transition: transform 180ms ease;
+      }
+
+      .song-band {
+        color: var(--muted);
+        font-size: 0.72rem;
+        line-height: 1.35;
+        text-align: right;
+      }
+
+      .map {
+        position: sticky;
+        top: 0;
+        align-self: start;
+        min-height: calc(100dvh - 3.6rem);
+        padding: 2rem 1.3rem;
+        border-left: 1px solid var(--ink);
+      }
+
+      .map h2 {
+        margin: 0 0 2rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+      }
+
+      .map-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .map-link {
+        display: grid;
+        grid-template-columns: 2.3rem 1fr;
+        gap: 0.55rem;
+        align-items: center;
+        text-decoration: none;
+      }
+
+      .map-link span {
+        color: var(--muted);
+        font: 0.68rem/1 "IBM Plex Mono", Consolas, monospace;
+      }
+
+      .map-bar {
+        height: var(--size);
+        min-height: 0.35rem;
+        background: var(--color);
+        transition: transform 180ms ease;
+        transform-origin: left;
+      }
+
+      .map-link:hover .map-bar,
+      .map-link:focus-visible .map-bar {
+        transform: scaleX(1.12);
+      }
+
+      .map-summary {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.72rem;
+        line-height: 1.5;
+      }
+
+      @media (max-width: 980px) {
+        body {
+          background: var(--paper);
+        }
+
+        .page {
+          grid-template-columns: minmax(13rem, 34vw) minmax(0, 1fr);
+        }
+
+        .map {
+          display: none;
+        }
+
+        .setlist-head {
+          grid-template-columns: 1fr;
+          gap: 1rem;
+        }
+      }
+
+      @media (max-width: 700px) {
+        .utility {
+          padding-inline: 1rem;
+        }
+
+        .utility nav a:not(:first-child) {
+          display: none;
+        }
+
+        .page {
+          display: block;
+        }
+
+        .event {
+          position: relative;
+          min-height: auto;
+          padding: 1.5rem 1rem 2rem;
+          border-right: 0;
+          border-bottom: 1px solid var(--ink);
+        }
+
+        .back {
+          margin-bottom: 3rem;
+        }
+
+        .event h1 {
+          max-width: 16ch;
+          font-size: clamp(2.6rem, 12vw, 4.6rem);
+        }
+
+        .setlist {
+          padding: 1.5rem 1rem 4rem;
+        }
+
+        .setlist-head {
+          min-height: auto;
+        }
+
+        .setlist-head h2 {
+          font-size: 4.4rem;
+        }
+
+        .act-head,
+        .song {
+          grid-template-columns: 3.2rem minmax(0, 1fr);
+        }
+
+        .act-head .count,
+        .song-band {
+          grid-column: 2;
+          text-align: left;
+        }
+
+        .song {
+          row-gap: 0.35rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        .song-title,
+        .map-bar {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#songs">跳到歌单</a>
+
+    <header class="utility">
+      <a class="brand" href="./index.html">LiveSetList</a>
+      <nav aria-label="方向与页面导航">
+        <a href="./index.html">全部方向</a>
+        <a href="#songs">歌单</a>
+        <a href="#event-info">演出资料</a>
+      </nav>
+    </header>
+
+    <main class="page">
+      <aside class="event" id="event-info">
+        <a class="back" href="./index.html">返回方向比较</a>
+        <h1>In the name of BanG Dream!</h1>
+        <span class="event-name-jp">BanG Dream! 10th Anniversary LIVE</span>
+
+        <div class="event-meta">
+          <dl>
+            <dt>日期</dt>
+            <dd>2026-02-28</dd>
+          </dl>
+          <dl>
+            <dt>场地</dt>
+            <dd>Kアリーナ横浜</dd>
+          </dl>
+          <dl>
+            <dt>开场</dt>
+            <dd>13:30 JP</dd>
+          </dl>
+          <dl>
+            <dt>开演</dt>
+            <dd>15:00 JP</dd>
+          </dl>
+        </div>
+
+        <div class="event-actions" aria-label="演出操作">
+          <button class="primary" type="button" aria-pressed="false">收藏</button>
+          <button type="button">分享</button>
+        </div>
+      </aside>
+
+      <section class="setlist" id="songs" aria-labelledby="setlist-heading">
+        <header class="setlist-head">
+          <h2 id="setlist-heading">SETLIST</h2>
+          <p>完整歌单共 41 曲。本骨架展示前四个演出区段，用于测试高密度阅读。</p>
+        </header>
+
+        <section class="act ras" id="act-ras">
+          <header class="act-head">
+            <span class="range">M1-M4</span>
+            <h3>RAISE A SUILEN</h3>
+            <span class="count">4 曲</span>
+          </header>
+          <div class="song-list">
+            <button class="song" type="button">
+              <span class="song-code">M1</span><span class="song-title">R·I·O·T</span><span class="song-band">RAISE A SUILEN</span>
+            </button>
+            <button class="song" type="button">
+              <span class="song-code">M2</span><span class="song-title">V.I.P MONSTER</span><span class="song-band">RAISE A SUILEN</span>
+            </button>
+            <button class="song" type="button">
+              <span class="song-code">M3</span><span class="song-title">OUTSIDER RODEO</span><span class="song-band">RAISE A SUILEN</span>
+            </button>
+            <button class="song" type="button">
+              <span class="song-code">M4</span><span class="song-title">HELL! or HELL?</span><span class="song-band">RAISE A SUILEN</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="act afterglow" id="act-afterglow">
+          <header class="act-head">
+            <span class="range">M5-M7</span>
+            <h3>Afterglow</h3>
+            <span class="count">3 曲</span>
+          </header>
+          <div class="song-list">
+            <button class="song" type="button">
+              <span class="song-code">M5</span><span class="song-title">燦々</span><span class="song-band">Afterglow</span>
+            </button>
+            <button class="song" type="button">
+              <span class="song-code">M6</span><span class="song-title">Hey-day狂騒曲(カプリチオ)</span><span class="song-band">Afterglow</span>
+            </button>
+            <button class="song" type="button">
+              <span class="song-code">M7</span><span class="song-title">Scarlet Sky</span><span class="song-band">Afterglow</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="act yume" id="act-yume">
+          <header class="act-head">
+            <span class="range">M8-M10</span>
+            <h3>夢限大みゅーたいぷ</h3>
+            <span class="count">3 曲</span>
+          </header>
+          <div class="song-list">
+            <button class="song" type="button">
+              <span class="song-code">M8</span><span class="song-title">夢現妄想世界</span><span class="song-band">夢限大みゅーたいぷ</span>
+            </button>
+            <button class="song" type="button">
+              <span class="song-code">M9</span><span class="song-title">チューニング</span><span class="song-band">夢限大みゅーたいぷ</span>
+            </button>
+            <button class="song" type="button">
+              <span class="song-code">M10</span><span class="song-title">コミュ着火Fire!</span><span class="song-band">夢限大みゅーたいぷ</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="act hello" id="act-hello">
+          <header class="act-head">
+            <span class="range">M11-M14</span>
+            <h3>ハロー、ハッピーワールド！</h3>
+            <span class="count">4 曲</span>
+          </header>
+          <div class="song-list">
+            <button class="song" type="button">
+              <span class="song-code">M11</span><span class="song-title">えがおのオーケストラっ！</span><span class="song-band">合作曲目</span>
+            </button>
+            <button class="song" type="button">
+              <span class="song-code">M12</span><span class="song-title">ゴーカ！ごーかい！？ファントムシーフ！</span><span class="song-band">ハロー、ハッピーワールド！</span>
+            </button>
+            <button class="song" type="button">
+              <span class="song-code">M13</span><span class="song-title">サンバロハッピ〜！</span><span class="song-band">ハロー、ハッピーワールド！</span>
+            </button>
+            <button class="song" type="button">
+              <span class="song-code">M14</span><span class="song-title">うぃーきゃん☆フレフレっ！</span><span class="song-band">ハロー、ハッピーワールド！</span>
+            </button>
+          </div>
+        </section>
+      </section>
+
+      <aside class="map" aria-label="歌单地图">
+        <h2>歌单地图</h2>
+        <nav class="map-list">
+          <a class="map-link" href="#act-ras"><span>M1</span><i class="map-bar" style="--size: 5.5rem; --color: var(--ras)"></i></a>
+          <a class="map-link" href="#act-afterglow"><span>M5</span><i class="map-bar" style="--size: 4.1rem; --color: var(--afterglow)"></i></a>
+          <a class="map-link" href="#act-yume"><span>M8</span><i class="map-bar" style="--size: 4.1rem; --color: var(--yume)"></i></a>
+          <a class="map-link" href="#act-hello"><span>M11</span><i class="map-bar" style="--size: 5.5rem; --color: var(--hello)"></i></a>
+        </nav>
+        <p class="map-summary">当前骨架仅显示 14 曲。完整版本将在此映射全场 41 曲与 10 个 Band。</p>
+      </aside>
+    </main>
+  </body>
+</html>
