@@ -20,115 +20,6 @@ def _truncate_business_tables(integration_admin_connection) -> None:
         )
 
 
-def _seed_versioned_detail_relations(integration_admin_connection, live_ids: list[int]) -> None:
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cursor:
-        cursor.execute(
-            """
-            INSERT INTO band_name_versions (
-                band_id, band_name, band_abbr, valid_from, valid_to, note
-            )
-            SELECT DISTINCT
-                band.id, band.band_name, NULLIF(band.band_abbr, ''),
-                NULL::date, NULL::date,
-                'versioned detail integration test'
-            FROM live_setlist setlist
-            CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) AS item(band_name)
-            JOIN band_attrs band ON band.band_name = item.band_name
-            WHERE setlist.live_id = ANY(%s)
-            ON CONFLICT DO NOTHING
-            """,
-            (live_ids,),
-        )
-        cursor.execute(
-            """
-            INSERT INTO band_lineup_versions (
-                band_id, version_no, version_label, valid_from, valid_to,
-                predecessor_id, change_type, note
-            )
-            SELECT DISTINCT
-                band.id, 1, band.band_name || ' V1',
-                NULL::date, NULL::date, NULL::bigint,
-                'initial', 'versioned detail integration test'
-            FROM live_setlist setlist
-            CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) AS item(band_name)
-            JOIN band_attrs band ON band.band_name = item.band_name
-            WHERE setlist.live_id = ANY(%s)
-            ON CONFLICT DO NOTHING
-            """,
-            (live_ids,),
-        )
-        cursor.execute(
-            """
-            INSERT INTO band_lineup_version_members (
-                lineup_version_id, member_name, display_order
-            )
-            SELECT version.id, member.member_name, member.display_order::integer
-            FROM band_lineup_versions version
-            JOIN band_attrs band ON band.id = version.band_id
-            CROSS JOIN LATERAL unnest(band.band_members) WITH ORDINALITY
-                AS member(member_name, display_order)
-            ORDER BY version.band_id, member.display_order
-            ON CONFLICT DO NOTHING
-            """
-        )
-        cursor.execute(
-            """
-            INSERT INTO live_band_lineup_contexts (
-                live_id, band_id, band_name_version_id,
-                base_lineup_version_id, next_lineup_version_id
-            )
-            SELECT DISTINCT
-                setlist.live_id, band.id, name_version.id, lineup_version.id, NULL::bigint
-            FROM live_setlist setlist
-            CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) AS item(band_name)
-            JOIN band_attrs band ON band.band_name = item.band_name
-            JOIN band_name_versions name_version ON name_version.band_id = band.id
-            JOIN band_lineup_versions lineup_version ON lineup_version.band_id = band.id
-            WHERE setlist.live_id = ANY(%s)
-            ON CONFLICT DO NOTHING
-            """,
-            (live_ids,),
-        )
-        cursor.execute(
-            """
-            INSERT INTO live_setlist_band_performances (
-                setlist_id, live_id, band_id, lineup_usage
-            )
-            SELECT setlist.id, setlist.live_id, band.id, 'base'
-            FROM live_setlist setlist
-            CROSS JOIN LATERAL jsonb_each(setlist.band_member) AS item(band_name, members)
-            JOIN band_attrs band ON band.band_name = item.band_name
-            WHERE setlist.live_id = ANY(%s)
-            ON CONFLICT DO NOTHING
-            """,
-            (live_ids,),
-        )
-        cursor.execute(
-            """
-            INSERT INTO live_setlist_band_performance_members (
-                setlist_id, band_id, member_name, display_order, appearance_role
-            )
-            SELECT
-                setlist.id, band.id, member.member_name,
-                member.display_order::integer, NULL
-            FROM live_setlist setlist
-            CROSS JOIN LATERAL jsonb_each(setlist.band_member) AS item(band_name, members)
-            JOIN band_attrs band ON band.band_name = item.band_name
-            CROSS JOIN LATERAL jsonb_array_elements_text(
-                CASE
-                    WHEN jsonb_typeof(item.members) = 'array' THEN item.members
-                    WHEN item.members IS NULL THEN '[]'::jsonb
-                    ELSE jsonb_build_array(item.members)
-                END
-            ) WITH ORDINALITY AS member(member_name, display_order)
-            WHERE setlist.live_id = ANY(%s)
-            ON CONFLICT DO NOTHING
-            """,
-            (live_ids,),
-        )
-
-
 def test_get_lives_returns_seeded_items(integration_test_client):
     # 测试点：列表接口应基于真实测试库返回种子数据，并正确聚合 bands 与分页信息。
     response = integration_test_client.get("/api/lives?page=1&page_size=20")
@@ -283,7 +174,6 @@ def test_get_live_detail_returns_seeded_detail_payload(
     integration_admin_connection,
 ):
     # 测试点：详情接口应基于真实固化阵容返回完整字段与 full/partial 出席状态。
-    _seed_versioned_detail_relations(integration_admin_connection, [1])
     response = integration_test_client.get("/api/lives/1")
 
     assert response.status_code == 200
@@ -387,18 +277,38 @@ def test_get_live_detail_applies_cross_band_cover_rules(
                 segment_type,
                 sub_order,
                 is_short,
-                band_member,
                 other_member,
                 comment
             )
             VALUES
-                (1, 9000, 99, 'SP', 99, true, '{"Poppin''Party": ["Kasumi"]}'::jsonb, NULL, NULL),
-                (1, 9001, 100, 'SP', 100, false, '{"Poppin''Party": ["Kasumi"]}'::jsonb, NULL, NULL),
-                (1, 9002, 101, 'SP', 101, false, '{"Poppin''Party": ["Kasumi"]}'::jsonb, NULL, NULL)
+                (1, 9000, 99, 'SP', 99, true, NULL, NULL),
+                (1, 9001, 100, 'SP', 100, false, NULL, NULL),
+                (1, 9002, 101, 'SP', 101, false, NULL, NULL)
+            """
+        )
+        cursor.execute(
+            """
+            INSERT INTO live_setlist_band_performances (
+                setlist_id, live_id, band_id, lineup_usage
+            )
+            SELECT id, live_id, 1, 'base'
+            FROM live_setlist
+            WHERE live_id = 1
+              AND absolute_order BETWEEN 99 AND 101
+            """
+        )
+        cursor.execute(
+            """
+            INSERT INTO live_setlist_band_performance_members (
+                setlist_id, band_id, member_name, display_order, appearance_role
+            )
+            SELECT id, 1, 'Kasumi', 1, NULL
+            FROM live_setlist
+            WHERE live_id = 1
+              AND absolute_order BETWEEN 99 AND 101
             """
         )
 
-    _seed_versioned_detail_relations(integration_admin_connection, [1])
     response = integration_test_client.get("/api/lives/1")
 
     assert response.status_code == 200
@@ -427,7 +337,6 @@ def test_get_live_detail_unmapped_band_uses_fallback_rules(
     integration_admin_connection,
 ):
     # 测试点：旧 JSON 中没有稳定 band_id 映射的乐队不得再进入公开出演真源。
-    _seed_versioned_detail_relations(integration_admin_connection, [2])
     response = integration_test_client.get("/api/lives/2")
 
     assert response.status_code == 200
@@ -450,7 +359,6 @@ def test_get_live_details_batch_returns_seeded_items_and_missing_ids(
     integration_admin_connection,
 ):
     # 测试点：批量详情接口应在真实库场景下支持去重、保序，并返回 missing_live_ids。
-    _seed_versioned_detail_relations(integration_admin_connection, [1, 2])
     response = integration_test_client.post(
         "/api/lives/details:batch",
         json={"live_ids": [2, 999, 1, 2]},

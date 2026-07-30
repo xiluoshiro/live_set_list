@@ -29,12 +29,12 @@ VALUES
     (2, 'Zepp Shinjuku'),
     (24, '東京ガーデンシアター');
 
-INSERT INTO public.band_attrs (id, band_abbr, band_name, band_members)
+INSERT INTO public.band_attrs (id, band_abbr, band_name)
 VALUES
-    (0, '', 'Other bands', ARRAY[]::text[]),
-    (1, 'ppp', 'Poppin''Party', ARRAY['Kasumi', 'Tae', 'Rimi', 'Saaya', 'Arisa']),
-    (2, 'rsl', 'Roselia', ARRAY['Yukina', 'Sayo', 'Lisa', 'Ako', 'Rinko']),
-    (3, 'mygo', 'MyGO!!!!!', ARRAY['Tomori', 'Anon', 'Raana', 'Soyo', 'Taki']);
+    (0, '', 'Other bands'),
+    (1, 'ppp', 'Poppin''Party'),
+    (2, 'rsl', 'Roselia'),
+    (3, 'mygo', 'MyGO!!!!!');
 
 INSERT INTO public.song_list (id, song_name, band_id, is_cover)
 VALUES
@@ -143,7 +143,6 @@ INSERT INTO public.live_setlist (
     segment_type,
     sub_order,
     is_short,
-    band_member,
     other_member,
     comment
 )
@@ -156,9 +155,6 @@ VALUES
         1,
         false,
         $${
-          "Poppin'Party": ["Kasumi", "Tae", "Rimi", "Saaya", "Arisa"]
-        }$$::jsonb,
-        $${
           "嘉宾": ["CHU2"]
         }$$::jsonb,
         'opening song'
@@ -170,9 +166,6 @@ VALUES
         'main',
         2,
         true,
-        $${
-          "Roselia": ["Yukina", "Sayo", "Lisa", "Ako"]
-        }$$::jsonb,
         NULL,
         'short version'
     ),
@@ -183,10 +176,6 @@ VALUES
         'main',
         1,
         false,
-        $${
-          "MyGO!!!!!": ["Tomori", "Anon", "Raana"],
-          "Special Guest Band": ["Vocal"]
-        }$$::jsonb,
         $${
           "支援": "Keyboard"
         }$$::jsonb,
@@ -199,9 +188,6 @@ VALUES
         'encore',
         1,
         false,
-        $${
-          "Poppin'Party": ["Kasumi", "Tae", "Saaya", "Arisa"]
-        }$$::jsonb,
         $${
           "嘉宾": ["Tomori", "Anon"]
         }$$::jsonb,
@@ -219,7 +205,6 @@ INSERT INTO public.live_setlist (
     segment_type,
     sub_order,
     is_short,
-    band_member,
     other_member,
     comment
 )
@@ -232,9 +217,6 @@ VALUES
         'M',
         1,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -246,9 +228,6 @@ VALUES
         'M',
         2,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -260,9 +239,6 @@ VALUES
         'M',
         3,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -274,9 +250,6 @@ VALUES
         'M',
         4,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -288,9 +261,6 @@ VALUES
         'M',
         5,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -302,9 +272,6 @@ VALUES
         'M',
         6,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -316,9 +283,6 @@ VALUES
         'M',
         7,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -330,9 +294,6 @@ VALUES
         'M',
         8,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -344,9 +305,6 @@ VALUES
         'M',
         9,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -358,9 +316,6 @@ VALUES
         'M',
         10,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -372,9 +327,6 @@ VALUES
         'M',
         11,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -386,9 +338,6 @@ VALUES
         'M',
         12,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -400,9 +349,6 @@ VALUES
         'EN',
         1,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -414,9 +360,6 @@ VALUES
         'EN',
         2,
         true,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -428,9 +371,6 @@ VALUES
         'EN',
         3,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -442,9 +382,6 @@ VALUES
         'OP',
         1,
         false,
-        $${
-          "Poppin'Party": ["愛美", "大塚紗英", "西本りみ", "大橋彩香", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     ),
@@ -456,15 +393,12 @@ VALUES
         'WEN',
         1,
         false,
-        $${
-          "Poppin'Party": ["愛美", "伊藤彩沙"]
-        }$$::jsonb,
         NULL,
         NULL
     );
 
--- Every real Band has one open name/lineup version. Runtime code must not fall back
--- to band_attrs.band_members after V25.
+-- Every real Band has one open name/lineup version. The legacy member columns
+-- are intentionally not used by the seed.
 INSERT INTO public.band_name_versions (band_id, band_name, band_abbr, valid_from, valid_to, note)
 SELECT id, band_name, NULLIF(band_abbr, ''), NULL, NULL, 'base seed current name'
 FROM public.band_attrs
@@ -480,34 +414,39 @@ WHERE id > 0
 ORDER BY id;
 
 INSERT INTO public.band_lineup_version_members (lineup_version_id, member_name, display_order)
-SELECT lineup.id, member.member_name, member.display_order::integer
+SELECT lineup.id, member.member_name, member.display_order
 FROM public.band_lineup_versions lineup
-JOIN public.band_attrs band ON band.id = lineup.band_id
-CROSS JOIN LATERAL unnest(COALESCE(band.band_members, ARRAY[]::text[]))
-    WITH ORDINALITY member(member_name, display_order);
+JOIN (
+    VALUES
+        (1, 'Kasumi', 1),
+        (1, 'Tae', 2),
+        (1, 'Rimi', 3),
+        (1, 'Saaya', 4),
+        (1, 'Arisa', 5),
+        (2, 'Yukina', 1),
+        (2, 'Sayo', 2),
+        (2, 'Lisa', 3),
+        (2, 'Ako', 4),
+        (2, 'Rinko', 5),
+        (3, 'Tomori', 1),
+        (3, 'Anon', 2),
+        (3, 'Raana', 3),
+        (3, 'Soyo', 4),
+        (3, 'Taki', 5)
+) member(band_id, member_name, display_order)
+    ON member.band_id = lineup.band_id;
 
 WITH effective_pairs AS (
-    SELECT DISTINCT setlist.live_id, band.id AS band_id
-    FROM public.live_setlist setlist
-    CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) performed(band_name)
-    JOIN public.band_attrs band ON band.band_name = performed.band_name
-
-    UNION
-
-    SELECT live.id, default_band.band_id
-    FROM public.live_attrs live
-    CROSS JOIN LATERAL unnest(live.default_band_ids) default_band(band_id)
-    WHERE NOT EXISTS (
-        SELECT 1 FROM public.live_setlist setlist WHERE setlist.live_id = live.id
-    )
-
-    UNION
-
-    SELECT live.id, attendee.band_id::integer
-    FROM public.live_attrs live
-    CROSS JOIN LATERAL jsonb_object_keys(
-        COALESCE(live.event_attendees, '{}'::jsonb)
-    ) attendee(band_id)
+    SELECT *
+    FROM (
+        VALUES
+            (1, 1),
+            (1, 2),
+            (2, 1),
+            (2, 3),
+            (38, 1),
+            (41, 3)
+    ) pair(live_id, band_id)
 )
 INSERT INTO public.live_band_lineup_contexts (
     live_id, band_id, band_name_version_id, base_lineup_version_id, next_lineup_version_id, note
@@ -520,28 +459,58 @@ JOIN public.band_lineup_versions lineup ON lineup.band_id = pairs.band_id;
 INSERT INTO public.live_setlist_band_performances (
     setlist_id, live_id, band_id, lineup_usage, handover_baseline
 )
-SELECT setlist.id, setlist.live_id, band.id, 'base', NULL
+SELECT
+    setlist.id,
+    setlist.live_id,
+    CASE
+        WHEN setlist.live_id = 1 AND setlist.absolute_order = 1 THEN 1
+        WHEN setlist.live_id = 1 AND setlist.absolute_order = 2 THEN 2
+        WHEN setlist.live_id = 2 AND setlist.absolute_order = 1 THEN 3
+        WHEN setlist.live_id = 2 AND setlist.absolute_order = 2 THEN 1
+        WHEN setlist.live_id = 38 THEN 1
+    END,
+    'base',
+    NULL
 FROM public.live_setlist setlist
-CROSS JOIN LATERAL jsonb_object_keys(setlist.band_member) performed(band_name)
-JOIN public.band_attrs band ON band.band_name = performed.band_name;
+WHERE setlist.live_id IN (1, 2, 38);
 
 INSERT INTO public.live_setlist_band_performance_members (
     setlist_id, band_id, member_name, display_order, appearance_role
 )
 SELECT
     setlist.id,
-    band.id,
+    performance.band_id,
     member.member_name,
     member.display_order::integer,
     CASE
-        WHEN member.member_name = ANY(COALESCE(band.band_members, ARRAY[]::text[])) THEN NULL
+        WHEN member.member_name = ANY(
+            CASE performance.band_id
+                WHEN 1 THEN ARRAY['Kasumi', 'Tae', 'Rimi', 'Saaya', 'Arisa']
+                WHEN 2 THEN ARRAY['Yukina', 'Sayo', 'Lisa', 'Ako', 'Rinko']
+                WHEN 3 THEN ARRAY['Tomori', 'Anon', 'Raana', 'Soyo', 'Taki']
+            END
+        ) THEN NULL
         ELSE 'guest'
     END
 FROM public.live_setlist setlist
-CROSS JOIN LATERAL jsonb_each(setlist.band_member) performed(band_name, members)
-JOIN public.band_attrs band ON band.band_name = performed.band_name
-CROSS JOIN LATERAL jsonb_array_elements_text(performed.members)
-    WITH ORDINALITY member(member_name, display_order);
+JOIN public.live_setlist_band_performances performance
+    ON performance.setlist_id = setlist.id
+CROSS JOIN LATERAL unnest(
+    CASE
+        WHEN setlist.live_id = 1 AND setlist.absolute_order = 1
+            THEN ARRAY['Kasumi', 'Tae', 'Rimi', 'Saaya', 'Arisa']
+        WHEN setlist.live_id = 1 AND setlist.absolute_order = 2
+            THEN ARRAY['Yukina', 'Sayo', 'Lisa', 'Ako']
+        WHEN setlist.live_id = 2 AND setlist.absolute_order = 1
+            THEN ARRAY['Tomori', 'Anon', 'Raana']
+        WHEN setlist.live_id = 2 AND setlist.absolute_order = 2
+            THEN ARRAY['Kasumi', 'Tae', 'Saaya', 'Arisa']
+        WHEN setlist.live_id = 38 AND setlist.absolute_order = 17
+            THEN ARRAY['愛美', '伊藤彩沙']
+        WHEN setlist.live_id = 38
+            THEN ARRAY['愛美', '大塚紗英', '西本りみ', '大橋彩香', '伊藤彩沙']
+    END
+) WITH ORDINALITY member(member_name, display_order);
 
 SELECT setval('public.live_attrs_id_seq', (SELECT MAX(id) FROM public.live_attrs), true);
 SELECT setval('public.song_list_id_seq', (SELECT MAX(id) FROM public.song_list), true);

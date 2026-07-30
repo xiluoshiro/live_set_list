@@ -384,10 +384,10 @@
   - 普通新行由服务端补齐当前开放上下文；只有版本创建时绑定的交接 Live 可使用直接后继上下文
   - `band_performances[].lineup_usage` 为 `base|next|handover`；`handover` 必须额外提交 `handover_baseline=base|next`，其他模式禁止携带该字段
   - 实际出演 `members` 必须非空且不得重复；后端根据正式基准计算 `former|incoming|guest`，不接受前端提交满员状态
-  - 新行只写版本化出演关系，`live_setlist.band_member` 保持 `NULL`
+  - 新行只写版本化出演关系；V26 已物理删除 `live_setlist.band_member`
   - 后端按 `absolute_order` 升序写入
 - `GET /api/console/lives/{live_id}/setlist`
-  - 返回 Live 级 `band_lineup_contexts` 和完整原始可编辑行；行内同时包含兼容成员 JSON、版本化 `band_performances`、交接基准和实际成员
+  - 返回 Live 级 `band_lineup_contexts` 和完整可编辑行；行内 `band_member` 仅为从版本化出演关系生成的界面投影，不对应数据库旧列，真源为 `band_performances`
 - `PUT /api/console/lives/{live_id}/setlist`
   - 与新增 Setlist 共用行字段和校验；请求集合至少保留一行
   - 在单一事务内锁定 Live、校验全部歌曲和版本关系、替换完整行集合并写 `live_setlist_update` 审计

@@ -161,10 +161,9 @@ def test_catalog_statistics_limits_stale_song_kinds_independently(
                 song_id,
                 absolute_order,
                 segment_type,
-                sub_order,
-                band_member
+                sub_order
             )
-            VALUES (%s, %s, %s, 'main', %s, '{"Roselia": ["Yukina"]}'::jsonb)
+            VALUES (%s, %s, %s, 'main', %s)
             """,
             [(901, 901 + index, index + 1, index + 1) for index in range(12)],
         )
