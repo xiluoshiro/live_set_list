@@ -752,6 +752,7 @@ function render() {
   }
   renderAside();
   bindSongInteractions();
+  afterRender();
 }
 
 document.querySelectorAll("[data-scenario]").forEach((button) => {
@@ -801,5 +802,132 @@ drawerMask.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !drawerMask.hidden) closeDrawer();
 });
+
+/* ============================================================
+   Motion layer (2026-07-30)
+   视口渐入 / 按钮涟漪 / 滚动视差 / 顶栏阴影 / Hero 星光。
+   全部 honoring prefers-reduced-motion；动画仅 transform/opacity。
+   滚动监听采用 passive + rAF 节流，只写 CSS 变量（视差无法用
+   IntersectionObserver 表达，无框架场景下这是最小实现）。
+   ============================================================ */
+
+const motionOK = window.matchMedia("(prefers-reduced-motion: no-preference)").matches;
+
+/* ---------- 视口渐入：IO 触发，stagger 由组内索引决定 ---------- */
+
+const revealObserver = motionOK
+  ? new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const el = entry.target;
+          el.classList.add("is-visible");
+          revealObserver.unobserve(el);
+          // 过渡结束后移除类，避免 reveal 的 transition-delay 干扰后续悬停过渡
+          el.addEventListener("transitionend", function done(event) {
+            if (event.propertyName !== "transform") return;
+            el.removeEventListener("transitionend", done);
+            el.classList.remove("reveal", "is-visible");
+            el.style.removeProperty("--reveal-delay");
+          });
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -6% 0px" },
+    )
+  : null;
+
+function prepareReveal() {
+  if (!revealObserver) return;
+  const groups = [
+    [document.querySelector(".detail-hero"), document.querySelector(".content-controls")],
+    [...contentElement.querySelectorAll(".act-block, .gap-marker, .compact-table-wrap")],
+    ...[...asideElement.querySelectorAll(".aside-panel")].map((panel) => [panel]),
+  ];
+  groups.forEach((group) => {
+    group.filter(Boolean).forEach((el, index) => {
+      el.classList.add("reveal");
+      el.style.setProperty("--reveal-delay", `${Math.min(index, 6) * 55}ms`);
+      revealObserver.observe(el);
+    });
+  });
+}
+
+/* ---------- 按钮涟漪：事件委托，键盘触发时居中 ---------- */
+
+const RIPPLE_SELECTOR = ".icon-action, .segmented button, .song-row, .aside-index a, .missing-disclosure";
+
+if (motionOK) {
+  document.addEventListener("click", (event) => {
+    const host = event.target.closest(RIPPLE_SELECTOR);
+    if (!(host instanceof HTMLElement) || host.disabled) return;
+    const rect = host.getBoundingClientRect();
+    const isKeyboard = event.detail === 0;
+    const x = isKeyboard ? rect.width / 2 : event.clientX - rect.left;
+    const y = isKeyboard ? rect.height / 2 : event.clientY - rect.top;
+    const size = Math.max(rect.width, rect.height) * 2;
+    const ripple = document.createElement("span");
+    ripple.className = "ripple";
+    ripple.setAttribute("aria-hidden", "true");
+    ripple.style.width = ripple.style.height = `${size}px`;
+    ripple.style.left = `${x - size / 2}px`;
+    ripple.style.top = `${y - size / 2}px`;
+    host.appendChild(ripple);
+    ripple.addEventListener("animationend", () => ripple.remove(), { once: true });
+  });
+}
+
+/* ---------- 滚动视差 + 顶栏投影 ---------- */
+
+const heroSection = document.querySelector(".detail-hero");
+const topbar = document.querySelector(".site-topbar");
+let scrollTicking = false;
+
+function updateScrollFx() {
+  const y = window.scrollY;
+  topbar.classList.toggle("is-scrolled", y > 8);
+  if (motionOK && heroSection) {
+    heroSection.style.setProperty("--hero-shift", `${Math.min(y * 0.18, 60)}px`);
+  }
+  scrollTicking = false;
+}
+
+window.addEventListener(
+  "scroll",
+  () => {
+    if (scrollTicking) return;
+    scrollTicking = true;
+    requestAnimationFrame(updateScrollFx);
+  },
+  { passive: true },
+);
+updateScrollFx();
+
+/* ---------- Hero 星光（BanG Dream! キラキラ 母题，纯装饰） ---------- */
+
+if (motionOK && heroSection) {
+  const SPARKS = [
+    { top: "14%", right: "11%", size: 14, delay: 0 },
+    { top: "60%", right: "5%", size: 9, delay: 1.3 },
+    { top: "30%", left: "3.5%", size: 11, delay: 2.2 },
+  ];
+  SPARKS.forEach(({ top, right, left, size, delay }) => {
+    const spark = document.createElement("span");
+    spark.className = "hero-sparkle";
+    spark.textContent = "✦";
+    spark.setAttribute("aria-hidden", "true");
+    spark.style.top = top;
+    if (right) spark.style.right = right;
+    if (left) spark.style.left = left;
+    spark.style.setProperty("--spark-size", `${size}px`);
+    spark.style.setProperty("--spark-delay", `${delay}s`);
+    heroSection.appendChild(spark);
+  });
+}
+
+/* ---------- render 后的动效钩子 ---------- */
+
+function afterRender() {
+  prepareReveal();
+}
 
 render();
