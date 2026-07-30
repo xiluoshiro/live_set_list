@@ -632,6 +632,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [songCover, setSongCover] = useState(false);
   const [insertedSongs, setInsertedSongs] = useState<SongInsertRow[]>([]);
   const [songQuery, setSongQuery] = useState("");
+  const [songBandFilterId, setSongBandFilterId] = useState<number | null>(null);
   const [songCandidates, setSongCandidates] = useState<SongInsertRow[]>([]);
   const [songPage, setSongPage] = useState(1);
   const [songPagination, setSongPagination] = useState({ page: 1, page_size: 20, total: 0, total_pages: 1 });
@@ -1503,10 +1504,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setMessage(`已加载歌曲 #${song.song_id}。`);
   };
 
-  const loadSongCandidatePage = async (query: string, page: number) => {
+  const loadSongCandidatePage = async (query: string, page: number, bandId: number | null) => {
     setSongLoading(true);
     try {
-      const response = await getConsoleSongs(query, 20, page);
+      const response = bandId === null
+        ? await getConsoleSongs(query, 20, page)
+        : await getConsoleSongs(query, 20, page, bandId);
       const candidates = response.items.map(toSongInsertRow);
       const responsePage = response.page ?? page;
       const responsePageSize = response.page_size ?? 20;
@@ -1531,12 +1534,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
   const querySongCandidates = async () => {
     setSongPage(1);
-    await loadSongCandidatePage(songQuery, 1);
+    await loadSongCandidatePage(songQuery, 1, songBandFilterId);
   };
 
   useEffect(() => {
     if (mode !== "song") return;
-    void loadSongCandidatePage(songQuery, songPage);
+    void loadSongCandidatePage(songQuery, songPage, songBandFilterId);
   }, [mode, songPage]);
 
   const selectSongForEditFromItem = (song: SongInsertRow) => {
@@ -2987,6 +2990,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       insertedSongs={insertedSongs}
       songCandidates={songCandidates}
       songQuery={songQuery}
+      songBandFilterId={songBandFilterId}
       songPage={songPagination.page}
       songTotal={songPagination.total}
       songTotalPages={songPagination.total_pages}
@@ -3001,6 +3005,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       songBandMenuRef={songBandMenuRef}
       onSongNameChange={setSongName}
       onSongQueryChange={setSongQuery}
+      onSongBandFilterChange={setSongBandFilterId}
       onQuerySongs={querySongCandidates}
       onSongPageChange={setSongPage}
       onSelectSong={selectSongForEdit}

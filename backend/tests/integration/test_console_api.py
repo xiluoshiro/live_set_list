@@ -213,6 +213,60 @@ def test_console_song_lookup_supports_server_side_pagination(
     }
 
 
+# 测试点：歌曲候选应支持单独或组合使用归属 Band，并让分页总数只统计筛选命中项。
+def test_console_song_lookup_filters_by_owning_band(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO song_list (song_name, band_id, is_cover)
+            VALUES
+                ('Band Filter Probe Poppin', 1, false),
+                ('Band Filter Probe Roselia', 2, false)
+            RETURNING id, band_id
+            """
+        )
+        inserted_by_band = {int(row[1]): int(row[0]) for row in cursor.fetchall()}
+
+    _login_and_get_csrf_for(
+        integration_test_client,
+        username=TEST_DEFAULT_ADMIN_USERNAME,
+        password=TEST_DEFAULT_ADMIN_PASSWORD,
+    )
+
+    combined_response = integration_test_client.get(
+        "/api/console/songs?q=Band Filter Probe&band_id=2&limit=20&page=1"
+    )
+    band_only_response = integration_test_client.get(
+        "/api/console/songs?band_id=2&limit=100&page=1"
+    )
+
+    assert combined_response.status_code == 200
+    assert combined_response.json() == {
+        "items": [
+            {
+                "song_id": inserted_by_band[2],
+                "song_name": "Band Filter Probe Roselia",
+                "band_id": 2,
+                "cover": False,
+                "band_name": "Roselia",
+            }
+        ],
+        "page": 1,
+        "page_size": 20,
+        "total": 1,
+        "total_pages": 1,
+    }
+    assert band_only_response.status_code == 200
+    band_only_body = band_only_response.json()
+    assert all(item["band_id"] == 2 for item in band_only_body["items"])
+    assert inserted_by_band[2] in {item["song_id"] for item in band_only_body["items"]}
+    assert band_only_body["total"] == len(band_only_body["items"])
+
+
 # 测试点：歌曲查询只允许从歌名开头向右补全，不能用输入命中歌名中段。
 def test_console_song_lookup_only_matches_title_prefix(
     integration_test_client,

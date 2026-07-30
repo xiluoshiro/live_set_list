@@ -1616,9 +1616,15 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("已更新歌曲 #901")).toBeInTheDocument();
   });
 
-  // 测试点：歌曲搜索固定每页 20 首，查询回到第一页并可保留查询词翻到下一页。
-  test("歌曲管理搜索、分页并从结果表加载歌曲", async () => {
+  // 测试点：歌曲搜索可组合归属 Band，固定每页 20 首，并在翻页时保留全部查询条件。
+  test("歌曲管理按名称和乐队搜索、分页并从结果表加载歌曲", async () => {
     const user = userEvent.setup();
+    apiMocks.getConsoleBands.mockResolvedValue({
+      items: [
+        { band_id: 1, band_name: "Poppin'Party", band_abbr: "ppp", band_members: ["戸山香澄"] },
+        { band_id: 2, band_name: "Roselia", band_abbr: "rsl", band_members: ["湊友希那"] },
+      ],
+    });
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
@@ -1648,9 +1654,10 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("", 20, 1));
     await user.type(screen.getByPlaceholderText("输入歌曲名"), "搜索命中");
+    await user.selectOptions(screen.getByLabelText("按乐队查询"), "2");
     await user.click(screen.getByRole("button", { name: "查询" }));
 
-    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("搜索命中", 20, 1));
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("搜索命中", 20, 1, 2));
     const resultTable = screen.getByRole("table", { name: "歌曲搜索结果" });
     expect(within(resultTable).getByText("搜索命中曲")).toBeInTheDocument();
     expect(screen.getByText("第 1 / 2 页 · 每页 20 首 · 共 21 首")).toBeInTheDocument();
@@ -1662,7 +1669,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("song-cover")).toBeChecked();
 
     await user.click(screen.getByRole("button", { name: "下一页" }));
-    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("搜索命中", 20, 2));
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("搜索命中", 20, 2, 2));
     expect(within(resultTable).getByText("搜索命中曲 第二页")).toBeInTheDocument();
     expect(screen.getByText("第 2 / 2 页 · 每页 20 首 · 共 21 首")).toBeInTheDocument();
   });

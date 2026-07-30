@@ -7,6 +7,7 @@ type SongAdminSectionProps = {
   insertedSongs: SongInsertRow[];
   songCandidates: SongInsertRow[];
   songQuery: string;
+  songBandFilterId: number | null;
   songPage: number;
   songTotal: number;
   songTotalPages: number;
@@ -21,6 +22,7 @@ type SongAdminSectionProps = {
   songBandMenuRef: RefObject<HTMLDivElement>;
   onSongNameChange: (value: string) => void;
   onSongQueryChange: (value: string) => void;
+  onSongBandFilterChange: (bandId: number | null) => void;
   onQuerySongs: () => void;
   onSongPageChange: (page: number) => void;
   onSelectSong: (songId: number) => void;
@@ -38,6 +40,7 @@ export function SongAdminSection({
   insertedSongs,
   songCandidates,
   songQuery,
+  songBandFilterId,
   songPage,
   songTotal,
   songTotalPages,
@@ -52,6 +55,7 @@ export function SongAdminSection({
   songBandMenuRef,
   onSongNameChange,
   onSongQueryChange,
+  onSongBandFilterChange,
   onQuerySongs,
   onSongPageChange,
   onSelectSong,
@@ -159,6 +163,21 @@ export function SongAdminSection({
             onKeyDown={(event) => { if (event.key === "Enter") onQuerySongs(); }}
             placeholder="输入歌曲名"
           />
+          <select
+            className="song-band-filter"
+            aria-label="按乐队查询"
+            value={songBandFilterId ?? ""}
+            onChange={(event) => onSongBandFilterChange(
+              event.target.value === "" ? null : Number(event.target.value),
+            )}
+          >
+            <option value="">全部 Band</option>
+            {bandOptions.map((band) => (
+              <option key={band.band_id} value={band.band_id}>
+                {band.band_name}
+              </option>
+            ))}
+          </select>
           <button type="button" className="console-ghost-btn" onClick={onQuerySongs}>查询</button>
         </div>
         <div className="console-table-wrap">
