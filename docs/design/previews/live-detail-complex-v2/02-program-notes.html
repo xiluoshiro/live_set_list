@@ -3,31 +3,47 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="LiveSetList 演出详情方向探索：纸本节目册。" />
+    <meta
+      name="description"
+      content="LiveSetList 演出详情方向探索：基于本地生产数据深化的纸本节目册。"
+    />
     <title>纸本节目册 | LiveSetList</title>
     <style>
       :root {
         color-scheme: light;
-        --paper: #f1efe8;
-        --sheet: #fbfaf5;
-        --ink: #1f2222;
-        --soft: #686a68;
-        --cobalt: #1858d7;
-        --line: #a9aaa4;
+        --page: #f4e8ee;
+        --page-deep: #ead8e1;
+        --sheet: #fffafb;
+        --sheet-muted: #faf1f5;
+        --ink: #242229;
+        --soft: #6d646b;
+        --cobalt: #2158c5;
+        --cobalt-dark: #174398;
+        --rule: #b8aeb4;
+        --rule-soft: #ded2d8;
+        --shadow: 0 1.8rem 5rem rgb(92 54 75 / 0.16);
         font-family:
           "Yu Mincho", "Hiragino Mincho ProN", "Iowan Old Style", Baskerville,
           "Noto Serif SC", serif;
         color: var(--ink);
-        background: var(--paper);
+        background: var(--page);
       }
 
       * {
         box-sizing: border-box;
       }
 
+      html {
+        min-width: 320px;
+        scroll-behavior: smooth;
+        scroll-padding-top: 1rem;
+        background: var(--page);
+      }
+
       body {
+        min-width: 320px;
         margin: 0;
-        background: var(--paper);
+        background: var(--page);
       }
 
       button,
@@ -36,8 +52,16 @@
         font: inherit;
       }
 
+      button {
+        border-radius: 0;
+      }
+
       a {
         text-underline-offset: 0.22em;
+      }
+
+      [hidden] {
+        display: none !important;
       }
 
       .topline {
@@ -45,251 +69,905 @@
         grid-template-columns: 1fr auto 1fr;
         align-items: center;
         min-height: 4rem;
-        padding: 0.75rem clamp(1rem, 3vw, 2.5rem);
-        border-bottom: 1px solid var(--line);
+        padding: 0.75rem clamp(1rem, 3vw, 2.75rem);
+        border-bottom: 1px solid var(--rule);
         font-family: "Segoe UI", "Noto Sans SC", sans-serif;
         font-size: 0.78rem;
       }
 
       .topline strong {
-        font-size: 0.9rem;
-        letter-spacing: -0.03em;
+        color: var(--cobalt);
+        font-size: 0.94rem;
+        letter-spacing: -0.035em;
       }
 
-      .topline .center {
+      .topline span {
         color: var(--soft);
       }
 
-      .topline a:last-child {
+      .topline a {
         justify-self: end;
       }
 
-      .sheet {
-        max-width: 1320px;
-        margin: clamp(1rem, 3vw, 3.5rem) auto;
+      .topline a:focus-visible,
+      .source-link:focus-visible,
+      .contents a:focus-visible {
+        outline: 2px solid var(--cobalt);
+        outline-offset: 4px;
+      }
+
+      .scenario-bar {
+        display: grid;
+        grid-template-columns: minmax(12rem, 0.55fr) minmax(0, 1.45fr);
+        gap: 2rem;
+        align-items: center;
+        max-width: 1440px;
+        margin: 0 auto;
+        padding: 1.25rem clamp(1rem, 3vw, 2.75rem);
+        border-right: 1px solid var(--rule);
+        border-left: 1px solid var(--rule);
+        background: color-mix(in srgb, var(--sheet) 46%, var(--page));
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+      }
+
+      .scenario-copy strong,
+      .scenario-copy span {
+        display: block;
+      }
+
+      .scenario-copy strong {
+        margin-bottom: 0.28rem;
+        font-size: 0.76rem;
+      }
+
+      .scenario-copy span {
+        max-width: 34rem;
+        color: var(--soft);
+        font-size: 0.7rem;
+        line-height: 1.5;
+      }
+
+      .scenario-tabs {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(7rem, 1fr));
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        border-left: 1px solid var(--rule);
+        scrollbar-color: var(--rule) transparent;
+        scrollbar-width: thin;
+      }
+
+      .scenario-tabs::-webkit-scrollbar {
+        height: 0.35rem;
+      }
+
+      .scenario-tabs::-webkit-scrollbar-thumb {
+        background: var(--rule);
+      }
+
+      .scenario-tabs button {
+        min-height: 3.25rem;
+        padding: 0.55rem 0.7rem;
+        border: 0;
+        border-top: 1px solid var(--rule);
+        border-right: 1px solid var(--rule);
+        border-bottom: 1px solid var(--rule);
+        color: var(--soft);
+        text-align: left;
+        background: transparent;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .scenario-tabs button span {
+        display: block;
+        margin-top: 0.15rem;
+        font-size: 0.64rem;
+      }
+
+      .scenario-tabs button[aria-selected="true"] {
+        color: var(--sheet);
+        background: var(--cobalt);
+      }
+
+      .scenario-tabs button:hover:not([aria-selected="true"]) {
+        color: var(--ink);
         background: var(--sheet);
-        box-shadow: 0 1.2rem 4rem rgb(49 51 47 / 0.12);
+      }
+
+      .scenario-tabs button:focus-visible {
+        position: relative;
+        z-index: 1;
+        outline: 3px solid var(--cobalt);
+        outline-offset: -3px;
+      }
+
+      .book {
+        max-width: 1380px;
+        margin: clamp(1rem, 3vw, 3rem) auto;
+        overflow: clip;
+        border: 1px solid var(--rule);
+        background: var(--sheet);
+        box-shadow: var(--shadow);
+        transition:
+          opacity 180ms ease,
+          transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .book.is-switching {
+        opacity: 0;
+        transform: translateY(0.65rem);
       }
 
       .cover {
         display: grid;
-        grid-template-columns: minmax(0, 1.5fr) minmax(16rem, 0.5fr);
-        min-height: 34rem;
+        grid-template-columns: minmax(0, 1.45fr) minmax(19rem, 0.55fr);
+        min-height: 29rem;
         border-bottom: 1px solid var(--ink);
       }
 
-      .cover-title {
+      .cover-copy {
         display: flex;
         flex-direction: column;
         justify-content: space-between;
+        min-width: 0;
         padding: clamp(2rem, 5vw, 5rem);
         border-right: 1px solid var(--ink);
       }
 
-      .cover-title .series {
+      .series {
+        margin: 0;
         color: var(--cobalt);
         font-family: "Segoe UI", "Noto Sans SC", sans-serif;
-        font-size: 0.78rem;
-        font-weight: 700;
+        font-size: 0.76rem;
+        font-weight: 750;
       }
 
       .cover h1 {
-        max-width: 13ch;
-        margin: 3rem 0;
-        font-size: clamp(3.3rem, 7.2vw, 8.6rem);
+        max-width: 16ch;
+        margin: 2.4rem 0;
+        font-size: clamp(3.15rem, 6.4vw, 7.5rem);
         font-weight: 500;
         letter-spacing: -0.065em;
         line-height: 0.92;
+        text-wrap: balance;
+        overflow-wrap: anywhere;
       }
 
-      .cover-title p {
-        max-width: 30rem;
+      .cover.is-long-title h1 {
+        max-width: 23ch;
+        font-size: clamp(2.65rem, 4.8vw, 5.4rem);
+        line-height: 0.96;
+      }
+
+      .cover-summary {
+        max-width: 39rem;
         margin: 0;
         color: var(--soft);
-        font-size: 0.92rem;
-        line-height: 1.65;
+        font-size: 0.94rem;
+        line-height: 1.7;
       }
 
-      .cover-data {
+      .reference-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem 1rem;
+        margin-top: 1.25rem;
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.69rem;
+      }
+
+      .reference-list span {
+        padding-left: 0.65rem;
+        border-left: 2px solid var(--cobalt);
+      }
+
+      .cover-register {
         display: flex;
         flex-direction: column;
         justify-content: space-between;
+        gap: 2rem;
         padding: clamp(1.5rem, 3vw, 3rem);
         color: var(--cobalt);
+        background: var(--sheet-muted);
       }
 
-      .cover-data .date {
+      .date-block {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.8rem;
+        align-items: end;
+      }
+
+      .date-day {
         margin: 0;
-        font-size: clamp(3rem, 5vw, 6.6rem);
+        font-size: clamp(3.6rem, 6vw, 7rem);
         font-weight: 400;
-        letter-spacing: -0.06em;
-        line-height: 0.85;
+        letter-spacing: -0.07em;
+        line-height: 0.78;
       }
 
-      .cover-data dl {
+      .date-year {
+        margin: 0;
+        padding-bottom: 0.1rem;
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.72rem;
+        line-height: 1.5;
+      }
+
+      .register-data {
         margin: 0;
         color: var(--ink);
       }
 
-      .cover-data div {
+      .register-data div {
         display: grid;
-        grid-template-columns: 4.5rem 1fr;
-        gap: 1rem;
-        padding: 0.85rem 0;
-        border-top: 1px solid var(--line);
+        grid-template-columns: 4.4rem minmax(0, 1fr);
+        gap: 0.8rem;
+        padding: 0.72rem 0;
+        border-top: 1px solid var(--rule);
       }
 
-      .cover-data dt {
+      .register-data dt {
+        color: var(--soft);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.67rem;
+      }
+
+      .register-data dd {
+        margin: 0;
+        font-size: 0.91rem;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+
+      .cover-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+      }
+
+      .cover-actions button,
+      .source-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 2.75rem;
+        padding: 0.55rem 0.85rem;
+        border: 1px solid var(--ink);
+        text-decoration: none;
+        background: transparent;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .cover-actions button + button {
+        border-left: 0;
+      }
+
+      .cover-actions .favorite {
+        border-color: var(--cobalt);
+        color: var(--sheet);
+        background: var(--cobalt);
+      }
+
+      .cover-actions .favorite[aria-pressed="true"] {
+        color: var(--cobalt);
+        background: transparent;
+      }
+
+      .cover-actions button:hover,
+      .source-link:hover {
+        color: var(--sheet);
+        background: var(--ink);
+      }
+
+      .cover-actions button:active,
+      .source-link:active {
+        transform: translateY(1px);
+      }
+
+      .cover-actions button:focus-visible {
+        position: relative;
+        z-index: 1;
+        outline: 3px solid var(--cobalt);
+        outline-offset: 3px;
+      }
+
+      .source-link {
+        grid-column: 1 / -1;
+        border-top: 0;
+        color: var(--cobalt);
+      }
+
+      .status-panel {
+        display: grid;
+        grid-template-columns: minmax(8rem, 0.28fr) minmax(0, 0.72fr);
+        border-bottom: 1px solid var(--ink);
+        background: var(--page-deep);
+      }
+
+      .status-title,
+      .status-copy {
+        padding: 1.5rem clamp(1.25rem, 3vw, 2.5rem);
+      }
+
+      .status-title {
+        border-right: 1px solid var(--ink);
+      }
+
+      .status-title strong {
+        display: block;
+        color: var(--cobalt);
+        font-size: clamp(1.7rem, 3vw, 3.4rem);
+        font-weight: 500;
+        letter-spacing: -0.045em;
+      }
+
+      .status-title span {
         color: var(--soft);
         font-family: "Segoe UI", "Noto Sans SC", sans-serif;
         font-size: 0.68rem;
       }
 
-      .cover-data dd {
+      .status-copy {
+        align-self: center;
+      }
+
+      .status-copy p {
+        max-width: 50rem;
         margin: 0;
-        font-size: 0.92rem;
+        line-height: 1.65;
+      }
+
+      .history-list {
+        display: grid;
+        gap: 0.4rem;
+        margin: 0.9rem 0 0;
+        padding: 0;
+        list-style: none;
+        color: var(--soft);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.72rem;
+      }
+
+      .history-list li {
+        padding-left: 0.7rem;
+        border-left: 2px solid var(--cobalt);
+      }
+
+      .reading-layout {
+        display: grid;
+        grid-template-columns: minmax(10rem, 0.2fr) minmax(28rem, 0.55fr) minmax(15rem, 0.25fr);
+        min-height: 42rem;
+      }
+
+      .contents,
+      .notes {
+        min-width: 0;
+        background: var(--sheet-muted);
+      }
+
+      .contents {
+        border-right: 1px solid var(--rule);
+      }
+
+      .contents-inner,
+      .notes-inner {
+        position: sticky;
+        top: 0;
+        padding: 2rem 1.25rem;
+      }
+
+      .notes-inner {
+        max-height: 100vh;
+        overflow-y: auto;
+        scrollbar-color: var(--rule) transparent;
+        scrollbar-width: thin;
+      }
+
+      .contents h2,
+      .notes-label {
+        margin: 0 0 1.5rem;
+        color: var(--cobalt);
+        font-size: 0.72rem;
+        font-weight: 750;
+        letter-spacing: 0.04em;
+      }
+
+      .contents nav {
+        display: grid;
+      }
+
+      .contents a {
+        display: grid;
+        grid-template-columns: 3.2rem minmax(0, 1fr);
+        gap: 0.55rem;
+        padding: 0.72rem 0;
+        border-top: 1px solid var(--rule-soft);
+        text-decoration: none;
+      }
+
+      .contents a:hover {
+        color: var(--cobalt);
+      }
+
+      .contents a span {
+        color: var(--cobalt);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.64rem;
+      }
+
+      .contents a strong {
+        font-size: 0.78rem;
+        font-weight: 600;
         line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .contents-summary {
+        margin: 2rem 0 0;
+        padding-top: 0.85rem;
+        border-top: 1px solid var(--ink);
+        color: var(--soft);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.67rem;
+        line-height: 1.55;
+      }
+
+      .program {
+        min-width: 0;
+        padding: 2rem clamp(1.5rem, 3.5vw, 3.5rem) 5rem;
       }
 
       .program-head {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: end;
-        gap: 2rem;
-        padding: clamp(2rem, 5vw, 5rem);
-        padding-bottom: 2rem;
+        gap: 0.75rem;
+        padding-bottom: 1.75rem;
       }
 
       .program-head h2 {
         margin: 0;
         color: var(--cobalt);
-        font-size: clamp(3.2rem, 6vw, 7rem);
+        font-size: clamp(3.4rem, 6.5vw, 7rem);
         font-weight: 400;
-        letter-spacing: -0.06em;
-        line-height: 0.9;
+        letter-spacing: -0.07em;
+        line-height: 0.88;
       }
 
-      .program-actions {
-        display: flex;
-        gap: 0.5rem;
-        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
-      }
-
-      .program-actions button {
-        min-height: 2.6rem;
-        padding: 0.55rem 0.85rem;
-        border: 1px solid var(--ink);
-        border-radius: 0;
-        background: transparent;
-        cursor: pointer;
-      }
-
-      .program-actions button:first-child {
-        color: var(--sheet);
-        background: var(--ink);
-      }
-
-      .program-actions button:active {
-        transform: translateY(1px);
-      }
-
-      .program {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0 4rem;
-        padding: 0 clamp(2rem, 5vw, 5rem) 5rem;
+      .program-head p {
+        max-width: 38rem;
+        margin: 0;
+        color: var(--soft);
+        font-size: 0.88rem;
+        line-height: 1.6;
       }
 
       .chapter {
-        position: relative;
+        scroll-margin-top: 1rem;
         display: grid;
-        grid-template-columns: 5.5rem minmax(0, 1fr);
-        gap: 1.25rem;
-        align-content: start;
-        padding: 2.3rem 0 3.2rem;
+        grid-template-columns: 4rem minmax(0, 1fr);
+        gap: 1rem;
+        padding: 2rem 0 2.5rem;
         border-top: 1px solid var(--ink);
       }
 
-      .chapter-number {
+      .chapter-mark {
         color: var(--cobalt);
-        font-size: clamp(2.4rem, 4vw, 4.7rem);
+        font-size: clamp(2.1rem, 3.8vw, 4rem);
         font-style: italic;
-        line-height: 0.9;
+        line-height: 1.1;
+        padding-bottom: 0.15rem;
       }
 
-      .chapter h3 {
-        margin: 0 0 0.55rem;
-        font-size: clamp(1.25rem, 2vw, 1.8rem);
-        font-weight: 500;
-        letter-spacing: -0.025em;
+      .chapter-main {
+        min-width: 0;
       }
 
-      .chapter-note {
-        margin: 0 0 2rem;
+      .chapter-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: start;
+        margin-bottom: 1.45rem;
+      }
+
+      .chapter-head h3 {
+        margin: 0;
+        font-size: clamp(1.35rem, 2.5vw, 2.25rem);
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        line-height: 1.15;
+        overflow-wrap: anywhere;
+      }
+
+      .chapter-head p {
+        margin: 0.4rem 0 0;
         color: var(--soft);
         font-family: "Segoe UI", "Noto Sans SC", sans-serif;
-        font-size: 0.7rem;
+        font-size: 0.68rem;
+      }
+
+      .chapter-range {
+        color: var(--cobalt);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.68rem;
+        white-space: nowrap;
       }
 
       .tracks {
         display: grid;
-        gap: 1.25rem;
+        gap: 0.25rem;
       }
 
       .track {
+        min-width: 0;
+      }
+
+      .track-main {
         display: grid;
-        grid-template-columns: 2.5rem minmax(0, 1fr);
-        gap: 0.75rem;
+        grid-template-columns: 3.25rem minmax(0, 1fr) minmax(8rem, 0.62fr) auto;
+        gap: 0.8rem;
         align-items: baseline;
-        padding: 0;
+        width: 100%;
+        min-height: 3.4rem;
+        padding: 0.7rem 0.65rem;
         border: 0;
+        color: var(--ink);
         text-align: left;
         background: transparent;
         cursor: pointer;
+        transition:
+          color 160ms ease,
+          background-color 160ms ease,
+          transform 160ms ease;
       }
 
-      .track .code {
+      .track-main:hover,
+      .track-main[aria-expanded="true"] {
+        color: var(--cobalt-dark);
+        background: var(--sheet-muted);
+      }
+
+      .track-main:active {
+        transform: translateY(1px);
+      }
+
+      .track-main:focus-visible {
+        outline: 2px solid var(--cobalt);
+        outline-offset: 2px;
+      }
+
+      .track-code {
         color: var(--cobalt);
         font-family: "Segoe UI", "Noto Sans SC", sans-serif;
-        font-size: 0.68rem;
-        font-weight: 700;
+        font-size: 0.7rem;
+        font-weight: 750;
       }
 
-      .track .title {
-        font-size: clamp(1rem, 1.5vw, 1.25rem);
-        line-height: 1.35;
+      .track-title {
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
       }
 
-      .track:hover .title,
-      .track:focus-visible .title {
-        text-decoration: underline;
-        text-decoration-color: var(--cobalt);
-        text-decoration-thickness: 2px;
-        text-underline-offset: 0.25em;
+      .track-performer {
+        color: var(--soft);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.67rem;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
       }
 
-      .track:focus-visible {
+      .track-more {
+        color: var(--soft);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.62rem;
+        white-space: nowrap;
+      }
+
+      .track-main[aria-expanded="true"] .track-more {
+        color: var(--cobalt);
+      }
+
+      .track-inline-detail {
+        margin: 0 0 0.65rem 4rem;
+        padding: 0.85rem;
+        border-left: 2px solid var(--cobalt);
+        background: var(--sheet-muted);
+      }
+
+      .detail-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.75rem;
+      }
+
+      .detail-tag {
+        padding: 0.18rem 0.4rem;
+        border: 1px solid var(--cobalt);
+        color: var(--cobalt);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.62rem;
+      }
+
+      .detail-copy {
+        margin: 0;
+        color: var(--soft);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.72rem;
+        line-height: 1.6;
+      }
+
+      .detail-copy + .detail-copy {
+        margin-top: 0.55rem;
+      }
+
+      .roster-summary {
+        margin: 0.8rem 0 0;
+        color: var(--soft);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.72rem;
+        line-height: 1.6;
+      }
+
+      .roster-disclosure {
+        margin-top: 0.75rem;
+        border-top: 1px solid var(--rule);
+        border-bottom: 1px solid var(--rule);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+      }
+
+      .roster-disclosure summary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.75rem;
+        align-items: center;
+        min-height: 2.8rem;
+        padding: 0.65rem 0;
+        color: var(--cobalt);
+        font-size: 0.69rem;
+        font-weight: 750;
+        cursor: pointer;
+        list-style: none;
+      }
+
+      .roster-disclosure summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .roster-disclosure summary::after {
+        content: "＋";
+        font-size: 1rem;
+        font-weight: 400;
+        transition: transform 180ms ease;
+      }
+
+      .roster-disclosure[open] summary::after {
+        transform: rotate(45deg);
+      }
+
+      .roster-disclosure summary:focus-visible {
         outline: 2px solid var(--cobalt);
-        outline-offset: 0.35rem;
+        outline-offset: 3px;
+      }
+
+      .roster-list {
+        display: grid;
+        gap: 0;
+        margin: 0;
+        padding: 0 0 0.75rem;
+        list-style: none;
+        counter-reset: roster;
+      }
+
+      .roster-list li {
+        counter-increment: roster;
+        display: grid;
+        grid-template-columns: 2rem minmax(0, 1fr);
+        gap: 0.5rem;
+        min-width: 0;
+        padding: 0.58rem 0;
+        border-top: 1px solid var(--rule-soft);
+      }
+
+      .roster-list li::before {
+        content: counter(roster, decimal-leading-zero);
+        color: var(--cobalt);
+        font-size: 0.6rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .roster-entry {
+        display: grid;
+        gap: 0.18rem;
+        min-width: 0;
+      }
+
+      .roster-entry strong {
+        color: var(--ink);
+        font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif SC", serif;
+        font-size: 0.78rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .roster-entry span {
+        color: var(--soft);
+        font-size: 0.62rem;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+
+      .track-inline-detail .roster-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 1.25rem;
+      }
+
+      .notes {
+        border-left: 1px solid var(--rule);
+      }
+
+      .notes-code {
+        margin: 0 0 0.8rem;
+        color: var(--cobalt);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.7rem;
+        font-weight: 750;
+      }
+
+      .notes h3 {
+        margin: 0;
+        font-size: clamp(1.35rem, 2.2vw, 2.1rem);
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+      }
+
+      .notes-rule {
+        width: 3rem;
+        margin: 1.25rem 0;
+        border: 0;
+        border-top: 2px solid var(--cobalt);
+      }
+
+      .notes-body {
+        color: var(--soft);
+        font-size: 0.82rem;
+        line-height: 1.65;
+      }
+
+      .notes-body p {
+        margin: 0;
+      }
+
+      .notes-body p + p {
+        margin-top: 0.65rem;
+      }
+
+      .empty-program {
+        display: grid;
+        grid-template-columns: minmax(10rem, 0.2fr) minmax(0, 0.8fr);
+        min-height: 26rem;
+      }
+
+      .empty-index {
+        padding: 2rem 1.25rem;
+        border-right: 1px solid var(--rule);
+        color: var(--cobalt);
+        background: var(--sheet-muted);
+      }
+
+      .empty-index strong {
+        display: block;
+        font-size: 0.75rem;
+      }
+
+      .empty-index span {
+        display: block;
+        margin-top: 0.5rem;
+        color: var(--soft);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.68rem;
+        line-height: 1.5;
+      }
+
+      .empty-copy {
+        align-self: center;
+        max-width: 48rem;
+        padding: clamp(2rem, 6vw, 6rem);
+      }
+
+      .empty-copy h2 {
+        max-width: 15ch;
+        margin: 0;
+        color: var(--cobalt);
+        font-size: clamp(2.8rem, 6vw, 6rem);
+        font-weight: 400;
+        letter-spacing: -0.06em;
+        line-height: 0.95;
+      }
+
+      .empty-copy > p {
+        max-width: 38rem;
+        margin: 1.5rem 0 0;
+        color: var(--soft);
+        line-height: 1.7;
+      }
+
+      .attendees {
+        display: grid;
+        gap: 0.75rem;
+        max-width: 38rem;
+        margin-top: 2rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--ink);
+      }
+
+      .attendee {
+        display: grid;
+        grid-template-columns: minmax(8rem, 0.35fr) minmax(0, 0.65fr);
+        gap: 1rem;
+      }
+
+      .attendee strong {
+        font-size: 0.82rem;
+      }
+
+      .attendee span {
+        color: var(--soft);
+        font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+        font-size: 0.72rem;
       }
 
       .book-footer {
-        display: grid;
-        grid-template-columns: 1fr auto;
+        display: flex;
+        justify-content: space-between;
         gap: 1rem;
-        padding: 1.25rem clamp(2rem, 5vw, 5rem);
+        padding: 1rem 1.25rem;
         border-top: 1px solid var(--ink);
+        color: var(--soft);
         font-family: "Segoe UI", "Noto Sans SC", sans-serif;
-        font-size: 0.72rem;
+        font-size: 0.66rem;
       }
 
       .book-footer span:last-child {
         color: var(--cobalt);
       }
 
+      @media (max-width: 1080px) {
+        .scenario-bar {
+          grid-template-columns: 1fr;
+          gap: 0.85rem;
+        }
+
+        .reading-layout {
+          grid-template-columns: minmax(9rem, 0.22fr) minmax(0, 0.78fr);
+        }
+
+        .notes {
+          display: none;
+        }
+
+        .track-inline-detail:not([hidden]) {
+          display: block;
+        }
+      }
+
+      @media (min-width: 1081px) {
+        .track-inline-detail {
+          display: none !important;
+        }
+      }
+
       @media (max-width: 820px) {
-        .sheet {
+        .book {
           margin: 0;
+          border-right: 0;
+          border-left: 0;
           box-shadow: none;
         }
 
@@ -298,93 +976,259 @@
           min-height: auto;
         }
 
-        .cover-title {
-          min-height: auto;
-          justify-content: flex-start;
-          gap: 1.4rem;
-          padding-top: 2.25rem;
+        .cover-copy {
+          gap: 1.25rem;
+          padding-top: 2rem;
           padding-bottom: 1.75rem;
           border-right: 0;
           border-bottom: 1px solid var(--ink);
         }
 
-        .cover h1 {
+        .cover h1,
+        .cover.is-long-title h1 {
+          max-width: 19ch;
           margin: 0;
+          font-size: clamp(2.55rem, 10vw, 4.4rem);
+          line-height: 0.98;
         }
 
-        .cover-data {
+        .cover-register {
           display: grid;
-          grid-template-columns: minmax(5rem, 0.3fr) minmax(0, 1fr);
-          gap: 1.5rem;
+          grid-template-columns: minmax(7rem, 0.28fr) minmax(0, 0.72fr);
+          gap: 1.25rem;
           align-items: start;
-          padding-top: 1.5rem;
-          padding-bottom: 1.5rem;
+          padding-top: 1.35rem;
+          padding-bottom: 1.35rem;
         }
 
-        .cover-data div {
-          padding: 0.55rem 0;
+        .cover-actions {
+          grid-column: 1 / -1;
         }
 
-        .program {
+        .status-panel {
           grid-template-columns: 1fr;
+        }
+
+        .status-title {
+          border-right: 0;
+          border-bottom: 1px solid var(--ink);
+        }
+
+        .contents-inner {
+          position: static;
         }
       }
 
-      @media (max-width: 560px) {
+      @media (max-width: 680px) {
         .topline {
           grid-template-columns: 1fr auto;
+          min-height: 3.5rem;
         }
 
-        .topline .center {
+        .topline span {
           display: none;
         }
 
-        .cover-title,
-        .cover-data,
-        .program-head,
+        .scenario-bar {
+          padding: 0.85rem 1rem 1rem;
+          border-right: 0;
+          border-left: 0;
+        }
+
+        .scenario-copy span {
+          display: none;
+        }
+
+        .scenario-tabs {
+          grid-template-columns: repeat(6, minmax(8rem, 1fr));
+        }
+
+        .scenario-tabs button {
+          min-height: 2.9rem;
+        }
+
+        .cover-copy,
+        .cover-register,
+        .status-title,
+        .status-copy {
+          padding-right: 1rem;
+          padding-left: 1rem;
+        }
+
+        .cover-summary {
+          font-size: 0.86rem;
+          line-height: 1.55;
+        }
+
+        .cover-register {
+          grid-template-columns: 5.4rem minmax(0, 1fr);
+          gap: 0.8rem;
+        }
+
+        .date-block {
+          display: block;
+        }
+
+        .date-day {
+          font-size: 3.25rem;
+        }
+
+        .date-year {
+          margin-top: 0.55rem;
+        }
+
+        .register-data div {
+          grid-template-columns: 3.6rem minmax(0, 1fr);
+          gap: 0.5rem;
+          padding: 0.48rem 0;
+        }
+
+        .reading-layout {
+          display: block;
+        }
+
+        .contents {
+          border-right: 0;
+          border-bottom: 1px solid var(--rule);
+        }
+
+        .contents-inner {
+          padding: 1rem;
+        }
+
+        .contents h2 {
+          margin-bottom: 0.75rem;
+        }
+
+        .contents nav {
+          grid-auto-flow: column;
+          grid-auto-columns: minmax(10rem, 0.72fr);
+          overflow-x: auto;
+          border-left: 1px solid var(--rule-soft);
+        }
+
+        .contents a {
+          grid-template-columns: 2.8rem minmax(0, 1fr);
+          padding: 0.7rem;
+          border-top: 1px solid var(--rule-soft);
+          border-right: 1px solid var(--rule-soft);
+          border-bottom: 1px solid var(--rule-soft);
+        }
+
+        .contents-summary {
+          display: none;
+        }
+
         .program {
-          padding-right: 1.2rem;
-          padding-left: 1.2rem;
-        }
-
-        .cover h1 {
-          font-size: clamp(3.1rem, 16vw, 5.3rem);
-        }
-
-        .cover-data {
-          grid-template-columns: 4.8rem minmax(0, 1fr);
-          gap: 1rem;
-          padding-top: 1.1rem;
-          padding-bottom: 1.1rem;
-        }
-
-        .cover-data .date {
-          font-size: 3rem;
-        }
-
-        .cover-data div {
-          grid-template-columns: 3.5rem minmax(0, 1fr);
-          gap: 0.55rem;
-          padding: 0.42rem 0;
+          padding: 1.5rem 1rem 3.5rem;
         }
 
         .program-head {
-          grid-template-columns: 1fr;
-          align-items: start;
+          padding-bottom: 1.2rem;
+        }
+
+        .program-head h2 {
+          font-size: 3.8rem;
         }
 
         .chapter {
-          grid-template-columns: 3.8rem minmax(0, 1fr);
-          gap: 0.75rem;
+          grid-template-columns: 3.2rem minmax(0, 1fr);
+          gap: 0.65rem;
+          padding: 1.45rem 0 1.9rem;
+        }
+
+        .chapter-head {
+          grid-template-columns: 1fr;
+          gap: 0.45rem;
+          margin-bottom: 0.85rem;
+        }
+
+        .track-main {
+          grid-template-columns: 2.65rem minmax(0, 1fr) auto;
+          gap: 0.55rem;
+          padding: 0.68rem 0.35rem;
+        }
+
+        .track-performer {
+          grid-column: 2;
+        }
+
+        .track-more {
+          grid-column: 3;
+          grid-row: 1;
+        }
+
+        .track-inline-detail {
+          margin-left: 3rem;
+        }
+
+        .track-inline-detail .roster-list {
+          grid-template-columns: 1fr;
+        }
+
+        .empty-program {
+          grid-template-columns: 1fr;
+        }
+
+        .empty-index {
+          border-right: 0;
+          border-bottom: 1px solid var(--rule);
+        }
+
+        .empty-copy {
+          padding: 2.5rem 1rem 4rem;
+        }
+
+        .empty-copy h2 {
+          font-size: 3.4rem;
+        }
+
+        .book-footer {
+          display: grid;
         }
       }
 
       @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
         *,
         *::before,
         *::after {
+          animation: none !important;
           scroll-behavior: auto !important;
           transition-duration: 0.01ms !important;
+        }
+      }
+
+      @media print {
+        :root {
+          --page: #fff;
+          --sheet: #fff;
+          --sheet-muted: #fff;
+        }
+
+        .topline,
+        .scenario-bar,
+        .cover-actions,
+        .notes,
+        .book-footer {
+          display: none !important;
+        }
+
+        .book {
+          margin: 0;
+          border: 0;
+          box-shadow: none;
+        }
+
+        .reading-layout {
+          grid-template-columns: 10rem minmax(0, 1fr);
+        }
+
+        .chapter {
+          break-inside: avoid;
         }
       }
     </style>
@@ -392,97 +1236,989 @@
   <body>
     <header class="topline">
       <strong>LiveSetList</strong>
-      <span class="center">演出详情方向探索</span>
+      <span>数字节目册方向深化</span>
       <a href="./index.html">全部方向</a>
     </header>
 
-    <main class="sheet">
-      <section class="cover" aria-labelledby="event-title">
-        <div class="cover-title">
-          <span class="series">BanG Dream! 10th Anniversary LIVE</span>
-          <h1 id="event-title">In the name of BanG Dream!</h1>
-          <p>以节目册的阅读方式保存一场多乐队纪念演出的曲序、章节和合作关系。</p>
+    <section class="scenario-bar" aria-labelledby="scenario-title">
+      <div class="scenario-copy">
+        <strong id="scenario-title">本地生产库场景</strong>
+        <span>用真实记录检验常规歌单、超长曲序、20+ 出演名录、复杂阵容与无歌单状态。</span>
+      </div>
+      <div class="scenario-tabs" role="tablist" aria-label="选择演出数据场景">
+        <button type="button" role="tab" aria-selected="true" data-scenario="regular">
+          常规巡演
+          <span>14 曲 / 1 Band</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="marathon">
+          超长多 Band
+          <span>41 曲 / 10 Band</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="animax">
+          超长出演名录
+          <span>8 曲 / 其他 20 组</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="handover">
+          阵容交接
+          <span>翻唱 / 满员+1</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="postponed">
+          延期无歌单
+          <span>排期 / 出演成员</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="cancelled">
+          取消无歌单
+          <span>不可收藏 / 空状态</span>
+        </button>
+      </div>
+    </section>
+
+    <main class="book" id="book" role="tabpanel" aria-live="polite">
+      <section class="cover" id="cover" aria-labelledby="event-title">
+        <div class="cover-copy">
+          <p class="series" id="event-series"></p>
+          <h1 id="event-title"></h1>
+          <div>
+            <p class="cover-summary" id="event-summary"></p>
+            <div class="reference-list" id="reference-list"></div>
+          </div>
         </div>
-        <aside class="cover-data" aria-label="演出资料">
-          <p class="date">02<br />28</p>
-          <dl>
-            <div><dt>年份</dt><dd>2026</dd></div>
-            <div><dt>场地</dt><dd>Kアリーナ横浜</dd></div>
-            <div><dt>开场</dt><dd>13:30 JP</dd></div>
-            <div><dt>开演</dt><dd>15:00 JP</dd></div>
-            <div><dt>收录</dt><dd>完整歌单 41 曲</dd></div>
+
+        <aside class="cover-register" aria-label="演出资料">
+          <div class="date-block">
+            <p class="date-day" id="date-day"></p>
+            <p class="date-year" id="date-year"></p>
+          </div>
+          <dl class="register-data">
+            <div><dt>场地</dt><dd id="meta-venue"></dd></div>
+            <div><dt>开场</dt><dd id="meta-open"></dd></div>
+            <div><dt>开演</dt><dd id="meta-start"></dd></div>
+            <div><dt>类型</dt><dd id="meta-type"></dd></div>
+            <div><dt>收录</dt><dd id="meta-count"></dd></div>
           </dl>
+          <div class="cover-actions">
+            <button class="favorite" id="favorite-button" type="button" aria-pressed="false">收藏</button>
+            <button id="share-button" type="button">复制链接</button>
+            <a class="source-link" id="source-link" href="#" target="_blank" rel="noreferrer">官方资料</a>
+          </div>
         </aside>
       </section>
 
-      <header class="program-head">
-        <h2>Program</h2>
-        <div class="program-actions" aria-label="演出操作">
-          <button type="button" aria-pressed="false">收藏</button>
-          <button type="button">分享</button>
+      <section class="status-panel" id="status-panel" aria-label="演出状态" hidden>
+        <div class="status-title">
+          <span>演出状态</span>
+          <strong id="status-label"></strong>
         </div>
-      </header>
+        <div class="status-copy">
+          <p id="status-note"></p>
+          <ul class="history-list" id="history-list"></ul>
+        </div>
+      </section>
 
-      <section class="program" aria-label="歌单章节">
-        <article class="chapter">
-          <span class="chapter-number">I</span>
-          <div>
-            <h3>RAISE A SUILEN</h3>
-            <p class="chapter-note">M1-M4 / 4 曲</p>
-            <div class="tracks">
-              <button class="track" type="button"><span class="code">M1</span><span class="title">R·I·O·T</span></button>
-              <button class="track" type="button"><span class="code">M2</span><span class="title">V.I.P MONSTER</span></button>
-              <button class="track" type="button"><span class="code">M3</span><span class="title">OUTSIDER RODEO</span></button>
-              <button class="track" type="button"><span class="code">M4</span><span class="title">HELL! or HELL?</span></button>
-            </div>
+      <section class="reading-layout" id="reading-layout">
+        <aside class="contents">
+          <div class="contents-inner">
+            <h2>Contents</h2>
+            <nav id="chapter-nav" aria-label="歌单章节"></nav>
+            <p class="contents-summary" id="contents-summary"></p>
           </div>
-        </article>
+        </aside>
 
-        <article class="chapter">
-          <span class="chapter-number">II</span>
-          <div>
-            <h3>Afterglow</h3>
-            <p class="chapter-note">M5-M7 / 3 曲</p>
-            <div class="tracks">
-              <button class="track" type="button"><span class="code">M5</span><span class="title">燦々</span></button>
-              <button class="track" type="button"><span class="code">M6</span><span class="title">Hey-day狂騒曲(カプリチオ)</span></button>
-              <button class="track" type="button"><span class="code">M7</span><span class="title">Scarlet Sky</span></button>
-            </div>
-          </div>
-        </article>
+        <section class="program" aria-labelledby="program-title">
+          <header class="program-head">
+            <h2 id="program-title">Program</h2>
+            <p id="program-summary"></p>
+          </header>
+          <div id="chapter-list"></div>
+        </section>
 
-        <article class="chapter">
-          <span class="chapter-number">III</span>
-          <div>
-            <h3>夢限大みゅーたいぷ</h3>
-            <p class="chapter-note">M8-M10 / 3 曲</p>
-            <div class="tracks">
-              <button class="track" type="button"><span class="code">M8</span><span class="title">夢現妄想世界</span></button>
-              <button class="track" type="button"><span class="code">M9</span><span class="title">チューニング</span></button>
-              <button class="track" type="button"><span class="code">M10</span><span class="title">コミュ着火Fire!</span></button>
+        <aside class="notes" aria-label="曲目注释">
+          <div class="notes-inner">
+            <p class="notes-label">Liner note</p>
+            <p class="notes-code" id="notes-code">选择曲目</p>
+            <h3 id="notes-title">出演与版本信息会在这里展开</h3>
+            <hr class="notes-rule" />
+            <div class="notes-body" id="notes-body">
+              <p>点击任一曲目，可以查看完整演出者、翻唱标记、阵容用法和特殊出演情况。</p>
             </div>
+            <div class="detail-tags" id="notes-tags"></div>
           </div>
-        </article>
+        </aside>
+      </section>
 
-        <article class="chapter">
-          <span class="chapter-number">IV</span>
-          <div>
-            <h3>ハロー、ハッピーワールド！</h3>
-            <p class="chapter-note">M11-M14 / 合作曲目后进入独立章节</p>
-            <div class="tracks">
-              <button class="track" type="button"><span class="code">M11</span><span class="title">えがおのオーケストラっ！</span></button>
-              <button class="track" type="button"><span class="code">M12</span><span class="title">ゴーカ！ごーかい！？ファントムシーフ！</span></button>
-              <button class="track" type="button"><span class="code">M13</span><span class="title">サンバロハッピ〜！</span></button>
-              <button class="track" type="button"><span class="code">M14</span><span class="title">うぃーきゃん☆フレフレっ！</span></button>
-            </div>
-          </div>
-        </article>
+      <section class="empty-program" id="empty-program" hidden>
+        <aside class="empty-index">
+          <strong>Contents</strong>
+          <span>本场没有可编排的曲目章节。</span>
+        </aside>
+        <div class="empty-copy">
+          <h2 id="empty-title"></h2>
+          <p id="empty-body"></p>
+          <div class="attendees" id="attendees"></div>
+        </div>
       </section>
 
       <footer class="book-footer">
-        <span>本页仅用于比较编辑排版方向，未补齐全部曲目。</span>
-        <span>14 / 41</span>
+        <span id="sample-label"></span>
+        <span>LiveSetList / Digital program</span>
       </footer>
     </main>
+
+    <script>
+      const scenarios = {
+        regular: {
+          liveId: 78,
+          date: "2026-02-15",
+          title: "Roselia ASIA TOUR「Neuweltfahrt」東京公演 -Final- DAY2",
+          series: "Roselia ASIA TOUR「Neuweltfahrt」",
+          summary: "14 曲全部由 Roselia 演出，主篇与安可构成常见的单乐队歌单阅读场景。",
+          venue: "東京ガーデンシアター",
+          opening: "16:30 JP",
+          start: "18:00 JP",
+          type: "单独公演",
+          status: "scheduled",
+          statusLabel: "已结束",
+          statusNote: "",
+          history: [],
+          source: "https://bang-dream.com/neuweltfahrt-tokyo/",
+          references: [
+            "巡演：Roselia ASIA TOUR「Neuweltfahrt」",
+            "活动组：東京公演 -Final-",
+          ],
+          chapters: [
+            {
+              title: "Main program",
+              range: "M1-M12",
+              note: "Roselia / 12 曲",
+              songs: [
+                { code: "M1", title: "FRONTIER FANTASIA", performers: ["Roselia"] },
+                { code: "M2", title: "BLACK SHOUT", performers: ["Roselia"] },
+                { code: "M3", title: "Determination Symphony", performers: ["Roselia"] },
+                { code: "M4", title: "紫炎", performers: ["Roselia"] },
+                { code: "M5", title: "R", performers: ["Roselia"] },
+                { code: "M6", title: "ZEAL of proud", performers: ["Roselia"] },
+                { code: "M7", title: "Ringing Bloom", performers: ["Roselia"] },
+                { code: "M8", title: "陽だまりロードナイト", performers: ["Roselia"] },
+                { code: "M9", title: "軌跡", performers: ["Roselia"] },
+                { code: "M10", title: "Song I am.", performers: ["Roselia"] },
+                { code: "M11", title: "Steadfast Spirits", performers: ["Roselia"] },
+                { code: "M12", title: "Neo-Aspect", performers: ["Roselia"] },
+              ],
+            },
+            {
+              title: "Encore",
+              range: "EN1-EN2",
+              note: "安可 / 2 曲",
+              songs: [
+                { code: "EN1", title: "FIRE BIRD", performers: ["Roselia"] },
+                { code: "EN2", title: "PASSIONATE ANTHEM", performers: ["Roselia"] },
+              ],
+            },
+          ],
+          attendees: [],
+        },
+        marathon: {
+          liveId: 42,
+          date: "2026-02-28",
+          title: "BanG Dream! 10th Anniversary LIVE「In the name of BanG Dream!」",
+          series: "BanG Dream! 10th Anniversary LIVE",
+          summary: "本地库最长的 41 曲歌单，包含 10 个 Band、跨 Band 合作与全员终章。",
+          venue: "Kアリーナ横浜",
+          opening: "13:30 JP",
+          start: "15:00 JP",
+          type: "多乐队公演",
+          status: "scheduled",
+          statusLabel: "已结束",
+          statusNote: "",
+          history: [],
+          source: "https://bang-dream.com/events/bangdream-10th-anniversary-live/",
+          references: [],
+          chapters: [
+            {
+              title: "RAISE A SUILEN",
+              range: "M1-M4",
+              note: "4 曲",
+              songs: [
+                { code: "M1", title: "R·I·O·T", performers: ["RAISE A SUILEN"] },
+                { code: "M2", title: "V.I.P MONSTER", performers: ["RAISE A SUILEN"] },
+                { code: "M3", title: "OUTSIDER RODEO", performers: ["RAISE A SUILEN"] },
+                { code: "M4", title: "HELL! or HELL?", performers: ["RAISE A SUILEN"] },
+              ],
+            },
+            {
+              title: "Afterglow",
+              range: "M5-M7",
+              note: "3 曲",
+              songs: [
+                { code: "M5", title: "燦々", performers: ["Afterglow"] },
+                { code: "M6", title: "Hey-day狂騒曲(カプリチオ)", performers: ["Afterglow"] },
+                { code: "M7", title: "Scarlet Sky", performers: ["Afterglow"] },
+              ],
+            },
+            {
+              title: "夢限大みゅーたいぷ",
+              range: "M8-M10",
+              note: "3 曲",
+              songs: [
+                { code: "M8", title: "夢現妄想世界", performers: ["夢限大みゅーたいぷ"] },
+                { code: "M9", title: "チューニング", performers: ["夢限大みゅーたいぷ"] },
+                { code: "M10", title: "コミュ着火Fire!", performers: ["夢限大みゅーたいぷ"] },
+              ],
+            },
+            {
+              title: "ハロー、ハッピーワールド！",
+              range: "M11-M14",
+              note: "合作开场 / 4 曲",
+              songs: [
+                {
+                  code: "M11",
+                  title: "えがおのオーケストラっ！",
+                  performers: ["ハロー、ハッピーワールド！", "夢限大みゅーたいぷ"],
+                  tags: ["合作"],
+                },
+                { code: "M12", title: "ゴーカ！ごーかい！？ファントムシーフ！", performers: ["ハロー、ハッピーワールド！"] },
+                { code: "M13", title: "サンバロハッピ〜！", performers: ["ハロー、ハッピーワールド！"] },
+                { code: "M14", title: "うぃーきゃん☆フレフレっ！", performers: ["ハロー、ハッピーワールド！"] },
+              ],
+            },
+            {
+              title: "Morfonica",
+              range: "M15-M18",
+              note: "4 曲",
+              songs: [
+                { code: "M15", title: "Daylight -デイライト-", performers: ["Morfonica"] },
+                { code: "M16", title: "メランコリックララバイ", performers: ["Morfonica"] },
+                { code: "M17", title: "誓いのWingbeat", performers: ["Morfonica"] },
+                { code: "M18", title: "Tempest", performers: ["Morfonica"] },
+              ],
+            },
+            {
+              title: "Pastel＊Palettes",
+              range: "M19-M22",
+              note: "合作曲 1 首",
+              songs: [
+                { code: "M19", title: "天下トーイツA to Z☆", performers: ["Pastel＊Palettes"] },
+                { code: "M20", title: "しゅわりん☆どり〜みん", performers: ["Pastel＊Palettes"] },
+                {
+                  code: "M21",
+                  title: "Y.O.L.O！！！！！",
+                  performers: ["Afterglow", "Pastel＊Palettes"],
+                  tags: ["合作"],
+                },
+                { code: "M22", title: "もういちど ルミナス", performers: ["Pastel＊Palettes"] },
+              ],
+            },
+            {
+              title: "Ave Mujica",
+              range: "M23-M26",
+              note: "4 曲",
+              songs: [
+                { code: "M23", title: "KiLLKiSS", performers: ["Ave Mujica"] },
+                { code: "M24", title: "顔", performers: ["Ave Mujica"] },
+                { code: "M25", title: "Sophie", performers: ["Ave Mujica"] },
+                { code: "M26", title: "Symbol I : △", performers: ["Ave Mujica"] },
+              ],
+            },
+            {
+              title: "Roselia",
+              range: "M27-M31",
+              note: "部分出演合作 / 5 曲",
+              songs: [
+                { code: "M27", title: "ZEAL of proud", performers: ["Roselia"] },
+                { code: "M28", title: "BLACK SHOUT", performers: ["Roselia"] },
+                { code: "M29", title: "FIRE BIRD", performers: ["Roselia"] },
+                { code: "M30", title: "VIOLET LINE", performers: ["Roselia"] },
+                {
+                  code: "M31",
+                  title: "PASSIONATE ANTHEM",
+                  performers: ["Afterglow", "Roselia"],
+                  tags: ["合作", "部分出演"],
+                  note: "Afterglow 仅记录佐倉綾音出演，Roselia 为完整阵容。",
+                },
+              ],
+            },
+            {
+              title: "MyGO!!!!!",
+              range: "M32-M35",
+              note: "4 曲",
+              songs: [
+                { code: "M32", title: "迷星叫", performers: ["MyGO!!!!!"] },
+                { code: "M33", title: "壱雫空", performers: ["MyGO!!!!!"] },
+                { code: "M34", title: "影色舞", performers: ["MyGO!!!!!"] },
+                { code: "M35", title: "往欄印", performers: ["MyGO!!!!!"] },
+              ],
+            },
+            {
+              title: "Poppin'Party",
+              range: "M36-M39",
+              note: "4 曲",
+              songs: [
+                { code: "M36", title: "ティアドロップス", performers: ["Poppin'Party"] },
+                { code: "M37", title: "ぽっぴん'どりーむ！", performers: ["Poppin'Party"] },
+                { code: "M38", title: "STAR BEAT!～ホシノコドウ～", performers: ["Poppin'Party"] },
+                { code: "M39", title: "キズナミュージック♪", performers: ["Poppin'Party"] },
+              ],
+            },
+            {
+              title: "Finale",
+              range: "M40-M41",
+              note: "10 Band 联合出演",
+              songs: [
+                {
+                  code: "M40",
+                  title: "CiRCLE THANKS MUSiC♪",
+                  performers: ["Poppin'Party", "Afterglow", "Pastel＊Palettes", "Roselia", "ハロー、ハッピーワールド！", "RAISE A SUILEN", "Morfonica", "MyGO!!!!!", "Ave Mujica", "夢限大みゅーたいぷ"],
+                  tags: ["全员终章"],
+                },
+                {
+                  code: "M41",
+                  title: "Yes! BanG_Dream!",
+                  performers: ["Poppin'Party", "Afterglow", "Pastel＊Palettes", "Roselia", "ハロー、ハッピーワールド！", "RAISE A SUILEN", "Morfonica", "MyGO!!!!!", "Ave Mujica", "夢限大みゅーたいぷ"],
+                  tags: ["全员终章"],
+                },
+              ],
+            },
+          ],
+          attendees: [],
+        },
+        animax: {
+          liveId: 12,
+          date: "2024-11-23",
+          title: "ANIMAX MUSIX 2024 FALL",
+          series: "ANIMAX MUSIX",
+          summary: "数据库收录 8 曲并保留 M19 至 M72 的原始序号；终曲含 2 个版本化 Band 与 20 组其他出演。",
+          contentsSummary: "8 曲按原始 absolute_order 排列；编号缺口来自活动中未纳入当前收录范围的曲目，并非页面漏排。",
+          programSummary: "展示数据库收录的 8 曲，保留活动原始编号。M19 至 M72 之间的缺号不做重新编号。",
+          venue: "横浜アリーナ",
+          opening: "13:00 JP",
+          start: "14:30 JP",
+          type: "多乐队公演",
+          status: "scheduled",
+          statusLabel: "已结束",
+          statusNote: "",
+          history: [],
+          source: "https://www.animax.co.jp/animaxmusix/archive/archive_2024_fall.html",
+          references: [
+            "相关曲目：8 曲",
+            "原始曲序跨度：M19-M72",
+            "单曲其他出演：最多 20 组",
+          ],
+          chapters: [
+            {
+              title: "Ave Mujica",
+              range: "M19-M21",
+              note: "3 曲",
+              songs: [
+                { code: "M19", title: "Ave Mujica", performers: ["Ave Mujica"] },
+                { code: "M20", title: "Symbol I : △", performers: ["Ave Mujica"] },
+                {
+                  code: "M21",
+                  title: "暗黒天国",
+                  performers: ["Ave Mujica"],
+                  otherMembers: [{ key: "Sizuk", value: [] }],
+                  tags: ["翻唱"],
+                },
+              ],
+            },
+            {
+              title: "Poppin'Party",
+              range: "M36-M38",
+              note: "3 曲",
+              songs: [
+                { code: "M36", title: "ときめきエクスペリエンス！", performers: ["Poppin'Party"] },
+                { code: "M37", title: "Hello! Wink!", performers: ["Poppin'Party"] },
+                { code: "M38", title: "ティアドロップス", performers: ["Poppin'Party"] },
+              ],
+            },
+            {
+              title: "Cross-over",
+              range: "M51 / M72",
+              note: "部分出演与 20 组终曲名录",
+              songs: [
+                {
+                  code: "M51",
+                  title: "私は最強",
+                  performers: ["Poppin'Party"],
+                  otherMembers: [{ key: "鈴木このみ", value: [] }],
+                  tags: ["翻唱", "部分出演"],
+                  note: "Poppin'Party 仅记录愛美出演；其他出演为鈴木このみ。",
+                },
+                {
+                  code: "M72",
+                  title: "only my railgun",
+                  performers: ["Poppin'Party", "Ave Mujica"],
+                  otherMembers: [
+                    { key: "ASCA", value: [] },
+                    { key: "ASOBI同盟", value: ["とくみくす", "りみー"] },
+                    { key: "GARNiDELiA", value: ["MARiA", "toku"] },
+                    { key: "KOTOKO", value: [] },
+                    {
+                      key: "Liella!",
+                      value: ["伊達さゆり", "Liyuu", "ペイトン尚未", "岬なこ", "青山なぎさ", "鈴原希実", "藪島朱音", "大熊和奏", "絵森彩", "結那", "坂倉花"],
+                    },
+                    { key: "MADKID", value: ["YOU-TA", "YUKI", "KAZUKI", "LIN", "SHIN"] },
+                    {
+                      key: "Secret Cast",
+                      value: ["井口裕香", "平野綾", "Tom-H@ck", "八木沼悟志(fripSide)"],
+                    },
+                    { key: "Sizuk", value: [] },
+                    { key: "TRUE", value: [] },
+                    { key: "sajou no hana", value: ["sana"] },
+                    {
+                      key: "ウマ娘 プリティーダービー",
+                      value: ["津田美波", "矢野妃菜喜", "春川芽生", "福嶋晴菜", "藤本侑里", "秋奈", "吉岡茉祐"],
+                    },
+                    { key: "オーイシマサヨシ", value: [] },
+                    { key: "中川翔子", value: [] },
+                    { key: "内田雄馬", value: [] },
+                    { key: "南條愛乃", value: [] },
+                    { key: "大渕野々花", value: [] },
+                    { key: "甘神三姉妹", value: ["上坂すみれ", "本渡楓", "若山詩音"] },
+                    { key: "蒼井翔太", value: [] },
+                    { key: "鈴木このみ", value: [] },
+                    { key: "鈴木愛奈", value: [] },
+                  ],
+                  tags: ["翻唱", "联合终章"],
+                  note: "版本化 Band 保留为 Poppin'Party 与 Ave Mujica；20 组其他出演以独立名录按需展开。",
+                },
+              ],
+            },
+          ],
+          attendees: [],
+        },
+        handover: {
+          liveId: 366,
+          date: "2018-05-13",
+          title: "BanG Dream! 5th☆LIVE Day2:Roselia -Ewigkeit-",
+          series: "BanG Dream! 5th☆LIVE",
+          summary: "18 曲包含开场嘉宾、跨 Band 翻唱与 Roselia 阵容交接，是成员语义最复杂的真实样本。",
+          venue: "幕張メッセ 国際展示場ホール",
+          opening: "16:30 JP",
+          start: "18:00 JP",
+          type: "单独公演",
+          status: "scheduled",
+          statusLabel: "已结束",
+          statusNote: "",
+          history: [],
+          source: "https://bang-dream.com/bang-dream-5thlive/",
+          references: ["活动组：BanG Dream! 5th☆LIVE"],
+          chapters: [
+            {
+              title: "Opening act / THE THIRD(仮)",
+              range: "OP1-OP4",
+              note: "开场演出 / 4 曲",
+              songs: [
+                { code: "OP1", title: "That Is How I Roll!", performers: ["THE THIRD(仮)"], tags: ["翻唱"], note: "原曲归属 Afterglow。" },
+                { code: "OP2", title: "しゅわりん☆どり〜みん", performers: ["THE THIRD(仮)"], tags: ["翻唱"], note: "原曲归属 Pastel＊Palettes。" },
+                { code: "OP3", title: "Don't be afraid!", performers: ["THE THIRD(仮)"], tags: ["翻唱"] },
+                { code: "OP4", title: "R·I·O·T", performers: ["THE THIRD(仮)"] },
+              ],
+            },
+            {
+              title: "Roselia / Main program",
+              range: "M1-M11",
+              note: "主篇 / 11 曲",
+              songs: [
+                { code: "M1", title: "ONENESS", performers: ["Roselia"] },
+                { code: "M2", title: "Determination Symphony", performers: ["Roselia"] },
+                { code: "M3", title: "魂のルフラン", performers: ["Roselia"], tags: ["翻唱"] },
+                { code: "M4", title: "Hacking to the Gate", performers: ["Roselia"], tags: ["翻唱"] },
+                { code: "M5", title: "ETERNAL BLAZE", performers: ["Roselia"], tags: ["翻唱"] },
+                { code: "M6", title: "深愛", performers: ["Roselia"], tags: ["翻唱"] },
+                { code: "M7", title: "LOUDER", performers: ["Roselia"] },
+                { code: "M8", title: "熱色スターマイン", performers: ["Roselia"] },
+                { code: "M9", title: "軌跡", performers: ["Roselia"] },
+                { code: "M10", title: "Re:birth day", performers: ["Roselia"] },
+                { code: "M11", title: "－HEROIC ADVENT－", performers: ["Roselia"] },
+              ],
+            },
+            {
+              title: "Encore",
+              range: "EN1-EN3",
+              note: "阵容交接发生在 EN2",
+              songs: [
+                { code: "EN1", title: "Neo-Aspect", performers: ["Roselia"] },
+                {
+                  code: "EN2",
+                  title: "BLACK SHOUT",
+                  performers: ["Roselia"],
+                  tags: ["阵容交接", "满员+1"],
+                  note: "以 Roselia V1 的 5 人阵容为满员基准，V2 新成员中島由貴共同出演，实际记录 6 人。",
+                },
+                { code: "EN3", title: "陽だまりロードナイト", performers: ["Roselia"] },
+              ],
+            },
+          ],
+          attendees: [],
+        },
+        postponed: {
+          liveId: 389,
+          date: "2018-09-26",
+          title: "パ・リーグ6球団×バンドリ！ ガールズバンドパーティ！ ～ガルパスペシャルゲーム！キラキラDAY～",
+          series: "パ・リーグ6球団×バンドリ！ ガールズバンドパーティ！",
+          summary: "数据库保留延期原因、正式排期快照和活动出演成员，但没有曲目记录。",
+          venue: "ZOZOマリンスタジアム",
+          opening: "12:00 JP",
+          start: "12:10 JP",
+          type: "活动",
+          status: "postponed",
+          statusLabel: "延期",
+          statusNote: "荒天のため試合中止",
+          history: ["原定开场 17:00 JP，开演 17:45 JP。当前记录为 12:00 JP / 12:10 JP。"],
+          source: "https://bang-dream.com/news/315/",
+          references: ["巡演：パ・リーグ6球団×バンドリ！"],
+          chapters: [],
+          emptyTitle: "本场尚无歌单记录",
+          emptyBody: "节目册保留演出状态、排期历史和活动出演成员，不生成用于填空的虚构曲序。",
+          attendees: [
+            { band: "Poppin'Party", members: "西本りみ / 部分出演" },
+            { band: "Roselia", members: "櫻川めぐ / 部分出演" },
+          ],
+        },
+        cancelled: {
+          liveId: 479,
+          date: "2020-05-01",
+          title: "Morfonica Debut Event「Prelude」",
+          series: "Morfonica Debut Event",
+          summary: "取消状态下保留可靠的演出资料，隐藏收藏入口，并以明确空状态替代歌单。",
+          venue: "舞浜アンフィシアター",
+          opening: "17:00 JP",
+          start: "18:00 JP",
+          type: "单独公演",
+          status: "cancelled",
+          statusLabel: "已取消",
+          statusNote: "",
+          history: [],
+          source: "https://bang-dream.com/events/morfonica_prelude/",
+          references: [],
+          chapters: [],
+          emptyTitle: "已取消，不展示歌单",
+          emptyBody: "本地生产库没有本场曲目，也没有补充取消说明。页面只呈现已确认的日期、场地和状态。",
+          attendees: [],
+        },
+      };
+
+      const elements = {
+        book: document.querySelector("#book"),
+        cover: document.querySelector("#cover"),
+        series: document.querySelector("#event-series"),
+        title: document.querySelector("#event-title"),
+        summary: document.querySelector("#event-summary"),
+        references: document.querySelector("#reference-list"),
+        dateDay: document.querySelector("#date-day"),
+        dateYear: document.querySelector("#date-year"),
+        venue: document.querySelector("#meta-venue"),
+        opening: document.querySelector("#meta-open"),
+        start: document.querySelector("#meta-start"),
+        type: document.querySelector("#meta-type"),
+        count: document.querySelector("#meta-count"),
+        favorite: document.querySelector("#favorite-button"),
+        share: document.querySelector("#share-button"),
+        source: document.querySelector("#source-link"),
+        statusPanel: document.querySelector("#status-panel"),
+        statusLabel: document.querySelector("#status-label"),
+        statusNote: document.querySelector("#status-note"),
+        history: document.querySelector("#history-list"),
+        readingLayout: document.querySelector("#reading-layout"),
+        chapterNav: document.querySelector("#chapter-nav"),
+        contentsSummary: document.querySelector("#contents-summary"),
+        programSummary: document.querySelector("#program-summary"),
+        chapterList: document.querySelector("#chapter-list"),
+        notesCode: document.querySelector("#notes-code"),
+        notesTitle: document.querySelector("#notes-title"),
+        notesBody: document.querySelector("#notes-body"),
+        notesTags: document.querySelector("#notes-tags"),
+        emptyProgram: document.querySelector("#empty-program"),
+        emptyTitle: document.querySelector("#empty-title"),
+        emptyBody: document.querySelector("#empty-body"),
+        attendees: document.querySelector("#attendees"),
+        sampleLabel: document.querySelector("#sample-label"),
+      };
+
+      const scenarioButtons = [...document.querySelectorAll("[data-scenario]")];
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      let activeScenarioKey = "regular";
+      let activeTrackButton = null;
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function roman(index) {
+        const values = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+        return values[index] ?? String(index + 1);
+      }
+
+      function songCount(scenario) {
+        return scenario.chapters.reduce((total, chapter) => total + chapter.songs.length, 0);
+      }
+
+      function performerSummary(performers) {
+        if (performers.length === 1) return performers[0];
+        if (performers.length === 2) return performers.join(" + ");
+        return `${performers.length} 组联合出演`;
+      }
+
+      function rosterListMarkup(items) {
+        const rows = items
+          .map((item) => {
+            const values = Array.isArray(item.value)
+              ? item.value
+              : item.value
+                ? [item.value]
+                : [];
+            const members = values.length > 0
+              ? `<span>${escapeHtml(values.join(" / "))}</span>`
+              : "";
+            return `
+              <li>
+                <span class="roster-entry">
+                  <strong>${escapeHtml(item.key)}</strong>
+                  ${members}
+                </span>
+              </li>
+            `;
+          })
+          .join("");
+        return `<ol class="roster-list">${rows}</ol>`;
+      }
+
+      function performerMarkup(performers) {
+        if (performers.length <= 3) {
+          return `<p class="detail-copy"><strong>版本化 Band：</strong>${escapeHtml(performers.join(" / "))}</p>`;
+        }
+
+        const preview = performers.slice(0, 2).join(" / ");
+        const items = performers.map((performer) => ({ key: performer, value: [] }));
+        return `
+          <p class="roster-summary">
+            <strong>版本化 Band：</strong>${escapeHtml(preview)}，另 ${performers.length - 2} 组
+          </p>
+          <details class="roster-disclosure">
+            <summary><span>展开完整 Band 名录（${performers.length} 组）</span></summary>
+            ${rosterListMarkup(items)}
+          </details>
+        `;
+      }
+
+      function otherMemberMarkup(otherMembers = []) {
+        if (otherMembers.length === 0) return "";
+
+        const nestedMemberCount = otherMembers.reduce((total, item) => {
+          const values = Array.isArray(item.value)
+            ? item.value
+            : item.value
+              ? [item.value]
+              : [];
+          return total + values.length;
+        }, 0);
+        const shouldCollapse = otherMembers.length > 3 || nestedMemberCount > 8;
+
+        if (!shouldCollapse) {
+          const names = otherMembers
+            .map((item) => {
+              const values = Array.isArray(item.value)
+                ? item.value
+                : item.value
+                  ? [item.value]
+                  : [];
+              return values.length > 0
+                ? `${item.key}（${values.join(" / ")}）`
+                : item.key;
+            })
+            .join(" / ");
+          return `<p class="detail-copy"><strong>其他出演：</strong>${escapeHtml(names)}</p>`;
+        }
+
+        const preview = otherMembers.slice(0, 2).map((item) => item.key).join(" / ");
+        const remainder = otherMembers.length > 2
+          ? `，另 ${otherMembers.length - 2} 组`
+          : nestedMemberCount > 0
+            ? `，共列 ${nestedMemberCount} 名成员`
+            : "";
+        return `
+          <p class="roster-summary">
+            <strong>其他出演：</strong>${escapeHtml(preview)}${escapeHtml(remainder)}
+          </p>
+          <details class="roster-disclosure">
+            <summary><span>展开完整其他出演名录（${otherMembers.length} 组）</span></summary>
+            ${rosterListMarkup(otherMembers)}
+          </details>
+        `;
+      }
+
+      function detailBodyMarkup(track) {
+        const noteLine = track.note
+          ? `<p class="detail-copy">${escapeHtml(track.note)}</p>`
+          : (track.otherMembers ?? []).length === 0
+            ? `<p class="detail-copy">本条没有额外阵容或版本备注。</p>`
+            : "";
+        return [
+          performerMarkup(track.performers),
+          noteLine,
+          otherMemberMarkup(track.otherMembers),
+        ].join("");
+      }
+
+      function detailMarkup(track) {
+        const tags = (track.tags ?? [])
+          .map((tag) => `<span class="detail-tag">${escapeHtml(tag)}</span>`)
+          .join("");
+        return `${detailBodyMarkup(track)}${tags ? `<div class="detail-tags">${tags}</div>` : ""}`;
+      }
+
+      function renderNotes(track) {
+        if (!track) {
+          elements.notesCode.textContent = "选择曲目";
+          elements.notesTitle.textContent = "出演与版本信息会在这里展开";
+          elements.notesBody.innerHTML = "<p>点击任一曲目，可以查看演出者、翻唱标记与阵容用法；超长出演名录默认收起，按需展开。</p>";
+          elements.notesTags.innerHTML = "";
+          return;
+        }
+
+        elements.notesCode.textContent = track.code;
+        elements.notesTitle.textContent = track.title;
+        elements.notesBody.innerHTML = detailBodyMarkup(track);
+        elements.notesTags.innerHTML = (track.tags ?? [])
+          .map((tag) => `<span class="detail-tag">${escapeHtml(tag)}</span>`)
+          .join("");
+      }
+
+      function selectTrack(button, track, inlineDetail) {
+        const wasActive = button === activeTrackButton;
+
+        if (activeTrackButton) {
+          activeTrackButton.setAttribute("aria-expanded", "false");
+          activeTrackButton.closest(".track").querySelector(".track-inline-detail").hidden = true;
+        }
+
+        if (wasActive) {
+          activeTrackButton = null;
+          renderNotes(null);
+          return;
+        }
+
+        activeTrackButton = button;
+        button.setAttribute("aria-expanded", "true");
+        inlineDetail.hidden = false;
+        renderNotes(track);
+      }
+
+      function buildChapters(scenario, scenarioKey) {
+        elements.chapterNav.innerHTML = "";
+        elements.chapterList.innerHTML = "";
+        activeTrackButton = null;
+        renderNotes(null);
+
+        scenario.chapters.forEach((chapter, chapterIndex) => {
+          const chapterId = `chapter-${scenarioKey}-${chapterIndex + 1}`;
+          const navLink = document.createElement("a");
+          navLink.href = `#${chapterId}`;
+          navLink.innerHTML = `<span>${escapeHtml(chapter.range)}</span><strong>${escapeHtml(chapter.title)}</strong>`;
+          elements.chapterNav.append(navLink);
+
+          const article = document.createElement("article");
+          article.className = "chapter";
+          article.id = chapterId;
+          article.innerHTML = `
+            <span class="chapter-mark">${roman(chapterIndex)}</span>
+            <div class="chapter-main">
+              <header class="chapter-head">
+                <div>
+                  <h3>${escapeHtml(chapter.title)}</h3>
+                  <p>${escapeHtml(chapter.note)}</p>
+                </div>
+                <span class="chapter-range">${escapeHtml(chapter.range)}</span>
+              </header>
+              <div class="tracks"></div>
+            </div>
+          `;
+
+          const tracks = article.querySelector(".tracks");
+          chapter.songs.forEach((track) => {
+            const row = document.createElement("div");
+            row.className = "track";
+            const otherCount = (track.otherMembers ?? []).length;
+            const tagsText = otherCount > 0
+              ? `其他 ${otherCount}`
+              : (track.tags ?? []).length > 0
+                ? track.tags.join(" / ")
+                : "查看";
+            row.innerHTML = `
+              <button class="track-main" type="button" aria-expanded="false">
+                <span class="track-code">${escapeHtml(track.code)}</span>
+                <span class="track-title">${escapeHtml(track.title)}</span>
+                <span class="track-performer">${escapeHtml(performerSummary(track.performers))}</span>
+                <span class="track-more">${escapeHtml(tagsText)}</span>
+              </button>
+              <div class="track-inline-detail" hidden>${detailMarkup(track)}</div>
+            `;
+            const button = row.querySelector(".track-main");
+            const inlineDetail = row.querySelector(".track-inline-detail");
+            button.addEventListener("click", () => selectTrack(button, track, inlineDetail));
+            tracks.append(row);
+          });
+
+          elements.chapterList.append(article);
+        });
+      }
+
+      function renderStatus(scenario) {
+        const showStatus = scenario.status !== "scheduled";
+        elements.statusPanel.hidden = !showStatus;
+        if (!showStatus) return;
+
+        elements.statusLabel.textContent = scenario.statusLabel;
+        elements.statusNote.textContent = scenario.statusNote || "本地生产库未记录补充说明。";
+        elements.history.innerHTML = scenario.history
+          .map((item) => `<li>${escapeHtml(item)}</li>`)
+          .join("");
+        elements.history.hidden = scenario.history.length === 0;
+      }
+
+      function renderEmpty(scenario) {
+        elements.emptyTitle.textContent = scenario.emptyTitle;
+        elements.emptyBody.textContent = scenario.emptyBody;
+        elements.attendees.innerHTML = scenario.attendees
+          .map(
+            (attendee) => `
+              <div class="attendee">
+                <strong>${escapeHtml(attendee.band)}</strong>
+                <span>${escapeHtml(attendee.members)}</span>
+              </div>
+            `,
+          )
+          .join("");
+        elements.attendees.hidden = scenario.attendees.length === 0;
+      }
+
+      function renderScenario(scenarioKey) {
+        const scenario = scenarios[scenarioKey];
+        activeScenarioKey = scenarioKey;
+        const count = songCount(scenario);
+        const [year, month, day] = scenario.date.split("-");
+        let selectedButton = null;
+
+        scenarioButtons.forEach((button) => {
+          const isSelected = button.dataset.scenario === scenarioKey;
+          button.setAttribute("aria-selected", String(isSelected));
+          button.tabIndex = isSelected ? 0 : -1;
+          if (isSelected) selectedButton = button;
+        });
+        elements.book.setAttribute("aria-labelledby", selectedButton?.id ?? "");
+        selectedButton?.scrollIntoView({ block: "nearest", inline: "nearest" });
+
+        elements.cover.classList.toggle("is-long-title", scenario.title.length > 48);
+        elements.series.textContent = scenario.series;
+        elements.title.textContent = scenario.title;
+        elements.summary.textContent = scenario.summary;
+        elements.references.innerHTML = scenario.references
+          .map((reference) => `<span>${escapeHtml(reference)}</span>`)
+          .join("");
+        elements.references.hidden = scenario.references.length === 0;
+        elements.dateDay.innerHTML = `${month}<br />${day}`;
+        elements.dateYear.innerHTML = `${year}<br />${escapeHtml(scenario.statusLabel)}`;
+        elements.venue.textContent = scenario.venue;
+        elements.opening.textContent = scenario.opening;
+        elements.start.textContent = scenario.start;
+        elements.type.textContent = scenario.type;
+        elements.count.textContent = count > 0 ? `${count} 曲 / ${scenario.chapters.length} 章` : "无歌单";
+        elements.favorite.hidden = scenario.status === "cancelled";
+        elements.favorite.setAttribute("aria-pressed", "false");
+        elements.favorite.textContent = "收藏";
+        elements.share.textContent = "复制链接";
+        elements.source.href = scenario.source;
+        elements.sampleLabel.textContent = `本地生产库只读样本 Live #${scenario.liveId}`;
+
+        renderStatus(scenario);
+
+        const hasSetlist = count > 0;
+        elements.readingLayout.hidden = !hasSetlist;
+        elements.emptyProgram.hidden = hasSetlist;
+
+        if (hasSetlist) {
+          elements.contentsSummary.textContent = scenario.contentsSummary
+            ?? `${count} 曲，按 ${scenario.chapters.length} 个阅读章节编排。曲目顺序仍以数据库 absolute_order 为准。`;
+          elements.programSummary.textContent = scenario.programSummary
+            ?? `${count} 曲完整收录。章节只负责阅读分组，不改变原始演出顺序。`;
+          buildChapters(scenario, scenarioKey);
+        } else {
+          renderEmpty(scenario);
+        }
+
+        document.title = `${scenario.title} | 纸本节目册`;
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set("scenario", scenarioKey);
+        if (window.location.protocol !== "file:") {
+          history.replaceState(null, "", currentUrl);
+        }
+      }
+
+      function requestScenario(nextKey) {
+        if (!nextKey || !scenarios[nextKey] || nextKey === activeScenarioKey) return;
+
+        if (reduceMotion.matches) {
+          renderScenario(nextKey);
+          return;
+        }
+
+        elements.book.classList.add("is-switching");
+        window.setTimeout(() => {
+          renderScenario(nextKey);
+          window.requestAnimationFrame(() => elements.book.classList.remove("is-switching"));
+        }, 150);
+      }
+
+      scenarioButtons.forEach((button) => {
+        button.id = `scenario-tab-${button.dataset.scenario}`;
+        button.setAttribute("aria-controls", "book");
+
+        button.addEventListener("click", () => {
+          requestScenario(button.dataset.scenario);
+        });
+
+        button.addEventListener("keydown", (event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+
+          const currentIndex = scenarioButtons.indexOf(button);
+          const nextIndex = event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? scenarioButtons.length - 1
+              : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + scenarioButtons.length)
+                % scenarioButtons.length;
+          const nextButton = scenarioButtons[nextIndex];
+          nextButton.focus();
+          requestScenario(nextButton.dataset.scenario);
+        });
+      });
+
+      elements.favorite.addEventListener("click", () => {
+        const pressed = elements.favorite.getAttribute("aria-pressed") === "true";
+        elements.favorite.setAttribute("aria-pressed", String(!pressed));
+        elements.favorite.textContent = pressed ? "收藏" : "已收藏";
+      });
+
+      elements.share.addEventListener("click", async () => {
+        const scenario = scenarios[activeScenarioKey];
+        try {
+          await navigator.clipboard.writeText(scenario.source);
+          elements.share.textContent = "已复制";
+        } catch {
+          elements.share.textContent = "复制失败";
+        }
+        window.setTimeout(() => {
+          elements.share.textContent = "复制链接";
+        }, 1400);
+      });
+
+      const requestedScenario = new URL(window.location.href).searchParams.get("scenario");
+      renderScenario(requestedScenario && scenarios[requestedScenario] ? requestedScenario : "regular");
+    </script>
   </body>
 </html>
