@@ -1236,17 +1236,33 @@
 
     <section class="scenario-bar" aria-labelledby="scenario-title">
       <div class="scenario-copy">
-        <strong id="scenario-title">时间线基础样本</strong>
-        <span>先比较单 Band 连续色轨与双 Band 并行色轨，其他复杂场景暂不加入。</span>
+        <strong id="scenario-title">歌单场景索引</strong>
+        <span>常规、多 Band、阵容交接与无歌单状态并列，用同一套时间线检验极端数据。</span>
       </div>
       <div class="scenario-tabs" role="tablist" aria-label="选择演出数据场景">
         <button type="button" role="tab" aria-selected="true" data-scenario="regular">
-          Roselia 常规歌单
-          <span>14 曲 · 单色连续轨</span>
+          Roselia 常规
+          <span>14 曲 · 单 Band</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="marathon">
+          41 曲马拉松
+          <span>11 章 · 10 Band</span>
         </button>
         <button type="button" role="tab" aria-selected="false" data-scenario="animax">
           ANIMAX M72
-          <span>双 Band · 其他 20 组</span>
+          <span>双 Band · 外部 20 组</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="handover">
+          Roselia 阵容交接
+          <span>18 曲 · 满员 +1</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="postponed">
+          延期无歌单
+          <span>排期历史 · 出演成员</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-scenario="cancelled">
+          取消无歌单
+          <span>状态收束 · 无曲目</span>
         </button>
       </div>
     </section>
@@ -1905,6 +1921,10 @@
           short: "内部 3-4 组",
           label: "内部 3-4 组合唱",
         },
+        "internal-all": {
+          short: "内部全员",
+          label: "内部全员合唱",
+        },
         "external-2": {
           short: "外部 2 组",
           label: "外部两组合唱",
@@ -1923,6 +1943,7 @@
         if (track.performers.length >= 3 && track.performers.length <= 4) {
           return collaborationLabels["internal-3-4"];
         }
+        if (track.performers.length >= 5) return collaborationLabels["internal-all"];
         return null;
       }
 

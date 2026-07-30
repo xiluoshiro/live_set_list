@@ -157,7 +157,7 @@ button {
 .scenario-bar {
   position: relative;
   z-index: 2;
-  grid-template-columns: minmax(15rem, 0.7fr) minmax(25rem, 1.3fr);
+  grid-template-columns: minmax(13.5rem, 0.42fr) minmax(0, 1.58fr);
   gap: clamp(1rem, 3vw, 3rem);
   width: min(1380px, calc(100% - 2rem));
   margin: 1.15rem auto 0;
@@ -193,18 +193,37 @@ button {
 }
 
 .scenario-tabs {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(10.75rem, 12rem);
   gap: 0;
-  overflow: visible;
-  padding: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 0 0 0.28rem;
   border: 0;
   border-left: 1px solid var(--rule);
   background: transparent;
   box-shadow: none;
+  scrollbar-color: var(--cobalt) rgb(78 70 101 / 0.08);
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+}
+
+.scenario-tabs::-webkit-scrollbar {
+  height: 0.25rem;
+}
+
+.scenario-tabs::-webkit-scrollbar-track {
+  background: rgb(78 70 101 / 0.08);
+}
+
+.scenario-tabs::-webkit-scrollbar-thumb {
+  background: var(--cobalt);
 }
 
 .scenario-tabs button {
   position: relative;
+  scroll-snap-align: start;
   min-height: 3.35rem;
   padding: 0.65rem 0.85rem;
   overflow: hidden;
@@ -1259,8 +1278,8 @@ button {
   }
 
   .scenario-tabs {
-    grid-template-columns: repeat(2, minmax(8.4rem, 1fr));
-    overflow-x: auto;
+    grid-template-columns: none;
+    grid-auto-columns: minmax(9.25rem, 10.75rem);
   }
 
   .book {
