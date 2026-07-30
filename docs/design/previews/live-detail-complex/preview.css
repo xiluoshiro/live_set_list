@@ -1211,3 +1211,298 @@ a {
     animation: none;
   }
 }
+
+/* ==========================================================================
+   Modernization layer (2026-07-30)
+   设计语言：现代简约 + BanG Dream! 品牌星光（キラキラ）。
+   - 只使用 transform / opacity 动画，全部受 prefers-reduced-motion 兜底
+   - 颜色一律经 color-mix 派生自现有 token，明暗双主题自动适配
+   - 强调色锁定 var(--accent-primary)，圆角体系沿用 card/control/pill
+   ========================================================================== */
+
+:root {
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-1: 160ms;
+  --dur-2: 420ms;
+}
+
+/* ---------- 顶栏：玻璃拟态深化 + 滚动投影 ---------- */
+
+.site-topbar {
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  transition: box-shadow var(--dur-2) var(--ease-spring), border-color var(--dur-2);
+}
+
+.site-topbar.is-scrolled {
+  border-bottom-color: transparent;
+  box-shadow: 0 8px 30px rgb(15 23 42 / 10%);
+}
+
+:root[data-theme="dark"] .site-topbar.is-scrolled {
+  box-shadow: 0 8px 30px rgb(0 0 0 / 45%);
+}
+
+/* 品牌星标：悬停旋转，呼应 BanG Dream! 的星形母题 */
+.brand-mark {
+  transition: transform var(--dur-2) var(--ease-spring);
+}
+
+.site-brand:hover .brand-mark {
+  transform: rotate(72deg) scale(1.08);
+}
+
+/* ---------- Hero：品牌光晕（视差层）+ 星光点缀 ---------- */
+
+.detail-hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* 光晕层：JS 通过 --hero-shift 驱动视差（transform-only） */
+.detail-hero::before {
+  position: absolute;
+  z-index: -1;
+  inset: -18%;
+  background:
+    radial-gradient(42% 56% at 84% 10%, color-mix(in srgb, var(--accent-primary) 12%, transparent), transparent 70%),
+    radial-gradient(38% 50% at 6% 92%, color-mix(in srgb, var(--accent-primary) 7%, transparent), transparent 72%);
+  content: "";
+  pointer-events: none;
+  transform: translate3d(0, var(--hero-shift, 0px), 0);
+  will-change: transform;
+}
+
+.hero-title-wrap h1 {
+  text-wrap: balance;
+}
+
+/* JS 注入的星光：キラキラ 闪烁，仅装饰 */
+.hero-sparkle {
+  position: absolute;
+  z-index: 0;
+  color: var(--accent-primary);
+  font-size: var(--spark-size, 12px);
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.4);
+  animation: sparkle-twinkle 3.8s ease-in-out infinite;
+  animation-delay: var(--spark-delay, 0s);
+}
+
+@keyframes sparkle-twinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4) rotate(0deg);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: scale(1) rotate(20deg);
+  }
+}
+
+/* ---------- 收录条：品牌渐变图标 ---------- */
+
+.coverage-icon {
+  background: linear-gradient(
+    135deg,
+    var(--accent-primary),
+    color-mix(in srgb, var(--accent-primary) 70%, #7a5bc7)
+  );
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent-primary) 32%, transparent);
+}
+
+/* ---------- 视口渐入（JS 注入 .reveal，IO 触发 .is-visible） ---------- */
+
+.reveal {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+  transition:
+    opacity var(--dur-2) var(--ease-spring),
+    transform var(--dur-2) var(--ease-spring);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+/* ---------- 涟漪（JS 注入 span.ripple，键盘点击居中） ---------- */
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.16;
+  pointer-events: none;
+  transform: scale(0);
+  animation: ripple-expand 560ms var(--ease-spring) forwards;
+}
+
+@keyframes ripple-expand {
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* 涟漪宿主：按钮类控件 */
+.icon-action,
+.segmented button,
+.song-row,
+.aside-index a,
+.missing-disclosure {
+  position: relative;
+  overflow: hidden;
+}
+
+/* ---------- 悬停交互反馈（仅精确指针设备） ---------- */
+
+@media (hover: hover) {
+  .act-block {
+    transition:
+      transform var(--dur-2) var(--ease-spring),
+      box-shadow var(--dur-2) var(--ease-spring),
+      border-color var(--dur-2);
+  }
+
+  /* 卡片悬浮提升：阴影按乐队色着色，强化区段身份 */
+  .act-block:hover {
+    border-color: color-mix(in srgb, var(--band-color) 30%, var(--border-subtle));
+    box-shadow: 0 14px 34px color-mix(in srgb, var(--band-color) 14%, rgb(15 23 42 / 8%));
+    transform: translateY(-2px);
+  }
+
+  .song-title,
+  .song-chevron {
+    transition:
+      color var(--dur-1),
+      transform var(--dur-1) var(--ease-spring);
+  }
+
+  /* 行级反馈：标题着色 + 箭头前移，暗示可点击 */
+  .song-row:hover .song-title {
+    color: var(--accent-primary);
+  }
+
+  .song-row:hover .song-chevron {
+    color: var(--accent-primary);
+    transform: translateX(3px);
+  }
+
+  .aside-index a {
+    transition:
+      background-color var(--dur-1),
+      color var(--dur-1),
+      transform var(--dur-1) var(--ease-spring);
+  }
+
+  .aside-index a:hover {
+    transform: translateX(3px);
+  }
+
+  .band-logo img {
+    transition: transform var(--dur-2) var(--ease-spring);
+  }
+
+  .act-block:hover .band-logo img {
+    transform: scale(1.08);
+  }
+}
+
+/* 分段控件：状态切换过渡 */
+.segmented button {
+  transition:
+    color var(--dur-1),
+    background-color var(--dur-1),
+    box-shadow var(--dur-1),
+    transform var(--dur-1);
+}
+
+@media (hover: hover) {
+  .segmented button:not(.active):not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+}
+
+/* ---------- 抽屉与弹层：更顺滑的入场 ---------- */
+
+.drawer-mask {
+  animation: mask-fade 200ms ease-out;
+}
+
+@keyframes mask-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.performance-drawer {
+  animation: drawer-in 260ms var(--ease-spring);
+}
+
+.band-popover {
+  animation: pop-in 180ms var(--ease-spring);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+/* ---------- 小屏收敛：星光隐藏，减少视觉噪音 ---------- */
+
+@media (max-width: 820px) {
+  .hero-sparkle {
+    display: none;
+  }
+}
+
+/* ---------- 减少动态偏好：全部收敛为静态 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .hero-sparkle {
+    display: none;
+  }
+
+  .detail-hero::before {
+    transform: none;
+    will-change: auto;
+  }
+
+  .brand-mark,
+  .segmented button,
+  .aside-index a,
+  .song-title,
+  .song-chevron,
+  .band-logo img,
+  .act-block {
+    transition: none;
+  }
+
+  .site-brand:hover .brand-mark,
+  .act-block:hover,
+  .song-row:hover .song-chevron,
+  .aside-index a:hover,
+  .act-block:hover .band-logo img {
+    transform: none;
+  }
+
+  .drawer-mask,
+  .band-popover {
+    animation: none;
+  }
+}
