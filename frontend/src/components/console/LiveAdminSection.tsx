@@ -557,7 +557,7 @@ export function LiveAdminSection({
                 </label>
                 {selected && history && context && (
                   <p className="console-admin-hint">
-                    当前版本：{displayName} · {history.lineup_versions.find(
+                    {history.lineup_versions.find(
                       (version) => version.lineup_version_id === context.base_lineup_version_id,
                     )?.version_label ?? "加载中"}
                   </p>
