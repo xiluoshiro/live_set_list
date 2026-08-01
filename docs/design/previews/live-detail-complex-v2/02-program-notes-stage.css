@@ -1160,7 +1160,7 @@ button {
   display: grid;
   gap: 0;
   overflow: hidden;
-  padding: 0.4rem 0;
+  padding: 0;
   border: 1px solid rgb(255 255 255 / 0.06);
   border-radius: 16px;
   background: linear-gradient(165deg, rgb(18 22 38 / 0.62), rgb(11 14 25 / 0.55));
@@ -1193,7 +1193,7 @@ button {
   z-index: 3;
   top: 0;
   right: 1rem;
-  left: 1rem;
+  left: 0.55rem;
   border-top: 1px solid var(--line-soft);
   pointer-events: none;
 }
@@ -1242,15 +1242,40 @@ button {
 .track-rail {
   position: absolute;
   z-index: 2;
-  top: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0 auto 0 0;
   display: block;
-  width: 1rem;
+  width: 0.55rem;
+  overflow: hidden;
   pointer-events: none;
 }
 
-.track-rail-lane,
+.track:first-child .track-rail {
+  border-radius: 10px 0 0;
+}
+
+.track:last-child .track-rail {
+  border-radius: 0 0 0 10px;
+}
+
+.track:only-child .track-rail {
+  border-radius: 10px 0 0 10px;
+}
+
+.track-rail::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: min(50%, 1.78rem);
+  left: 50%;
+  width: 0.34rem;
+  height: 0.34rem;
+  border: 1px solid rgb(255 255 255 / 0.9);
+  background: rgb(255 255 255 / 0.42);
+  box-shadow: 0 0 0 1px rgb(40 35 61 / 0.18);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.track-rail-core,
 .track-rail-spectrum {
   position: absolute;
   top: 0;
@@ -1258,24 +1283,23 @@ button {
   display: block;
 }
 
-.track-rail-lane {
+.track-rail-core {
   left: var(--lane-left);
   width: var(--lane-width);
   background: var(--lane-color);
 }
 
-.track-rail-lane + .track-rail-lane {
-  border-left: 1px solid rgb(255 255 255 / 0.72);
+.track-rail-core:not(:last-child) {
+  box-shadow: inset -0.5px 0 rgb(255 255 255 / 0.66);
 }
 
-.track:first-child .track-rail-lane,
-.track:first-child .track-rail-spectrum {
-  top: -0.4rem;
-}
-
-.track:last-child .track-rail-lane,
-.track:last-child .track-rail-spectrum {
-  bottom: -0.4rem;
+.track + .track .track-rail::before {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  inset: 0 0 auto;
+  height: 1px;
+  background: rgb(255 255 255 / 0.88);
 }
 
 .track-rail-spectrum {
@@ -1283,48 +1307,25 @@ button {
   width: 100%;
   overflow: hidden;
   background: var(--rail-spectrum);
-  background-size: 100% 165%;
-  box-shadow: inset -1px 0 rgb(255 255 255 / 0.32);
+  background-size: 100% 100%;
+  box-shadow: inset -1px 0 rgb(255 255 255 / 0.82);
 }
 
 .track-rail-spectrum::after {
   content: "";
   position: absolute;
-  inset: -58% 0;
-  background: linear-gradient(180deg, transparent 35%, rgb(255 255 255 / 0.82) 50%, transparent 65%);
+  inset: 0 -58%;
+  background: linear-gradient(90deg, transparent 35%, rgb(255 255 255 / 0.82) 50%, transparent 65%);
   opacity: 0.58;
-  transform: translateY(-28%);
+  transform: translateX(-28%);
 }
 
-.track-rail-node {
-  position: absolute;
-  z-index: 2;
-  top: min(50%, 1.78rem);
-  left: 50%;
-  display: block;
-  width: 0.72rem;
-  height: 0.72rem;
-  border: 2px solid rgb(245 247 255 / 0.96);
-  background: #0a0c16;
-  box-shadow: 0 0 0 1px rgb(10 12 22 / 0.7);
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.track-rail.is-spectrum .track-rail-node {
-  border-color: rgb(255 255 255 / 0.96);
+.track-rail.is-spectrum::after {
   background: var(--rail-spectrum);
-  box-shadow: 0 0 0 1px rgb(10 12 22 / 0.7);
+  box-shadow: 0 0 0 1px rgb(40 35 61 / 0.18);
 }
 
-.track-rail.is-spectrum .track-rail-node::after {
-  content: "";
-  position: absolute;
-  inset: 2px;
-  border: 1px solid rgb(255 255 255 / 0.92);
-  background: #0a0c16;
-}
-
-.track[data-lineup-transition="true"] .track-rail-node {
+.track[data-lineup-transition="true"] .track-rail::after {
   border-color: #aebcff;
   box-shadow:
     0 0 0 1px rgb(10 12 22 / 0.82),
@@ -1964,24 +1965,19 @@ button {
     0 0.45rem 1.3rem rgb(58 75 117 / 0.1);
 }
 
-:root[data-theme="light"] .track-rail-lane,
 :root[data-theme="light"] .track-rail-spectrum {
-  box-shadow: none;
+  box-shadow: inset -1px 0 rgb(255 255 255 / 0.82);
 }
 
-:root[data-theme="light"] .track-rail-node {
-  border-color: rgb(255 255 255 / 0.96);
-  background: #f7f9fd;
+:root[data-theme="light"] .track-rail::after {
+  border-color: rgb(255 255 255 / 0.9);
+  background: rgb(255 255 255 / 0.42);
   box-shadow: 0 0 0 1px rgb(55 75 126 / 0.24);
 }
 
-:root[data-theme="light"] .track-rail.is-spectrum .track-rail-node {
+:root[data-theme="light"] .track-rail.is-spectrum::after {
   background: var(--rail-spectrum);
   box-shadow: 0 0 0 1px rgb(55 75 126 / 0.2);
-}
-
-:root[data-theme="light"] .track-rail.is-spectrum .track-rail-node::after {
-  background: #f7f9fd;
 }
 
 :root[data-theme="light"] .track[data-lineup-transition="true"] .track-main {
@@ -2065,7 +2061,7 @@ button {
   0%,
   18% {
     opacity: 0;
-    transform: translateY(-34%);
+    transform: translateX(-34%);
   }
 
   46% {
@@ -2075,7 +2071,7 @@ button {
   76%,
   100% {
     opacity: 0;
-    transform: translateY(34%);
+    transform: translateX(34%);
   }
 }
 
@@ -2369,7 +2365,7 @@ button {
 
   .track-rail {
     left: 0;
-    width: 1rem;
+    width: 0.55rem;
   }
 
   .track-title {
