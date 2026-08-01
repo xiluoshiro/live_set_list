@@ -1235,7 +1235,7 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="./02-program-notes-stage.css" />
+    <link rel="stylesheet" href="./02-program-notes-stage.css?v=row-seam-2" />
   </head>
   <body>
     <header class="topline">
@@ -2156,32 +2156,26 @@
       }
 
       function spectrumRail(colors) {
-        const cycleColors = [...colors, colors[0]];
-        return `linear-gradient(180deg, ${cycleColors
+        return `linear-gradient(90deg, ${colors
           .map((color, index) => {
-            const position = (100 * index) / Math.max(1, cycleColors.length - 1);
+            const position = (100 * index) / Math.max(1, colors.length - 1);
             return `${color} ${position.toFixed(2)}%`;
           })
           .join(", ")})`;
       }
 
-      function bandRailMarkup(track, scenario, previousTrack, nextTrack) {
+      function bandRailMarkup(track, scenario) {
         const colors = railPalette(track, scenario);
-        const previousColors = previousTrack ? railPalette(previousTrack, scenario) : [];
-        const nextColors = nextTrack ? railPalette(nextTrack, scenario) : [];
         const isSpectrum = colors.length >= 5;
-        const previousIsSpectrum = previousColors.length >= 5;
-        const nextIsSpectrum = nextColors.length >= 5;
 
         if (isSpectrum) {
           return `
             <span
-              class="track-rail is-spectrum${previousIsSpectrum ? " is-connected-before" : ""}${nextIsSpectrum ? " is-connected-after" : ""}"
+              class="track-rail is-spectrum"
               style="--rail-spectrum:${spectrumRail(colors)}"
               aria-hidden="true"
             >
               <span class="track-rail-spectrum"></span>
-              <span class="track-rail-node"></span>
             </span>
           `;
         }
@@ -2190,11 +2184,9 @@
           .map((color, index) => {
             const laneWidth = 100 / colors.length;
             const laneLeft = laneWidth * index;
-            const connectsBefore = index < previousColors.length && !previousIsSpectrum;
-            const connectsAfter = index < nextColors.length && !nextIsSpectrum;
             return `
               <span
-                class="track-rail-lane${connectsBefore ? " is-connected-before" : ""}${connectsAfter ? " is-connected-after" : ""}"
+                class="track-rail-core"
                 style="--lane-color:${color};--lane-left:${laneLeft.toFixed(2)}%;--lane-width:${laneWidth.toFixed(2)}%"
               ></span>
             `;
@@ -2204,7 +2196,6 @@
         return `
           <span class="track-rail" aria-hidden="true">
             ${lanes}
-            <span class="track-rail-node"></span>
           </span>
         `;
       }
@@ -2527,9 +2518,7 @@
           `;
 
           const tracks = article.querySelector(".tracks");
-          chapter.songs.forEach((track, trackIndex) => {
-            const previousTrack = chapter.songs[trackIndex - 1] ?? null;
-            const nextTrack = chapter.songs[trackIndex + 1] ?? null;
+          chapter.songs.forEach((track) => {
             const row = document.createElement("div");
             row.className = "track";
             row.dataset.bandCount = String(track.performers.length);
@@ -2553,7 +2542,7 @@
                   ? track.tags.join(" / ")
                   : "详情";
             row.innerHTML = `
-              ${bandRailMarkup(track, scenario, previousTrack, nextTrack)}
+              ${bandRailMarkup(track, scenario)}
               <button class="track-main" type="button" aria-expanded="false">
                 <span class="track-code">${escapeHtml(track.code)}</span>
                 <span class="track-title">${escapeHtml(track.title)}</span>
