@@ -1329,8 +1329,10 @@
 
         <section class="program" aria-labelledby="program-title">
           <header class="program-head">
-            <h2 id="program-title">SETLIST</h2>
-            <p id="program-summary"></p>
+            <div class="program-head-copy">
+              <h2 id="program-title">SETLIST</h2>
+              <p id="program-summary"></p>
+            </div>
           </header>
           <div id="chapter-list"></div>
         </section>
@@ -1772,7 +1774,7 @@
           series: "BanG Dream! 11th☆LIVE",
           summary: "25 曲包含 MyGO!!!!! 开场，以及 Poppin'Party 与 RAISE A SUILEN 的交替区块和 8 次交叉出演。",
           contentsSummary: "一根主轴贯穿完整歌单；纯色表示当前 Band，颜色在交叉出演与段落交接处连续过渡。",
-          programSummary: "25 曲按数据库 absolute_order 展示。章节只标出演区块，主轴渐变负责显示 Band 之间的交接。",
+          programSummary: "25 曲按数据库 absolute_order 展示。章节只标出演区块，主轴以纯色色块显示 Band 之间的交接。",
           venue: "有明アリーナ",
           opening: "17:00 JP",
           start: "18:00 JP",
@@ -1783,7 +1785,7 @@
           history: [],
           source: "https://bang-dream.com/11th-live/",
           references: ["活动组：BanG Dream! 11th☆LIVE", "交叉出演：8 曲"],
-          gradientBands: ["RAISE A SUILEN", "Poppin'Party"],
+          axisBands: ["RAISE A SUILEN", "Poppin'Party"],
           chapters: [
             {
               title: "Opening act / MyGO!!!!!",
@@ -1897,7 +1899,7 @@
           title: "Poppin'Party×Roselia 合同ライブ「DREAMS GO ON」",
           series: "Poppin'Party×Roselia 合同ライブ",
           summary: "21 曲从 Roselia、Poppin'Party 独立区块进入逐曲交替，再以互换翻唱和双 Band 合演完成安可。",
-          contentsSummary: "粉色与蓝色共用一根连续主轴；交替段直接换色，合演曲在同一轴线上完成完整渐变。",
+          contentsSummary: "粉色与蓝色共用一根连续主轴；交替段直接换色，合演曲也保持清晰的纯色色块。",
           programSummary: "21 曲完整收录。M12-M17 的逐曲交替与 EN1-EN3 的互换、合演由同一套单轴时间线表达。",
           venue: "有明アリーナ",
           opening: "16:30 JP",
@@ -1909,7 +1911,7 @@
           history: [],
           source: "https://bang-dream.com/events/ppp-roselia2026/",
           references: ["逐曲交替：M12-M17", "互换翻唱：EN1-EN2"],
-          gradientBands: ["Poppin'Party", "Roselia"],
+          axisBands: ["Poppin'Party", "Roselia"],
           chapters: [
             {
               title: "Roselia / Opening block",
@@ -2079,6 +2081,8 @@
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
       let activeScenarioKey = "regular";
       let activeTrackButton = null;
+      let axisResizeObserver = null;
+      let axisUpdateFrame = null;
 
       const bandVisuals = {
         "Poppin'Party": { color: "#ff3377" },
@@ -2106,73 +2110,81 @@
       }
 
       function railPalette(track, scenario) {
-        const gradientBands = scenario.gradientBands ?? [];
-        const scenarioPerformers = gradientBands.filter((band) => track.performers.includes(band));
-        const otherPerformers = track.performers.filter((band) => !gradientBands.includes(band));
+        const axisBands = scenario.axisBands ?? [];
+        const scenarioPerformers = axisBands.filter((band) => track.performers.includes(band));
+        const otherPerformers = track.performers.filter((band) => !axisBands.includes(band));
         const orderedPerformers = scenarioPerformers.length > 0
           ? [...scenarioPerformers, ...otherPerformers]
           : track.performers;
-        const colors = orderedPerformers.map(bandColor);
-
-        if (track.lineupTransition) {
-          colors.push("#7183dc");
-        }
-
-        return [...new Set(colors)];
+        return [...new Set(orderedPerformers.map(bandColor))];
       }
 
-      function blendRailColors(colors) {
-        if (colors.length === 0) return "#244fc9";
-        if (colors.length === 1) return colors[0];
-        return `color-mix(in srgb, ${colors[0]} 50%, ${colors.at(-1)})`;
+      function axisLayout(tracksElement) {
+        const scenario = tracksElement.axisScenario;
+        const rows = [...tracksElement.querySelectorAll(".track")];
+        const height = Math.max(1, tracksElement.clientHeight);
+        const states = rows.map((row) => {
+          const track = row.axisTrack;
+          const colors = railPalette(track, scenario);
+          return {
+            row,
+            track,
+            colors: colors.length > 0 ? colors : ["#244fc9"],
+            top: row.offsetTop,
+            bottom: row.offsetTop + row.offsetHeight,
+          };
+        });
+        return { height, states };
       }
 
-      function bridgeRailColors(left, right) {
-        if (!left || !right || left === right) return left || right || "#244fc9";
-        return `color-mix(in srgb, ${left} 50%, ${right})`;
-      }
-
-      function railGradient(palette, topColor, bottomColor) {
-        if (palette.length <= 1) {
-          const color = palette[0] ?? "#244fc9";
-          return `linear-gradient(180deg, ${topColor} 0%, ${color} 34%, ${color} 66%, ${bottomColor} 100%)`;
-        }
-
-        const innerStops = palette
-          .map((color, index) => {
-            const position = 28 + (44 * index) / Math.max(1, palette.length - 1);
-            return `${color} ${position}%`;
+      function renderTrackAxis(tracksElement) {
+        if (!tracksElement.isConnected || !tracksElement.axisScenario) return;
+        const { height, states } = axisLayout(tracksElement);
+        const axis = tracksElement.querySelector(".timeline-axis");
+        const segments = states
+          .flatMap((state) => {
+            const rowHeight = Math.max(1, state.bottom - state.top);
+            const segmentHeight = rowHeight / state.colors.length;
+            return state.colors.map((color, index) => ({
+              color,
+              top: state.top + segmentHeight * index,
+              height: index === state.colors.length - 1
+                ? state.bottom - (state.top + segmentHeight * index)
+                : segmentHeight,
+            }));
           })
-          .join(", ");
-        return `linear-gradient(180deg, ${topColor} 0%, ${innerStops}, ${bottomColor} 100%)`;
+          .map(
+            (segment) => `
+              <span
+                class="timeline-axis-segment"
+                style="top:${segment.top.toFixed(2)}px;height:${segment.height.toFixed(2)}px;--segment-color:${segment.color}"
+              ></span>
+            `,
+          )
+          .join("");
+        const markers = states
+          .filter((state) => state.track.lineupTransition)
+          .map((state) => {
+            const button = state.row.querySelector(".track-main");
+            const y = state.top + button.offsetHeight / 2;
+            return `
+              <span
+                class="timeline-axis-marker"
+                style="top:${(y - 2).toFixed(2)}px;--marker-color:#7183dc"
+              ></span>
+            `;
+          })
+          .join("");
+        axis.style.height = `${height}px`;
+        axis.innerHTML = `${segments}${markers}`;
       }
 
-      function bandRailMarkup(track, scenario, previousTrack, nextTrack) {
-        const palette = railPalette(track, scenario);
-        const currentColor = blendRailColors(palette);
-        const previousColor = previousTrack
-          ? blendRailColors(railPalette(previousTrack, scenario))
-          : currentColor;
-        const nextColor = nextTrack
-          ? blendRailColors(railPalette(nextTrack, scenario))
-          : currentColor;
-        const topColor = bridgeRailColors(previousColor, currentColor);
-        const bottomColor = bridgeRailColors(currentColor, nextColor);
-        const stateClass = track.lineupTransition
-          ? "is-handover"
-          : palette.length > 1
-            ? "is-shared"
-            : "is-solo";
-
-        return `
-          <span
-            class="track-rail track-rail-continuous ${stateClass}"
-            style="--rail-fill:${railGradient(palette, topColor, bottomColor)}"
-            aria-hidden="true"
-          >
-            <span class="track-rail-fill"></span>
-          </span>
-        `;
+      function scheduleAxisUpdate() {
+        if (axisUpdateFrame !== null) return;
+        axisUpdateFrame = window.requestAnimationFrame(() => {
+          axisUpdateFrame = null;
+          document.querySelectorAll(".tracks").forEach(renderTrackAxis);
+        });
       }
 
       function renderBandLegend(scenario) {
@@ -2184,10 +2196,10 @@
             });
           });
         });
-        const orderedNames = scenario.gradientBands
+        const orderedNames = scenario.axisBands
           ? [
-              ...scenario.gradientBands,
-              ...names.filter((name) => !scenario.gradientBands.includes(name)),
+              ...scenario.axisBands,
+              ...names.filter((name) => !scenario.axisBands.includes(name)),
             ]
           : names;
         elements.bandLegend.innerHTML = `
@@ -2204,14 +2216,14 @@
               )
               .join("")}
           </ul>
-          ${scenario.gradientBands
+          ${scenario.axisBands
             ? `
-              <div
-                class="band-legend-gradient"
-                style="--rail-a:${bandColor(scenario.gradientBands[0])};--rail-b:${bandColor(scenario.gradientBands[1])}"
-              >
-                <span class="band-legend-gradient-rail" aria-hidden="true"></span>
-                <span>单轴连续换色；完整渐变表示共同出演。</span>
+              <div class="band-legend-segments">
+                <span class="band-legend-segment-rail" aria-hidden="true">
+                  <i style="--segment-color:${bandColor(scenario.axisBands[0])}"></i>
+                  <i style="--segment-color:${bandColor(scenario.axisBands[1])}"></i>
+                </span>
+                <span>单轴按纯色色块硬切；共同出演不产生混色。</span>
               </div>
             `
             : ""}
@@ -2456,6 +2468,12 @@
 
       function buildChapters(scenario, scenarioKey) {
         clearTrackSelection();
+        if (axisUpdateFrame !== null) {
+          window.cancelAnimationFrame(axisUpdateFrame);
+          axisUpdateFrame = null;
+        }
+        axisResizeObserver?.disconnect();
+        axisResizeObserver = new ResizeObserver(scheduleAxisUpdate);
         elements.chapterNav.innerHTML = "";
         elements.chapterList.innerHTML = "";
 
@@ -2483,16 +2501,17 @@
           `;
 
           const tracks = article.querySelector(".tracks");
-          chapter.songs.forEach((track, trackIndex) => {
-            const previousTrack = chapter.songs[trackIndex - 1] ?? null;
-            const nextTrack = chapter.songs[trackIndex + 1] ?? null;
+          tracks.axisScenario = scenario;
+          tracks.insertAdjacentHTML(
+            "afterbegin",
+            `<span class="timeline-axis" aria-hidden="true"></span>`,
+          );
+          chapter.songs.forEach((track) => {
             const row = document.createElement("div");
             row.className = "track";
+            row.axisTrack = track;
             row.dataset.bandCount = String(track.performers.length);
             if (track.lineupTransition) row.dataset.lineupTransition = "true";
-            if (scenario.gradientBands?.some((band) => track.performers.includes(band))) {
-              row.dataset.railMode = "gradient";
-            }
             row.style.setProperty("--track-primary", bandColor(track.performers[0]));
             const otherCount = (track.otherMembers ?? []).length;
             const collaboration = collaborationSpec(track);
@@ -2506,7 +2525,6 @@
                   ? track.tags.join(" / ")
                   : "查看";
             row.innerHTML = `
-              ${bandRailMarkup(track, scenario, previousTrack, nextTrack)}
               <button class="track-main" type="button" aria-expanded="false">
                 <span class="track-code">${escapeHtml(track.code)}</span>
                 <span class="track-title">${escapeHtml(track.title)}</span>
@@ -2522,7 +2540,9 @@
           });
 
           elements.chapterList.append(article);
+          axisResizeObserver.observe(tracks);
         });
+        scheduleAxisUpdate();
       }
 
       function renderStatus(scenario) {

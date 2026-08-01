@@ -759,7 +759,7 @@ button {
     0 0 0 1px rgb(65 58 85 / 0.18);
 }
 
-.band-legend-gradient {
+.band-legend-segments {
   display: grid;
   grid-template-columns: 1rem minmax(0, 1fr);
   gap: 0.55rem;
@@ -772,21 +772,20 @@ button {
   line-height: 1.5;
 }
 
-.band-legend-gradient-rail {
-  position: relative;
+.band-legend-segment-rail {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
   width: 0.42rem;
   height: 1.55rem;
   margin-left: 0.28rem;
-  background:
-    linear-gradient(
-      180deg,
-      var(--rail-a),
-      color-mix(in srgb, var(--rail-a) 50%, var(--rail-b)),
-      var(--rail-b)
-    );
   box-shadow:
     inset -1px 0 rgb(255 255 255 / 0.72),
     0 0 0 1px rgb(65 58 85 / 0.16);
+}
+
+.band-legend-segment-rail i {
+  display: block;
+  background: var(--segment-color);
 }
 
 .contents-summary {
@@ -807,8 +806,13 @@ button {
 }
 
 .program-head {
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   padding-bottom: 1.4rem;
+}
+
+.program-head-copy {
+  min-width: 0;
 }
 
 .program-head h2 {
@@ -823,6 +827,7 @@ button {
 }
 
 .program-head p {
+  margin-top: 0.5rem;
   max-width: 48rem;
   color: #6c6578;
   font-family: inherit;
@@ -881,6 +886,7 @@ button {
 }
 
 .tracks {
+  position: relative;
   display: grid;
   gap: 0;
   overflow: visible;
@@ -931,12 +937,7 @@ button {
 .track-main:hover,
 .track-main[aria-expanded="true"] {
   color: var(--ink);
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--track-primary) 9%, rgb(255 255 255 / 0.65)),
-      rgb(255 255 255 / 0.22) 64%
-    );
+  background: color-mix(in srgb, var(--track-primary) 7%, rgb(255 255 255 / 0.72));
   transform: translateX(2px);
 }
 
@@ -950,82 +951,43 @@ button {
   outline-offset: -3px;
 }
 
-.track-rail {
+.timeline-axis {
   position: absolute;
   z-index: 2;
-  inset: 0 auto 0 0;
+  top: 0;
+  left: 0.16rem;
   display: block;
-  width: 0.55rem;
-  overflow: hidden;
-  border-right: 1px solid rgb(255 255 255 / 0.82);
-  background: rgb(189 193 207 / 0.42);
-  box-shadow: inset -1px 0 rgb(56 51 77 / 0.16);
+  width: 0.24rem;
   pointer-events: none;
-  transform-origin: left center;
-  transition:
-    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 170ms ease;
-}
-
-.track-rail-fill {
-  position: absolute;
-  inset: 0;
   overflow: hidden;
-  background-image: var(--rail-fill);
+  box-shadow:
+    inset -1px 0 rgb(255 255 255 / 0.74),
+    0 0 0 1px rgb(56 51 77 / 0.12);
 }
 
-.track-rail-fill::after {
-  content: "";
+.timeline-axis-segment {
   position: absolute;
-  inset: -55% 0;
-  background:
-    linear-gradient(
-      180deg,
-      transparent 38%,
-      rgb(255 255 255 / 0.62) 50%,
-      transparent 62%
-    );
-  opacity: 0;
-  transform: translateY(-22%);
+  right: 0;
+  left: 0;
+  display: block;
+  background: var(--segment-color);
 }
 
-.track-rail::after {
-  content: "";
+.timeline-axis-marker {
   position: absolute;
-  top: min(50%, 1.825rem);
-  left: 50%;
-  width: 0.34rem;
-  height: 0.34rem;
-  border: 1px solid rgb(255 255 255 / 0.9);
-  background: rgb(255 255 255 / 0.42);
-  box-shadow: 0 0 0 1px rgb(40 35 61 / 0.18);
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.track-rail-continuous.is-shared::after,
-.track-rail-continuous.is-handover::after {
-  width: 0.3rem;
+  left: -0.1rem;
+  display: block;
+  width: 0.44rem;
   height: 0.3rem;
-  background: rgb(255 255 255 / 0.58);
+  border: 1px solid var(--marker-color);
+  background: #fff9fc;
 }
 
 .track[data-lineup-transition="true"] .track-main {
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--track-primary) 13%, rgb(255 255 255 / 0.5)),
-      rgb(113 131 220 / 0.08) 40%,
-      transparent 72%
-    );
+  background: color-mix(in srgb, var(--track-primary) 9%, rgb(255 255 255 / 0.65));
   box-shadow:
     inset 0 1px color-mix(in srgb, var(--track-primary) 35%, transparent),
     inset 0 -1px rgb(113 131 220 / 0.3);
-}
-
-.track:hover .track-rail,
-.track:has(.track-main[aria-expanded="true"]) .track-rail {
-  opacity: 1;
-  transform: scaleX(1.35);
 }
 
 .track-code {
@@ -1311,30 +1273,6 @@ button {
   color: var(--cobalt);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .track-rail-continuous.is-shared .track-rail-fill::after,
-  .track-rail-continuous.is-handover .track-rail-fill::after {
-    animation: rail-gradient-flow 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
-  }
-}
-
-@keyframes rail-gradient-flow {
-  from {
-    opacity: 0;
-    transform: translateY(-22%);
-  }
-
-  48% {
-    opacity: 0.52;
-  }
-
-  72%,
-  to {
-    opacity: 0;
-    transform: translateY(22%);
-  }
-}
-
 @keyframes book-arrive {
   from {
     opacity: 0;
@@ -1554,6 +1492,13 @@ button {
 
   .track-inline-detail .roster-list {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .program-head {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
   }
 }
 
