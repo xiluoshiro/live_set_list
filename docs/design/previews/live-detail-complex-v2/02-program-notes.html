@@ -2156,9 +2156,10 @@
       }
 
       function spectrumRail(colors) {
-        return `linear-gradient(180deg, ${colors
+        const cycleColors = [...colors, colors[0]];
+        return `linear-gradient(180deg, ${cycleColors
           .map((color, index) => {
-            const position = (100 * index) / Math.max(1, colors.length - 1);
+            const position = (100 * index) / Math.max(1, cycleColors.length - 1);
             return `${color} ${position.toFixed(2)}%`;
           })
           .join(", ")})`;
@@ -2187,13 +2188,14 @@
 
         const lanes = colors
           .map((color, index) => {
-            const lanePosition = ((index + 0.5) / colors.length) * 100;
+            const laneWidth = 100 / colors.length;
+            const laneLeft = laneWidth * index;
             const connectsBefore = index < previousColors.length && !previousIsSpectrum;
             const connectsAfter = index < nextColors.length && !nextIsSpectrum;
             return `
               <span
                 class="track-rail-lane${connectsBefore ? " is-connected-before" : ""}${connectsAfter ? " is-connected-after" : ""}"
-                style="--lane-color:${color};--lane-x:${lanePosition.toFixed(2)}%"
+                style="--lane-color:${color};--lane-left:${laneLeft.toFixed(2)}%;--lane-width:${laneWidth.toFixed(2)}%"
               ></span>
             `;
           })
