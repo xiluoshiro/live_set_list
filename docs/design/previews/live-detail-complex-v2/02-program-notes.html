@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="LiveSetList 演出详情方向探索：Y2K 水晶歌单与 Band 彩色时间线。"
+      content="LiveSetList 演出详情方向探索：暗色舞台灯光歌单与 Band 彩色时间线。"
     />
-    <title>Y2K 水晶歌单 | LiveSetList</title>
+    <title>STAGE LIGHT 歌单 | LiveSetList</title>
     <style>
       :root {
         color-scheme: light;
@@ -1225,12 +1225,12 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="./02-program-notes-y2k.css" />
+    <link rel="stylesheet" href="./02-program-notes-stage.css" />
   </head>
   <body>
     <header class="topline">
       <strong>LiveSetList</strong>
-      <span>Y2K CRYSTAL SETLIST</span>
+      <span>STAGE LIGHT SETLIST</span>
       <a href="./index.html">全部方向</a>
     </header>
 
@@ -1366,7 +1366,7 @@
 
       <footer class="book-footer">
         <span id="sample-label"></span>
-        <span>LiveSetList / Crystal setlist</span>
+        <span>LiveSetList / Stage light setlist</span>
       </footer>
     </main>
 
@@ -2636,7 +2636,7 @@
           renderEmpty(scenario);
         }
 
-        document.title = `${scenario.title} | Y2K 水晶歌单`;
+        document.title = `${scenario.title} | STAGE LIGHT 歌单`;
         const currentUrl = new URL(window.location.href);
         currentUrl.searchParams.set("scenario", scenarioKey);
         if (window.location.protocol !== "file:") {
