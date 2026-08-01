@@ -1,13 +1,23 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="LiveSetList 演出详情方向探索：暗色舞台灯光歌单与 Band 彩色时间线。"
+      content="LiveSetList 演出详情方向探索：双主题舞台灯光歌单与 Band 彩色时间线。"
     />
     <title>STAGE LIGHT 歌单 | LiveSetList</title>
+    <script>
+      try {
+        const savedTheme = localStorage.getItem("live-setlist-program-notes-theme");
+        if (savedTheme === "dark" || savedTheme === "light") {
+          document.documentElement.dataset.theme = savedTheme;
+        }
+      } catch {
+        // 静态预览在禁用存储时仍默认使用夜间模式。
+      }
+    </script>
     <style>
       :root {
         color-scheme: light;
@@ -1231,7 +1241,12 @@
     <header class="topline">
       <strong>LiveSetList</strong>
       <span>STAGE LIGHT SETLIST</span>
-      <a href="./index.html">全部方向</a>
+      <div class="topline-actions">
+        <button class="theme-toggle" type="button">
+          <span class="theme-label">白天模式</span>
+        </button>
+        <a href="./index.html">全部方向</a>
+      </div>
     </header>
 
     <section class="scenario-bar" aria-labelledby="scenario-title">
@@ -2038,6 +2053,8 @@
       };
 
       const elements = {
+        themeToggle: document.querySelector(".theme-toggle"),
+        themeLabel: document.querySelector(".theme-label"),
         book: document.querySelector("#book"),
         cover: document.querySelector("#cover"),
         series: document.querySelector("#event-series"),
@@ -2083,6 +2100,27 @@
       let activeTrackButton = null;
       let axisResizeObserver = null;
       let axisUpdateFrame = null;
+
+      function setTheme(theme, { persist = false } = {}) {
+        const normalizedTheme = theme === "light" ? "light" : "dark";
+        const isDark = normalizedTheme === "dark";
+        document.documentElement.dataset.theme = normalizedTheme;
+        elements.themeLabel.textContent = isDark ? "白天模式" : "夜间模式";
+        elements.themeToggle.setAttribute(
+          "aria-label",
+          `当前${isDark ? "夜间" : "白天"}模式，切换为${isDark ? "白天" : "夜间"}模式`,
+        );
+        elements.themeToggle.setAttribute("aria-pressed", String(!isDark));
+
+        if (!persist) return;
+        try {
+          localStorage.setItem("live-setlist-program-notes-theme", normalizedTheme);
+        } catch {
+          // 存储不可用时只保留当前页面内的主题状态。
+        }
+      }
+
+      setTheme(document.documentElement.dataset.theme);
 
       const bandVisuals = {
         "Poppin'Party": { color: "#ff3377" },
@@ -2515,6 +2553,12 @@
             row.style.setProperty("--track-primary", bandColor(track.performers[0]));
             const otherCount = (track.otherMembers ?? []).length;
             const collaboration = collaborationSpec(track);
+            const hasDetailMarker = Boolean(
+              track.lineupTransition
+                || collaboration
+                || otherCount > 0
+                || (track.tags ?? []).length > 0,
+            );
             const tagsText = track.lineupTransition
               ? "V1 + V2 接点"
               : collaboration
@@ -2523,13 +2567,13 @@
                 ? `其他 ${otherCount}`
                 : (track.tags ?? []).length > 0
                   ? track.tags.join(" / ")
-                  : "查看";
+                  : "详情";
             row.innerHTML = `
               <button class="track-main" type="button" aria-expanded="false">
                 <span class="track-code">${escapeHtml(track.code)}</span>
                 <span class="track-title">${escapeHtml(track.title)}</span>
                 <span class="track-performer">${escapeHtml(performerSummary(track.performers))}</span>
-                <span class="track-more">${escapeHtml(tagsText)}</span>
+                <span class="track-more" data-default="${String(!hasDetailMarker)}">${escapeHtml(tagsText)}</span>
               </button>
               <div class="track-inline-detail" hidden>${detailMarkup(track)}</div>
             `;
@@ -2682,6 +2726,11 @@
           nextButton.focus();
           requestScenario(nextButton.dataset.scenario);
         });
+      });
+
+      elements.themeToggle.addEventListener("click", () => {
+        const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        setTheme(nextTheme, { persist: true });
       });
 
       elements.favorite.addEventListener("click", () => {
