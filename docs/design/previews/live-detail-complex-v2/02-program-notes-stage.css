@@ -965,21 +965,53 @@ button {
 }
 
 .band-legend-segment-rail {
-  display: grid;
-  grid-template-rows: 1fr 1fr;
-  gap: 1px;
-  width: 0.44rem;
+  position: relative;
+  display: block;
+  width: 1.05rem;
   height: 1.7rem;
-  margin-left: 0.3rem;
-  overflow: hidden;
-  border-radius: 999px;
-  box-shadow: 0 0 8px rgb(107 140 255 / 0.25);
+  overflow: visible;
 }
 
 .band-legend-segment-rail i {
-  display: block;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 999px;
   background: var(--segment-color);
   box-shadow: 0 0 7px var(--segment-color);
+}
+
+.band-legend-segment-rail i:first-child {
+  left: 0.3rem;
+}
+
+.band-legend-segment-rail i:nth-child(2) {
+  right: 0.3rem;
+}
+
+.band-legend-segment-rail::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.42rem;
+  height: 0.42rem;
+  border: 1px solid rgb(255 255 255 / 0.9);
+  background: var(--panel-2);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.band-legend-spectrum-rail {
+  position: relative;
+  display: block;
+  width: 0.5rem;
+  height: 1.7rem;
+  margin-left: 0.28rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ff3377, #ee7744, #f4b600, #44bb66, #22cccc, #3344aa, #881144);
+  box-shadow: 0 0 9px rgb(107 140 255 / 0.3);
 }
 
 .contents-summary {
@@ -1185,20 +1217,6 @@ button {
     transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.track-main::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 0.45rem;
-  width: 3px;
-  height: 0;
-  border-radius: 999px;
-  background: var(--track-primary, var(--neon));
-  box-shadow: 0 0 12px var(--track-primary, var(--neon));
-  transform: translateY(-50%);
-  transition: height 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
 .track-main:hover,
 .track-main[aria-expanded="true"] {
   color: var(--ink);
@@ -1207,11 +1225,6 @@ button {
     inset 0 0 0 1px color-mix(in srgb, var(--track-primary, var(--neon)) 26%, transparent),
     0 0.7rem 1.8rem rgb(0 0 0 / 0.32);
   transform: translateX(3px);
-}
-
-.track-main:hover::after,
-.track-main[aria-expanded="true"]::after {
-  height: 58%;
 }
 
 .track-main:active {
@@ -1224,43 +1237,101 @@ button {
   outline-offset: -2px;
 }
 
-/* Band 彩色光轨轴 */
+/* Band 独立色轨 */
 
-.timeline-axis {
+.track-rail {
   position: absolute;
   z-index: 2;
   top: 0;
-  left: 0.56rem;
+  bottom: 0;
+  left: 0.38rem;
   display: block;
-  width: 5px;
-  border-radius: 999px;
+  width: 1rem;
   pointer-events: none;
+  transition: transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.track-rail-lane,
+.track-rail-spectrum {
+  position: absolute;
+  top: 0.42rem;
+  bottom: 0.42rem;
+  display: block;
+  border-radius: 999px;
+}
+
+.track-rail-lane {
+  left: var(--lane-x);
+  width: 2px;
+  background: var(--lane-color);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--lane-color) 78%, transparent);
+  transform: translateX(-50%);
+}
+
+.track-rail-lane.is-connected-before,
+.track-rail.is-connected-before .track-rail-spectrum {
+  top: 0;
+}
+
+.track-rail-lane.is-connected-after,
+.track-rail.is-connected-after .track-rail-spectrum {
+  bottom: 0;
+}
+
+.track-rail-spectrum {
+  left: 50%;
+  width: 0.52rem;
   overflow: hidden;
-  background: rgb(255 255 255 / 0.05);
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.03);
+  background: var(--rail-spectrum);
+  box-shadow:
+    0 0 10px rgb(107 140 255 / 0.38),
+    inset 0 0 0 1px rgb(255 255 255 / 0.3);
+  transform: translateX(-50%);
 }
 
-.timeline-axis-segment {
+.track-rail-spectrum::after {
+  content: "";
   position: absolute;
-  right: 0;
-  left: 0;
-  display: block;
-  background: var(--segment-color);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--segment-color) 85%, transparent);
+  inset: -58% 0;
+  background: linear-gradient(180deg, transparent 35%, rgb(255 255 255 / 0.82) 50%, transparent 65%);
+  opacity: 0.58;
+  transform: translateY(-28%);
 }
 
-.timeline-axis-marker {
+.track-rail-node {
   position: absolute;
-  left: -0.17rem;
+  z-index: 2;
+  top: min(50%, 1.78rem);
+  left: 50%;
   display: block;
-  width: 0.68rem;
-  height: 0.68rem;
-  border: 2px solid var(--marker-color);
-  border-radius: 50%;
+  width: 0.58rem;
+  height: 0.58rem;
+  border: 2px solid rgb(245 247 255 / 0.94);
   background: #0a0c16;
   box-shadow:
-    0 0 10px var(--marker-color),
-    0 0 20px color-mix(in srgb, var(--marker-color) 55%, transparent);
+    0 0 0 1px rgb(10 12 22 / 0.82),
+    0 0 9px rgb(255 255 255 / 0.28);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.track-rail.is-spectrum .track-rail-node {
+  border-color: rgb(255 255 255 / 0.96);
+  background: var(--rail-spectrum);
+  box-shadow:
+    0 0 0 1px rgb(10 12 22 / 0.82),
+    0 0 12px rgb(107 140 255 / 0.6);
+}
+
+.track[data-lineup-transition="true"] .track-rail-node {
+  border-color: #aebcff;
+  box-shadow:
+    0 0 0 1px rgb(10 12 22 / 0.82),
+    0 0 12px rgb(107 140 255 / 0.64);
+}
+
+.track:hover .track-rail,
+.track:has(.track-main[aria-expanded="true"]) .track-rail {
+  transform: scaleX(1.12);
 }
 
 .track[data-lineup-transition="true"] .track-main {
@@ -1896,19 +1967,20 @@ button {
     0 0.45rem 1.3rem rgb(58 75 117 / 0.1);
 }
 
-:root[data-theme="light"] .timeline-axis {
-  background: rgb(55 75 126 / 0.1);
-  box-shadow: 0 0 0 1px rgb(55 75 126 / 0.05);
-}
-
-:root[data-theme="light"] .timeline-axis-segment,
-:root[data-theme="light"] .timeline-axis-marker,
-:root[data-theme="light"] .track-main::after {
+:root[data-theme="light"] .track-rail-lane,
+:root[data-theme="light"] .track-rail-spectrum {
   box-shadow: none;
 }
 
-:root[data-theme="light"] .timeline-axis-marker {
+:root[data-theme="light"] .track-rail-node {
+  border-color: rgb(255 255 255 / 0.96);
   background: #f7f9fd;
+  box-shadow: 0 0 0 1px rgb(55 75 126 / 0.24);
+}
+
+:root[data-theme="light"] .track-rail.is-spectrum .track-rail-node {
+  background: var(--rail-spectrum);
+  box-shadow: 0 0 0 1px rgb(55 75 126 / 0.2);
 }
 
 :root[data-theme="light"] .track[data-lineup-transition="true"] .track-main {
@@ -1981,6 +2053,30 @@ button {
 }
 
 /* ---------------- 动画 ---------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .track-rail-spectrum::after {
+    animation: spectrum-rail-sheen 3.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+}
+
+@keyframes spectrum-rail-sheen {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translateY(-34%);
+  }
+
+  46% {
+    opacity: 0.62;
+  }
+
+  76%,
+  100% {
+    opacity: 0;
+    transform: translateY(34%);
+  }
+}
 
 @keyframes book-arrive {
   from {
@@ -2270,8 +2366,9 @@ button {
     padding: 0.7rem 0.6rem 0.7rem 1.75rem;
   }
 
-  .timeline-axis {
-    left: 0.46rem;
+  .track-rail {
+    left: 0.3rem;
+    width: 0.92rem;
   }
 
   .track-title {
