@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="以 Web 1.0 个人主页为灵感的 LiveSetList 演出详情框架。" />
+  <title>★ ROSELIA LIVE LOG ★</title>
+  <style>
+    :root { color-scheme:dark; --ink:#f8f7ef; --night:#0d1734; --cyan:#64e7ee; --pink:#ff7eb6; --yellow:#ffe56b; font-family:"Courier New",monospace; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background-color:var(--night); background-image:repeating-linear-gradient(45deg,rgba(100,231,238,.06) 0 2px,transparent 2px 10px); }
+    a { color:var(--cyan); }
+    a:hover { color:var(--yellow); }
+    :focus-visible { outline:3px solid var(--yellow); outline-offset:3px; }
+    .topline { overflow:hidden; padding:.45rem; color:var(--night); background:var(--yellow); font-weight:700; white-space:nowrap; }
+    .wrap { max-width:1050px; margin:1.2rem auto 4rem; padding:0 1rem; }
+    .banner { padding:1rem; border:4px ridge var(--cyan); text-align:center; background:#162652; }
+    .banner h1 { margin:.2rem 0; color:var(--pink); font-family:Impact,"Arial Black",sans-serif; font-size:clamp(2.5rem,7vw,6rem); letter-spacing:.035em; text-shadow:3px 3px 0 #44216f; }
+    .banner p { margin:.4rem 0; color:var(--cyan); }
+    .layout { display:grid; grid-template-columns:190px minmax(0,1fr); gap:1rem; margin-top:1rem; }
+    .box { border:3px outset #8ab7dc; background:#101d41; }
+    .box-title { margin:0; padding:.42rem .6rem; color:var(--night); background:var(--cyan); font-size:.8rem; }
+    .box-body { padding:.75rem; }
+    nav a { display:block; margin:.5rem 0; }
+    .blink { color:var(--pink); font-weight:700; }
+    .counter { display:inline-block; margin-top:.6rem; padding:.15rem .35rem; color:#8ef28b; background:#081021; border:2px inset #5f7b9e; letter-spacing:.1em; }
+    .event { display:grid; grid-template-columns:1fr 150px; gap:1rem; }
+    .event h2 { margin:0 0 .5rem; color:var(--yellow); font-size:clamp(1.5rem,4vw,2.6rem); line-height:1.1; }
+    .event p { margin:.5rem 0; line-height:1.6; }
+    .date { display:grid; place-items:center; min-height:135px; border:3px double var(--pink); color:var(--pink); text-align:center; font-family:Impact,"Arial Black",sans-serif; font-size:2rem; background:#241447; }
+    .ticker { margin:1rem 0; padding:.5rem; border:2px dashed var(--pink); color:var(--yellow); text-align:center; }
+    .setgrid { display:grid; grid-template-columns:1fr 1fr; gap:.7rem; }
+    .song { display:grid; grid-template-columns:42px 1fr; min-height:56px; border:2px solid #40598b; background:#172957; }
+    .song b { display:grid; place-items:center; color:var(--night); background:var(--pink); }
+    .song span { align-self:center; padding:.55rem; font-size:.82rem; line-height:1.25; }
+    .song:nth-child(3n) b { background:var(--cyan); }
+    .song:nth-child(4n) b { background:var(--yellow); }
+    .encore { margin-top:1rem; border-color:var(--pink); }
+    .encore .box-title { background:var(--pink); }
+    .encore ul { margin:.2rem 0; padding-left:1.4rem; line-height:1.8; }
+    .button-wall { display:flex; flex-wrap:wrap; gap:.45rem; margin-top:1rem; }
+    .button-wall span { display:inline-block; padding:.25rem .45rem; border:2px outset #8ab7dc; color:var(--night); background:#b8d8ef; font-size:.68rem; }
+    footer { margin-top:1rem; padding:1rem; border:2px dashed var(--cyan); text-align:center; font-size:.72rem; line-height:1.8; }
+    @media (max-width:680px) {
+      .wrap { margin-top:.7rem; padding:0 .55rem; }
+      .layout,.event,.setgrid { grid-template-columns:1fr; }
+      .sidebar { order:2; }
+      .date { min-height:90px; }
+      .banner h1 { font-size:2.6rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topline">★ WELCOME TO MY ROSELIA LIVE LOG ★ LAST UPDATE: 2026-02-15 ★ NO ALGORITHM, JUST SETLISTS ★</div>
+  <div class="wrap">
+    <header class="banner"><p>LIVESETLIST PRESENTS</p><h1>NEUWELTFAHRT</h1><p>東京公演 -Final- DAY2 fan archive</p></header>
+    <div class="layout">
+      <aside class="sidebar">
+        <section class="box"><h2 class="box-title">☆ MENU ☆</h2><div class="box-body"><nav><a href="#info">LIVE INFO</a><a href="#setlist">SETLIST</a><a href="#encore">ENCORE</a><a href="./index.html">BACK TO INDEX</a></nav></div></section>
+        <section class="box" style="margin-top:1rem"><h2 class="box-title">NOW PLAYING</h2><div class="box-body"><p class="blink">♪ Roselia ♪</p><p>FRONTIER FANTASIA</p><span class="counter">000014</span><br /><small>songs archived</small></div></section>
+      </aside>
+      <main>
+        <section class="box" id="info"><h2 class="box-title">★ LIVE REPORT ★</h2><div class="box-body event"><div><h2>Roselia ASIA TOUR<br />「Neuweltfahrt」</h2><p><b>VENUE:</b> 東京ガーデンシアター</p><p><b>DOORS:</b> 16:30　<b>START:</b> 18:00 JP</p><p><b>PERFORMER:</b> Roselia</p></div><time class="date" datetime="2026-02-15">2026<br />02.15</time></div></section>
+        <p class="ticker">DAY2 opening act: 奈良育英高等学校 軽音楽部 at about 17:30</p>
+        <section class="box" id="setlist"><h2 class="box-title">♪ MAIN PROGRAM / 12 SONGS ♪</h2><div class="box-body setgrid">
+          <div class="song"><b>M1</b><span>FRONTIER FANTASIA</span></div><div class="song"><b>M2</b><span>BLACK SHOUT</span></div><div class="song"><b>M3</b><span>Determination Symphony</span></div><div class="song"><b>M4</b><span>紫炎</span></div><div class="song"><b>M5</b><span>R</span></div><div class="song"><b>M6</b><span>ZEAL of proud</span></div><div class="song"><b>M7</b><span>Ringing Bloom</span></div><div class="song"><b>M8</b><span>陽だまりロードナイト</span></div><div class="song"><b>M9</b><span>軌跡</span></div><div class="song"><b>M10</b><span>Song I am.</span></div><div class="song"><b>M11</b><span>Steadfast Spirits</span></div><div class="song"><b>M12</b><span>Neo-Aspect</span></div>
+        </div></section>
+        <section class="box encore" id="encore"><h2 class="box-title">♥ ENCORE ♥</h2><div class="box-body"><ul><li>EN1 FIRE BIRD</li><li>EN2 PASSIONATE ANTHEM</li></ul></div></section>
+        <div class="button-wall" aria-label="页面标签"><span>ROSELIA FAN</span><span>HTML FOREVER</span><span>LIVE ARCHIVE</span><span>NO COOKIES</span></div>
+      </main>
+    </div>
+    <footer>公演事实来自 <a href="https://bang-dream.com/neuweltfahrt-tokyo/">BanG Dream! 公式特设页</a>。曲序使用 LiveSetList 本地预览数据。<br />Best viewed on whatever browser you already have.</footer>
+  </div>
+</body>
+</html>
