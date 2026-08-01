@@ -13,7 +13,7 @@
   --panel-2: rgb(21 25 42 / 0.58);
   --ink: #f2f5fd;
   --soft: #a4adca;
-  --dim: #6d7692;
+  --dim: #818ba7;
   --line: rgb(146 162 213 / 0.16);
   --line-soft: rgb(146 162 213 / 0.09);
   --neon: #6b8cff;
@@ -44,7 +44,7 @@
   --panel-2: rgb(246 248 253 / 0.84);
   --ink: #182139;
   --soft: #435171;
-  --dim: #657291;
+  --dim: #5f6b89;
   --line: rgb(55 75 126 / 0.18);
   --line-soft: rgb(55 75 126 / 0.1);
   --neon: #4268d8;
@@ -285,6 +285,12 @@ button {
   text-decoration-color: var(--neon-strong);
 }
 
+.topline a:focus-visible,
+.contents a:focus-visible {
+  outline: 2px solid var(--neon);
+  outline-offset: 4px;
+}
+
 /* ---------------- 场景切换条 ---------------- */
 
 .scenario-bar {
@@ -394,7 +400,7 @@ button {
   margin-top: 0.22rem;
   color: var(--dim);
   font-family: var(--font-m);
-  font-size: 0.58rem;
+  font-size: 0.64rem;
   font-weight: 500;
   letter-spacing: 0.04em;
 }
@@ -651,7 +657,7 @@ button {
 .register-data dt {
   color: var(--dim);
   font-family: var(--font-m);
-  font-size: 0.64rem;
+  font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -699,7 +705,7 @@ button {
 .cover-actions .favorite {
   border-color: transparent;
   color: #fff;
-  background: linear-gradient(125deg, #4f6ef7 0%, #8a5cf6 52%, #ff5fa8 110%);
+  background: linear-gradient(125deg, #455fdc 0%, #754bd5 52%, #b3265e 110%);
   box-shadow:
     0 0.55rem 1.7rem rgb(107 140 255 / 0.35),
     inset 0 1px rgb(255 255 255 / 0.28);
@@ -726,7 +732,7 @@ button {
 .cover-actions .favorite:hover {
   border-color: transparent;
   color: #fff;
-  background: linear-gradient(125deg, #5d7bff 0%, #9669ff 52%, #ff71b4 110%);
+  background: linear-gradient(125deg, #4b66e6 0%, #8057df 52%, #c02d6a 110%);
   box-shadow:
     0 0.7rem 2rem rgb(107 140 255 / 0.45),
     inset 0 1px rgb(255 255 255 / 0.32);
@@ -759,7 +765,7 @@ button {
 .status-title span {
   color: rgb(255 196 120 / 0.75);
   font-family: var(--font-m);
-  font-size: 0.6rem;
+  font-size: 0.66rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -842,7 +848,7 @@ button {
   margin: 0;
   color: var(--neon-strong);
   font-family: var(--font-m);
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -895,7 +901,7 @@ button {
 .contents a span {
   color: var(--neon-strong);
   font-family: var(--font-m);
-  font-size: 0.58rem;
+  font-size: 0.64rem;
   letter-spacing: 0.03em;
 }
 
@@ -915,7 +921,7 @@ button {
   margin: 0 0 0.75rem;
   color: var(--dim);
   font-family: var(--font-m);
-  font-size: 0.56rem;
+  font-size: 0.64rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -1148,7 +1154,7 @@ button {
   background: rgb(107 140 255 / 0.08);
   box-shadow: 0 0 12px rgb(107 140 255 / 0.12);
   font-family: var(--font-m);
-  font-size: 0.58rem;
+  font-size: 0.64rem;
   font-weight: 650;
   letter-spacing: 0.05em;
 }
@@ -1204,6 +1210,7 @@ button {
   grid-template-columns: 3.3rem minmax(0, 1fr) minmax(7.5rem, 0.5fr) minmax(4.5rem, auto);
   gap: 0.9rem;
   align-items: center;
+  width: calc(100% - 0.9rem);
   min-height: 3.55rem;
   margin: 0 0.45rem;
   padding: 0.72rem 0.85rem 0.72rem 1.9rem;
@@ -1342,7 +1349,7 @@ button {
 .track-code {
   color: var(--neon-strong);
   font-family: var(--font-m);
-  font-size: 0.64rem;
+  font-size: 0.68rem;
   font-weight: 750;
   letter-spacing: 0.05em;
   text-shadow: 0 0 12px rgb(107 140 255 / 0.45);
@@ -1372,7 +1379,7 @@ button {
   color: var(--soft);
   background: rgb(255 255 255 / 0.03);
   font-family: var(--font-m);
-  font-size: 0.63rem;
+  font-size: 0.68rem;
   letter-spacing: 0.03em;
   text-align: center;
   white-space: nowrap;
@@ -1663,7 +1670,7 @@ button {
   margin: 0 0 0.7rem;
   color: var(--neon-strong);
   font-family: var(--font-m);
-  font-size: 0.63rem;
+  font-size: 0.68rem;
   font-weight: 720;
   letter-spacing: 0.08em;
   text-shadow: 0 0 12px rgb(107 140 255 / 0.5);
@@ -1782,7 +1789,7 @@ button {
   color: var(--dim);
   background: linear-gradient(180deg, rgb(12 15 26 / 0.55), rgb(9 11 20 / 0.5));
   font-family: var(--font-m);
-  font-size: 0.58rem;
+  font-size: 0.64rem;
   letter-spacing: 0.08em;
 }
 
@@ -1895,7 +1902,7 @@ button {
 
 :root[data-theme="light"] .cover-actions .favorite {
   color: #f8faff;
-  background: linear-gradient(125deg, #365fc6 0%, #6c55d9 54%, #d93678 110%);
+  background: linear-gradient(125deg, #365fc6 0%, #6c55d9 54%, #b3265e 110%);
   box-shadow: 0 0.55rem 1.4rem rgb(66 104 216 / 0.23);
 }
 
@@ -2358,6 +2365,7 @@ button {
   .track-main {
     grid-template-columns: 2.7rem minmax(0, 1fr) auto;
     gap: 0.55rem;
+    width: calc(100% - 0.6rem);
     min-height: 3.55rem;
     margin: 0 0.3rem;
     padding: 0.7rem 0.6rem 0.7rem 1.75rem;
@@ -2439,7 +2447,7 @@ button {
   }
 
   .scenario-tabs button span {
-    font-size: 0.54rem;
+    font-size: 0.6rem;
   }
 
   .cover-copy {
@@ -2575,7 +2583,7 @@ button {
 
   .track-more {
     padding: 0.22rem 0.4rem;
-    font-size: 0.58rem;
+    font-size: 0.62rem;
   }
 
   .book-footer {
@@ -2645,5 +2653,17 @@ button {
     border-radius: 0;
     background: #fff;
     box-shadow: none;
+  }
+
+  .date-day > span:not(.date-separator),
+  .program-head h2,
+  .status-title strong,
+  .empty-copy h2 {
+    color: #182139;
+    background: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    filter: none;
+    text-shadow: none;
   }
 }
