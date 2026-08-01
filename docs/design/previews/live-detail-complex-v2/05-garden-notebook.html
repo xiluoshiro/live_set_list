@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="以数字花园个人博客为灵感的 LiveSetList 演出详情框架。" />
+  <title>花园笔记 | Neuweltfahrt DAY2</title>
+  <style>
+    :root { color-scheme: light; --ink:#28342d; --paper:#f7f3e9; --leaf:#3f765c; --sun:#e8b94f; --pink:#efb7ba; font-family:"Yu Gothic",Meiryo,sans-serif; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:var(--paper); }
+    a { color:inherit; text-decoration-thickness:1px; text-underline-offset:.24em; }
+    :focus-visible { outline:3px solid var(--leaf); outline-offset:4px; }
+    .shell { display:grid; grid-template-columns:230px minmax(0,1fr); max-width:1280px; margin:auto; }
+    aside { position:sticky; top:0; align-self:start; min-height:100dvh; padding:2rem 1.5rem; border-right:2px dashed rgba(63,118,92,.34); }
+    .home { display:inline-block; margin-bottom:3.5rem; color:var(--leaf); font-weight:800; text-decoration:none; }
+    nav a { display:block; width:max-content; margin:.85rem 0; }
+    .plant-state { margin-top:4rem; padding:1rem; border:1px solid var(--leaf); border-radius:46% 54% 42% 58% / 50% 42% 58% 50%; font-size:.78rem; line-height:1.6; transform:rotate(-2deg); }
+    main { min-width:0; padding:2.5rem clamp(1.4rem,5vw,5rem) 6rem; }
+    .hero { position:relative; min-height:520px; padding:2rem 0 4rem; }
+    .crumb { margin:0 0 4rem; color:var(--leaf); font-size:.78rem; }
+    h1 { max-width:760px; margin:0; font-family:"Hiragino Maru Gothic ProN","Yu Gothic",sans-serif; font-size:clamp(3.2rem,8vw,7rem); line-height:.88; letter-spacing:-.07em; }
+    h1 span { display:block; margin-top:1rem; color:var(--leaf); font-size:.34em; letter-spacing:.01em; }
+    .date-flower { position:absolute; top:4rem; right:0; display:grid; width:170px; height:170px; place-items:center; color:var(--ink); background:var(--sun); border-radius:50% 44% 53% 47%; font-size:1.3rem; font-weight:800; transform:rotate(7deg); }
+    .date-flower::before,.date-flower::after { position:absolute; width:62px; height:90px; content:""; background:var(--pink); border-radius:70% 30% 70% 30%; z-index:-1; }
+    .date-flower::before { transform:translate(-65px,-42px) rotate(20deg); }
+    .date-flower::after { transform:translate(68px,48px) rotate(20deg); }
+    .facts { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,.8fr) minmax(0,1fr); gap:1rem; margin:1.5rem 0 5rem; }
+    .facts div { padding:1.1rem 1.2rem; background:#e3eddc; clip-path:polygon(0 4%,96% 0,100% 92%,5% 100%); }
+    .facts div:nth-child(2) { background:#f6dfc3; transform:rotate(1deg); }
+    .facts div:nth-child(3) { background:#eacfd1; transform:rotate(-1deg); }
+    dt { margin-bottom:.45rem; color:var(--leaf); font-size:.72rem; font-weight:700; }
+    dd { margin:0; line-height:1.55; }
+    .note-head { max-width:620px; margin-bottom:2rem; }
+    h2 { margin:0 0 .7rem; font-size:clamp(2rem,4vw,3.8rem); letter-spacing:-.04em; }
+    .note-head p { margin:0; color:#59675e; line-height:1.8; }
+    .songs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1.2rem 2rem; padding:0; list-style:none; counter-reset:song; }
+    .songs li { position:relative; min-height:92px; padding:1.1rem 1rem 1rem 4.6rem; background:#fffdf7; clip-path:polygon(0 0,96% 2%,100% 90%,3% 100%); counter-increment:song; }
+    .songs li:nth-child(3n+2) { background:#eef2d7; transform:rotate(.45deg); }
+    .songs li:nth-child(4n) { background:#f7e1e2; transform:rotate(-.55deg); }
+    .songs li::before { position:absolute; top:1.05rem; left:1rem; content:counter(song,decimal-leading-zero); color:var(--leaf); font-family:monospace; font-size:.74rem; }
+    .songs strong { display:block; font-size:1.05rem; line-height:1.35; }
+    .songs small { display:block; margin-top:.45rem; color:#64746a; }
+    .encore { margin-top:2rem; padding:1.5rem; border:2px dashed var(--pink); }
+    .encore h3 { margin:0 0 1rem; color:var(--leaf); }
+    .encore ol { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin:0; padding:0; list-style:none; }
+    .encore li { padding:1rem; background:#f7e1e2; }
+    footer { margin-top:5rem; padding-top:1.5rem; border-top:2px dashed rgba(63,118,92,.35); color:#5d6c62; font-size:.82rem; line-height:1.7; }
+    @media (max-width:760px) {
+      .shell { display:block; }
+      aside { position:static; min-height:0; padding:1rem; border-right:0; border-bottom:2px dashed rgba(63,118,92,.34); }
+      aside nav,.plant-state { display:none; }
+      .home { margin:0; }
+      main { padding:1.4rem 1rem 4rem; }
+      .hero { min-height:430px; padding-top:1rem; overflow:hidden; }
+      .crumb { margin-bottom:2.2rem; }
+      .date-flower { top:14rem; right:1rem; width:120px; height:120px; font-size:.95rem; }
+      .facts,.songs,.encore ol { grid-template-columns:1fr; }
+      .facts { margin-top:1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <a class="home" href="./index.html">LiveSetList</a>
+      <nav aria-label="本页导航"><a href="#live">这场演出</a><a href="#setlist">曲目笔记</a><a href="#source">资料来源</a></nav>
+      <p class="plant-state">这是一页持续生长的演出笔记。曲序来自本地记录，日期和会场由官方资料确认。</p>
+    </aside>
+    <main>
+      <header class="hero" id="live">
+        <p class="crumb">Roselia ASIA TOUR / 東京公演</p>
+        <h1>Neuweltfahrt <span>東京公演 -Final- DAY2</span></h1>
+        <div class="date-flower"><time datetime="2026-02-15">2026.02.15</time></div>
+      </header>
+      <dl class="facts"><div><dt>会场</dt><dd>東京ガーデンシアター</dd></div><div><dt>时间</dt><dd>16:30 开场<br />18:00 开演</dd></div><div><dt>出演</dt><dd>Roselia<br />14 songs</dd></div></dl>
+      <section id="setlist">
+        <header class="note-head"><h2>主篇曲目</h2><p>十二首歌像十二张散落的便笺。这里优先保留顺序、标题和演出者，不做组件化包装。</p></header>
+        <ol class="songs">
+          <li><strong>FRONTIER FANTASIA</strong><small>M1 / Roselia</small></li><li><strong>BLACK SHOUT</strong><small>M2 / Roselia</small></li>
+          <li><strong>Determination Symphony</strong><small>M3 / Roselia</small></li><li><strong>紫炎</strong><small>M4 / Roselia</small></li>
+          <li><strong>R</strong><small>M5 / Roselia</small></li><li><strong>ZEAL of proud</strong><small>M6 / Roselia</small></li>
+          <li><strong>Ringing Bloom</strong><small>M7 / Roselia</small></li><li><strong>陽だまりロードナイト</strong><small>M8 / Roselia</small></li>
+          <li><strong>軌跡</strong><small>M9 / Roselia</small></li><li><strong>Song I am.</strong><small>M10 / Roselia</small></li>
+          <li><strong>Steadfast Spirits</strong><small>M11 / Roselia</small></li><li><strong>Neo-Aspect</strong><small>M12 / Roselia</small></li>
+        </ol>
+        <div class="encore"><h3>Encore</h3><ol><li><strong>EN1 FIRE BIRD</strong></li><li><strong>EN2 PASSIONATE ANTHEM</strong></li></ol></div>
+      </section>
+      <footer id="source">DAY2 opening act: 奈良育英高等学校 軽音楽部，17:30 左右登场。<br /><a href="https://bang-dream.com/neuweltfahrt-tokyo/">BanG Dream! 公式公演页</a></footer>
+    </main>
+  </div>
+</body>
+</html>

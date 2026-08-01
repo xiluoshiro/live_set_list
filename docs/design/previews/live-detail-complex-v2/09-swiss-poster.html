@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="以瑞士风格个人设计博客为灵感的 LiveSetList 演出详情框架。" />
+  <title>Neuweltfahrt / Live 78</title>
+  <style>
+    :root { color-scheme:light; --ink:#171717; --paper:#f3f3ef; --red:#e53b2f; font-family:Arial,Helvetica,"Noto Sans SC",sans-serif; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); }
+    a { color:inherit; }
+    :focus-visible { outline:4px solid var(--red); outline-offset:3px; }
+    header.site { display:grid; grid-template-columns:2fr 1fr 1fr; min-height:66px; border-bottom:2px solid var(--ink); }
+    header.site>* { display:flex; align-items:center; padding:0 1rem; border-right:1px solid var(--ink); font-size:.75rem; font-weight:700; text-decoration:none; }
+    header.site>*:last-child { border-right:0; }
+    .hero { display:grid; grid-template-columns:2fr 1fr; min-height:560px; border-bottom:2px solid var(--ink); }
+    .title { display:flex; flex-direction:column; justify-content:space-between; min-width:0; padding:2.5rem 2rem 2rem; border-right:2px solid var(--ink); }
+    .title p { margin:0; font-size:.82rem; font-weight:700; }
+    h1 { margin:0; font-size:clamp(4rem,10.5vw,10rem); font-weight:900; letter-spacing:-.09em; line-height:.72; overflow-wrap:anywhere; }
+    h1 span { display:block; margin-top:1.6rem; color:var(--red); font-size:.22em; letter-spacing:-.02em; line-height:1; }
+    .date { display:grid; grid-template-rows:auto 1fr auto; padding:2rem; background:var(--red); color:var(--paper); }
+    .date span { font-size:.78rem; font-weight:700; }
+    .date strong { align-self:center; font-size:clamp(5rem,11vw,10rem); letter-spacing:-.08em; line-height:.75; }
+    .date p { margin:0; font-size:.85rem; font-weight:700; line-height:1.6; }
+    .facts { display:grid; grid-template-columns:2fr 1fr 1fr; margin:0; border-bottom:2px solid var(--ink); }
+    .facts div { padding:1.25rem 1rem; border-right:1px solid var(--ink); }
+    .facts div:last-child { border-right:0; }
+    .facts dt { margin-bottom:.5rem; color:var(--red); font-size:.68rem; font-weight:800; }
+    .facts dd { margin:0; font-size:.92rem; font-weight:700; }
+    .program { display:grid; grid-template-columns:180px minmax(0,1fr); border-bottom:2px solid var(--ink); }
+    .program-head { padding:2rem 1rem; border-right:2px solid var(--ink); }
+    .program-head h2 { margin:0; font-size:2.7rem; line-height:.9; }
+    .program-head p { margin:1rem 0 0; color:var(--red); font-size:.72rem; font-weight:700; }
+    .tracks { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin:0; padding:0; list-style:none; }
+    .tracks li { display:grid; grid-template-columns:54px 1fr; min-height:100px; border-right:1px solid var(--ink); border-bottom:1px solid var(--ink); }
+    .tracks li:nth-child(3n) { border-right:0; }
+    .tracks li:nth-last-child(-n+3) { border-bottom:0; }
+    .tracks b { display:flex; align-items:flex-start; justify-content:center; padding-top:1rem; color:var(--red); font-size:.75rem; }
+    .tracks span { display:flex; align-items:flex-end; padding:1rem; border-left:1px solid var(--ink); font-size:1rem; font-weight:800; line-height:1.15; overflow-wrap:anywhere; }
+    .encore { display:grid; grid-template-columns:180px 1fr 1fr; background:var(--ink); color:var(--paper); }
+    .encore h2 { margin:0; padding:1.5rem 1rem; color:var(--red); font-size:1rem; }
+    .encore p { margin:0; padding:1.5rem; border-left:1px solid #777; font-size:1.15rem; font-weight:800; }
+    footer { display:grid; grid-template-columns:2fr 1fr; gap:2rem; padding:2rem; font-size:.72rem; line-height:1.65; }
+    footer a { justify-self:end; }
+    @media (max-width:760px) {
+      header.site { grid-template-columns:1fr auto; }
+      header.site span { display:none; }
+      .hero { grid-template-columns:1fr; min-height:0; }
+      .title { min-height:430px; padding:1.5rem 1rem; border-right:0; border-bottom:2px solid var(--ink); }
+      h1 { font-size:clamp(4rem,18vw,6.2rem); }
+      .date { min-height:260px; }
+      .facts,.program,.encore,footer { grid-template-columns:1fr; }
+      .facts div { border-right:0; border-bottom:1px solid var(--ink); }
+      .facts div:last-child { border-bottom:0; }
+      .program-head { border-right:0; border-bottom:2px solid var(--ink); }
+      .tracks { grid-template-columns:1fr; }
+      .tracks li,.tracks li:nth-child(3n),.tracks li:nth-last-child(-n+3) { border-right:0; border-bottom:1px solid var(--ink); }
+      .tracks li:last-child { border-bottom:0; }
+      .encore p { border-top:1px solid #777; border-left:0; }
+      footer a { justify-self:start; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site"><a href="./index.html">LIVESETLIST</a><span>ROSELIA</span><a href="#program">SETLIST</a></header>
+  <main>
+    <section class="hero"><div class="title"><p>Roselia ASIA TOUR</p><h1>Neuwelt<br />fahrt<span>東京公演 -Final- DAY2</span></h1></div><div class="date"><span>2026 / SUN</span><strong>02<br />15</strong><p>16:30 DOORS<br />18:00 START</p></div></section>
+    <dl class="facts"><div><dt>VENUE</dt><dd>東京ガーデンシアター</dd></div><div><dt>PERFORMER</dt><dd>Roselia</dd></div><div><dt>PROGRAM</dt><dd>12 + 2 songs</dd></div></dl>
+    <section class="program" id="program"><header class="program-head"><h2>MAIN<br />PROG<br />RAM</h2><p>12 SONGS</p></header><ol class="tracks">
+      <li><b>M1</b><span>FRONTIER FANTASIA</span></li><li><b>M2</b><span>BLACK SHOUT</span></li><li><b>M3</b><span>Determination Symphony</span></li><li><b>M4</b><span>紫炎</span></li><li><b>M5</b><span>R</span></li><li><b>M6</b><span>ZEAL of proud</span></li><li><b>M7</b><span>Ringing Bloom</span></li><li><b>M8</b><span>陽だまりロードナイト</span></li><li><b>M9</b><span>軌跡</span></li><li><b>M10</b><span>Song I am.</span></li><li><b>M11</b><span>Steadfast Spirits</span></li><li><b>M12</b><span>Neo-Aspect</span></li>
+    </ol></section>
+    <section class="encore"><h2>ENCORE</h2><p>EN1 FIRE BIRD</p><p>EN2 PASSIONATE ANTHEM</p></section>
+  </main>
+  <footer><span>DAY2 opening act: 奈良育英高等学校 軽音楽部，17:30 左右。曲序使用 LiveSetList 本地预览数据。</span><a href="https://bang-dream.com/neuweltfahrt-tokyo/">BanG Dream! 公式公演页</a></footer>
+</body>
+</html>
