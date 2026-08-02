@@ -10,6 +10,7 @@ import {
 } from "../api";
 import { logError } from "../logger";
 import { ContentState } from "./ContentState";
+import { MastheadTitle } from "./MastheadTitle";
 import { StageLedgerContent } from "./StageLedgerContent";
 import { SectionTabs } from "./SectionTabs";
 import { StopShortcuts } from "./StopShortcuts";
@@ -130,7 +131,7 @@ export function TourDetailPage({
           <div className="stage-title-meta">
             <span className="stage-type-label">巡演</span>
           </div>
-          <h1>{detail?.tour_title ?? fallback.tourTitle}</h1>
+          <MastheadTitle as="h1" title={detail?.tour_title ?? fallback.tourTitle} />
           {detail && detail.bands.length > 0 && (
             <div className="stage-masthead-bands">
               <span className="stage-field-label">参与乐队</span>

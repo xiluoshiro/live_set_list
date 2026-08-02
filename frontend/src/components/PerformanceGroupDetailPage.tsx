@@ -10,6 +10,7 @@ import {
 import { logError } from "../logger";
 import { getPerformanceGroupStatusPresentation } from "../liveStatus";
 import { ContentState } from "./ContentState";
+import { MastheadTitle } from "./MastheadTitle";
 import { StageLedgerContent } from "./StageLedgerContent";
 import { StopShortcuts } from "./StopShortcuts";
 import { getGroupedLiveShortTitle } from "./performanceGroupHelpers";
@@ -150,7 +151,7 @@ export function PerformanceGroupDetailPage({
               </span>
               <span className="stage-type-label">{getDisplayTypeLabel(detail.display_type)}</span>
             </div>
-            <h1>{detail.group_title}</h1>
+            <MastheadTitle as="h1" title={detail.group_title} />
             {detail.bands.length > 0 && (
               <div className="stage-masthead-bands">
                 <span className="stage-field-label">参与乐队</span>

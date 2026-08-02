@@ -11,6 +11,7 @@ import type {
 import { getBandRepresentativeColor } from "./BandIconsCell";
 import { Collapsible } from "./ui/Collapsible";
 import { formatLiveType } from "./console/constants";
+import { MastheadTitle } from "./MastheadTitle";
 import { getLiveStatusPresentation } from "../liveStatus";
 
 export type LiveDetailFallback = {
@@ -779,7 +780,7 @@ export function StageLedgerContent({
               <StatusLine detail={detailData} />
               <span className="stage-type-label">{formatLiveType(detailData.live_type)}</span>
             </div>
-            {embedded ? <h2 id={titleId}>{detailTitle}</h2> : <h1 id={titleId}>{detailTitle}</h1>}
+            <MastheadTitle as={embedded ? "h2" : "h1"} id={titleId} title={detailTitle} />
             <div className="stage-masthead-bands">
               <span className="stage-field-label">出演</span>
               <BandNameList detail={detailData} onOpenBand={onOpenBand} />

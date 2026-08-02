@@ -78,6 +78,11 @@
   color: var(--stage-muted);
 }
 
+.stage-masthead h1,
+.stage-masthead h2 {
+  position: relative;
+}
+
 .stage-masthead h1 {
   max-width: 100%;
   margin: 0;
@@ -98,6 +103,17 @@
   letter-spacing: -0.02em;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.stage-title-measure {
+  position: absolute;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.stage-title-line {
+  display: block;
 }
 
 .stage-masthead-bands {
