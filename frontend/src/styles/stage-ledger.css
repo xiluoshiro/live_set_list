@@ -19,11 +19,6 @@
   padding: 28px clamp(16px, 3vw, 48px) 64px;
 }
 
-.stage-ledger-page.is-embedded {
-  width: 100%;
-  padding: 0;
-}
-
 .stage-ledger-article {
   min-width: 0;
 }
@@ -83,8 +78,7 @@
   color: var(--stage-muted);
 }
 
-.stage-masthead h1,
-.stage-masthead h2 {
+.stage-masthead h1 {
   max-width: 100%;
   margin: 0;
   color: var(--stage-heading);
@@ -93,10 +87,6 @@
   letter-spacing: -0.055em;
   line-height: 1.06;
   overflow-wrap: anywhere;
-}
-
-.stage-masthead h2 {
-  font-size: clamp(1.8rem, 4vw, 3.4rem);
 }
 
 .stage-masthead-bands {
@@ -256,36 +246,11 @@
 
 .stage-official-link {
   color: var(--text-link);
-  font-size: 13px;
   text-decoration: none;
 }
 
-.stage-official-link {
-  display: inline-flex;
-  width: 36px;
-  height: 36px;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-}
-
-.stage-official-link .action-icon {
-  width: 16px;
-  height: 16px;
-}
-
 .stage-official-link:hover {
-  border-color: var(--stage-accent);
-  background: color-mix(in srgb, var(--stage-accent) 8%, var(--stage-surface));
-}
-
-.stage-official-link:hover,
-.stage-inline-link:hover {
   text-decoration: underline;
-}
-
-.stage-official-link:hover {
-  text-decoration: none;
 }
 
 .stage-inline-link {
@@ -297,14 +262,6 @@
   cursor: pointer;
 }
 
-.stage-navigation-row {
-  display: flex;
-  align-items: stretch;
-  gap: 16px;
-  border-bottom: 1px solid var(--stage-line-soft);
-}
-
-.stage-anchor-nav,
 .stage-jump-nav {
   display: flex;
   flex-wrap: wrap;
@@ -312,20 +269,12 @@
   align-items: center;
 }
 
-.stage-anchor-nav {
-  flex: 1 1 auto;
-  padding: 17px 0;
-  border-bottom: 0;
-}
-
-.stage-anchor-nav a,
 .stage-jump-nav a {
   color: var(--stage-muted);
   font-size: 13px;
   text-decoration: none;
 }
 
-.stage-anchor-nav a:hover,
 .stage-jump-nav a:hover {
   color: var(--stage-accent);
   text-decoration: underline;
@@ -387,15 +336,13 @@
 
 .stage-flow-section,
 .stage-attendance-section,
-.stage-history-section,
-.stage-related-section {
+.stage-history-section {
   padding: 30px 0 0;
 }
 
 .stage-flow-section + section,
 .stage-attendance-section + section,
-.stage-history-section + section,
-.stage-related-section + section {
+.stage-history-section + section {
   margin-top: 34px;
   border-top: 1px solid var(--stage-line-soft);
 }
@@ -419,7 +366,6 @@
 .stage-flow-section,
 .stage-attendance-section,
 .stage-history-section,
-.stage-related-section,
 .stage-segment-heading h3,
 .stage-act-block {
   scroll-margin-top: calc(var(--stage-topbar-offset) + 58px);
@@ -444,12 +390,6 @@
   font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.stage-segment-heading span {
-  color: var(--stage-muted);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
 }
 
 .stage-act-block {
@@ -763,31 +703,6 @@
   line-height: 1.5;
 }
 
-.stage-related-list {
-  display: grid;
-  gap: 0;
-}
-
-.stage-related-row {
-  display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 18px;
-  padding: 13px 0;
-  border-top: 1px solid var(--stage-line-soft);
-}
-
-.stage-related-row > span {
-  color: var(--stage-muted);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.stage-related-row .stage-inline-link {
-  text-align: left;
-}
-
 .stage-status-body,
 .stage-empty-section,
 .stage-error-section {
@@ -944,10 +859,6 @@
     padding: 18px 16px 88px;
   }
 
-  .stage-ledger-page.is-embedded {
-    padding: 0;
-  }
-
   .stage-masthead {
     grid-template-columns: 1fr;
     gap: 28px;
@@ -969,10 +880,6 @@
   .stage-masthead h1 {
     font-size: clamp(30px, 9vw, 38px);
     letter-spacing: -0.045em;
-  }
-
-  .stage-masthead h2 {
-    font-size: clamp(26px, 7vw, 34px);
   }
 
   .stage-content-grid {
@@ -1022,15 +929,6 @@
     align-items: start;
   }
 
-  .stage-navigation-row {
-    gap: 8px;
-  }
-
-  .stage-navigation-row .stage-anchor-nav {
-    min-width: 0;
-    gap: 7px 12px;
-  }
-
   .stage-section-heading > span {
     padding-top: 5px;
   }
@@ -1049,15 +947,6 @@
     grid-column: 2;
     grid-row: 1 / span 2;
     align-self: center;
-  }
-
-  .stage-related-row {
-    grid-template-columns: 1fr;
-    gap: 5px;
-  }
-
-  .stage-related-row > span {
-    font-size: 10px;
   }
 
   .stage-mobile-action-bar {

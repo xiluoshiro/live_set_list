@@ -8,7 +8,6 @@ import type {
   PerformanceGroupRef,
   TourRef,
 } from "../api";
-import { ExternalLinkIcon } from "./ActionIcons";
 import { getBandRepresentativeColor } from "./BandIconsCell";
 import { Collapsible } from "./ui/Collapsible";
 import { formatLiveType } from "./console/constants";
@@ -409,7 +408,6 @@ function StageFlow({
         <section key={segment.key} className="stage-segment" aria-labelledby={`stage-segment-${segment.key}`}>
           <header className="stage-segment-heading">
             <h3 id={`stage-segment-${segment.key}`} tabIndex={-1}>{segmentLabel(segment.code)}</h3>
-            <span>{segment.code}</span>
           </header>
           {buildActBlocks(segment.rows).map((block, blockIndex) => {
             const firstBand = block.bands[0];
@@ -546,7 +544,7 @@ function ScheduleHistory({ detail }: { detail: LiveDetailResponse }) {
   );
 }
 
-function RelatedArchives({
+function MastheadRelated({
   detail,
   onOpenTour,
   onOpenPerformanceGroup,
@@ -557,34 +555,28 @@ function RelatedArchives({
   onOpenPerformanceGroup?: (group: PerformanceGroupRef, sourceLiveId: number) => void;
   showTourReference: boolean;
 }) {
-  if ((!detail.tour || !showTourReference || !onOpenTour) && (!detail.performance_group || !onOpenPerformanceGroup)) return null;
+  const tourRef = showTourReference && detail.tour && onOpenTour ? detail.tour : null;
+  const groupRef = detail.performance_group && onOpenPerformanceGroup ? detail.performance_group : null;
+  if (!tourRef && !groupRef) return null;
   return (
-    <section className="stage-related-section" id="stage-related" tabIndex={-1} aria-labelledby="stage-related-title">
-      <div className="stage-section-heading">
-        <div>
-          <h2 id="stage-related-title">关联档案</h2>
-          <p>Tour 表示巡演连续关系，Performance Group 表示活动集合。</p>
+    <>
+      {tourRef && (
+        <div className="stage-masthead-bands">
+          <span className="stage-field-label">Tour</span>
+          <button type="button" className="stage-inline-link" onClick={() => onOpenTour?.(tourRef)}>
+            {tourRef.tour_title}
+          </button>
         </div>
-      </div>
-      <div className="stage-related-list">
-        {showTourReference && detail.tour && onOpenTour && (
-          <div className="stage-related-row">
-            <span>Tour</span>
-            <button type="button" className="stage-inline-link" onClick={() => onOpenTour(detail.tour as TourRef)}>
-              {detail.tour.tour_title}
-            </button>
-          </div>
-        )}
-        {detail.performance_group && onOpenPerformanceGroup && (
-          <div className="stage-related-row">
-            <span>Performance Group</span>
-            <button type="button" className="stage-inline-link" onClick={() => onOpenPerformanceGroup(detail.performance_group as PerformanceGroupRef, detail.live_id)}>
-              {detail.performance_group.group_title}
-            </button>
-          </div>
-        )}
-      </div>
-    </section>
+      )}
+      {groupRef && (
+        <div className="stage-masthead-bands">
+          <span className="stage-field-label">Performance Group</span>
+          <button type="button" className="stage-inline-link" onClick={() => onOpenPerformanceGroup?.(groupRef, detail.live_id)}>
+            {groupRef.group_title}
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -681,10 +673,6 @@ export function StageLedgerContent({
     setMobileExpandedTrackId(trackId);
   }, []);
 
-  const closeArchive = useCallback(() => {
-    onBack?.();
-  }, [onBack]);
-
   useEffect(() => {
     if (embedded || !detailData) return undefined;
     const previousTitle = document.title;
@@ -731,7 +719,7 @@ export function StageLedgerContent({
 
   if (detailNotFound) {
     return (
-      <div className={`stage-ledger-page${embedded ? " is-embedded" : ""}`} data-stage-ledger>
+      <div className="stage-ledger-page" data-stage-ledger>
         <article className="stage-error-article" role="alert">
           <p className="stage-error-kicker">404</p>
           <h1>未找到这场 Live</h1>
@@ -746,7 +734,7 @@ export function StageLedgerContent({
 
   if (!detailData) {
     return (
-      <div className={`stage-ledger-page${embedded ? " is-embedded" : ""}`} data-stage-ledger>
+      <div className="stage-ledger-page" data-stage-ledger>
         <article className="stage-ledger-article">
           <header className="stage-masthead stage-masthead-fallback">
             <div className="stage-masthead-main">
@@ -771,10 +759,9 @@ export function StageLedgerContent({
 
   const showAttendance = detailData.live_type === "event" && detailData.event_attendees.length > 0;
   const showFlow = visibleRows.length > 0;
-  const hasRelated = Boolean(detailData.tour || detailData.performance_group);
   const showFavoriteAction = detailData.event_status !== "cancelled"
     && Boolean((canFavorite && onToggleFavorite) || (!canFavorite && onRequestLogin));
-  const showStageActions = Boolean(detailUrl || showFavoriteAction || (!embedded && onBack));
+  const showStageActions = Boolean(detailUrl || showFavoriteAction);
   const showMobileActionBar = showFavoriteAction;
   const jumpSegments = buildSegments(visibleRows);
   const jumpBands = uniqueBandMembers(visibleRows.flatMap((row) => row.band_members));
@@ -782,7 +769,7 @@ export function StageLedgerContent({
   const structuredData = buildStructuredData(detailData);
 
   return (
-    <div className={`stage-ledger-page${embedded ? " is-embedded" : ""}`} data-stage-ledger>
+    <div className="stage-ledger-page" data-stage-ledger>
       <article className="stage-ledger-article" aria-labelledby={titleId}>
         <header className="stage-masthead">
           <div className="stage-masthead-main">
@@ -790,11 +777,17 @@ export function StageLedgerContent({
               <StatusLine detail={detailData} />
               <span className="stage-type-label">{formatLiveType(detailData.live_type)}</span>
             </div>
-            {embedded ? <h2 id={titleId}>{detailTitle}</h2> : <h1 id={titleId}>{detailTitle}</h1>}
+            <h1 id={titleId}>{detailTitle}</h1>
             <div className="stage-masthead-bands">
               <span className="stage-field-label">出演</span>
               <BandNameList detail={detailData} onOpenBand={onOpenBand} />
             </div>
+            <MastheadRelated
+              detail={detailData}
+              onOpenTour={onOpenTour}
+              onOpenPerformanceGroup={onOpenPerformanceGroup}
+              showTourReference={showTourReference}
+            />
             {detailData.status_note && (
               <p className="stage-status-note" role="note">
                 {detailData.event_status === "cancelled" ? "取消说明" : detailData.event_status === "postponed" ? "延期说明" : "备注"}：{detailData.status_note}
@@ -810,17 +803,6 @@ export function StageLedgerContent({
             </dl>
             {showStageActions && (
               <div className="stage-actions" aria-label="演出操作">
-                {!embedded && onBack && (
-                  <button
-                    type="button"
-                    className="stage-action-button"
-                    onClick={closeArchive}
-                    aria-label="关闭演出资料"
-                    title="关闭演出资料"
-                  >
-                    关闭
-                  </button>
-                )}
                 {showFavoriteAction && canFavorite && onToggleFavorite && (
                   <button
                     type="button"
@@ -844,21 +826,13 @@ export function StageLedgerContent({
                     aria-label="打开官方网页"
                     title="打开官方网页"
                   >
-                    <ExternalLinkIcon />
+                    官方网页
                   </a>
                 )}
               </div>
             )}
           </div>
         </header>
-
-        <div className="stage-navigation-row">
-          <nav className="stage-anchor-nav" aria-label="页内导航">
-            {showFlow && <a href="#stage-flow" onClick={(event) => focusAnchor(event, "stage-flow")}>演出流程</a>}
-            {showAttendance && <a href="#stage-attendance" onClick={(event) => focusAnchor(event, "stage-attendance")}>出演阵容</a>}
-            {hasRelated && <a href="#stage-related" onClick={(event) => focusAnchor(event, "stage-related")}>关联档案</a>}
-          </nav>
-        </div>
 
         {detailError && detailData && (
           <div className="stage-inline-error" role="alert">
@@ -927,12 +901,6 @@ export function StageLedgerContent({
                 </section>
               )}
               <ScheduleHistory detail={detailData} />
-              <RelatedArchives
-                detail={detailData}
-                onOpenTour={onOpenTour}
-                onOpenPerformanceGroup={onOpenPerformanceGroup}
-                showTourReference={showTourReference}
-              />
             </div>
             {selectedRow && (
               <aside className="stage-inspector-column" aria-label="歌曲详情">

@@ -117,9 +117,6 @@ describe("StageLedgerContent", () => {
     expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toContain("日本武道館");
 
     const previousHistoryState = window.history.state;
-    await user.click(screen.getByRole("link", { name: "演出流程" }));
-    expect(container.querySelector("#stage-flow")).toHaveFocus();
-
     await user.click(screen.getByRole("button", { name: /Song One/ }));
     const trigger = screen.getByRole("button", { name: /Song One/ });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
@@ -225,17 +222,6 @@ describe("StageLedgerContent", () => {
     await user.click(screen.getAllByRole("button", { name: "关闭歌曲详情" })[0]);
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Song One" })).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
-  });
-
-  test("关闭演出资料时直接退出详情，不写入浏览器 history", async () => {
-    // 测试点：页面级关闭动作应直接交给上层返回，不新增浏览器历史记录。
-    const user = userEvent.setup();
-    const onBack = vi.fn();
-    renderStage(makeDetail(), { onBack });
-
-    await user.click(screen.getByRole("button", { name: "关闭演出资料" }));
-    await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
-    expect(window.location.hash).toBe("");
   });
 
   test("取消状态隐藏收藏和歌单，并保留状态说明", () => {
