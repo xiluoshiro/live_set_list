@@ -28,71 +28,6 @@
   min-width: 0;
 }
 
-.stage-breadcrumb {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  color: var(--stage-muted);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
-}
-
-.stage-context-title {
-  color: var(--stage-heading);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.stage-context-bar {
-  position: sticky;
-  top: var(--stage-topbar-offset);
-  z-index: var(--z-sticky);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 42px;
-  margin: -8px 0 18px;
-  padding: 7px 12px 7px 14px;
-  border: 1px solid var(--stage-line);
-  border-left: 3px solid var(--stage-accent);
-  border-radius: var(--stage-radius);
-  background: color-mix(in srgb, var(--stage-surface-raised) 96%, transparent);
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--stage-ink) 7%, transparent);
-  backdrop-filter: blur(12px);
-}
-
-.stage-context-actions {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.stage-context-close {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 30px;
-  padding: 5px 9px;
-  border: 1px solid var(--stage-line);
-  border-radius: var(--stage-radius);
-  background: var(--stage-surface);
-  color: var(--stage-heading);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.stage-context-close:hover {
-  border-color: var(--stage-accent);
-  color: var(--stage-accent);
-}
-
 .stage-masthead {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(270px, 0.9fr);
@@ -1127,27 +1062,6 @@
 
   .stage-ledger-page.is-embedded {
     padding: 0;
-  }
-
-  .stage-context-bar {
-    gap: 8px;
-    margin-top: -5px;
-    margin-bottom: 14px;
-  }
-
-  .stage-breadcrumb {
-    flex-wrap: nowrap;
-    overflow: hidden;
-    white-space: nowrap;
-  }
-
-  .stage-breadcrumb span:last-child {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .stage-context-close {
-    padding-inline: 7px;
   }
 
   .stage-masthead {

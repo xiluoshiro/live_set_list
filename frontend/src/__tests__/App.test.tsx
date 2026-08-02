@@ -630,27 +630,28 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(1));
     await user.click(screen.getByRole("button", { name: "关闭演出资料" }));
-    await user.click(screen.getByRole("button", { name: "查看全部 Live →" }));
 
-    await waitFor(() => expect(screen.getByText("总计 47 条")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "演出资料" })).toBeInTheDocument());
+    expect(screen.getByText("总计 47 条")).toBeInTheDocument();
+    expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "all" });
     expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
   });
 
-  // 测试点：History popstate 必须把 SPA 从详情还原到实际来源页面，支持鼠标侧键。
-  test("浏览器返回会还原前一个主页面和详情来源", async () => {
+  // 测试点：从任意来源打开 Live 详情后，History popstate 都必须把 SPA 归一到演出资料页。
+  test("浏览器返回 Live 详情时一定回到演出资料页", async () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "查看全部 Live →" }));
     await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
     expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "detail", detailLiveId: 1 });
 
-    fireEvent.popState(window, { state: { app: "live-set-list", tab: "all" } });
+    fireEvent.popState(window, { state: { app: "live-set-list", tab: "home" } });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "演出资料" })).toBeInTheDocument());
+    expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "all" });
     expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
   });
 
@@ -1751,7 +1752,7 @@ describe("App", () => {
   });
 
   test("详情页关闭按钮可回到列表页", async () => {
-    // 测试点：点击固定在上下文栏的关闭按钮后详情页应消失，列表页应重新展示。
+    // 测试点：点击详情页关闭按钮后必须离开详情，并回到演出资料列表。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1767,7 +1768,7 @@ describe("App", () => {
   });
 
   test("详情页关闭按钮样式类名正确", async () => {
-    // 测试点：Stage Ledger 关闭动作固定在演出档案上下文栏，避免返回动作被页面头部滚走。
+    // 测试点：移除独立上下文页眉后，Stage Ledger 仍在演出操作区域提供关闭动作。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1778,9 +1779,9 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
 
     const closeBtn = screen.getByRole("button", { name: "关闭演出资料" });
-    expect(closeBtn).toHaveClass("stage-context-close");
+    expect(closeBtn).toHaveClass("stage-action-button");
     expect(closeBtn).toHaveTextContent("关闭");
-    expect(closeBtn).not.toHaveClass("detail-back-btn");
+    expect(closeBtn).not.toHaveClass("stage-context-close");
   });
 
   test("详情弹窗在 url 为空时标题不渲染超链接", async () => {
