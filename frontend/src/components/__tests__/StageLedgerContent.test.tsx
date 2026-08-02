@@ -92,7 +92,7 @@ describe("StageLedgerContent", () => {
     window.history.replaceState(null, "", "/");
   });
 
-  test("按结构化位置渲染连续流程，并用检查器展示曲目细节", async () => {
+  test("按结构化位置渲染连续流程，并展示曲目细节", async () => {
     // 测试点：Stage Ledger 保留 segment/absolute_order/song_id，点击曲目后详情可展开并由 Escape 还原焦点。
     const user = userEvent.setup();
     const onOpenBand = vi.fn();
@@ -105,10 +105,13 @@ describe("StageLedgerContent", () => {
     expect(screen.getByText("Song One")).toBeInTheDocument();
     expect(screen.getByText("01")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/77");
+    expect(container.querySelector(".stage-actions .stage-official-link")).not.toBeNull();
+    expect(container.querySelector(".stage-context-actions .stage-official-link")).toBeNull();
     expect(container.querySelector(".stage-sources-section")).toBeNull();
     expect(screen.queryByText("资料来源")).not.toBeInTheDocument();
     expect(screen.queryByText("阵容摘要")).not.toBeInTheDocument();
     expect(screen.queryByText("逐曲检查器")).not.toBeInTheDocument();
+    expect(screen.queryByText("按原始段落和绝对顺序排列，实际出演关系在曲目中展开。")).not.toBeInTheDocument();
     expect(screen.queryByText("查看")).not.toBeInTheDocument();
     expect(container.querySelector(".stage-summary-ruler")).toBeNull();
     expect(document.title).toBe("Stage Ledger Live · LiveSetList");
@@ -120,6 +123,8 @@ describe("StageLedgerContent", () => {
     await user.click(screen.getByRole("button", { name: /Song One/ }));
     const trigger = screen.getByRole("button", { name: /Song One/ });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(window.location.hash).not.toBe("#track-M1");
+    expect(window.history.state).not.toMatchObject({ stageOverlay: "track" });
     expect(trigger).not.toHaveTextContent("Poppin'Party");
     expect(screen.getAllByRole("heading", { name: "Song One" }).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("阵容版本：Poppin'Party / V1")).not.toBeInTheDocument();
@@ -175,6 +180,30 @@ describe("StageLedgerContent", () => {
     expect(blocks[2]).toHaveClass("is-continuation");
   });
 
+  test("流程摘要中的段落与乐队跳转分成两行", () => {
+    // 测试点：长流程的页内跳转按段落与出演乐队分层，避免两类定位入口挤在同一行。
+    const baseRow = makeDetail().detail_rows[0];
+    const detail = makeDetail({
+      detail_rows: [
+        ...Array.from({ length: 19 }, (_, index) => ({
+          ...baseRow,
+          row_id: `M${index + 1}`,
+          absolute_order: index + 1,
+          sub_order: index + 1,
+          song_name: `Main Song ${index + 1}`,
+        })),
+        { ...baseRow, row_id: "OP20", absolute_order: 20, sub_order: 20, segment_type: "OP", song_name: "Opening Song" },
+        { ...baseRow, row_id: "EN21", absolute_order: 21, sub_order: 21, segment_type: "EN", song_name: "Encore Song" },
+      ],
+    });
+    const { container } = renderStage(detail);
+
+    const jumpRows = container.querySelectorAll(".stage-jump-row");
+    expect(jumpRows).toHaveLength(2);
+    expect(jumpRows[0]).toHaveTextContent("Opening Act");
+    expect(jumpRows[1]).toHaveTextContent("Poppin'Party");
+  });
+
   test("Event 先呈现出席阵容，不伪造空歌单", async () => {
     // 测试点：Event 路径优先呈现 attendees，只有存在曲目时才展示流程区。
     const user = userEvent.setup();
@@ -197,21 +226,35 @@ describe("StageLedgerContent", () => {
     expect(screen.getByText("已记录成员：Yukina")).toBeInTheDocument();
   });
 
-  test("直接打开曲目 hash 会在详情加载后展开对应曲目", async () => {
-    // 测试点：可分享的 #track-* 深链在首轮加载态不会被清掉，数据确认后应恢复目标曲目。
+  test("曲目详情不写入 history，关闭后只恢复触发按钮焦点", async () => {
+    // 测试点：曲目详情属于当前页面内的瞬时状态，不新增浏览器历史，关闭后把焦点还给原曲目。
+    const user = userEvent.setup();
     const previousUrl = window.location.href;
-    window.history.replaceState(null, "", "/lives/77#track-M1");
+    renderStage(makeDetail());
 
-    try {
-      renderStage(makeDetail());
+    const trigger = screen.getByRole("button", { name: /Song One/ });
+    await user.click(trigger);
+    expect(window.location.href).toBe(previousUrl);
+    expect(window.history.state).not.toMatchObject({ stageOverlay: "track" });
 
-      await waitFor(() => {
-        expect(screen.getByRole("button", { name: /Song One/ })).toHaveAttribute("aria-expanded", "true");
-      });
-      expect(window.location.hash).toBe("#track-M1");
-    } finally {
-      window.history.replaceState(null, "", previousUrl);
-    }
+    await user.click(screen.getAllByRole("button", { name: "关闭歌曲详情" })[0]);
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Song One" })).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+  });
+
+  test("关闭演出资料时直接退出详情，不先关闭摘要卡片", async () => {
+    // 测试点：页面级关闭动作应清理摘要状态并直接交给上层返回，不能让用户重复点击。
+    const user = userEvent.setup();
+    const onBack = vi.fn();
+    renderStage(makeDetail(), { onBack });
+
+    await user.click(screen.getByRole("button", { name: "打开演出流程摘要" }));
+    expect(screen.getByText("TRACKS")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "关闭演出资料" }));
+    await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("TRACKS")).not.toBeInTheDocument();
+    expect(window.location.hash).toBe("");
   });
 
   test("取消状态隐藏收藏和歌单，并保留状态说明", () => {
