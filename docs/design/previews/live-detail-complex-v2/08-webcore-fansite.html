@@ -29,6 +29,11 @@
     .event p { margin:.5rem 0; line-height:1.6; }
     .date { display:grid; place-items:center; min-height:135px; border:3px double var(--pink); color:var(--pink); text-align:center; font-family:Impact,"Arial Black",sans-serif; font-size:2rem; background:#241447; }
     .ticker { margin:1rem 0; padding:.5rem; border:2px dashed var(--pink); color:var(--yellow); text-align:center; }
+    .signal-path { position:relative; padding-left:6.2rem; }
+    .signal-path::before { position:absolute; top:.35rem; bottom:.35rem; left:3.15rem; width:5px; content:""; background:var(--cyan); box-shadow:2px 0 0 #315680; }
+    .signal-step { position:relative; }
+    .signal-step::before { position:absolute; z-index:2; top:.65rem; left:-3.55rem; width:15px; height:15px; content:""; border:3px solid var(--night); background:var(--yellow); box-shadow:0 0 0 2px var(--cyan); }
+    .signal-step::after { position:absolute; top:.78rem; left:-6.2rem; width:2rem; content:attr(data-signal); color:var(--pink); font-size:.65rem; font-weight:700; text-align:right; }
     .setgrid { display:grid; grid-template-columns:1fr 1fr; gap:.7rem; }
     .song { display:grid; grid-template-columns:42px 1fr; min-height:56px; border:2px solid #40598b; background:#172957; }
     .song b { display:grid; place-items:center; color:var(--night); background:var(--pink); }
@@ -47,6 +52,10 @@
       .sidebar { order:2; }
       .date { min-height:90px; }
       .banner h1 { font-size:2.6rem; }
+      .signal-path { padding-left:3.5rem; }
+      .signal-path::before { left:1.2rem; }
+      .signal-step::before { left:-2.65rem; }
+      .signal-step::after { top:1.7rem; left:-3.45rem; transform:rotate(-90deg); }
     }
   </style>
 </head>
@@ -59,13 +68,13 @@
         <section class="box"><h2 class="box-title">☆ MENU ☆</h2><div class="box-body"><nav><a href="#info">LIVE INFO</a><a href="#setlist">SETLIST</a><a href="#encore">ENCORE</a><a href="./index.html">BACK TO INDEX</a></nav></div></section>
         <section class="box" style="margin-top:1rem"><h2 class="box-title">NOW PLAYING</h2><div class="box-body"><p class="blink">♪ Roselia ♪</p><p>FRONTIER FANTASIA</p><span class="counter">000014</span><br /><small>songs archived</small></div></section>
       </aside>
-      <main>
-        <section class="box" id="info"><h2 class="box-title">★ LIVE REPORT ★</h2><div class="box-body event"><div><h2>Roselia ASIA TOUR<br />「Neuweltfahrt」</h2><p><b>VENUE:</b> 東京ガーデンシアター</p><p><b>DOORS:</b> 16:30　<b>START:</b> 18:00 JP</p><p><b>PERFORMER:</b> Roselia</p></div><time class="date" datetime="2026-02-15">2026<br />02.15</time></div></section>
-        <p class="ticker">DAY2 opening act: 奈良育英高等学校 軽音楽部 at about 17:30</p>
-        <section class="box" id="setlist"><h2 class="box-title">♪ MAIN PROGRAM / 12 SONGS ♪</h2><div class="box-body setgrid">
+      <main class="signal-path">
+        <section class="box signal-step" data-signal="16:30" id="info"><h2 class="box-title">★ LIVE REPORT ★</h2><div class="box-body event"><div><h2>Roselia ASIA TOUR<br />「Neuweltfahrt」</h2><p><b>VENUE:</b> 東京ガーデンシアター</p><p><b>DOORS:</b> 16:30　<b>START:</b> 18:00 JP</p><p><b>PERFORMER:</b> Roselia</p></div><time class="date" datetime="2026-02-15">2026<br />02.15</time></div></section>
+        <p class="ticker signal-step" data-signal="17:30">DAY2 opening act: 奈良育英高等学校 軽音楽部 at about 17:30</p>
+        <section class="box signal-step" data-signal="18:00" id="setlist"><h2 class="box-title">♪ MAIN PROGRAM / 12 SONGS ♪</h2><div class="box-body setgrid">
           <div class="song"><b>M1</b><span>FRONTIER FANTASIA</span></div><div class="song"><b>M2</b><span>BLACK SHOUT</span></div><div class="song"><b>M3</b><span>Determination Symphony</span></div><div class="song"><b>M4</b><span>紫炎</span></div><div class="song"><b>M5</b><span>R</span></div><div class="song"><b>M6</b><span>ZEAL of proud</span></div><div class="song"><b>M7</b><span>Ringing Bloom</span></div><div class="song"><b>M8</b><span>陽だまりロードナイト</span></div><div class="song"><b>M9</b><span>軌跡</span></div><div class="song"><b>M10</b><span>Song I am.</span></div><div class="song"><b>M11</b><span>Steadfast Spirits</span></div><div class="song"><b>M12</b><span>Neo-Aspect</span></div>
         </div></section>
-        <section class="box encore" id="encore"><h2 class="box-title">♥ ENCORE ♥</h2><div class="box-body"><ul><li>EN1 FIRE BIRD</li><li>EN2 PASSIONATE ANTHEM</li></ul></div></section>
+        <section class="box encore signal-step" data-signal="EN" id="encore"><h2 class="box-title">♥ ENCORE ♥</h2><div class="box-body"><ul><li>EN1 FIRE BIRD</li><li>EN2 PASSIONATE ANTHEM</li></ul></div></section>
         <div class="button-wall" aria-label="页面标签"><span>ROSELIA FAN</span><span>HTML FOREVER</span><span>LIVE ARCHIVE</span><span>NO COOKIES</span></div>
       </main>
     </div>
