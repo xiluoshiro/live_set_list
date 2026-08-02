@@ -11,7 +11,6 @@ import type {
 import { ExternalLinkIcon } from "./ActionIcons";
 import { getBandRepresentativeColor } from "./BandIconsCell";
 import { Collapsible } from "./ui/Collapsible";
-import { Popover } from "./ui/Popover";
 import { formatLiveType } from "./console/constants";
 import { getLiveStatusPresentation } from "../liveStatus";
 
@@ -53,6 +52,7 @@ type StageRow = LiveDetailRow & {
 
 type StageSegment = {
   code: string;
+  key: string;
   rows: StageRow[];
 };
 
@@ -71,12 +71,46 @@ const SEGMENT_LABELS: Record<string, string> = {
   RH: "Rehearsal",
 };
 
+const SEGMENT_ALIASES: Record<string, string> = {
+  main: "M",
+  opening: "OP",
+  encore: "EN",
+  "w encore": "WEN",
+  wencore: "WEN",
+  rehearsal: "RH",
+};
+
 const EXTRA_CATEGORY_LABELS: Record<string, string> = {
   former: "前成员",
   incoming: "新成员",
   guest: "嘉宾",
   support: "支援",
 };
+
+const TIMEZONE_CODES: Record<string, string> = {
+  "+00:00": "UTC",
+  "+07:00": "ICT",
+  "+08:00": "CST",
+  "+09:00": "JST",
+  "+05:30": "IST",
+  "+05:00": "PKT",
+  "+03:00": "MSK",
+  "+02:00": "EET",
+  "+01:00": "CET",
+  "-05:00": "EST",
+  "-06:00": "CDT",
+  "-07:00": "MST",
+  "-08:00": "PST",
+  "-09:00": "AKST",
+  "-10:00": "HST",
+  "+11:00": "AEDT",
+  "+12:00": "NZST",
+};
+
+function canonicalSegmentType(value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, " ");
+  return SEGMENT_ALIASES[normalized] ?? normalized.toUpperCase();
+}
 
 function formatTimedLabel(value: string | null | undefined): string {
   const raw = value?.trim();
@@ -86,8 +120,7 @@ function formatTimedLabel(value: string | null | undefined): string {
   const [, timePart, offsetHour, offsetMinute] = match;
   if (!offsetHour) return timePart;
   const normalizedOffset = `${offsetHour}:${offsetMinute ?? "00"}`;
-  const timezoneLabelMap: Record<string, string> = { "+08:00": "CN", "+09:00": "JP" };
-  return `${timePart} (${timezoneLabelMap[normalizedOffset] ?? `UTC${normalizedOffset}`})`;
+  return `${timePart} (${TIMEZONE_CODES[normalizedOffset] ?? `UTC${normalizedOffset}`})`;
 }
 
 function getCanonicalPath(liveId: number): string {
@@ -99,11 +132,10 @@ function getCanonicalUrl(liveId: number): string {
   return `${window.location.origin}${getCanonicalPath(liveId)}`;
 }
 
-function parseRowPosition(rowId: string): { absoluteOrder: number; segmentType: string; subOrder: number } {
+function parseRowPosition(rowId: string): { segmentType: string; subOrder: number } {
   const match = rowId.match(/^([A-Za-z]+)(\d+)$/);
-  if (!match) return { absoluteOrder: 1, segmentType: rowId || "M", subOrder: 1 };
-  const subOrder = Number(match[2]);
-  return { absoluteOrder: subOrder, segmentType: match[1], subOrder };
+  if (!match) return { segmentType: rowId || "M", subOrder: 1 };
+  return { segmentType: match[1], subOrder: Number(match[2]) };
 }
 
 function normalizeRows(rows: LiveDetailRow[] | undefined): StageRow[] {
@@ -114,8 +146,8 @@ function normalizeRows(rows: LiveDetailRow[] | undefined): StageRow[] {
       return {
         ...row,
         row_id: rowId,
-        absolute_order: row.absolute_order ?? (fallback.absoluteOrder > 0 ? fallback.absoluteOrder : index + 1),
-        segment_type: row.segment_type ?? fallback.segmentType,
+        absolute_order: row.absolute_order ?? index + 1,
+        segment_type: canonicalSegmentType(row.segment_type ?? fallback.segmentType),
         sub_order: row.sub_order ?? fallback.subOrder,
         song_id: row.song_id ?? index + 1,
         band_members: Array.isArray(row.band_members) ? row.band_members : [],
@@ -147,12 +179,15 @@ function uniqueBandMembers(members: LiveDetailBandMember[]): LiveDetailBandMembe
 
 function buildSegments(rows: StageRow[]): StageSegment[] {
   const segments: StageSegment[] = [];
+  const occurrences = new Map<string, number>();
   rows.forEach((row) => {
     const current = segments[segments.length - 1];
     if (current?.code === row.segment_type) {
       current.rows.push(row);
     } else {
-      segments.push({ code: row.segment_type, rows: [row] });
+      const occurrence = (occurrences.get(row.segment_type) ?? 0) + 1;
+      occurrences.set(row.segment_type, occurrence);
+      segments.push({ code: row.segment_type, key: `${row.segment_type}-${occurrence}`, rows: [row] });
     }
   });
   return segments;
@@ -195,6 +230,10 @@ function attendanceText(member: LiveDetailBandMember): string {
   if (status === "full_plus") return `全员 ${expected}/${expected}，特别出演 ${extras} 人`;
   if (status === "full") return `全员 ${expected}/${expected}`;
   return `部分成员 ${present}/${expected}`;
+}
+
+function formatTrackComment(comment: string, coverBand: LiveDetailRow["cover_band"]): string {
+  return comment === "翻唱" && coverBand ? `翻唱自 ${coverBand.band_name}` : comment;
 }
 
 function formatScheduleHistoryParts(
@@ -267,78 +306,6 @@ function BandNameList({
   );
 }
 
-function StageSummary({
-  detail,
-  rows,
-  open,
-  onOpenChange,
-}: {
-  detail: LiveDetailResponse;
-  rows: StageRow[];
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const isEvent = detail.live_type === "event";
-  const isCancelled = detail.event_status === "cancelled";
-  const actCount = new Set(
-    rows.flatMap((row) => row.band_members.map((member) => getBandKey(member))),
-  ).size || detail.band_names.length;
-  const segmentCount = new Set(rows.map((row) => row.segment_type)).size;
-  const cells = isCancelled
-    ? [
-        { value: "已取消", label: "当前状态" },
-        { value: "未形成", label: "演出流程" },
-        { value: "可用", label: "官方资料" },
-      ]
-    : isEvent
-      ? [
-          { value: String(detail.event_attendees.length || detail.band_names.length), label: "BANDS" },
-          { value: detail.event_attendees.length > 0 ? "已记录" : "暂无记录", label: "出席阵容" },
-          { value: rows.length > 0 ? String(rows.length) : "暂无", label: "演出曲目" },
-        ]
-      : [
-          { value: String(rows.length), label: "TRACKS" },
-          { value: String(actCount), label: "ACTS" },
-          { value: String(segmentCount), label: "段落" },
-        ];
-  return (
-    <Popover.Root open={open} onOpenChange={onOpenChange}>
-      <Popover.Trigger asChild>
-        <button type="button" className="stage-summary-trigger" aria-expanded={open} aria-label="打开演出流程摘要">
-          <span>摘要</span>
-          <span aria-hidden="true">{open ? "收起" : "展开"}</span>
-        </button>
-      </Popover.Trigger>
-      <Popover.Content
-        className="stage-summary-popover"
-        sideOffset={10}
-        align="end"
-        onPointerDownOutside={(event) => event.preventDefault()}
-        onFocusOutside={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
-      >
-        <div className="stage-summary-popover-head">
-          <div>
-            <span className="stage-summary-popover-kicker">演出流程</span>
-            <strong>摘要</strong>
-          </div>
-          <Popover.Close asChild>
-            <button type="button" className="stage-iconless-button" aria-label="关闭摘要">关闭</button>
-          </Popover.Close>
-        </div>
-        <div className="stage-summary-ruler" aria-label="演出流程摘要">
-          {cells.map((cell) => (
-            <div key={cell.label} className="stage-summary-cell">
-              <strong>{cell.value}</strong>
-              <span>{cell.label}</span>
-            </div>
-          ))}
-        </div>
-      </Popover.Content>
-    </Popover.Root>
-  );
-}
-
 function StageTrackInspector({ row, onClose }: { row: StageRow; onClose?: () => void }) {
   return (
     <div className="stage-inspector-body">
@@ -393,7 +360,7 @@ function StageTrackInspector({ row, onClose }: { row: StageRow; onClose?: () => 
             <h4>资料标记</h4>
             <ul className="stage-detail-list">
               {row.comments.map((comment) => (
-                <li key={comment}>{comment === "翻唱" && row.cover_band ? `翻唱自 ${row.cover_band.band_name}` : comment}</li>
+                <li key={comment}>{formatTrackComment(comment, row.cover_band)}</li>
               ))}
               {row.other_members.map((other) => (
                 <li key={other.key}>{other.key}：{other.value.join(" / ") || "未记录"}</li>
@@ -410,7 +377,7 @@ function StageColorRail({ bands }: { bands: LiveDetailBandMember[] }) {
   const colors = uniqueBandMembers(bands);
   return (
     <span className="stage-color-rail" aria-hidden="true">
-      {(colors.length > 0 ? colors : [{ band_id: null, band_name: "未记录" }]).map((band, index) => (
+      {(colors.length > 0 ? colors : [{ band_id: null, band_name: "出演关系未记录" }]).map((band, index) => (
         <span key={`${getBandKey(band)}-${index}`} style={{ backgroundColor: colors.length > 0 ? getBandColor(band) : "var(--stage-rail-neutral)" }} />
       ))}
     </span>
@@ -439,9 +406,9 @@ function StageFlow({
   return (
     <div className="stage-flow-list">
       {segments.map((segment) => (
-        <section key={segment.code} className="stage-segment" aria-labelledby={`stage-segment-${segment.code}`}>
+        <section key={segment.key} className="stage-segment" aria-labelledby={`stage-segment-${segment.key}`}>
           <header className="stage-segment-heading">
-            <h3 id={`stage-segment-${segment.code}`} tabIndex={-1}>{segmentLabel(segment.code)}</h3>
+            <h3 id={`stage-segment-${segment.key}`} tabIndex={-1}>{segmentLabel(segment.code)}</h3>
             <span>{segment.code}</span>
           </header>
           {buildActBlocks(segment.rows).map((block, blockIndex) => {
@@ -460,7 +427,7 @@ function StageFlow({
             >
               <StageColorRail bands={block.bands} />
               <div className="stage-act-heading">
-                <span>{block.bands.length > 0 ? block.bands.map((band) => band.band_name).join(" × ") : "出演关系未记录"}</span>
+                <h4>{block.bands.length > 0 ? block.bands.map((band) => band.band_name).join(" × ") : "出演关系未记录"}</h4>
               </div>
               <ol className="stage-track-list" start={block.rows[0]?.absolute_order ?? 1}>
                 {block.rows.map((row) => {
@@ -495,7 +462,7 @@ function StageFlow({
                               <strong>{row.song_name}</strong>
                             </span>
                             {row.comments.length > 0 && (
-                              <span className="stage-track-meta">{row.comments.join(" / ")}</span>
+                              <span className="stage-track-meta">{row.comments.map((comment) => formatTrackComment(comment, row.cover_band)).join(" / ")}</span>
                             )}
                           </button>
                         </Collapsible.Trigger>
@@ -638,9 +605,6 @@ function StageSkeleton({ fallback }: { fallback: LiveDetailFallback }) {
             <span className="stage-skeleton-line" />
           </div>
         </header>
-        <div className="stage-summary-ruler stage-skeleton-summary">
-          <span /><span /><span /><span />
-        </div>
         <div className="stage-skeleton-content">
           <span /><span /><span /><span />
         </div>
@@ -690,7 +654,6 @@ export function StageLedgerContent({
   const rows = useMemo(() => normalizeRows(detailData?.detail_rows), [detailData?.detail_rows]);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [mobileExpandedTrackId, setMobileExpandedTrackId] = useState<string | null>(null);
-  const [summaryOpen, setSummaryOpen] = useState(false);
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const selectedTrackIdRef = useRef<string | null>(null);
   selectedTrackIdRef.current = selectedTrackId;
@@ -718,16 +681,7 @@ export function StageLedgerContent({
     setMobileExpandedTrackId(trackId);
   }, []);
 
-  const openSummary = useCallback(() => {
-    setSummaryOpen(true);
-  }, []);
-
-  const closeSummary = useCallback(() => {
-    setSummaryOpen(false);
-  }, []);
-
   const closeArchive = useCallback(() => {
-    setSummaryOpen(false);
     onBack?.();
   }, [onBack]);
 
@@ -823,7 +777,7 @@ export function StageLedgerContent({
   const showStageActions = Boolean(detailUrl || showFavoriteAction || (!embedded && onBack));
   const showMobileActionBar = showFavoriteAction;
   const jumpSegments = buildSegments(visibleRows);
-  const jumpBands = uniqueBandMembers(visibleRows.flatMap((row) => row.band_members)).slice(0, 10);
+  const jumpBands = uniqueBandMembers(visibleRows.flatMap((row) => row.band_members));
   const titleId = `stage-ledger-title-${detailData.live_id}`;
   const structuredData = buildStructuredData(detailData);
 
@@ -843,7 +797,7 @@ export function StageLedgerContent({
             </div>
             {detailData.status_note && (
               <p className="stage-status-note" role="note">
-                {detailData.event_status === "cancelled" ? "取消说明" : "延期说明"}：{detailData.status_note}
+                {detailData.event_status === "cancelled" ? "取消说明" : detailData.event_status === "postponed" ? "延期说明" : "备注"}：{detailData.status_note}
               </p>
             )}
           </div>
@@ -904,12 +858,6 @@ export function StageLedgerContent({
             {showAttendance && <a href="#stage-attendance" onClick={(event) => focusAnchor(event, "stage-attendance")}>出演阵容</a>}
             {hasRelated && <a href="#stage-related" onClick={(event) => focusAnchor(event, "stage-related")}>关联档案</a>}
           </nav>
-          <StageSummary
-            detail={detailData}
-            rows={visibleRows}
-            open={summaryOpen}
-            onOpenChange={(open) => (open ? openSummary() : closeSummary())}
-          />
         </div>
 
         {detailError && detailData && (
@@ -950,7 +898,7 @@ export function StageLedgerContent({
                     <nav className="stage-jump-nav" aria-label="演出流程跳转">
                       <div className="stage-jump-row stage-jump-segment-row">
                         {jumpSegments.map((segment) => (
-                          <a key={segment.code} href={`#stage-segment-${segment.code}`} onClick={(event) => focusAnchor(event, `stage-segment-${segment.code}`)}>{segmentLabel(segment.code)}</a>
+                          <a key={segment.key} href={`#stage-segment-${segment.key}`} onClick={(event) => focusAnchor(event, `stage-segment-${segment.key}`)}>{segmentLabel(segment.code)}</a>
                         ))}
                       </div>
                       {jumpBands.length > 0 && (

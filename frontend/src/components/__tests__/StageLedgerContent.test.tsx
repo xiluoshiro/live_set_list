@@ -112,7 +112,7 @@ describe("StageLedgerContent", () => {
     expect(screen.queryByText("逐曲检查器")).not.toBeInTheDocument();
     expect(screen.queryByText("按原始段落和绝对顺序排列，实际出演关系在曲目中展开。")).not.toBeInTheDocument();
     expect(screen.queryByText("查看")).not.toBeInTheDocument();
-    expect(container.querySelector(".stage-summary-ruler")).toBeNull();
+    expect(container.querySelector(".stage-summary-trigger")).toBeNull();
     expect(document.title).toBe("Stage Ledger Live · LiveSetList");
     expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toContain("日本武道館");
 
@@ -141,25 +141,6 @@ describe("StageLedgerContent", () => {
 
     const structuredData = JSON.parse(container.querySelector("script[data-stage-ledger-jsonld]")?.textContent ?? "{}");
     expect(structuredData.url).toMatch(/\/lives\/77$/);
-  });
-
-  test("摘要用弹出卡片承载，但不写入浏览器 history", async () => {
-    // 测试点：演出摘要是详情页内的瞬时状态，打开和关闭都不改变地址或浏览器 history。
-    const user = userEvent.setup();
-    const previousUrl = window.location.href;
-    const previousState = window.history.state;
-    renderStage(makeDetail());
-
-    await user.click(screen.getByRole("button", { name: "打开演出流程摘要" }));
-    expect(screen.getByText("TRACKS")).toBeInTheDocument();
-    expect(window.location.href).toBe(previousUrl);
-    expect(window.history.state).toBe(previousState);
-
-    await user.click(screen.getByRole("button", { name: "关闭摘要" }));
-    await waitFor(() => expect(screen.queryByText("TRACKS")).not.toBeInTheDocument());
-    expect(screen.getByRole("heading", { name: "演出流程" })).toBeInTheDocument();
-    expect(window.location.href).toBe(previousUrl);
-    expect(window.history.state).toBe(previousState);
   });
 
   test("保留共同出演的时间轴连续性", () => {
@@ -246,18 +227,14 @@ describe("StageLedgerContent", () => {
     expect(trigger).toHaveFocus();
   });
 
-  test("关闭演出资料时直接退出详情，不先关闭摘要卡片", async () => {
-    // 测试点：页面级关闭动作应清理无 history 的摘要状态并直接交给上层返回，不能让用户重复点击。
+  test("关闭演出资料时直接退出详情，不写入浏览器 history", async () => {
+    // 测试点：页面级关闭动作应直接交给上层返回，不新增浏览器历史记录。
     const user = userEvent.setup();
     const onBack = vi.fn();
     renderStage(makeDetail(), { onBack });
 
-    await user.click(screen.getByRole("button", { name: "打开演出流程摘要" }));
-    expect(screen.getByText("TRACKS")).toBeInTheDocument();
-
     await user.click(screen.getByRole("button", { name: "关闭演出资料" }));
     await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText("TRACKS")).not.toBeInTheDocument();
     expect(window.location.hash).toBe("");
   });
 
