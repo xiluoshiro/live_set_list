@@ -8,9 +8,9 @@ import type {
   PerformanceGroupRef,
   TourRef,
 } from "../api";
+import { ExternalLinkIcon } from "./ActionIcons";
 import { getBandRepresentativeColor } from "./BandIconsCell";
 import { Collapsible } from "./ui/Collapsible";
-import { DropdownMenu } from "./ui/DropdownMenu";
 import { Popover } from "./ui/Popover";
 import { formatLiveType } from "./console/constants";
 import { getLiveStatusPresentation } from "../liveStatus";
@@ -60,6 +60,13 @@ type StageActBlock = {
   key: string;
   rows: StageRow[];
   bands: LiveDetailBandMember[];
+  continuesPrevious: boolean;
+};
+
+type StageHistoryState = {
+  stageOverlay?: "summary" | "track";
+  stageTrackId?: string;
+  stageAnchor?: string;
 };
 
 const SEGMENT_LABELS: Record<string, string> = {
@@ -167,9 +174,39 @@ function buildActBlocks(rows: StageRow[]): StageActBlock[] {
       previous.rows.push(row);
       return;
     }
-    blocks.push({ key, rows: [row], bands });
+    const continuesPrevious = Boolean(
+      previous
+      && bands.length > 0
+      && previous.bands.some((previousBand) => bands.some((band) => getBandKey(previousBand) === getBandKey(band))),
+    );
+    blocks.push({ key, rows: [row], bands, continuesPrevious });
   });
   return blocks;
+}
+
+function readStageHistoryState(value: unknown): StageHistoryState {
+  if (!value || typeof value !== "object") return {};
+  const candidate = value as Partial<StageHistoryState>;
+  return {
+    stageOverlay: candidate.stageOverlay === "summary" || candidate.stageOverlay === "track"
+      ? candidate.stageOverlay
+      : undefined,
+    stageTrackId: typeof candidate.stageTrackId === "string" ? candidate.stageTrackId : undefined,
+    stageAnchor: typeof candidate.stageAnchor === "string" ? candidate.stageAnchor : undefined,
+  };
+}
+
+function getTrackIdFromHash(hash: string): string | null {
+  const match = hash.match(/^#track-(.+)$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getStageHistoryHash(state: StageHistoryState): string {
+  if (state.stageOverlay === "summary") return "#stage-summary";
+  if (state.stageOverlay === "track" && state.stageTrackId) {
+    return `#track-${encodeURIComponent(state.stageTrackId)}`;
+  }
+  return state.stageAnchor ? `#${state.stageAnchor}` : "";
 }
 
 function segmentLabel(code: string): string {
@@ -261,14 +298,23 @@ function BandNameList({
   );
 }
 
-function StageSummary({ detail, rows }: { detail: LiveDetailResponse; rows: StageRow[] }) {
+function StageSummary({
+  detail,
+  rows,
+  open,
+  onOpenChange,
+}: {
+  detail: LiveDetailResponse;
+  rows: StageRow[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const isEvent = detail.live_type === "event";
   const isCancelled = detail.event_status === "cancelled";
   const actCount = new Set(
     rows.flatMap((row) => row.band_members.map((member) => getBandKey(member))),
   ).size || detail.band_names.length;
   const segmentCount = new Set(rows.map((row) => row.segment_type)).size;
-  const hasPerTrackAttendance = rows.some((row) => row.band_members.length > 0);
   const cells = isCancelled
     ? [
         { value: "已取消", label: "当前状态" },
@@ -285,17 +331,35 @@ function StageSummary({ detail, rows }: { detail: LiveDetailResponse; rows: Stag
           { value: String(rows.length), label: "TRACKS" },
           { value: String(actCount), label: "ACTS" },
           { value: String(segmentCount), label: "段落" },
-          { value: hasPerTrackAttendance ? "已记录" : "未记录", label: "逐曲出演" },
         ];
   return (
-    <section className="stage-summary-ruler" aria-label="档案摘要">
-      {cells.map((cell) => (
-        <div key={cell.label} className="stage-summary-cell">
-          <strong>{cell.value}</strong>
-          <span>{cell.label}</span>
+    <Popover.Root open={open} onOpenChange={onOpenChange}>
+      <Popover.Trigger asChild>
+        <button type="button" className="stage-summary-trigger" aria-expanded={open} aria-label="打开演出流程摘要">
+          <span>摘要</span>
+          <span aria-hidden="true">{open ? "收起" : "展开"}</span>
+        </button>
+      </Popover.Trigger>
+      <Popover.Content className="stage-summary-popover" sideOffset={10} align="end">
+        <div className="stage-summary-popover-head">
+          <div>
+            <span className="stage-summary-popover-kicker">演出流程</span>
+            <strong>摘要</strong>
+          </div>
+          <Popover.Close asChild>
+            <button type="button" className="stage-iconless-button" aria-label="关闭摘要">关闭</button>
+          </Popover.Close>
         </div>
-      ))}
-    </section>
+        <div className="stage-summary-ruler" aria-label="演出流程摘要">
+          {cells.map((cell) => (
+            <div key={cell.label} className="stage-summary-cell">
+              <strong>{cell.value}</strong>
+              <span>{cell.label}</span>
+            </div>
+          ))}
+        </div>
+      </Popover.Content>
+    </Popover.Root>
   );
 }
 
@@ -308,7 +372,7 @@ function StageTrackInspector({ row, onClose }: { row: StageRow; onClose?: () => 
           <h3>{row.song_name}</h3>
         </div>
         {onClose && (
-          <button type="button" className="stage-iconless-button" onClick={onClose} aria-label="关闭逐曲检查器">
+          <button type="button" className="stage-iconless-button" onClick={onClose} aria-label="关闭歌曲详情">
             关闭
           </button>
         )}
@@ -317,7 +381,7 @@ function StageTrackInspector({ row, onClose }: { row: StageRow; onClose?: () => 
         <div className="stage-inspector-group">
           <h4>实际出演</h4>
           {row.band_members.length === 0 ? (
-            <p className="stage-muted">本曲暂无版本化出演记录。</p>
+            <p className="stage-muted">本曲暂无出演记录。</p>
           ) : (
             <ul className="stage-member-list">
               {row.band_members.map((member) => (
@@ -329,12 +393,6 @@ function StageTrackInspector({ row, onClose }: { row: StageRow; onClose?: () => 
                       {attendanceText(member)}
                     </span>
                   </div>
-                  {member.lineup_version && (
-                    <p>
-                      阵容版本：{member.lineup_version.version_label}
-                      {member.next_lineup_version && ` 至 ${member.next_lineup_version.version_label}`}
-                    </p>
-                  )}
                   {member.lineup_usage === "handover" && (
                     <p>
                       交接共演，正式满员基准：{member.handover_baseline === "next" ? "新阵容" : member.handover_baseline === "base" ? "旧阵容" : "阵容基准未知"}
@@ -386,16 +444,18 @@ function StageColorRail({ bands }: { bands: LiveDetailBandMember[] }) {
 function StageFlow({
   rows,
   selectedTrackId,
-  setSelectedTrackId,
   mobileExpandedTrackId,
   setMobileExpandedTrackId,
+  onOpenTrack,
+  onCloseTrack,
   triggerRefs,
 }: {
   rows: StageRow[];
   selectedTrackId: string | null;
-  setSelectedTrackId: (value: string | null) => void;
   mobileExpandedTrackId: string | null;
   setMobileExpandedTrackId: (value: string | null) => void;
+  onOpenTrack: (value: string) => void;
+  onCloseTrack: () => void;
   triggerRefs: MutableRefObject<Record<string, HTMLButtonElement | null>>;
 }) {
   const segments = buildSegments(rows);
@@ -416,7 +476,12 @@ function StageFlow({
               : undefined;
             if (bandKey) bandAnchors.add(bandKey);
             return (
-            <div id={bandAnchor} tabIndex={bandAnchor ? -1 : undefined} key={`${segment.code}-${block.key}-${blockIndex}`} className="stage-act-block">
+            <div
+              id={bandAnchor}
+              tabIndex={bandAnchor ? -1 : undefined}
+              key={`${segment.code}-${block.key}-${blockIndex}`}
+              className={`stage-act-block${block.continuesPrevious ? " is-continuation" : ""}`}
+            >
               <StageColorRail bands={block.bands} />
               <div className="stage-act-heading">
                 <span>{block.bands.length > 0 ? block.bands.map((band) => band.band_name).join(" × ") : "出演关系未记录"}</span>
@@ -430,7 +495,14 @@ function StageFlow({
                     <li key={row.row_id} className={`stage-track-item${isSelected ? " is-selected" : ""}`}>
                       <Collapsible.Root
                         open={isMobileExpanded}
-                        onOpenChange={(open) => setMobileExpandedTrackId(open ? row.row_id : null)}
+                        onOpenChange={(open) => {
+                          setMobileExpandedTrackId(open ? row.row_id : null);
+                          if (open) {
+                            onOpenTrack(row.row_id);
+                          } else if (selectedTrackId === row.row_id) {
+                            onCloseTrack();
+                          }
+                        }}
                       >
                         <Collapsible.Trigger asChild>
                           <button
@@ -441,23 +513,18 @@ function StageFlow({
                             className="stage-track-trigger"
                             aria-expanded={isMobileExpanded}
                             aria-controls={inlineInspectorId}
-                            onClick={() => setSelectedTrackId(row.row_id)}
                           >
                             <span className="stage-track-number">{String(row.absolute_order).padStart(2, "0")}</span>
                             <span className="stage-track-copy">
                               <strong>{row.song_name}</strong>
-                              {row.band_members.length > 0 && (
-                                <span>{row.band_members.map((band) => band.band_name).join(" × ")}</span>
-                              )}
                             </span>
-                            <span className="stage-track-meta">
-                              {row.comments.length > 0 && <span>{row.comments.join(" / ")}</span>}
-                              <span aria-hidden="true">{isMobileExpanded ? "收起" : "查看"}</span>
-                            </span>
+                            {row.comments.length > 0 && (
+                              <span className="stage-track-meta">{row.comments.join(" / ")}</span>
+                            )}
                           </button>
                         </Collapsible.Trigger>
                         <Collapsible.Content id={inlineInspectorId} className="stage-inline-inspector">
-                          <StageTrackInspector row={row} />
+                          <StageTrackInspector row={row} onClose={onCloseTrack} />
                         </Collapsible.Content>
                       </Collapsible.Root>
                     </li>
@@ -505,42 +572,6 @@ function EventAttendees({ attendees }: { attendees: LiveDetailEventAttendee[] })
             </li>
           );
         })}
-      </ul>
-    </section>
-  );
-}
-
-function LineupSummary({ rows }: { rows: StageRow[] }) {
-  const summaries = useMemo(() => {
-    const byBand = new Map<string, { member: LiveDetailBandMember; members: Set<string>; statuses: Set<string> }>();
-    rows.forEach((row) => row.band_members.forEach((member) => {
-      const key = getBandKey(member);
-      const current = byBand.get(key) ?? { member, members: new Set<string>(), statuses: new Set<string>() };
-      member.present_members.forEach((name) => current.members.add(name));
-      current.statuses.add(attendanceStatus(member));
-      byBand.set(key, current);
-    }));
-    return [...byBand.values()];
-  }, [rows]);
-  if (summaries.length === 0) return null;
-  return (
-    <section className="stage-lineup-summary" id="stage-lineup" tabIndex={-1} aria-labelledby="stage-lineup-title">
-      <div className="stage-section-heading">
-        <div>
-          <h2 id="stage-lineup-title">阵容摘要</h2>
-          <p>摘要只汇总逐曲出演记录，具体交接和缺席成员请查看曲目。</p>
-        </div>
-        <span>{summaries.length} ACTS</span>
-      </div>
-      <ul className="stage-lineup-list">
-        {summaries.map(({ member, members, statuses }) => (
-          <li key={getBandKey(member)}>
-            <span className="stage-band-mark" style={{ backgroundColor: getBandColor(member) }} aria-hidden="true" />
-            <strong>{member.band_name}</strong>
-            <span>{statuses.has("unknown") ? "阵容基准未知" : "逐曲记录"}</span>
-            <span>{members.size > 0 ? `${members.size} 名成员有出演记录` : "成员未记录"}</span>
-          </li>
-        ))}
       </ul>
     </section>
   );
@@ -614,35 +645,6 @@ function RelatedArchives({
   );
 }
 
-function SharePopover({
-  liveId,
-  title,
-  onShare,
-  onCopy,
-}: {
-  liveId: number;
-  title: string;
-  onShare: () => void;
-  onCopy: () => void;
-}) {
-  return (
-    <Popover.Root>
-      <Popover.Trigger asChild>
-        <button type="button" className="stage-action-button stage-share-action">分享</button>
-      </Popover.Trigger>
-      <Popover.Content className="stage-share-popover" sideOffset={8} align="end">
-        <span>永久地址</span>
-        <code>{getCanonicalPath(liveId)}</code>
-        <div className="stage-share-actions">
-          <button type="button" className="stage-inline-action" onClick={onShare}>分享</button>
-          <button type="button" className="stage-inline-action" onClick={onCopy}>复制地址</button>
-        </div>
-        <span className="stage-sr-only">{title}</span>
-      </Popover.Content>
-    </Popover.Root>
-  );
-}
-
 function StageSkeleton({ fallback }: { fallback: LiveDetailFallback }) {
   return (
     <div className="stage-ledger-page stage-ledger-loading" data-stage-ledger>
@@ -712,8 +714,10 @@ export function StageLedgerContent({
   const rows = useMemo(() => normalizeRows(detailData?.detail_rows), [detailData?.detail_rows]);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [mobileExpandedTrackId, setMobileExpandedTrackId] = useState<string | null>(null);
-  const [shareMessage, setShareMessage] = useState("");
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const selectedTrackIdRef = useRef<string | null>(null);
+  selectedTrackIdRef.current = selectedTrackId;
   const detailTitle = detailData?.live_title ?? fallback.liveTitle;
   const detailUrl = detailData?.url ?? fallback.url;
   const isCancelled = detailData?.event_status === "cancelled";
@@ -723,35 +727,113 @@ export function StageLedgerContent({
     || (new Set(visibleRows.flatMap((row) => row.band_members.map((member) => getBandKey(member)))).size > 3)
     || (new Set(visibleRows.map((row) => row.segment_type)).size > 2);
 
-  const clearSelection = useCallback(() => {
-    const previousId = selectedTrackId ?? mobileExpandedTrackId;
+  const pushStageHistory = useCallback((next: StageHistoryState) => {
+    const current = window.history.state;
+    const nextState: Record<string, unknown> = current && typeof current === "object"
+      ? { ...(current as Record<string, unknown>) }
+      : {};
+    delete nextState.stageOverlay;
+    delete nextState.stageTrackId;
+    delete nextState.stageAnchor;
+    Object.assign(nextState, next);
+    const hash = getStageHistoryHash(next);
+    window.history.pushState(
+      nextState,
+      "",
+      `${window.location.pathname}${window.location.search}${hash}`,
+    );
+  }, []);
+
+  const clearTrackState = useCallback((focusId = selectedTrackIdRef.current ?? mobileExpandedTrackId) => {
     setSelectedTrackId(null);
     setMobileExpandedTrackId(null);
-    if (previousId) triggerRefs.current[previousId]?.focus();
-  }, [mobileExpandedTrackId, selectedTrackId]);
+    if (focusId) triggerRefs.current[focusId]?.focus();
+  }, [mobileExpandedTrackId]);
+
+  const closeTrack = useCallback(() => {
+    const historyState = readStageHistoryState(window.history.state);
+    if (historyState.stageOverlay === "track") {
+      clearTrackState();
+      window.history.back();
+      return;
+    }
+    if (getTrackIdFromHash(window.location.hash)) {
+      const current = window.history.state;
+      const nextState: Record<string, unknown> = current && typeof current === "object"
+        ? { ...(current as Record<string, unknown>) }
+        : {};
+      delete nextState.stageOverlay;
+      delete nextState.stageTrackId;
+      delete nextState.stageAnchor;
+      window.history.replaceState(nextState, "", `${window.location.pathname}${window.location.search}`);
+    }
+    clearTrackState();
+  }, [clearTrackState]);
+
+  const openTrack = useCallback((trackId: string) => {
+    const historyState = readStageHistoryState(window.history.state);
+    setSelectedTrackId(trackId);
+    setMobileExpandedTrackId(trackId);
+    if (historyState.stageOverlay === "track" && historyState.stageTrackId === trackId) return;
+    pushStageHistory({ stageOverlay: "track", stageTrackId: trackId });
+  }, [pushStageHistory]);
+
+  const openSummary = useCallback(() => {
+    const historyState = readStageHistoryState(window.history.state);
+    setSummaryOpen(true);
+    if (historyState.stageOverlay !== "summary") {
+      pushStageHistory({ stageOverlay: "summary" });
+    }
+  }, [pushStageHistory]);
+
+  const closeSummary = useCallback(() => {
+    const historyState = readStageHistoryState(window.history.state);
+    if (historyState.stageOverlay === "summary") {
+      setSummaryOpen(false);
+      window.history.back();
+      return;
+    }
+    setSummaryOpen(false);
+  }, []);
+
+  const applyStageHistory = useCallback((value: unknown) => {
+    const historyState = readStageHistoryState(value);
+    const hashTrackId = getTrackIdFromHash(window.location.hash);
+    const trackId = historyState.stageOverlay === "track" ? historyState.stageTrackId : hashTrackId;
+    if (trackId && visibleRows.some((row) => row.row_id === trackId)) {
+      setSummaryOpen(false);
+      setSelectedTrackId(trackId);
+      setMobileExpandedTrackId(trackId);
+      return;
+    }
+    const wasTrackOpen = selectedTrackIdRef.current !== null || mobileExpandedTrackId !== null;
+    setSummaryOpen(historyState.stageOverlay === "summary" || window.location.hash === "#stage-summary");
+    setSelectedTrackId(null);
+    setMobileExpandedTrackId(null);
+    if (wasTrackOpen) {
+      const previousId = selectedTrackIdRef.current ?? mobileExpandedTrackId;
+      if (previousId) triggerRefs.current[previousId]?.focus();
+    }
+  }, [mobileExpandedTrackId, visibleRows]);
 
   useEffect(() => {
-    const hashId = decodeURIComponent(window.location.hash.replace(/^#track-/, ""));
-    if (hashId && visibleRows.some((row) => row.row_id === hashId)) {
-      setSelectedTrackId(hashId);
-      setMobileExpandedTrackId(hashId);
+    const historyState = readStageHistoryState(window.history.state);
+    const hashTrackId = getTrackIdFromHash(window.location.hash);
+    const trackId = historyState.stageOverlay === "track" ? historyState.stageTrackId : hashTrackId;
+    if (trackId && visibleRows.some((row) => row.row_id === trackId)) {
+      setSelectedTrackId(trackId);
+      setMobileExpandedTrackId(trackId);
+    }
+    if (historyState.stageOverlay === "summary" || window.location.hash === "#stage-summary") {
+      setSummaryOpen(true);
     }
   }, [visibleRows]);
 
   useEffect(() => {
-    if (detailLoading) return;
-    if (!selectedTrackId) {
-      if (window.location.hash.startsWith("#track-")) {
-        window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`);
-      }
-      return;
-    }
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${window.location.pathname}${window.location.search}#track-${encodeURIComponent(selectedTrackId)}`,
-    );
-  }, [detailLoading, selectedTrackId]);
+    const onPopState = (event: PopStateEvent) => applyStageHistory(event.state);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [applyStageHistory]);
 
   useEffect(() => {
     if (embedded || !detailData) return undefined;
@@ -782,58 +864,21 @@ export function StageLedgerContent({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && (selectedTrackId !== null || mobileExpandedTrackId !== null)) {
         event.preventDefault();
-        clearSelection();
+        closeTrack();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [clearSelection, mobileExpandedTrackId, selectedTrackId]);
-
-  const copyPermanentUrl = useCallback(async () => {
-    const url = getCanonicalUrl(detailData?.live_id ?? 0);
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-      } else {
-        const input = document.createElement("textarea");
-        input.value = url;
-        input.setAttribute("readonly", "true");
-        input.style.position = "fixed";
-        input.style.opacity = "0";
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand("copy");
-        input.remove();
-      }
-      setShareMessage("永久地址已复制");
-    } catch {
-      setShareMessage("复制失败，请手动复制地址");
-    }
-  }, [detailData?.live_id]);
-
-  const shareLive = useCallback(async () => {
-    const url = getCanonicalUrl(detailData?.live_id ?? 0);
-    try {
-      if (typeof navigator.share === "function") {
-        await navigator.share({ title: detailTitle, text: detailTitle, url });
-        setShareMessage("已打开分享");
-      } else {
-        await copyPermanentUrl();
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      await copyPermanentUrl();
-    }
-  }, [copyPermanentUrl, detailTitle, detailData?.live_id]);
+  }, [closeTrack, mobileExpandedTrackId, selectedTrackId]);
 
   const focusAnchor = useCallback((event: MouseEvent<HTMLAnchorElement>, targetId: string) => {
     const target = document.getElementById(targetId);
     if (!target) return;
     event.preventDefault();
-    window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}#${targetId}`);
+    pushStageHistory({ stageAnchor: targetId });
     target.focus({ preventScroll: true });
     target.scrollIntoView?.({ behavior: "auto", block: "start" });
-  }, []);
+  }, [pushStageHistory]);
 
   if (detailNotFound) {
     return (
@@ -877,22 +922,44 @@ export function StageLedgerContent({
 
   const showAttendance = detailData.live_type === "event" && detailData.event_attendees.length > 0;
   const showFlow = visibleRows.length > 0;
-  const hasLineupSummary = visibleRows.some((row) => row.band_members.length > 0);
   const hasRelated = Boolean(detailData.tour || detailData.performance_group);
-  const hasSources = Boolean(detailUrl || detailData.schedule_history?.length);
+  const showMobileFavoriteAction = detailData.event_status !== "cancelled"
+    && Boolean((canFavorite && onToggleFavorite) || (!canFavorite && onRequestLogin));
   const titleId = `stage-ledger-title-${detailData.live_id}`;
   const structuredData = buildStructuredData(detailData);
 
   return (
     <div className={`stage-ledger-page${embedded ? " is-embedded" : ""}`} data-stage-ledger>
       {!embedded && (
-        <nav className="stage-breadcrumb" aria-label="面包屑">
-          <button type="button" className="stage-inline-link" onClick={onBack}>演出档案</button>
-          {detailData.tour && <span aria-hidden="true">/</span>}
-          {detailData.tour && <span>{detailData.tour.tour_title}</span>}
-          {!detailData.tour && detailData.performance_group && <span aria-hidden="true">/</span>}
-          {!detailData.tour && detailData.performance_group && <span>{detailData.performance_group.group_title}</span>}
-        </nav>
+        <div className="stage-context-bar">
+          <nav className="stage-breadcrumb" aria-label="面包屑">
+            <span>演出档案</span>
+            {detailData.tour && <span aria-hidden="true">/</span>}
+            {detailData.tour && <span>{detailData.tour.tour_title}</span>}
+            {!detailData.tour && detailData.performance_group && <span aria-hidden="true">/</span>}
+            {!detailData.tour && detailData.performance_group && <span>{detailData.performance_group.group_title}</span>}
+          </nav>
+          <div className="stage-context-actions">
+            {detailUrl && (
+              <a
+                className="stage-official-link"
+                href={detailUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="打开官方网页"
+                title="打开官方网页"
+              >
+                <ExternalLinkIcon />
+              </a>
+            )}
+            {onBack && (
+              <button type="button" className="stage-context-close" onClick={onBack} aria-label="关闭演出资料">
+                <span aria-hidden="true">×</span>
+                <span>关闭</span>
+              </button>
+            )}
+          </div>
+        </div>
       )}
       <article className="stage-ledger-article" aria-labelledby={titleId}>
         <header className="stage-masthead">
@@ -919,56 +986,52 @@ export function StageLedgerContent({
               <div><dt>开演</dt><dd>{formatTimedLabel(detailData.start_time)}</dd></div>
               <div><dt>场馆</dt><dd>{detailData.venue?.trim() || "未记录"}</dd></div>
             </dl>
-            <div className="stage-actions" aria-label="演出操作">
-              {onBack && <button type="button" className="stage-action-button stage-back-action" aria-label="返回" onClick={onBack}>返回资料</button>}
-              {detailData.event_status !== "cancelled" && canFavorite && onToggleFavorite && (
-                <button
-                  type="button"
-                  className={`stage-action-button${isFavorite ? " is-active" : ""}`}
-                  aria-pressed={isFavorite}
-                  aria-busy={isFavoriteSyncing}
-                  onClick={onToggleFavorite}
-                >
-                  {isFavorite ? "已收藏" : "收藏"}
-                </button>
-              )}
-              {detailData.event_status !== "cancelled" && !canFavorite && onRequestLogin && (
-                <button type="button" className="stage-action-button" onClick={onRequestLogin}>登录后收藏</button>
-              )}
-              <SharePopover liveId={detailData.live_id} title={detailTitle} onShare={() => void shareLive()} onCopy={() => void copyPermanentUrl()} />
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
-                  <button type="button" className="stage-action-button stage-more-action" aria-label="更多操作">更多</button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content className="stage-dropdown-content" sideOffset={6} align="end">
-                    <DropdownMenu.Item className="stage-dropdown-item" onSelect={() => void shareLive()}>分享或复制地址</DropdownMenu.Item>
-                    {detailUrl && (
-                      <DropdownMenu.Item className="stage-dropdown-item" asChild>
-                        <a href={detailUrl} target="_blank" rel="noreferrer">打开官方来源</a>
-                      </DropdownMenu.Item>
-                    )}
-                    <DropdownMenu.Separator className="stage-dropdown-separator" />
-                    <DropdownMenu.Item className="stage-dropdown-item" onSelect={() => clearSelection()}>关闭逐曲检查器</DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
-            </div>
-            {detailUrl && (
-              <a className="stage-official-link stage-official-action" href={detailUrl} target="_blank" rel="noreferrer">官方来源</a>
+            {detailData.event_status !== "cancelled" && ((canFavorite && onToggleFavorite) || (!canFavorite && onRequestLogin)) && (
+              <div className="stage-actions" aria-label="演出操作">
+                {canFavorite && onToggleFavorite && (
+                  <button
+                    type="button"
+                    className={`stage-action-button${isFavorite ? " is-active" : ""}`}
+                    aria-pressed={isFavorite}
+                    aria-busy={isFavoriteSyncing}
+                    onClick={onToggleFavorite}
+                  >
+                    {isFavorite ? "已收藏" : "收藏"}
+                  </button>
+                )}
+                {!canFavorite && onRequestLogin && (
+                  <button type="button" className="stage-action-button" onClick={onRequestLogin}>登录后收藏</button>
+                )}
+              </div>
+            )}
+            {embedded && detailUrl && (
+              <a
+                className="stage-official-link stage-embedded-official-link"
+                href={detailUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="打开官方网页"
+                title="打开官方网页"
+              >
+                <ExternalLinkIcon />
+              </a>
             )}
           </div>
         </header>
 
-        <StageSummary detail={detailData} rows={visibleRows} />
-
-        <nav className="stage-anchor-nav" aria-label="页内导航">
-          {showFlow && <a href="#stage-flow" onClick={(event) => focusAnchor(event, "stage-flow")}>演出流程</a>}
-          {showAttendance && <a href="#stage-attendance" onClick={(event) => focusAnchor(event, "stage-attendance")}>出演阵容</a>}
-          {hasLineupSummary && <a href="#stage-lineup" onClick={(event) => focusAnchor(event, "stage-lineup")}>阵容摘要</a>}
-          {hasRelated && <a href="#stage-related" onClick={(event) => focusAnchor(event, "stage-related")}>关联档案</a>}
-          {hasSources && <a href="#stage-sources" onClick={(event) => focusAnchor(event, "stage-sources")}>资料来源</a>}
-        </nav>
+        <div className="stage-navigation-row">
+          <nav className="stage-anchor-nav" aria-label="页内导航">
+            {showFlow && <a href="#stage-flow" onClick={(event) => focusAnchor(event, "stage-flow")}>演出流程</a>}
+            {showAttendance && <a href="#stage-attendance" onClick={(event) => focusAnchor(event, "stage-attendance")}>出演阵容</a>}
+            {hasRelated && <a href="#stage-related" onClick={(event) => focusAnchor(event, "stage-related")}>关联档案</a>}
+          </nav>
+          <StageSummary
+            detail={detailData}
+            rows={visibleRows}
+            open={summaryOpen}
+            onOpenChange={(open) => (open ? openSummary() : closeSummary())}
+          />
+        </div>
 
         {detailError && detailData && (
           <div className="stage-inline-error" role="alert">
@@ -983,11 +1046,11 @@ export function StageLedgerContent({
             <div>
               <h2 id="stage-status-title">本场 Live 已取消</h2>
               <p>{detailData.status_note || "当前资料没有形成公开演出流程。"}</p>
-              <p className="stage-muted">保留当前日期、场馆和官方来源，供资料核对和分享使用。</p>
+              <p className="stage-muted">保留当前日期、场馆和官方网页，供资料核对使用。</p>
             </div>
           </section>
         ) : (
-          <div className="stage-content-grid">
+          <div className={`stage-content-grid${selectedRow ? " has-inspector" : ""}`}>
             <div className="stage-primary-column">
               {detailData.live_type === "event" && showAttendance && <EventAttendees attendees={detailData.event_attendees} />}
               {detailData.live_type === "event" && !showAttendance && !showFlow && (
@@ -1018,9 +1081,10 @@ export function StageLedgerContent({
                   <StageFlow
                     rows={visibleRows}
                     selectedTrackId={selectedTrackId}
-                    setSelectedTrackId={setSelectedTrackId}
                     mobileExpandedTrackId={mobileExpandedTrackId}
                     setMobileExpandedTrackId={setMobileExpandedTrackId}
+                    onOpenTrack={openTrack}
+                    onCloseTrack={closeTrack}
                     triggerRefs={triggerRefs}
                   />
                 </section>
@@ -1030,7 +1094,6 @@ export function StageLedgerContent({
                   <p>本页目前只收录演出基本资料，暂无演出曲目记录。</p>
                 </section>
               )}
-              {hasLineupSummary && <LineupSummary rows={visibleRows} />}
               <ScheduleHistory detail={detailData} />
               <RelatedArchives
                 detail={detailData}
@@ -1038,45 +1101,29 @@ export function StageLedgerContent({
                 onOpenPerformanceGroup={onOpenPerformanceGroup}
                 showTourReference={showTourReference}
               />
-              {hasSources && (
-                <section className="stage-sources-section" id="stage-sources" tabIndex={-1} aria-labelledby="stage-sources-title">
-                  <div className="stage-section-heading">
-                    <div><h2 id="stage-sources-title">资料来源</h2><p>本站只展示当前接口可以确认的资料。</p></div>
-                  </div>
-                  {detailUrl && <a className="stage-source-link" href={detailUrl} target="_blank" rel="noreferrer">打开官方来源</a>}
-                  {detailData.schedule_history && detailData.schedule_history.length > 0 && <a className="stage-source-link" href="#stage-history">查看改期记录</a>}
-                </section>
-              )}
             </div>
-            <aside className="stage-inspector-column" aria-label="逐曲检查器">
-              {selectedRow ? (
+            {selectedRow && (
+              <aside className="stage-inspector-column" aria-label="歌曲详情">
                 <div className="stage-inspector-panel">
-                  <StageTrackInspector row={selectedRow} onClose={clearSelection} />
+                  <StageTrackInspector row={selectedRow} onClose={closeTrack} />
                 </div>
-              ) : (
-                <div className="stage-inspector-empty">
-                  <span>逐曲检查器</span>
-                  <p>选择一首歌曲查看实际出演、阵容版本和资料标记。</p>
-                </div>
-              )}
-            </aside>
+              </aside>
+            )}
           </div>
         )}
 
-        <div className="stage-mobile-action-bar" aria-label="移动端操作">
-          {onBack && <button type="button" className="stage-mobile-action" aria-label="返回" onClick={onBack}>返回</button>}
-          {detailData.event_status !== "cancelled" && canFavorite && onToggleFavorite && (
-            <button type="button" className="stage-mobile-action" aria-pressed={isFavorite} onClick={onToggleFavorite}>
-              {isFavorite ? "已收藏" : "收藏"}
-            </button>
-          )}
-          {detailData.event_status !== "cancelled" && !canFavorite && onRequestLogin && (
-            <button type="button" className="stage-mobile-action" onClick={onRequestLogin}>登录后收藏</button>
-          )}
-          <button type="button" className="stage-mobile-action" onClick={() => void shareLive()}>分享</button>
-          {detailUrl && <a className="stage-mobile-action" href={detailUrl} target="_blank" rel="noreferrer">官方来源</a>}
-        </div>
-        <p className="stage-share-feedback" aria-live="polite">{shareMessage}</p>
+        {showMobileFavoriteAction && (
+          <div className="stage-mobile-action-bar" aria-label="移动端操作">
+            {detailData.event_status !== "cancelled" && canFavorite && onToggleFavorite && (
+              <button type="button" className="stage-mobile-action" aria-pressed={isFavorite} onClick={onToggleFavorite}>
+                {isFavorite ? "已收藏" : "收藏"}
+              </button>
+            )}
+            {detailData.event_status !== "cancelled" && !canFavorite && onRequestLogin && (
+              <button type="button" className="stage-mobile-action" onClick={onRequestLogin}>登录后收藏</button>
+            )}
+          </div>
+        )}
         <script type="application/ld+json" data-stage-ledger-jsonld dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       </article>
     </div>

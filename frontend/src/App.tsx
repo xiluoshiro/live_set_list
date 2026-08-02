@@ -358,7 +358,9 @@ function App() {
         : requestedTab;
     setUserMenuOpen(false);
     if (allowedTab === "detail" && state.detailLiveId && state.detailFallback && state.previousTab) {
-      resetPageScroll();
+      if (!(tab === "detail" && detailLiveId === state.detailLiveId)) {
+        resetPageScroll();
+      }
       setDetailLiveId(state.detailLiveId);
       setDetailFallback(state.detailFallback);
       setPreviousTab(state.previousTab);
