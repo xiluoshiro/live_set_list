@@ -230,6 +230,7 @@ export function TourDetailPage({
                     displayTitle={getTourStopShortTitle(selectedStop.live_title, detail.tour_title)}
                     showTourReference={false}
                     embedded
+                    onOpenBand={onOpenBand}
                     canFavorite={canFavorite}
                     isFavorite={selectedLiveId !== null && isFavorite(selectedLiveId)}
                     isFavoriteSyncing={selectedLiveId !== null && isSyncing(selectedLiveId)}
