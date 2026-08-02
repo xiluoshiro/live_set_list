@@ -479,6 +479,18 @@ function App() {
       }
     }
     const onPopState = (event: PopStateEvent) => {
+      if (activeTabRef.current === "detail" && isAppHistoryState(event.state) && event.state.tab !== "detail") {
+        const archiveState: AppHistoryState = {
+          app: "live-set-list",
+          tab: "all",
+          ...(event.state.tab === "all" || event.state.tab === "favorites"
+            ? { listState: event.state.listState }
+            : {}),
+        };
+        window.history.replaceState(archiveState, "", "/");
+        applyHistoryState(archiveState);
+        return;
+      }
       if (isAppHistoryState(event.state)) {
         applyHistoryState(event.state);
       }
@@ -1319,19 +1331,17 @@ function App() {
   };
 
   const handleBackFromDetail = () => {
-    if (isAppHistoryState(window.history.state) && window.history.state.tab === "detail") {
-      window.history.back();
-      return;
-    }
-    if (previousTab === "tour_detail") {
-      navigateToTab("tours");
-      return;
-    }
-    if (previousTab === "performance_group_detail") {
-      navigateToTab("all");
-      return;
-    }
-    navigateToTab(previousTab);
+    const archiveState: AppHistoryState = {
+      app: "live-set-list",
+      tab: "all",
+      listState: {
+        page,
+        cardPage,
+        scrollY: 0,
+      },
+    };
+    window.history.replaceState(archiveState, "", "/");
+    applyHistoryState(archiveState);
   };
   const handleBackFromTourDetail = () => {
     if (isAppHistoryState(window.history.state) && window.history.state.tab === "tour_detail") {

@@ -63,11 +63,6 @@ type StageActBlock = {
   continuesPrevious: boolean;
 };
 
-type StageHistoryState = {
-  stageOverlay?: "summary";
-  stageAnchor?: string;
-};
-
 const SEGMENT_LABELS: Record<string, string> = {
   M: "Main Set",
   OP: "Opening Act",
@@ -181,20 +176,6 @@ function buildActBlocks(rows: StageRow[]): StageActBlock[] {
     blocks.push({ key, rows: [row], bands, continuesPrevious });
   });
   return blocks;
-}
-
-function readStageHistoryState(value: unknown): StageHistoryState {
-  if (!value || typeof value !== "object") return {};
-  const candidate = value as Partial<StageHistoryState>;
-  return {
-    stageOverlay: candidate.stageOverlay === "summary" ? candidate.stageOverlay : undefined,
-    stageAnchor: typeof candidate.stageAnchor === "string" ? candidate.stageAnchor : undefined,
-  };
-}
-
-function getStageHistoryHash(state: StageHistoryState): string {
-  if (state.stageOverlay === "summary") return "#stage-summary";
-  return state.stageAnchor ? `#${state.stageAnchor}` : "";
 }
 
 function segmentLabel(code: string): string {
@@ -722,38 +703,6 @@ export function StageLedgerContent({
     || (new Set(visibleRows.flatMap((row) => row.band_members.map((member) => getBandKey(member)))).size > 3)
     || (new Set(visibleRows.map((row) => row.segment_type)).size > 2);
 
-  const pushStageHistory = useCallback((next: StageHistoryState) => {
-    const current = window.history.state;
-    const nextState: Record<string, unknown> = current && typeof current === "object"
-      ? { ...(current as Record<string, unknown>) }
-      : {};
-    delete nextState.stageOverlay;
-    delete nextState.stageAnchor;
-    Object.assign(nextState, next);
-    const hash = getStageHistoryHash(next);
-    window.history.pushState(
-      nextState,
-      "",
-      `${window.location.pathname}${window.location.search}${hash}`,
-    );
-  }, []);
-
-  const replaceStageHistory = useCallback((next: StageHistoryState) => {
-    const current = window.history.state;
-    const nextState: Record<string, unknown> = current && typeof current === "object"
-      ? { ...(current as Record<string, unknown>) }
-      : {};
-    delete nextState.stageOverlay;
-    delete nextState.stageAnchor;
-    Object.assign(nextState, next);
-    const hash = getStageHistoryHash(next);
-    window.history.replaceState(
-      nextState,
-      "",
-      `${window.location.pathname}${window.location.search}${hash}`,
-    );
-  }, []);
-
   const clearTrackState = useCallback((focusId = selectedTrackIdRef.current ?? mobileExpandedTrackId) => {
     setSelectedTrackId(null);
     setMobileExpandedTrackId(null);
@@ -770,54 +719,17 @@ export function StageLedgerContent({
   }, []);
 
   const openSummary = useCallback(() => {
-    const historyState = readStageHistoryState(window.history.state);
     setSummaryOpen(true);
-    if (historyState.stageOverlay !== "summary") {
-      replaceStageHistory({});
-      pushStageHistory({ stageOverlay: "summary" });
-    }
-  }, [pushStageHistory, replaceStageHistory]);
+  }, []);
 
   const closeSummary = useCallback(() => {
-    const historyState = readStageHistoryState(window.history.state);
-    if (historyState.stageOverlay === "summary") {
-      setSummaryOpen(false);
-      window.history.back();
-      return;
-    }
     setSummaryOpen(false);
   }, []);
 
   const closeArchive = useCallback(() => {
-    const historyState = readStageHistoryState(window.history.state);
-    const hasSummaryHistory = historyState.stageOverlay === "summary" || window.location.hash === "#stage-summary";
     setSummaryOpen(false);
-    if (hasSummaryHistory) {
-      window.history.back();
-      window.setTimeout(() => onBack?.(), 0);
-      return;
-    }
-    replaceStageHistory({});
     onBack?.();
-  }, [onBack, replaceStageHistory]);
-
-  const applyStageHistory = useCallback((value: unknown) => {
-    const historyState = readStageHistoryState(value);
-    setSummaryOpen(historyState.stageOverlay === "summary" || window.location.hash === "#stage-summary");
-  }, []);
-
-  useEffect(() => {
-    const historyState = readStageHistoryState(window.history.state);
-    if (historyState.stageOverlay === "summary" || window.location.hash === "#stage-summary") {
-      setSummaryOpen(true);
-    }
-  }, [visibleRows]);
-
-  useEffect(() => {
-    const onPopState = (event: PopStateEvent) => applyStageHistory(event.state);
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [applyStageHistory]);
+  }, [onBack]);
 
   useEffect(() => {
     if (embedded || !detailData) return undefined;
@@ -859,10 +771,9 @@ export function StageLedgerContent({
     const target = document.getElementById(targetId);
     if (!target) return;
     event.preventDefault();
-    replaceStageHistory({ stageAnchor: targetId });
     target.focus({ preventScroll: true });
     target.scrollIntoView?.({ behavior: "auto", block: "start" });
-  }, [replaceStageHistory]);
+  }, []);
 
   if (detailNotFound) {
     return (
@@ -909,7 +820,7 @@ export function StageLedgerContent({
   const hasRelated = Boolean(detailData.tour || detailData.performance_group);
   const showFavoriteAction = detailData.event_status !== "cancelled"
     && Boolean((canFavorite && onToggleFavorite) || (!canFavorite && onRequestLogin));
-  const showStageActions = Boolean(detailUrl || showFavoriteAction);
+  const showStageActions = Boolean(detailUrl || showFavoriteAction || (!embedded && onBack));
   const showMobileActionBar = showFavoriteAction;
   const jumpSegments = buildSegments(visibleRows);
   const jumpBands = uniqueBandMembers(visibleRows.flatMap((row) => row.band_members)).slice(0, 10);
@@ -918,38 +829,6 @@ export function StageLedgerContent({
 
   return (
     <div className={`stage-ledger-page${embedded ? " is-embedded" : ""}`} data-stage-ledger>
-      {!embedded && (
-        <div className="stage-context-bar">
-          <nav className="stage-breadcrumb" aria-label="面包屑">
-            <span className="stage-context-title">演出档案</span>
-            {detailData.tour && <span aria-hidden="true">/</span>}
-            {detailData.tour && <span>{detailData.tour.tour_title}</span>}
-            {!detailData.tour && detailData.performance_group && <span aria-hidden="true">/</span>}
-            {!detailData.tour && detailData.performance_group && <span>{detailData.performance_group.group_title}</span>}
-          </nav>
-          {onBack && (
-            <div className="stage-context-actions">
-              <button
-                type="button"
-                className="stage-context-close"
-                onPointerDownCapture={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  closeArchive();
-                }}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (event.detail === 0) closeArchive();
-                }}
-                aria-label="关闭演出资料"
-              >
-                <span aria-hidden="true">×</span>
-                <span>关闭</span>
-              </button>
-            </div>
-          )}
-        </div>
-      )}
       <article className="stage-ledger-article" aria-labelledby={titleId}>
         <header className="stage-masthead">
           <div className="stage-masthead-main">
@@ -977,6 +856,17 @@ export function StageLedgerContent({
             </dl>
             {showStageActions && (
               <div className="stage-actions" aria-label="演出操作">
+                {!embedded && onBack && (
+                  <button
+                    type="button"
+                    className="stage-action-button"
+                    onClick={closeArchive}
+                    aria-label="关闭演出资料"
+                    title="关闭演出资料"
+                  >
+                    关闭
+                  </button>
+                )}
                 {showFavoriteAction && canFavorite && onToggleFavorite && (
                   <button
                     type="button"

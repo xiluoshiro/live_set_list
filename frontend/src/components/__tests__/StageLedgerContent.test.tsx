@@ -106,7 +106,6 @@ describe("StageLedgerContent", () => {
     expect(screen.getByText("01")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/77");
     expect(container.querySelector(".stage-actions .stage-official-link")).not.toBeNull();
-    expect(container.querySelector(".stage-context-actions .stage-official-link")).toBeNull();
     expect(container.querySelector(".stage-sources-section")).toBeNull();
     expect(screen.queryByText("资料来源")).not.toBeInTheDocument();
     expect(screen.queryByText("阵容摘要")).not.toBeInTheDocument();
@@ -117,6 +116,7 @@ describe("StageLedgerContent", () => {
     expect(document.title).toBe("Stage Ledger Live · LiveSetList");
     expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toContain("日本武道館");
 
+    const previousHistoryState = window.history.state;
     await user.click(screen.getByRole("link", { name: "演出流程" }));
     expect(container.querySelector("#stage-flow")).toHaveFocus();
 
@@ -124,7 +124,7 @@ describe("StageLedgerContent", () => {
     const trigger = screen.getByRole("button", { name: /Song One/ });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(window.location.hash).not.toBe("#track-M1");
-    expect(window.history.state).not.toMatchObject({ stageOverlay: "track" });
+    expect(window.history.state).toBe(previousHistoryState);
     expect(trigger).not.toHaveTextContent("Poppin'Party");
     expect(screen.getAllByRole("heading", { name: "Song One" }).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("阵容版本：Poppin'Party / V1")).not.toBeInTheDocument();
@@ -143,20 +143,23 @@ describe("StageLedgerContent", () => {
     expect(structuredData.url).toMatch(/\/lives\/77$/);
   });
 
-  test("摘要用弹出卡片承载，并能通过浏览器返回关闭", async () => {
-    // 测试点：演出摘要不再占据页面首屏，打开后新增 history 状态，返回可关闭而不离开详情页。
+  test("摘要用弹出卡片承载，但不写入浏览器 history", async () => {
+    // 测试点：演出摘要是详情页内的瞬时状态，打开和关闭都不改变地址或浏览器 history。
     const user = userEvent.setup();
+    const previousUrl = window.location.href;
+    const previousState = window.history.state;
     renderStage(makeDetail());
 
     await user.click(screen.getByRole("button", { name: "打开演出流程摘要" }));
     expect(screen.getByText("TRACKS")).toBeInTheDocument();
-    expect(window.history.state).toMatchObject({ stageOverlay: "summary" });
-    expect(window.location.hash).toBe("#stage-summary");
+    expect(window.location.href).toBe(previousUrl);
+    expect(window.history.state).toBe(previousState);
 
-    window.history.replaceState(null, "", "/lives/77");
-    fireEvent.popState(window, { state: null });
+    await user.click(screen.getByRole("button", { name: "关闭摘要" }));
     await waitFor(() => expect(screen.queryByText("TRACKS")).not.toBeInTheDocument());
     expect(screen.getByRole("heading", { name: "演出流程" })).toBeInTheDocument();
+    expect(window.location.href).toBe(previousUrl);
+    expect(window.history.state).toBe(previousState);
   });
 
   test("保留共同出演的时间轴连续性", () => {
@@ -230,12 +233,13 @@ describe("StageLedgerContent", () => {
     // 测试点：曲目详情属于当前页面内的瞬时状态，不新增浏览器历史，关闭后把焦点还给原曲目。
     const user = userEvent.setup();
     const previousUrl = window.location.href;
+    const previousState = window.history.state;
     renderStage(makeDetail());
 
     const trigger = screen.getByRole("button", { name: /Song One/ });
     await user.click(trigger);
     expect(window.location.href).toBe(previousUrl);
-    expect(window.history.state).not.toMatchObject({ stageOverlay: "track" });
+    expect(window.history.state).toBe(previousState);
 
     await user.click(screen.getAllByRole("button", { name: "关闭歌曲详情" })[0]);
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Song One" })).not.toBeInTheDocument());
@@ -243,7 +247,7 @@ describe("StageLedgerContent", () => {
   });
 
   test("关闭演出资料时直接退出详情，不先关闭摘要卡片", async () => {
-    // 测试点：页面级关闭动作应清理摘要状态并直接交给上层返回，不能让用户重复点击。
+    // 测试点：页面级关闭动作应清理无 history 的摘要状态并直接交给上层返回，不能让用户重复点击。
     const user = userEvent.setup();
     const onBack = vi.fn();
     renderStage(makeDetail(), { onBack });
