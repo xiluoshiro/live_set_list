@@ -12,9 +12,11 @@
 
 .tour-detail-page { margin: 24px; padding: 20px; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-1); }
 .tour-detail-page > .section-tabs { margin-top: 14px; }
-.tour-detail-page .stage-masthead h1 {
-  font-size: clamp(1.2rem, 2.4vw, 1.8rem);
-  letter-spacing: -0.02em;
+
+.tour-detail-page .stage-section-heading h2,
+.tour-detail-page .stage-empty-section h2,
+.tour-detail-page .stage-status-body h2 {
+  font-size: clamp(0.9rem, 1.7vw, 1.25rem);
 }
 
 [data-stage-ledger] .section-tabs {
@@ -140,10 +142,6 @@
     clip: auto;
   }
   .tour-detail-page { margin: 12px; padding: 15px; }
-  .tour-detail-page .stage-masthead h1 {
-    font-size: clamp(1.15rem, 5vw, 1.5rem);
-    letter-spacing: -0.015em;
-  }
   .tour-transition-detail-head { align-items: flex-start; flex-direction: column; }
   .tour-transition-diff-row { grid-template-columns: 22px minmax(0, 1fr); }
   .tour-transition-order { grid-column: 2; white-space: normal; }

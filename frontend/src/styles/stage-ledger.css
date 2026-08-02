@@ -82,10 +82,10 @@
   max-width: 100%;
   margin: 0;
   color: var(--stage-heading);
-  font-size: clamp(2.25rem, 5vw, 4.5rem);
+  font-size: clamp(1.4rem, 2.6vw, 2.1rem);
   font-weight: 700;
-  letter-spacing: -0.055em;
-  line-height: 1.06;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
   overflow-wrap: anywhere;
 }
 
@@ -93,10 +93,10 @@
   max-width: 100%;
   margin: 0;
   color: var(--stage-heading);
-  font-size: clamp(1.8rem, 4vw, 3.4rem);
+  font-size: clamp(1rem, 2vw, 1.45rem);
   font-weight: 700;
-  letter-spacing: -0.045em;
-  line-height: 1.12;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
@@ -321,8 +321,8 @@
 .stage-section-heading h2 {
   margin: 0;
   color: var(--stage-heading);
-  font-size: clamp(1.45rem, 2.5vw, 2.2rem);
-  letter-spacing: -0.03em;
+  font-size: clamp(1.3rem, 2.3vw, 1.8rem);
+  letter-spacing: -0.02em;
 }
 
 .stage-section-heading p {
@@ -818,7 +818,7 @@
 
 .stage-skeleton-title {
   width: min(92%, 740px);
-  height: clamp(86px, 11vw, 170px);
+  height: clamp(40px, 5vw, 64px);
   margin: 18px 0 0;
 }
 
@@ -885,12 +885,12 @@
   }
 
   .stage-masthead h1 {
-    font-size: clamp(30px, 9vw, 38px);
-    letter-spacing: -0.045em;
+    font-size: clamp(1.25rem, 5.5vw, 1.7rem);
+    letter-spacing: -0.02em;
   }
 
   .stage-masthead h2 {
-    font-size: clamp(26px, 7vw, 34px);
+    font-size: clamp(0.95rem, 4.5vw, 1.2rem);
   }
 
   .stage-content-grid {
