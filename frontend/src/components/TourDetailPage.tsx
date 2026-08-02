@@ -10,7 +10,6 @@ import {
 } from "../api";
 import { logError } from "../logger";
 import { ContentState } from "./ContentState";
-import { DetailTitleLink } from "./DetailTitleLink";
 import { StageLedgerContent } from "./StageLedgerContent";
 import { SectionTabs } from "./SectionTabs";
 import { getTourStopShortTitle } from "./tourHelpers";
@@ -22,11 +21,11 @@ type TourDetailTab = "stops" | "statistics";
 type TourDetailPageProps = {
   tourId: number;
   fallback: TourDetailFallback;
-  onBack: () => void;
   canFavorite?: boolean;
   isFavorite?: (liveId: number) => boolean;
   isSyncing?: (liveId: number) => boolean;
   onToggleFavorite?: (liveId: number) => void;
+  onOpenBand?: (bandId: number) => void;
 };
 
 function formatDateRange(detail: TourDetailResponse): string {
@@ -41,11 +40,11 @@ function normalizeError(caught: unknown): string {
 export function TourDetailPage({
   tourId,
   fallback,
-  onBack,
   canFavorite = false,
   isFavorite = () => false,
   isSyncing = () => false,
   onToggleFavorite,
+  onOpenBand,
 }: TourDetailPageProps) {
   const [detail, setDetail] = useState<TourDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -124,28 +123,53 @@ export function TourDetailPage({
   const selectedStop = detail?.stops.find((stop) => stop.live_id === selectedLiveId) ?? null;
 
   return (
-    <div className="tour-detail-page">
-      <div className="detail-page-head tour-detail-head">
-        <h2>{detail?.url ? <DetailTitleLink href={detail.url}>{detail.tour_title}</DetailTitleLink> : detail?.tour_title ?? fallback.tourTitle}</h2>
-        <button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回"><span className="modal-action-glyph" aria-hidden="true">←</span></button>
-      </div>
+    <div className="tour-detail-page" data-stage-ledger>
+      <header className="stage-masthead">
+        <div className="stage-masthead-main">
+          <div className="stage-title-meta">
+            <span className="stage-type-label">巡演</span>
+          </div>
+          <h1>{detail?.tour_title ?? fallback.tourTitle}</h1>
+          {detail && detail.bands.length > 0 && (
+            <div className="stage-masthead-bands">
+              <span className="stage-field-label">参与乐队</span>
+              <ul className="stage-band-list">
+                {detail.bands.map((band) => (
+                  <li key={band.band_id}>
+                    {onOpenBand ? (
+                      <button type="button" className="stage-inline-link" onClick={() => onOpenBand(band.band_id)}>
+                        {band.band_name}
+                      </button>
+                    ) : (
+                      <span>{band.band_name}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+        {detail && (
+          <div className="stage-masthead-side">
+            <dl className="stage-schedule-list">
+              <div><dt>已收录日期</dt><dd>{formatDateRange(detail)}</dd></div>
+              <div>
+                <dt>场次</dt>
+                <dd>
+                  {detail.collected_live_count} 场
+                  {(detail.cancelled_live_count ?? 0) > 0 && (
+                    <span className="live-cancelled-count"> · 取消 {detail.cancelled_live_count ?? 0} 场</span>
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        )}
+      </header>
       {loading && <ContentState kind="loading" title="加载巡演详情..." layout="detail" />}
       {error && <ContentState kind="error" title="巡演详情加载失败" description={error} layout="detail" />}
       {detail && (
         <>
-          <div className="detail-meta-line">
-            <p className="detail-inline-item detail-inline-item-date"><strong>已收录日期：</strong><span>{formatDateRange(detail)}</span></p>
-            <p className="detail-inline-item">
-              <strong>场次：</strong>
-              <span>
-                {detail.collected_live_count}
-                {(detail.cancelled_live_count ?? 0) > 0 && (
-                  <span className="live-cancelled-count"> · 取消 {detail.cancelled_live_count ?? 0} 场</span>
-                )}
-              </span>
-            </p>
-            <p className="detail-inline-item"><strong>参与乐队：</strong><span>{detail.bands.map((band) => band.band_name).join(" / ") || "-"}</span></p>
-          </div>
           <SectionTabs
             label="巡演详情内容"
             value={activeTab}
@@ -197,12 +221,13 @@ export function TourDetailPage({
                 })}
               </nav>
               {selectedStop && (
-                <div className="detail-page tour-inline-live-detail">
+                <div className="tour-inline-live-detail">
                   <StageLedgerContent
                     detailData={liveDetail}
                     detailLoading={liveLoading}
                     detailError={liveError}
                     fallback={{ liveTitle: selectedStop.live_title, liveDate: selectedStop.live_date, url: selectedStop.url }}
+                    displayTitle={getTourStopShortTitle(selectedStop.live_title, detail.tour_title)}
                     showTourReference={false}
                     embedded
                     canFavorite={canFavorite}

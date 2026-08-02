@@ -88,7 +88,6 @@ describe("TourDetailPage cancelled stops", () => {
       <TourDetailPage
         tourId={1}
         fallback={{ tourTitle: "示例巡演" }}
-        onBack={vi.fn()}
         canFavorite
         onToggleFavorite={vi.fn()}
       />,

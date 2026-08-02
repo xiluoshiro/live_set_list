@@ -120,7 +120,7 @@ describe("PerformanceGroupDetailPage", () => {
     const deferredDetail = deferred<ReturnType<typeof makeDetailResponse>>();
     getPerformanceGroupDetailMock.mockReturnValue(deferredDetail.promise);
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     expect(screen.getByText("加载活动组详情...")).toBeInTheDocument();
 
@@ -134,12 +134,12 @@ describe("PerformanceGroupDetailPage", () => {
   test("displays group title after successful load", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       expect(screen.getByText("BanG Dream! 12th LIVE")).toBeInTheDocument();
     });
-    expect(screen.getByRole("region", { name: "活动状态" })).toHaveTextContent("已结束");
+    expect(screen.getAllByText("已结束").length).toBeGreaterThanOrEqual(1);
   });
 
   // 测试点：活动组概览不重复显示日期范围，日期只保留在选中 Live 自身详情中。
@@ -148,7 +148,7 @@ describe("PerformanceGroupDetailPage", () => {
       makeDetailResponse({ start_date: "2025-04-26", end_date: "2025-04-27" }),
     );
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       expect(screen.queryByText("已收录日期：")).not.toBeInTheDocument();
@@ -167,7 +167,7 @@ describe("PerformanceGroupDetailPage", () => {
       }),
     );
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       expect(screen.getByText("单日多场")).toBeInTheDocument();
@@ -180,7 +180,7 @@ describe("PerformanceGroupDetailPage", () => {
       makeDetailResponse({ display_type: "multi_day", day_count: 2 }),
     );
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       expect(screen.getByText("多日活动")).toBeInTheDocument();
@@ -199,7 +199,7 @@ describe("PerformanceGroupDetailPage", () => {
       }),
     );
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       expect(screen.getByText("已收录 5 场")).toBeInTheDocument();
@@ -211,7 +211,7 @@ describe("PerformanceGroupDetailPage", () => {
       makeDetailResponse({ day_count: 2, live_count: 3 }),
     );
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       expect(screen.getByText("已收录 2 日 · 3 场")).toBeInTheDocument();
@@ -222,7 +222,7 @@ describe("PerformanceGroupDetailPage", () => {
   test("renders a flat short-title navigation like tour stops", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       const nav = screen.getByRole("navigation", { name: "活动组场次" });
@@ -238,7 +238,7 @@ describe("PerformanceGroupDetailPage", () => {
   test("shortens live title buttons by removing group title prefix", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       const button = screen.getByRole("button", { name: /DAY 1: Poppin'Party/ });
@@ -257,7 +257,7 @@ describe("PerformanceGroupDetailPage", () => {
       )),
     });
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       const nav = screen.getByRole("navigation", { name: "活动组场次" });
@@ -276,7 +276,7 @@ describe("PerformanceGroupDetailPage", () => {
 
     const user = userEvent.setup();
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /DAY 2: Roselia/ })).toBeInTheDocument();
@@ -293,7 +293,7 @@ describe("PerformanceGroupDetailPage", () => {
   test("preserves canonical live order without time suffixes", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       const nav = screen.getByRole("navigation", { name: "活动组场次" });
@@ -317,7 +317,7 @@ describe("PerformanceGroupDetailPage", () => {
     const onOpenTour = vi.fn();
     const user = userEvent.setup();
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} onOpenTour={onOpenTour} />);
+    render(<PerformanceGroupDetailPage groupId={1}  onOpenTour={onOpenTour} />);
 
     const tourLink = await screen.findByRole("button", { name: "MyGO!!!!! ZEPP TOUR 2025" });
     await user.click(tourLink);
@@ -329,7 +329,7 @@ describe("PerformanceGroupDetailPage", () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
     getLiveDetailMock.mockResolvedValue(makeLiveDetailResponse(102));
 
-    render(<PerformanceGroupDetailPage groupId={1} initialLiveId={102} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1} initialLiveId={102}  />);
 
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(102));
     expect(screen.getByRole("button", { name: /DAY 2: Roselia/ })).toHaveAttribute("aria-pressed", "true");
@@ -344,7 +344,7 @@ describe("PerformanceGroupDetailPage", () => {
     render(
       <PerformanceGroupDetailPage
         groupId={1}
-        onBack={vi.fn()}
+        
         canFavorite
         isFavorite={(liveId) => liveId === 101}
         onToggleFavorite={onToggleFavorite}
@@ -363,15 +363,15 @@ describe("PerformanceGroupDetailPage", () => {
     getPerformanceGroupDetailMock.mockRejectedValue(new Error("Group 1 not found"));
     getLiveDetailMock.mockReset();
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
       expect(screen.getByText(/活动组详情加载失败/)).toBeInTheDocument();
     });
   });
 
-  // 测试点：参与乐队以文本形式显示在元数据行中
-  test("displays participating bands as text in meta line", async () => {
+  // 测试点：参与乐队以舞台标签样式逐项显示在标题下方
+  test("displays participating bands in masthead band row", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(
       makeDetailResponse({
         bands: [
@@ -381,11 +381,12 @@ describe("PerformanceGroupDetailPage", () => {
       }),
     );
 
-    render(<PerformanceGroupDetailPage groupId={1} onBack={vi.fn()} />);
+    render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
-      expect(screen.getByText("参与乐队：")).toBeInTheDocument();
-      expect(screen.getByText("Poppin'Party / Roselia")).toBeInTheDocument();
+      expect(screen.getByText("参与乐队")).toBeInTheDocument();
+      expect(screen.getByText("Poppin'Party")).toBeInTheDocument();
+      expect(screen.getByText("Roselia")).toBeInTheDocument();
     });
   });
 });

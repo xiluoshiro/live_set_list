@@ -89,6 +89,17 @@
   overflow-wrap: anywhere;
 }
 
+.stage-masthead h2 {
+  max-width: 100%;
+  margin: 0;
+  color: var(--stage-heading);
+  font-size: clamp(1.8rem, 4vw, 3.4rem);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
 .stage-masthead-bands {
   display: flex;
   flex-wrap: wrap;
@@ -245,12 +256,8 @@
 }
 
 .stage-official-link {
-  color: var(--text-link);
+  color: var(--stage-heading);
   text-decoration: none;
-}
-
-.stage-official-link:hover {
-  text-decoration: underline;
 }
 
 .stage-inline-link {
@@ -880,6 +887,10 @@
   .stage-masthead h1 {
     font-size: clamp(30px, 9vw, 38px);
     letter-spacing: -0.045em;
+  }
+
+  .stage-masthead h2 {
+    font-size: clamp(26px, 7vw, 34px);
   }
 
   .stage-content-grid {
