@@ -297,114 +297,11 @@
   cursor: pointer;
 }
 
-.stage-summary-ruler {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  margin: 0;
-  border-bottom: 1px solid var(--stage-line);
-}
-
 .stage-navigation-row {
   display: flex;
   align-items: stretch;
   gap: 16px;
   border-bottom: 1px solid var(--stage-line-soft);
-}
-
-.stage-summary-trigger {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-  align-self: center;
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 1px solid var(--stage-line);
-  border-radius: var(--stage-radius);
-  background: var(--stage-surface);
-  color: var(--stage-heading);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.stage-summary-trigger span:last-child {
-  color: var(--stage-muted);
-}
-
-.stage-summary-trigger:hover,
-.stage-summary-trigger[aria-expanded="true"] {
-  border-color: var(--stage-accent);
-  color: var(--stage-accent);
-}
-
-.stage-summary-popover {
-  z-index: var(--z-popover);
-  width: min(430px, calc(100vw - 32px));
-  padding: 16px;
-  border: 1px solid var(--stage-line);
-  border-radius: var(--stage-radius);
-  background: var(--stage-surface-raised);
-  box-shadow: var(--shadow-popover);
-}
-
-.stage-summary-popover-head {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--stage-line-soft);
-}
-
-.stage-summary-popover-head > div {
-  display: grid;
-  gap: 4px;
-}
-
-.stage-summary-popover-kicker {
-  color: var(--stage-muted);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.stage-summary-popover-head strong {
-  color: var(--stage-heading);
-  font-size: 17px;
-}
-
-.stage-summary-popover .stage-summary-ruler {
-  padding-top: 4px;
-  border-bottom: 0;
-}
-
-.stage-summary-cell {
-  display: grid;
-  gap: 5px;
-  min-width: 150px;
-  padding: 17px 24px 16px 0;
-}
-
-.stage-summary-cell + .stage-summary-cell {
-  padding-left: 24px;
-  border-left: 1px solid var(--stage-line-soft);
-}
-
-.stage-summary-cell strong {
-  color: var(--stage-heading);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.stage-summary-cell span {
-  color: var(--stage-muted);
-  font-size: 11px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
 }
 
 .stage-anchor-nav,
@@ -519,11 +416,6 @@
   align-items: center;
 }
 
-.stage-jump-nav a {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
-}
-
 .stage-flow-section,
 .stage-attendance-section,
 .stage-history-section,
@@ -543,7 +435,7 @@
   align-items: baseline;
   gap: 12px;
   padding: 9px 0;
-  border-top: 2px solid var(--stage-heading);
+  border-top: 1px solid var(--stage-line);
 }
 
 .stage-segment-heading h3 {
@@ -590,6 +482,11 @@
   color: var(--stage-heading);
   font-size: 14px;
   font-weight: 600;
+}
+
+.stage-act-heading h4 {
+  margin: 0;
+  font: inherit;
 }
 
 .stage-track-list {
@@ -977,7 +874,6 @@
 .stage-breadcrumb-skeleton,
 .stage-skeleton-line,
 .stage-skeleton-title,
-.stage-skeleton-summary span,
 .stage-skeleton-content span {
   display: block;
   border-radius: var(--stage-radius);
@@ -1009,17 +905,6 @@
   gap: 14px;
 }
 
-.stage-skeleton-summary {
-  gap: 0;
-  padding-top: 15px;
-}
-
-.stage-skeleton-summary span {
-  width: 130px;
-  height: 38px;
-  margin-right: 24px;
-}
-
 .stage-skeleton-content {
   display: grid;
   gap: 16px;
@@ -1039,7 +924,6 @@
 @media (prefers-reduced-motion: no-preference) {
   .stage-skeleton-line,
   .stage-skeleton-title,
-  .stage-skeleton-summary span,
   .stage-skeleton-content span {
     background: linear-gradient(90deg, var(--skeleton-base) 20%, var(--skeleton-highlight) 50%, var(--skeleton-base) 80%);
     background-size: 220% 100%;
@@ -1147,11 +1031,6 @@
     gap: 7px 12px;
   }
 
-  .stage-summary-trigger {
-    align-self: start;
-    margin-top: 10px;
-  }
-
   .stage-section-heading > span {
     padding-top: 5px;
   }
@@ -1205,23 +1084,6 @@
 @media (max-width: 360px) {
   .stage-ledger-page {
     padding-inline: 12px;
-  }
-
-  .stage-summary-cell {
-    min-width: 50%;
-    padding-right: 12px;
-  }
-
-  .stage-summary-cell + .stage-summary-cell {
-    padding-left: 12px;
-  }
-
-  .stage-summary-cell:nth-child(odd) {
-    border-left: 0;
-  }
-
-  .stage-summary-cell strong {
-    font-size: 16px;
   }
 
   .stage-act-block {

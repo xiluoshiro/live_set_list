@@ -1720,8 +1720,8 @@ describe("App", () => {
     expect(screen.getByText("开场")).toBeInTheDocument();
     expect(screen.getByText("开演")).toBeInTheDocument();
     expect(screen.getByText("场馆")).toBeInTheDocument();
-    expect(screen.getByText("17:00 (CN)")).toBeInTheDocument();
-    expect(screen.getByText("18:00 (JP)")).toBeInTheDocument();
+    expect(screen.getByText("17:00 (CST)")).toBeInTheDocument();
+    expect(screen.getByText("18:00 (JST)")).toBeInTheDocument();
     expect(screen.getByText("测试场地")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/1");
     expect(container.querySelectorAll("ol.stage-track-list").length).toBeGreaterThan(0);
@@ -1730,8 +1730,8 @@ describe("App", () => {
     expect(getLiveDetailMock).toHaveBeenCalledWith(1);
   });
 
-  test("详情页使用摘要弹出卡片与排期列表，而非旧 meta 行", async () => {
-    // 测试点：Stage Ledger 用语义 dl 和按需打开的摘要卡片承载排期信息，旧 detail-meta 结构不应回归。
+  test("详情页使用排期列表与页内导航，而非旧 meta 行", async () => {
+    // 测试点：Stage Ledger 用语义 dl 排期列表和页内锚点导航承载信息，旧 detail-meta 结构不应回归。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1744,9 +1744,8 @@ describe("App", () => {
     const schedule = container.querySelector(".stage-schedule-list");
     expect(schedule).not.toBeNull();
     expect(schedule?.querySelectorAll("dt")).toHaveLength(4);
-    expect(container.querySelector(".stage-summary-trigger")).not.toBeNull();
-    await user.click(screen.getByRole("button", { name: "打开演出流程摘要" }));
-    expect(container.querySelector(".stage-summary-ruler")).not.toBeNull();
+    expect(container.querySelector(".stage-anchor-nav")).not.toBeNull();
+    expect(container.querySelector(".stage-summary-trigger")).toBeNull();
     expect(container.querySelector(".detail-meta-line")).toBeNull();
     expect(container.querySelector(".detail-row")).toBeNull();
   });
