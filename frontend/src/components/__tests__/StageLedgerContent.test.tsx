@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 
 import type { LiveDetailResponse } from "../../api";
 import { StageLedgerContent } from "../StageLedgerContent";
@@ -88,8 +88,12 @@ function renderStage(detailData: LiveDetailResponse, extra: Partial<ComponentPro
 }
 
 describe("StageLedgerContent", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
   test("按结构化位置渲染连续流程，并用检查器展示曲目细节", async () => {
-    // 测试点：Stage Ledger 保留 segment/absolute_order/song_id，点击曲目后检查器可展开并由 Escape 还原焦点。
+    // 测试点：Stage Ledger 保留 segment/absolute_order/song_id，点击曲目后详情可展开并由 Escape 还原焦点。
     const user = userEvent.setup();
     const onOpenBand = vi.fn();
     const { container } = renderStage(makeDetail(), { onOpenBand });
@@ -100,6 +104,13 @@ describe("StageLedgerContent", () => {
     expect(screen.getAllByText("ZZ").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Song One")).toBeInTheDocument();
     expect(screen.getByText("01")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/77");
+    expect(container.querySelector(".stage-sources-section")).toBeNull();
+    expect(screen.queryByText("资料来源")).not.toBeInTheDocument();
+    expect(screen.queryByText("阵容摘要")).not.toBeInTheDocument();
+    expect(screen.queryByText("逐曲检查器")).not.toBeInTheDocument();
+    expect(screen.queryByText("查看")).not.toBeInTheDocument();
+    expect(container.querySelector(".stage-summary-ruler")).toBeNull();
     expect(document.title).toBe("Stage Ledger Live · LiveSetList");
     expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toContain("日本武道館");
 
@@ -109,8 +120,10 @@ describe("StageLedgerContent", () => {
     await user.click(screen.getByRole("button", { name: /Song One/ }));
     const trigger = screen.getByRole("button", { name: /Song One/ });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(trigger).not.toHaveTextContent("Poppin'Party");
     expect(screen.getAllByRole("heading", { name: "Song One" }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("阵容版本：Poppin'Party / V1").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("阵容版本：Poppin'Party / V1")).not.toBeInTheDocument();
+    expect(screen.getAllByText("实到成员：Kasumi / Tae").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("缺席成员：Rimi").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("额外出演：Guest（嘉宾）").length).toBeGreaterThanOrEqual(1);
 
@@ -119,10 +132,47 @@ describe("StageLedgerContent", () => {
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(trigger).toHaveFocus();
-    expect(screen.getByText("选择一首歌曲查看实际出演、阵容版本和资料标记。")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Song One" })).not.toBeInTheDocument());
 
     const structuredData = JSON.parse(container.querySelector("script[data-stage-ledger-jsonld]")?.textContent ?? "{}");
     expect(structuredData.url).toMatch(/\/lives\/77$/);
+  });
+
+  test("摘要用弹出卡片承载，并能通过浏览器返回关闭", async () => {
+    // 测试点：演出摘要不再占据页面首屏，打开后新增 history 状态，返回可关闭而不离开详情页。
+    const user = userEvent.setup();
+    renderStage(makeDetail());
+
+    await user.click(screen.getByRole("button", { name: "打开演出流程摘要" }));
+    expect(screen.getByText("TRACKS")).toBeInTheDocument();
+    expect(window.history.state).toMatchObject({ stageOverlay: "summary" });
+    expect(window.location.hash).toBe("#stage-summary");
+
+    window.history.replaceState(null, "", "/lives/77");
+    fireEvent.popState(window, { state: null });
+    await waitFor(() => expect(screen.queryByText("TRACKS")).not.toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: "演出流程" })).toBeInTheDocument();
+  });
+
+  test("保留共同出演的时间轴连续性", () => {
+    // 测试点：共同出演只增加成员时，保留共享乐队的连续色轨，不制造无意义的时间断点。
+    const baseRow = makeDetail().detail_rows[0];
+    const pastel = { ...baseRow.band_members[0], band_id: 3, band_name: "Pastel＊Palettes" };
+    const afterglow = { ...pastel, band_id: 4, band_name: "Afterglow" };
+    const detail = makeDetail({
+      detail_rows: [
+        { ...baseRow, row_id: "M19", absolute_order: 19, song_name: "Song Nineteen", band_members: [pastel] },
+        { ...baseRow, row_id: "M20", absolute_order: 20, song_name: "Song Twenty", band_members: [pastel] },
+        { ...baseRow, row_id: "M21", absolute_order: 21, song_name: "Song Twenty One", band_members: [afterglow, pastel] },
+        { ...baseRow, row_id: "M22", absolute_order: 22, song_name: "Song Twenty Two", band_members: [pastel] },
+      ],
+    });
+    const { container } = renderStage(detail);
+
+    const blocks = container.querySelectorAll(".stage-act-block");
+    expect(blocks).toHaveLength(3);
+    expect(blocks[1]).toHaveClass("is-continuation");
+    expect(blocks[2]).toHaveClass("is-continuation");
   });
 
   test("Event 先呈现出席阵容，不伪造空歌单", async () => {

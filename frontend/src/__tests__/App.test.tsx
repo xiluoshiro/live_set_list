@@ -629,7 +629,7 @@ describe("App", () => {
     expect(screen.getAllByText("已结束")[0]).toHaveClass("live-status-pill");
     await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(1));
-    await user.click(screen.getByRole("button", { name: "返回" }));
+    await user.click(screen.getByRole("button", { name: "关闭演出资料" }));
     await user.click(screen.getByRole("button", { name: "查看全部 Live →" }));
 
     await waitFor(() => expect(screen.getByText("总计 47 条")).toBeInTheDocument());
@@ -654,8 +654,8 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
   });
 
-  test("卡片详情返回会保留已加载页并继续触发无限加载", async () => {
-    // 测试点：详情期间完成的卡片分页请求不能让返回后的列表卡在第一页。
+  test("卡片详情关闭会保留已加载页并继续触发无限加载", async () => {
+    // 测试点：详情期间完成的卡片分页请求不能让关闭后的列表卡在第一页。
     localStorage.setItem("live-view-mode", "cards");
     const secondPage = deferred<PerformancesResponse>();
     getLivesMock.mockImplementation((requestedPage) => {
@@ -701,7 +701,7 @@ describe("App", () => {
 
       const sourceState = window.history.state;
       await user.click(screen.getByText("示例 Live 名称 1"));
-      await screen.findByRole("button", { name: "返回" });
+      await screen.findByRole("button", { name: "关闭演出资料" });
       await act(async () => {
         secondPage.resolve(makePerformancesResponse({ page: 2, pageSize: 20, total: 60, totalPages: 3, itemCount: 20, startId: 21 }));
       });
@@ -1672,8 +1672,8 @@ describe("App", () => {
     expect(getComputedStyle(secondTable).tableLayout).toBe("fixed");
   });
 
-  test("点击 live 名称打开详情页并可返回", async () => {
-    // 测试点：详情查看路径（打开/返回）可用。
+  test("点击 live 名称打开详情页并可关闭", async () => {
+    // 测试点：详情查看路径（打开/关闭）可用。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1686,7 +1686,7 @@ describe("App", () => {
     await user.click(firstLiveButton);
     expect(screen.getByRole("heading", { name: firstLiveName })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "返回" }));
+    await user.click(screen.getByRole("button", { name: "关闭演出资料" }));
     expect(screen.queryByRole("heading", { name: firstLiveName })).not.toBeInTheDocument();
   });
 
@@ -1703,7 +1703,7 @@ describe("App", () => {
   });
 
   test("详情页呈现 Stage Ledger 结构与连续歌单", async () => {
-    // 测试点：详情页应呈现 Stage Ledger 的摘要、流程、来源与永久链接，而不是旧成员表格。
+    // 测试点：详情页应呈现 Stage Ledger 的流程、官方网页入口与永久链接，而不是旧成员表格。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1713,7 +1713,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
 
-    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关闭演出资料" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "演出流程" })).toBeInTheDocument();
     expect(screen.getByText("日期")).toBeInTheDocument();
     expect(screen.getByText("开场")).toBeInTheDocument();
@@ -1722,15 +1722,15 @@ describe("App", () => {
     expect(screen.getByText("17:00 (CN)")).toBeInTheDocument();
     expect(screen.getByText("18:00 (JP)")).toBeInTheDocument();
     expect(screen.getByText("测试场地")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "官方来源" })).toHaveAttribute("href", "https://example.com/live/1");
+    expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/1");
     expect(container.querySelectorAll("ol.stage-track-list").length).toBeGreaterThan(0);
     expect(screen.getByText("曲目 1")).toBeInTheDocument();
     expect(container.querySelector(".detail-member-table-wrap")).toBeNull();
     expect(getLiveDetailMock).toHaveBeenCalledWith(1);
   });
 
-  test("详情页使用摘要标尺与排期列表，而非旧 meta 行", async () => {
-    // 测试点：Stage Ledger 用语义 dl 和摘要标尺承载排期信息，旧 detail-meta 结构不应回归。
+  test("详情页使用摘要弹出卡片与排期列表，而非旧 meta 行", async () => {
+    // 测试点：Stage Ledger 用语义 dl 和按需打开的摘要卡片承载排期信息，旧 detail-meta 结构不应回归。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1743,13 +1743,15 @@ describe("App", () => {
     const schedule = container.querySelector(".stage-schedule-list");
     expect(schedule).not.toBeNull();
     expect(schedule?.querySelectorAll("dt")).toHaveLength(4);
+    expect(container.querySelector(".stage-summary-trigger")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "打开演出流程摘要" }));
     expect(container.querySelector(".stage-summary-ruler")).not.toBeNull();
     expect(container.querySelector(".detail-meta-line")).toBeNull();
     expect(container.querySelector(".detail-row")).toBeNull();
   });
 
-  test("详情页返回按钮可回到列表页", async () => {
-    // 测试点：点击返回按钮后详情页应消失，列表页应重新展示。
+  test("详情页关闭按钮可回到列表页", async () => {
+    // 测试点：点击固定在上下文栏的关闭按钮后详情页应消失，列表页应重新展示。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1758,14 +1760,14 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
-    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关闭演出资料" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "返回" }));
+    await user.click(screen.getByRole("button", { name: "关闭演出资料" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
   });
 
-  test("详情页返回按钮样式类名正确", async () => {
-    // 测试点：Stage Ledger 返回动作使用新作用域样式，避免旧 detail 按钮类名回归。
+  test("详情页关闭按钮样式类名正确", async () => {
+    // 测试点：Stage Ledger 关闭动作固定在演出档案上下文栏，避免返回动作被页面头部滚走。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1775,10 +1777,10 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
 
-    const backBtn = screen.getByRole("button", { name: "返回" });
-    expect(backBtn).toHaveClass("stage-back-action");
-    expect(backBtn).toHaveTextContent("返回资料");
-    expect(backBtn).not.toHaveClass("detail-back-btn");
+    const closeBtn = screen.getByRole("button", { name: "关闭演出资料" });
+    expect(closeBtn).toHaveClass("stage-context-close");
+    expect(closeBtn).toHaveTextContent("关闭");
+    expect(closeBtn).not.toHaveClass("detail-back-btn");
   });
 
   test("详情弹窗在 url 为空时标题不渲染超链接", async () => {
