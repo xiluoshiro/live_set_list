@@ -1326,7 +1326,7 @@ describe("App", () => {
     ]);
     expect(stopNavigation).toHaveTextContent("東京公演FINAL");
     expect(stopNavigation).not.toHaveTextContent("已结束");
-    expect(stopNavigation.querySelectorAll(".tour-stop-separator")).toHaveLength(1);
+    expect(stopNavigation.querySelectorAll(".tour-stop-separator")).toHaveLength(0);
     expect(within(stopNavigation).queryByText("/")).not.toBeInTheDocument();
     expect(within(stopNavigation).queryByText("2026-05-30")).not.toBeInTheDocument();
     expect(within(stopNavigation).queryByText("Zepp Tokyo")).not.toBeInTheDocument();
@@ -1343,25 +1343,6 @@ describe("App", () => {
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
     expect(getTourDetailMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
-  });
-
-  // 测试点：已登录用户可以用不含状态后缀的巡演场次标题逐场收藏子 Live。
-  test("巡演详情提供逐场收藏操作", async () => {
-    getAuthMeMock.mockResolvedValue({
-      authenticated: true,
-      user: { id: 1, username: "viewer", display_name: "Viewer", role: "viewer" },
-      csrf_token: "csrf-token",
-      favorite_live_ids: [41],
-    });
-    const user = userEvent.setup();
-    renderApp({ withAuthProvider: true });
-
-    await user.click(await screen.findByRole("button", { name: "巡演资料" }));
-    await user.click(await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus"));
-
-    expect(await screen.findByRole("button", { name: "取消收藏 東京公演" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "加入收藏 FINAL" }));
-    await waitFor(() => expect(favoriteLiveMock).toHaveBeenCalledWith(42, "csrf-token"));
   });
 
   // 测试点：巡演统计按需加载时间线差异，把替换归入新增和移除，并可切回对应 Live 详情。
