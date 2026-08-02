@@ -63,7 +63,7 @@
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 13px;
+  font-size: 18px;
   cursor: pointer;
 }
 .tour-stop-shortcut:hover { color: var(--accent-primary); }
@@ -156,6 +156,7 @@
     clip: auto;
   }
   .tour-detail-page { margin: 12px; padding: 15px; }
+  .tour-stop-shortcut { font-size: 17px; }
   .tour-transition-detail-head { align-items: flex-start; flex-direction: column; }
   .tour-transition-diff-row { grid-template-columns: 22px minmax(0, 1fr); }
   .tour-transition-order { grid-column: 2; white-space: normal; }
