@@ -39,6 +39,14 @@
   font-size: 12px;
 }
 
+.stage-context-title {
+  color: var(--stage-heading);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .stage-context-bar {
   position: sticky;
   top: var(--stage-topbar-offset);
@@ -49,10 +57,11 @@
   gap: 16px;
   min-height: 42px;
   margin: -8px 0 18px;
-  padding: 7px 0;
-  border-top: 1px solid var(--stage-line-soft);
-  border-bottom: 1px solid var(--stage-line);
-  background: color-mix(in srgb, var(--stage-surface) 94%, transparent);
+  padding: 7px 12px 7px 14px;
+  border: 1px solid var(--stage-line);
+  border-left: 3px solid var(--stage-accent);
+  border-radius: var(--stage-radius);
+  background: color-mix(in srgb, var(--stage-surface-raised) 96%, transparent);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--stage-ink) 7%, transparent);
   backdrop-filter: blur(12px);
 }
@@ -220,6 +229,26 @@
   border-top: 1px solid var(--stage-line-soft);
 }
 
+.stage-schedule-date {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.stage-schedule-opening {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.stage-schedule-venue {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.stage-schedule-start {
+  grid-column: 2;
+  grid-row: 2;
+}
+
 .stage-schedule-list dt {
   margin-bottom: 5px;
   color: var(--stage-muted);
@@ -298,13 +327,11 @@
 
 .stage-official-link {
   display: inline-flex;
-  width: 32px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--stage-line);
-  border-radius: var(--stage-radius);
-  background: var(--stage-surface);
+  padding: 8px;
 }
 
 .stage-official-link .action-icon {
@@ -320,6 +347,10 @@
 .stage-official-link:hover,
 .stage-inline-link:hover {
   text-decoration: underline;
+}
+
+.stage-official-link:hover {
+  text-decoration: none;
 }
 
 .stage-inline-link {
@@ -538,15 +569,33 @@
 }
 
 .stage-jump-nav {
+  display: grid;
+  gap: 8px;
   margin: 0 0 24px;
   padding: 10px 0;
   border-top: 1px solid var(--stage-line-soft);
   border-bottom: 1px solid var(--stage-line-soft);
 }
 
+.stage-jump-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 18px;
+  align-items: center;
+}
+
 .stage-jump-nav a {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 11px;
+}
+
+.stage-flow-section,
+.stage-attendance-section,
+.stage-history-section,
+.stage-related-section,
+.stage-segment-heading h3,
+.stage-act-block {
+  scroll-margin-top: calc(var(--stage-topbar-offset) + 58px);
 }
 
 .stage-segment {
@@ -1105,6 +1154,18 @@
     grid-template-columns: 1fr;
     gap: 28px;
     padding: 22px 0 24px;
+  }
+
+  .stage-schedule-list {
+    grid-template-columns: 1fr;
+  }
+
+  .stage-schedule-date,
+  .stage-schedule-opening,
+  .stage-schedule-start,
+  .stage-schedule-venue {
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .stage-masthead h1 {

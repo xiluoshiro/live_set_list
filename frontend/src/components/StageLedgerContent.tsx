@@ -64,8 +64,7 @@ type StageActBlock = {
 };
 
 type StageHistoryState = {
-  stageOverlay?: "summary" | "track";
-  stageTrackId?: string;
+  stageOverlay?: "summary";
   stageAnchor?: string;
 };
 
@@ -188,24 +187,13 @@ function readStageHistoryState(value: unknown): StageHistoryState {
   if (!value || typeof value !== "object") return {};
   const candidate = value as Partial<StageHistoryState>;
   return {
-    stageOverlay: candidate.stageOverlay === "summary" || candidate.stageOverlay === "track"
-      ? candidate.stageOverlay
-      : undefined,
-    stageTrackId: typeof candidate.stageTrackId === "string" ? candidate.stageTrackId : undefined,
+    stageOverlay: candidate.stageOverlay === "summary" ? candidate.stageOverlay : undefined,
     stageAnchor: typeof candidate.stageAnchor === "string" ? candidate.stageAnchor : undefined,
   };
 }
 
-function getTrackIdFromHash(hash: string): string | null {
-  const match = hash.match(/^#track-(.+)$/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
 function getStageHistoryHash(state: StageHistoryState): string {
   if (state.stageOverlay === "summary") return "#stage-summary";
-  if (state.stageOverlay === "track" && state.stageTrackId) {
-    return `#track-${encodeURIComponent(state.stageTrackId)}`;
-  }
   return state.stageAnchor ? `#${state.stageAnchor}` : "";
 }
 
@@ -340,7 +328,14 @@ function StageSummary({
           <span aria-hidden="true">{open ? "收起" : "展开"}</span>
         </button>
       </Popover.Trigger>
-      <Popover.Content className="stage-summary-popover" sideOffset={10} align="end">
+      <Popover.Content
+        className="stage-summary-popover"
+        sideOffset={10}
+        align="end"
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+      >
         <div className="stage-summary-popover-head">
           <div>
             <span className="stage-summary-popover-kicker">演出流程</span>
@@ -733,11 +728,26 @@ export function StageLedgerContent({
       ? { ...(current as Record<string, unknown>) }
       : {};
     delete nextState.stageOverlay;
-    delete nextState.stageTrackId;
     delete nextState.stageAnchor;
     Object.assign(nextState, next);
     const hash = getStageHistoryHash(next);
     window.history.pushState(
+      nextState,
+      "",
+      `${window.location.pathname}${window.location.search}${hash}`,
+    );
+  }, []);
+
+  const replaceStageHistory = useCallback((next: StageHistoryState) => {
+    const current = window.history.state;
+    const nextState: Record<string, unknown> = current && typeof current === "object"
+      ? { ...(current as Record<string, unknown>) }
+      : {};
+    delete nextState.stageOverlay;
+    delete nextState.stageAnchor;
+    Object.assign(nextState, next);
+    const hash = getStageHistoryHash(next);
+    window.history.replaceState(
       nextState,
       "",
       `${window.location.pathname}${window.location.search}${hash}`,
@@ -751,40 +761,22 @@ export function StageLedgerContent({
   }, [mobileExpandedTrackId]);
 
   const closeTrack = useCallback(() => {
-    const historyState = readStageHistoryState(window.history.state);
-    if (historyState.stageOverlay === "track") {
-      clearTrackState();
-      window.history.back();
-      return;
-    }
-    if (getTrackIdFromHash(window.location.hash)) {
-      const current = window.history.state;
-      const nextState: Record<string, unknown> = current && typeof current === "object"
-        ? { ...(current as Record<string, unknown>) }
-        : {};
-      delete nextState.stageOverlay;
-      delete nextState.stageTrackId;
-      delete nextState.stageAnchor;
-      window.history.replaceState(nextState, "", `${window.location.pathname}${window.location.search}`);
-    }
     clearTrackState();
   }, [clearTrackState]);
 
   const openTrack = useCallback((trackId: string) => {
-    const historyState = readStageHistoryState(window.history.state);
     setSelectedTrackId(trackId);
     setMobileExpandedTrackId(trackId);
-    if (historyState.stageOverlay === "track" && historyState.stageTrackId === trackId) return;
-    pushStageHistory({ stageOverlay: "track", stageTrackId: trackId });
-  }, [pushStageHistory]);
+  }, []);
 
   const openSummary = useCallback(() => {
     const historyState = readStageHistoryState(window.history.state);
     setSummaryOpen(true);
     if (historyState.stageOverlay !== "summary") {
+      replaceStageHistory({});
       pushStageHistory({ stageOverlay: "summary" });
     }
-  }, [pushStageHistory]);
+  }, [pushStageHistory, replaceStageHistory]);
 
   const closeSummary = useCallback(() => {
     const historyState = readStageHistoryState(window.history.state);
@@ -796,34 +788,26 @@ export function StageLedgerContent({
     setSummaryOpen(false);
   }, []);
 
-  const applyStageHistory = useCallback((value: unknown) => {
-    const historyState = readStageHistoryState(value);
-    const hashTrackId = getTrackIdFromHash(window.location.hash);
-    const trackId = historyState.stageOverlay === "track" ? historyState.stageTrackId : hashTrackId;
-    if (trackId && visibleRows.some((row) => row.row_id === trackId)) {
-      setSummaryOpen(false);
-      setSelectedTrackId(trackId);
-      setMobileExpandedTrackId(trackId);
+  const closeArchive = useCallback(() => {
+    const historyState = readStageHistoryState(window.history.state);
+    const hasSummaryHistory = historyState.stageOverlay === "summary" || window.location.hash === "#stage-summary";
+    setSummaryOpen(false);
+    if (hasSummaryHistory) {
+      window.history.back();
+      window.setTimeout(() => onBack?.(), 0);
       return;
     }
-    const wasTrackOpen = selectedTrackIdRef.current !== null || mobileExpandedTrackId !== null;
+    replaceStageHistory({});
+    onBack?.();
+  }, [onBack, replaceStageHistory]);
+
+  const applyStageHistory = useCallback((value: unknown) => {
+    const historyState = readStageHistoryState(value);
     setSummaryOpen(historyState.stageOverlay === "summary" || window.location.hash === "#stage-summary");
-    setSelectedTrackId(null);
-    setMobileExpandedTrackId(null);
-    if (wasTrackOpen) {
-      const previousId = selectedTrackIdRef.current ?? mobileExpandedTrackId;
-      if (previousId) triggerRefs.current[previousId]?.focus();
-    }
-  }, [mobileExpandedTrackId, visibleRows]);
+  }, []);
 
   useEffect(() => {
     const historyState = readStageHistoryState(window.history.state);
-    const hashTrackId = getTrackIdFromHash(window.location.hash);
-    const trackId = historyState.stageOverlay === "track" ? historyState.stageTrackId : hashTrackId;
-    if (trackId && visibleRows.some((row) => row.row_id === trackId)) {
-      setSelectedTrackId(trackId);
-      setMobileExpandedTrackId(trackId);
-    }
     if (historyState.stageOverlay === "summary" || window.location.hash === "#stage-summary") {
       setSummaryOpen(true);
     }
@@ -875,10 +859,10 @@ export function StageLedgerContent({
     const target = document.getElementById(targetId);
     if (!target) return;
     event.preventDefault();
-    pushStageHistory({ stageAnchor: targetId });
+    replaceStageHistory({ stageAnchor: targetId });
     target.focus({ preventScroll: true });
     target.scrollIntoView?.({ behavior: "auto", block: "start" });
-  }, [pushStageHistory]);
+  }, [replaceStageHistory]);
 
   if (detailNotFound) {
     return (
@@ -923,8 +907,12 @@ export function StageLedgerContent({
   const showAttendance = detailData.live_type === "event" && detailData.event_attendees.length > 0;
   const showFlow = visibleRows.length > 0;
   const hasRelated = Boolean(detailData.tour || detailData.performance_group);
-  const showMobileFavoriteAction = detailData.event_status !== "cancelled"
+  const showFavoriteAction = detailData.event_status !== "cancelled"
     && Boolean((canFavorite && onToggleFavorite) || (!canFavorite && onRequestLogin));
+  const showStageActions = Boolean(detailUrl || showFavoriteAction);
+  const showMobileActionBar = showFavoriteAction;
+  const jumpSegments = buildSegments(visibleRows);
+  const jumpBands = uniqueBandMembers(visibleRows.flatMap((row) => row.band_members)).slice(0, 10);
   const titleId = `stage-ledger-title-${detailData.live_id}`;
   const structuredData = buildStructuredData(detailData);
 
@@ -933,32 +921,33 @@ export function StageLedgerContent({
       {!embedded && (
         <div className="stage-context-bar">
           <nav className="stage-breadcrumb" aria-label="面包屑">
-            <span>演出档案</span>
+            <span className="stage-context-title">演出档案</span>
             {detailData.tour && <span aria-hidden="true">/</span>}
             {detailData.tour && <span>{detailData.tour.tour_title}</span>}
             {!detailData.tour && detailData.performance_group && <span aria-hidden="true">/</span>}
             {!detailData.tour && detailData.performance_group && <span>{detailData.performance_group.group_title}</span>}
           </nav>
-          <div className="stage-context-actions">
-            {detailUrl && (
-              <a
-                className="stage-official-link"
-                href={detailUrl}
-                target="_blank"
-                rel="noreferrer"
-                aria-label="打开官方网页"
-                title="打开官方网页"
+          {onBack && (
+            <div className="stage-context-actions">
+              <button
+                type="button"
+                className="stage-context-close"
+                onPointerDownCapture={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  closeArchive();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (event.detail === 0) closeArchive();
+                }}
+                aria-label="关闭演出资料"
               >
-                <ExternalLinkIcon />
-              </a>
-            )}
-            {onBack && (
-              <button type="button" className="stage-context-close" onClick={onBack} aria-label="关闭演出资料">
                 <span aria-hidden="true">×</span>
                 <span>关闭</span>
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
       <article className="stage-ledger-article" aria-labelledby={titleId}>
@@ -981,14 +970,14 @@ export function StageLedgerContent({
           </div>
           <div className="stage-masthead-side">
             <dl className="stage-schedule-list">
-              <div><dt>日期</dt><dd>{detailData.live_date}</dd></div>
-              <div><dt>开场</dt><dd>{formatTimedLabel(detailData.opening_time)}</dd></div>
-              <div><dt>开演</dt><dd>{formatTimedLabel(detailData.start_time)}</dd></div>
-              <div><dt>场馆</dt><dd>{detailData.venue?.trim() || "未记录"}</dd></div>
+              <div className="stage-schedule-date"><dt>日期</dt><dd>{detailData.live_date}</dd></div>
+              <div className="stage-schedule-opening"><dt>开场</dt><dd>{formatTimedLabel(detailData.opening_time)}</dd></div>
+              <div className="stage-schedule-start"><dt>开演</dt><dd>{formatTimedLabel(detailData.start_time)}</dd></div>
+              <div className="stage-schedule-venue"><dt>场馆</dt><dd>{detailData.venue?.trim() || "未记录"}</dd></div>
             </dl>
-            {detailData.event_status !== "cancelled" && ((canFavorite && onToggleFavorite) || (!canFavorite && onRequestLogin)) && (
+            {showStageActions && (
               <div className="stage-actions" aria-label="演出操作">
-                {canFavorite && onToggleFavorite && (
+                {showFavoriteAction && canFavorite && onToggleFavorite && (
                   <button
                     type="button"
                     className={`stage-action-button${isFavorite ? " is-active" : ""}`}
@@ -999,22 +988,22 @@ export function StageLedgerContent({
                     {isFavorite ? "已收藏" : "收藏"}
                   </button>
                 )}
-                {!canFavorite && onRequestLogin && (
+                {showFavoriteAction && !canFavorite && onRequestLogin && (
                   <button type="button" className="stage-action-button" onClick={onRequestLogin}>登录后收藏</button>
                 )}
+                {detailUrl && (
+                  <a
+                    className="stage-action-button stage-official-link"
+                    href={detailUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="打开官方网页"
+                    title="打开官方网页"
+                  >
+                    <ExternalLinkIcon />
+                  </a>
+                )}
               </div>
-            )}
-            {embedded && detailUrl && (
-              <a
-                className="stage-official-link stage-embedded-official-link"
-                href={detailUrl}
-                target="_blank"
-                rel="noreferrer"
-                aria-label="打开官方网页"
-                title="打开官方网页"
-              >
-                <ExternalLinkIcon />
-              </a>
             )}
           </div>
         </header>
@@ -1064,18 +1053,23 @@ export function StageLedgerContent({
                   <div className="stage-section-heading">
                     <div>
                       <h2 id="stage-flow-title">演出流程</h2>
-                      <p>按原始段落和绝对顺序排列，实际出演关系在曲目中展开。</p>
                     </div>
                     <span>{visibleRows.length} TRACKS</span>
                   </div>
                   {shouldShowJump && (
                     <nav className="stage-jump-nav" aria-label="演出流程跳转">
-                      {buildSegments(visibleRows).map((segment) => (
-                        <a key={segment.code} href={`#stage-segment-${segment.code}`} onClick={(event) => focusAnchor(event, `stage-segment-${segment.code}`)}>{segmentLabel(segment.code)}</a>
-                      ))}
-                        {uniqueBandMembers(visibleRows.flatMap((row) => row.band_members)).slice(0, 10).map((band) => (
-                          <a key={getBandKey(band)} href={`#stage-band-${encodeURIComponent(getBandKey(band))}`} onClick={(event) => focusAnchor(event, `stage-band-${encodeURIComponent(getBandKey(band))}`)}>{band.band_name}</a>
+                      <div className="stage-jump-row stage-jump-segment-row">
+                        {jumpSegments.map((segment) => (
+                          <a key={segment.code} href={`#stage-segment-${segment.code}`} onClick={(event) => focusAnchor(event, `stage-segment-${segment.code}`)}>{segmentLabel(segment.code)}</a>
                         ))}
+                      </div>
+                      {jumpBands.length > 0 && (
+                        <div className="stage-jump-row stage-jump-band-row">
+                          {jumpBands.map((band) => (
+                            <a key={getBandKey(band)} href={`#stage-band-${encodeURIComponent(getBandKey(band))}`} onClick={(event) => focusAnchor(event, `stage-band-${encodeURIComponent(getBandKey(band))}`)}>{band.band_name}</a>
+                          ))}
+                        </div>
+                      )}
                     </nav>
                   )}
                   <StageFlow
@@ -1112,14 +1106,14 @@ export function StageLedgerContent({
           </div>
         )}
 
-        {showMobileFavoriteAction && (
+        {showMobileActionBar && (
           <div className="stage-mobile-action-bar" aria-label="移动端操作">
-            {detailData.event_status !== "cancelled" && canFavorite && onToggleFavorite && (
+            {showFavoriteAction && canFavorite && onToggleFavorite && (
               <button type="button" className="stage-mobile-action" aria-pressed={isFavorite} onClick={onToggleFavorite}>
                 {isFavorite ? "已收藏" : "收藏"}
               </button>
             )}
-            {detailData.event_status !== "cancelled" && !canFavorite && onRequestLogin && (
+            {showFavoriteAction && !canFavorite && onRequestLogin && (
               <button type="button" className="stage-mobile-action" onClick={onRequestLogin}>登录后收藏</button>
             )}
           </div>
