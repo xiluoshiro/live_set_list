@@ -1330,7 +1330,8 @@ describe("App", () => {
     expect(within(stopNavigation).queryByText("/")).not.toBeInTheDocument();
     expect(within(stopNavigation).queryByText("2026-05-30")).not.toBeInTheDocument();
     expect(within(stopNavigation).queryByText("Zepp Tokyo")).not.toBeInTheDocument();
-    expect(screen.getByText("已收录日期：").closest("p")).toHaveClass("detail-inline-item", "detail-inline-item-date");
+    expect(screen.getByText("已收录日期")).toBeInTheDocument();
+    expect(screen.getByText("2026-05-30 — 2026-06-02")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看 Live" })).not.toBeInTheDocument();
     expect(screen.queryByText("已有 Setlist")).not.toBeInTheDocument();
     expect(screen.queryByText("暂无 Setlist")).not.toBeInTheDocument();
@@ -1388,16 +1389,20 @@ describe("App", () => {
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
   });
 
-  // 测试点：巡演及页内 Live 详情复用统一的 Phosphor 外链图标，精简场次导航不再重复来源链接。
-  test("巡演详情复用既有外链样式", async () => {
+  // 测试点：巡演详情标题为纯文本（无外链图标），页内 Live 详情保留统一的官方网页入口。
+  test("巡演详情标题为纯文本，页内 Live 保留外链入口", async () => {
     const user = userEvent.setup();
     renderApp();
     await user.click(await screen.findByRole("button", { name: "巡演资料" }));
     await user.click(await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus"));
 
     await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
-    const titleLink = screen.getByRole("link", { name: "Ave Mujica LIVE TOUR 2026 Exitus" });
-    expect(titleLink.querySelector(".detail-title-link-icon .action-icon-external")).not.toBeNull();
+    const titleHeading = screen.getByRole("heading", { name: "Ave Mujica LIVE TOUR 2026 Exitus" });
+    expect(titleHeading.querySelector("a")).toBeNull();
+    expect(titleHeading.querySelector(".detail-title-link-icon")).toBeNull();
+
+    await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(41));
+    expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/41");
     expect(screen.queryByText("↗")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /打开《.*》的资料来源/ })).not.toBeInTheDocument();
   });

@@ -10,19 +10,18 @@ import {
 import { logError } from "../logger";
 import { getPerformanceGroupStatusPresentation } from "../liveStatus";
 import { ContentState } from "./ContentState";
-import { DetailTitleLink } from "./DetailTitleLink";
 import { StageLedgerContent } from "./StageLedgerContent";
 import { getGroupedLiveShortTitle } from "./performanceGroupHelpers";
 
 type PerformanceGroupDetailPageProps = {
   groupId: number;
   initialLiveId?: number | null;
-  onBack: () => void;
   onOpenTour?: (tour: TourRef) => void;
   canFavorite?: boolean;
   isFavorite?: (liveId: number) => boolean;
   isSyncing?: (liveId: number) => boolean;
   onToggleFavorite?: (liveId: number) => void;
+  onOpenBand?: (bandId: number) => void;
 };
 
 function getDisplayTypeLabel(
@@ -49,12 +48,12 @@ function normalizeError(caught: unknown): string {
 export function PerformanceGroupDetailPage({
   groupId,
   initialLiveId = null,
-  onBack,
   onOpenTour,
   canFavorite = false,
   isFavorite = () => false,
   isSyncing = () => false,
   onToggleFavorite,
+  onOpenBand,
 }: PerformanceGroupDetailPageProps) {
   const [detail, setDetail] = useState<PerformanceGroupDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -131,39 +130,56 @@ export function PerformanceGroupDetailPage({
     (live) => live.live_id === selectedLiveId,
   ) ?? null;
 
-  const groupUrl = detail?.lives[0]?.url ?? null;
+  const groupStatus = detail
+    ? getPerformanceGroupStatusPresentation(
+        detail.start_date,
+        detail.end_date,
+        detail.cancelled_live_count ?? 0,
+        detail.live_count,
+      )
+    : null;
   return (
-    <div className="tour-detail-page">
-      <div className="detail-page-head tour-detail-head">
-        <h2>
-          {groupUrl
-            ? <DetailTitleLink href={groupUrl}>{detail?.group_title ?? `活动组 #${groupId}`}</DetailTitleLink>
-            : detail?.group_title ?? `活动组 #${groupId}`}
-        </h2>
-        <button type="button" className="detail-back-btn" onClick={onBack} aria-label="返回"><span className="modal-action-glyph" aria-hidden="true">←</span></button>
-      </div>
+    <div className="tour-detail-page" data-stage-ledger>
+      {detail && groupStatus && (
+        <header className="stage-masthead">
+          <div className="stage-masthead-main">
+            <div className="stage-title-meta">
+              <span className="stage-status-line" data-status-tone={groupStatus.tone}>
+                <span>{groupStatus.primary}</span>
+              </span>
+              <span className="stage-type-label">{getDisplayTypeLabel(detail.display_type)}</span>
+            </div>
+            <h1>{detail.group_title}</h1>
+            {detail.bands.length > 0 && (
+              <div className="stage-masthead-bands">
+                <span className="stage-field-label">参与乐队</span>
+                <ul className="stage-band-list">
+                  {detail.bands.map((band) => (
+                    <li key={band.band_id}>
+                      {onOpenBand ? (
+                        <button type="button" className="stage-inline-link" onClick={() => onOpenBand(band.band_id)}>
+                          {band.band_name}
+                        </button>
+                      ) : (
+                        <span>{band.band_name}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <div className="stage-masthead-side">
+            <dl className="stage-schedule-list">
+              <div><dt>场次</dt><dd>{getCountText(detail)}</dd></div>
+            </dl>
+          </div>
+        </header>
+      )}
       {loading && <ContentState kind="loading" title="加载活动组详情..." layout="detail" />}
       {error && <ContentState kind="error" title="活动组详情加载失败" description={error} layout="detail" />}
       {detail && (
         <>
-          {(() => {
-            const status = getPerformanceGroupStatusPresentation(
-              detail.start_date,
-              detail.end_date,
-              detail.cancelled_live_count ?? 0,
-              detail.live_count,
-            );
-            return (
-              <section className="live-status-panel" data-status-tone={status.tone} aria-label="活动状态">
-                <strong>{status.primary}</strong>
-              </section>
-            );
-          })()}
-          <div className="detail-meta-line">
-            <p className="detail-inline-item"><strong>类型：</strong><span>{getDisplayTypeLabel(detail.display_type)}</span></p>
-            <p className="detail-inline-item"><strong>场次：</strong><span>{getCountText(detail)}</span></p>
-            <p className="detail-inline-item"><strong>参与乐队：</strong><span>{detail.bands.map((b) => b.band_name).join(" / ") || "-"}</span></p>
-          </div>
           <nav
             className="tour-stop-shortcuts"
             aria-label="活动组场次"
@@ -210,7 +226,7 @@ export function PerformanceGroupDetailPage({
             })}
           </nav>
           {selectedLive && (
-            <div className="detail-page tour-inline-live-detail">
+            <div className="tour-inline-live-detail">
               <StageLedgerContent
                 detailData={liveDetail}
                 detailLoading={liveLoading}
@@ -220,6 +236,7 @@ export function PerformanceGroupDetailPage({
                   liveDate: selectedLive.live_date,
                   url: selectedLive.url,
                 }}
+                displayTitle={getGroupedLiveShortTitle(selectedLive.live_title, detail.group_title)}
                 onOpenTour={onOpenTour}
                 embedded
                 canFavorite={canFavorite}

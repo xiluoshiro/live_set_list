@@ -1343,20 +1343,6 @@ function App() {
     window.history.replaceState(archiveState, "", "/");
     applyHistoryState(archiveState);
   };
-  const handleBackFromTourDetail = () => {
-    if (isAppHistoryState(window.history.state) && window.history.state.tab === "tour_detail") {
-      window.history.back();
-      return;
-    }
-    navigateToTab("tours");
-  };
-  const handleBackFromPerformanceGroupDetail = () => {
-    if (isAppHistoryState(window.history.state) && window.history.state.tab === "performance_group_detail") {
-      window.history.back();
-      return;
-    }
-    navigateToTab("all");
-  };
   const toggleTheme = () => {
     setThemeMode(getNextThemeMode(themeMode));
   };
@@ -1559,23 +1545,29 @@ function App() {
             key={`tour-${detailTourId}-${liveDataRevision}`}
             tourId={detailTourId}
             fallback={tourFallback}
-            onBack={handleBackFromTourDetail}
             canFavorite={canUseFavoriteFeatures}
             isFavorite={isFavorite}
             isSyncing={favorites.isFavoriteSyncing}
             onToggleFavorite={(liveId) => void toggleFavorite(liveId)}
+            onOpenBand={(bandId) => {
+              setCatalogBandPage(1);
+              navigateToTab("browse", { catalogBandId: bandId });
+            }}
           />
         ) : showPerformanceGroupDetailPanel && detailGroupId !== null && groupFallback !== null ? (
           <PerformanceGroupDetailPage
             key={`group-${detailGroupId}-${liveDataRevision}`}
             groupId={detailGroupId}
             initialLiveId={detailGroupLiveId}
-            onBack={handleBackFromPerformanceGroupDetail}
             onOpenTour={openTourDetail}
             canFavorite={canUseFavoriteFeatures}
             isFavorite={isFavorite}
             isSyncing={favorites.isFavoriteSyncing}
             onToggleFavorite={(liveId) => void toggleFavorite(liveId)}
+            onOpenBand={(bandId) => {
+              setCatalogBandPage(1);
+              navigateToTab("browse", { catalogBandId: bandId });
+            }}
           />
         ) : showHomePanel ? (
           <HomeDashboard

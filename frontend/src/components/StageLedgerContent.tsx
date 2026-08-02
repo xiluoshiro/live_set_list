@@ -25,6 +25,7 @@ export type StageLedgerContentProps = {
   detailError: string | null;
   detailNotFound?: boolean;
   fallback: LiveDetailFallback;
+  displayTitle?: string;
   onRetry?: () => void;
   onBack?: () => void;
   onOpenTour?: (tour: TourRef) => void;
@@ -562,7 +563,7 @@ function MastheadRelated({
     <>
       {tourRef && (
         <div className="stage-masthead-bands">
-          <span className="stage-field-label">Tour</span>
+          <span className="stage-field-label">巡演</span>
           <button type="button" className="stage-inline-link" onClick={() => onOpenTour?.(tourRef)}>
             {tourRef.tour_title}
           </button>
@@ -570,7 +571,7 @@ function MastheadRelated({
       )}
       {groupRef && (
         <div className="stage-masthead-bands">
-          <span className="stage-field-label">Performance Group</span>
+          <span className="stage-field-label">活动组</span>
           <button type="button" className="stage-inline-link" onClick={() => onOpenPerformanceGroup?.(groupRef, detail.live_id)}>
             {groupRef.group_title}
           </button>
@@ -630,6 +631,7 @@ export function StageLedgerContent({
   detailError,
   detailNotFound = false,
   fallback,
+  displayTitle,
   onRetry,
   onBack,
   onOpenTour,
@@ -649,7 +651,7 @@ export function StageLedgerContent({
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const selectedTrackIdRef = useRef<string | null>(null);
   selectedTrackIdRef.current = selectedTrackId;
-  const detailTitle = detailData?.live_title ?? fallback.liveTitle;
+  const detailTitle = displayTitle ?? detailData?.live_title ?? fallback.liveTitle;
   const detailUrl = detailData?.url ?? fallback.url;
   const isCancelled = detailData?.event_status === "cancelled";
   const visibleRows = isCancelled ? [] : rows;
@@ -777,7 +779,7 @@ export function StageLedgerContent({
               <StatusLine detail={detailData} />
               <span className="stage-type-label">{formatLiveType(detailData.live_type)}</span>
             </div>
-            <h1 id={titleId}>{detailTitle}</h1>
+            {embedded ? <h2 id={titleId}>{detailTitle}</h2> : <h1 id={titleId}>{detailTitle}</h1>}
             <div className="stage-masthead-bands">
               <span className="stage-field-label">出演</span>
               <BandNameList detail={detailData} onOpenBand={onOpenBand} />
