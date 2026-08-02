@@ -47,15 +47,29 @@
   color: var(--text-on-primary);
 }
 
-.tour-stop-shortcuts { display: flex; flex-wrap: wrap; margin-top: 14px; line-height: 1.8; }
+.tour-stop-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 18px;
+  margin-top: 14px;
+  padding: 8px 0;
+  border-top: 1px solid var(--stage-line-soft);
+  border-bottom: 1px solid var(--stage-line-soft);
+}
 .tour-stop-shortcut-item { display: inline-flex; align-items: center; white-space: nowrap; }
-.tour-stop-separator { width: 2px; height: 1.1em; margin: 0 10px; border-radius: var(--radius-pill); background: var(--border-strong); }
-.tour-stop-shortcut { color: var(--text-muted); font-size: 13px; }
+.tour-stop-shortcut {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
 .tour-stop-shortcut:hover { color: var(--accent-primary); }
-.tour-stop-shortcut[aria-pressed="true"] { color: var(--text-heading); font-weight: 700; text-decoration: underline; }
+.tour-stop-shortcut[aria-pressed="true"] { color: var(--accent-primary); font-weight: 600; }
 .tour-stop-shortcut-item.is-cancelled .tour-stop-shortcut { color: var(--accent-danger); }
 .tour-stop-shortcut-item.is-cancelled .cancelled-static-title { cursor: default; }
-.performance-group-live-star { margin-left: 5px; }
 .tour-detail-state { text-align: center; color: var(--text-muted); padding: 28px; }
 .tour-inline-live-detail { margin: 18px 0 0; }
 .tour-statistics { display: flex; flex-direction: column; gap: 14px; }

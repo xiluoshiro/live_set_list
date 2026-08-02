@@ -228,7 +228,7 @@ describe("PerformanceGroupDetailPage", () => {
       const nav = screen.getByRole("navigation", { name: "活动组场次" });
       expect(within(nav).getAllByRole("button")).toHaveLength(3);
       expect(nav.querySelector("time")).toBeNull();
-      expect(nav.querySelectorAll(".tour-stop-separator")).toHaveLength(2);
+      expect(nav.querySelectorAll(".tour-stop-separator")).toHaveLength(0);
       expect(nav).not.toHaveTextContent("2025-04-26");
       expect(nav).not.toHaveTextContent("18:00");
     });
@@ -333,29 +333,6 @@ describe("PerformanceGroupDetailPage", () => {
 
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(102));
     expect(screen.getByRole("button", { name: /DAY 2: Roselia/ })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  // 测试点：已登录用户可以逐场收藏活动组子 Live，组本身不出现整体收藏按钮。
-  test("offers a favorite control for each child live", async () => {
-    getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
-    const onToggleFavorite = vi.fn();
-    const user = userEvent.setup();
-
-    render(
-      <PerformanceGroupDetailPage
-        groupId={1}
-        
-        canFavorite
-        isFavorite={(liveId) => liveId === 101}
-        onToggleFavorite={onToggleFavorite}
-      />,
-    );
-
-    const removeButton = await screen.findByRole("button", { name: /取消收藏 DAY 1/ });
-    const addButton = screen.getByRole("button", { name: /加入收藏 DAY 2: Roselia/ });
-    expect(removeButton).toBeInTheDocument();
-    await user.click(addButton);
-    expect(onToggleFavorite).toHaveBeenCalledWith(102);
   });
 
   // 测试点：API 返回 404 时显示错误信息

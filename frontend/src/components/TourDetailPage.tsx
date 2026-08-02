@@ -12,6 +12,7 @@ import { logError } from "../logger";
 import { ContentState } from "./ContentState";
 import { StageLedgerContent } from "./StageLedgerContent";
 import { SectionTabs } from "./SectionTabs";
+import { StopShortcuts } from "./StopShortcuts";
 import { getTourStopShortTitle } from "./tourHelpers";
 import { TourStatisticsPanel } from "./TourStatisticsPanel";
 
@@ -178,48 +179,24 @@ export function TourDetailPage({
           />
           {activeTab === "stops" ? (
             <>
-              <nav className="tour-stop-shortcuts" aria-label="巡演场次">
-                {detail.stops.map((stop, index) => {
+              <StopShortcuts
+                label="巡演场次"
+                items={detail.stops.map((stop) => {
                   const shortTitle = getTourStopShortTitle(stop.live_title, detail.tour_title);
                   const displayTitle = stop.event_status === "cancelled"
                     ? `${shortTitle}（已取消）`
                     : shortTitle;
-                  const favorite = isFavorite(stop.live_id);
-                  const canOpenStop = stop.event_status !== "cancelled" || stop.has_setlist;
-                  return (
-                    <span
-                      key={stop.live_id}
-                      className={`tour-stop-shortcut-item ${stop.event_status === "cancelled" ? "is-cancelled" : ""}`}
-                    >
-                      {index > 0 && <span className="tour-stop-separator" aria-hidden="true" />}
-                      {canOpenStop ? (
-                        <button
-                          type="button"
-                          className="detail-tour-link tour-stop-shortcut"
-                          title={stop.live_title}
-                          aria-pressed={stop.live_id === selectedLiveId}
-                          onClick={() => setSelectedLiveId(stop.live_id)}
-                        >
-                          {displayTitle}
-                        </button>
-                      ) : (
-                        <span className="tour-stop-shortcut cancelled-static-title" title={stop.live_title}>
-                          {displayTitle}
-                        </span>
-                      )}
-                      {canFavorite && onToggleFavorite && stop.event_status !== "cancelled" && (
-                        <button
-                          type="button"
-                          className={`star-btn performance-group-live-star ${favorite ? "is-fav" : ""} ${isSyncing(stop.live_id) ? "is-syncing" : ""}`}
-                          aria-label={`${favorite ? "取消收藏" : "加入收藏"} ${displayTitle}`}
-                          aria-busy={isSyncing(stop.live_id)}
-                          onClick={() => onToggleFavorite(stop.live_id)}
-                        >★</button>
-                      )}
-                    </span>
-                  );
+                  return {
+                    liveId: stop.live_id,
+                    title: displayTitle,
+                    fullTitle: stop.live_title,
+                    cancelled: stop.event_status === "cancelled",
+                    canOpen: stop.event_status !== "cancelled" || stop.has_setlist,
+                    selected: stop.live_id === selectedLiveId,
+                    onSelect: () => setSelectedLiveId(stop.live_id),
+                  };
                 })}
-              </nav>
+              />
               {selectedStop && (
                 <div className="tour-inline-live-detail">
                   <StageLedgerContent
