@@ -1,4 +1,5 @@
 ﻿import json
+import re
 from collections.abc import Mapping
 from math import ceil
 from typing import Any, Literal, cast
@@ -228,7 +229,8 @@ SELECT
             WHERE history.live_id = l.id
         ),
         '[]'::jsonb
-    ) AS schedule_history
+    ) AS schedule_history,
+    NULLIF(to_jsonb(l) ->> 'venue_id', '')::int AS venue_id
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -251,7 +253,11 @@ SELECT
     stl.is_short,
     s.is_cover,
     s.band_id,
-    owner_band.band_name
+    owner_band.band_name,
+    stl.absolute_order,
+    stl.segment_type,
+    stl.sub_order,
+    stl.song_id
 FROM live_setlist stl
 JOIN song_list s
     ON s.id = stl.song_id
@@ -312,7 +318,8 @@ SELECT
             WHERE history.live_id = l.id
         ),
         '[]'::jsonb
-    ) AS schedule_history
+    ) AS schedule_history,
+    NULLIF(to_jsonb(l) ->> 'venue_id', '')::int AS venue_id
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -337,7 +344,10 @@ WITH row_base AS (
         stl.is_short,
         s.is_cover,
         s.band_id,
-        stl.absolute_order
+        stl.absolute_order,
+        stl.segment_type,
+        stl.sub_order,
+        stl.song_id
     FROM live_setlist stl
     JOIN song_list s
         ON s.id = stl.song_id
@@ -351,7 +361,11 @@ SELECT
     rb.is_short,
     rb.is_cover,
     rb.band_id,
-    owner_band.band_name
+    owner_band.band_name,
+    rb.absolute_order,
+    rb.segment_type,
+    rb.sub_order,
+    rb.song_id
 FROM row_base rb
 LEFT JOIN band_attrs owner_band
     ON owner_band.id = rb.band_id
@@ -415,7 +429,19 @@ WHERE performance.live_id = ANY(%s)
 ORDER BY performance.live_id, setlist.absolute_order, performance.band_id
 """
 
-ParsedDetailRow = tuple[str, str, dict[str, Any], bool, bool, int, str | None]
+ParsedDetailRow = tuple[
+    str,
+    str,
+    dict[str, Any],
+    bool,
+    bool,
+    int,
+    str | None,
+    int,
+    str,
+    int,
+    int,
+]
 PerformanceRowsByDetail = dict[tuple[int, str], list[dict[str, Any]]]
 
 
@@ -666,6 +692,30 @@ def _build_detail_tags(
     return comments, None
 
 
+def _fallback_row_position(row_id: str, fallback_order: int = 1) -> tuple[int, str, int]:
+    """Keep old mocked/compatibility rows readable while structured fields roll out."""
+    match = re.match(r"^([A-Za-z]+)(\d+)$", row_id)
+    if match:
+        return int(match.group(2)), match.group(1), int(match.group(2))
+    return max(1, fallback_order), row_id or "M", max(1, fallback_order)
+
+
+def _parse_detail_row_values(
+    row_id: str,
+    values: list[Any],
+    fallback_order: int = 1,
+) -> tuple[int, str, int, int]:
+    fallback_absolute_order, fallback_segment_type, fallback_sub_order = _fallback_row_position(
+        row_id,
+        fallback_order,
+    )
+    absolute_order = int(values[2]) if len(values) > 2 and values[2] is not None else fallback_absolute_order
+    segment_type = str(values[3]) if len(values) > 3 and values[3] is not None else fallback_segment_type
+    sub_order = int(values[4]) if len(values) > 4 and values[4] is not None else fallback_sub_order
+    song_id = int(values[5]) if len(values) > 5 and values[5] is not None else max(1, fallback_order)
+    return absolute_order, segment_type, sub_order, song_id
+
+
 def _order_band_names_by_bands(
     bands: list[int],
     raw_band_names: Any,
@@ -723,7 +773,19 @@ def _build_live_detail_payload(
         for item in items
     }
     detail_rows = []
-    for row_id, song_name, other_member_obj, is_short, is_cover, song_band_id, song_band_name in parsed_rows:
+    for (
+        row_id,
+        song_name,
+        other_member_obj,
+        is_short,
+        is_cover,
+        song_band_id,
+        song_band_name,
+        absolute_order,
+        segment_type,
+        sub_order,
+        song_id,
+    ) in sorted(parsed_rows, key=lambda row: row[7]):
         band_members = _build_detail_band_members(
             live_id=live_id,
             row_id=row_id,
@@ -745,6 +807,10 @@ def _build_live_detail_payload(
         detail_rows.append(
             {
                 "row_id": row_id,
+                "absolute_order": absolute_order,
+                "segment_type": segment_type,
+                "sub_order": sub_order,
+                "song_id": song_id,
                 "song_name": song_name,
                 "band_members": band_members,
                 "other_members": other_members,
@@ -768,6 +834,7 @@ def _build_live_detail_payload(
         "live_date": header_row[1],
         "live_title": str(header_row[2]),
         "live_type": live_type,
+        "venue_id": header_row[18] if len(header_row) > 18 else None,
         "venue": header_row[3],
         "opening_time": header_row[4],
         "start_time": header_row[5],
@@ -799,10 +866,15 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
     performance_rows_by_detail = _load_detail_performances(cur, [live_id])
 
     parsed_rows: list[ParsedDetailRow] = []
-    for row in raw_rows:
+    for row_index, row in enumerate(raw_rows, start=1):
         row_id, song_name, other_member_raw, is_short, is_cover, *song_band_values = row
         song_band_id = int(song_band_values[0]) if song_band_values else 0
         song_band_name = str(song_band_values[1]) if len(song_band_values) > 1 and song_band_values[1] is not None else None
+        absolute_order, segment_type, sub_order, song_id = _parse_detail_row_values(
+            str(row_id),
+            song_band_values,
+            row_index,
+        )
         other_member_obj = _ensure_json_object(other_member_raw)
         parsed_rows.append(
             (
@@ -813,6 +885,10 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
                 bool(is_cover),
                 int(song_band_id),
                 song_band_name,
+                absolute_order,
+                segment_type,
+                sub_order,
+                song_id,
             )
         )
 
@@ -1029,10 +1105,15 @@ def get_live_details_batch(
                 performance_rows_by_detail = _load_detail_performances(cur, deduped_live_ids)
 
                 parsed_rows_by_live_id: dict[int, list[ParsedDetailRow]] = {}
-                for row in raw_rows:
+                for row_index, row in enumerate(raw_rows, start=1):
                     live_id, row_id, song_name, other_member_raw, is_short, is_cover, *song_band_values = row
                     song_band_id = int(song_band_values[0]) if song_band_values else 0
                     song_band_name = str(song_band_values[1]) if len(song_band_values) > 1 and song_band_values[1] is not None else None
+                    absolute_order, segment_type, sub_order, song_id = _parse_detail_row_values(
+                        str(row_id),
+                        song_band_values,
+                        row_index,
+                    )
                     live_id_int = int(live_id)
                     parsed_rows_by_live_id.setdefault(live_id_int, []).append(
                         (
@@ -1043,6 +1124,10 @@ def get_live_details_batch(
                             bool(is_cover),
                             int(song_band_id),
                             song_band_name,
+                            absolute_order,
+                            segment_type,
+                            sub_order,
+                            song_id,
                         )
                     )
 

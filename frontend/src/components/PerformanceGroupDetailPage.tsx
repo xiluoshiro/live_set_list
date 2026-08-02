@@ -11,7 +11,7 @@ import { logError } from "../logger";
 import { getPerformanceGroupStatusPresentation } from "../liveStatus";
 import { ContentState } from "./ContentState";
 import { DetailTitleLink } from "./DetailTitleLink";
-import { LiveDetailContent } from "./LiveDetailContent";
+import { StageLedgerContent } from "./StageLedgerContent";
 import { getGroupedLiveShortTitle } from "./performanceGroupHelpers";
 
 type PerformanceGroupDetailPageProps = {
@@ -211,7 +211,7 @@ export function PerformanceGroupDetailPage({
           </nav>
           {selectedLive && (
             <div className="detail-page tour-inline-live-detail">
-              <LiveDetailContent
+              <StageLedgerContent
                 detailData={liveDetail}
                 detailLoading={liveLoading}
                 detailError={liveError}
@@ -221,6 +221,11 @@ export function PerformanceGroupDetailPage({
                   url: selectedLive.url,
                 }}
                 onOpenTour={onOpenTour}
+                embedded
+                canFavorite={canFavorite}
+                isFavorite={selectedLiveId !== null && isFavorite(selectedLiveId)}
+                isFavoriteSyncing={selectedLiveId !== null && isSyncing(selectedLiveId)}
+                onToggleFavorite={selectedLiveId === null || !onToggleFavorite ? undefined : () => onToggleFavorite(selectedLiveId)}
               />
             </div>
           )}

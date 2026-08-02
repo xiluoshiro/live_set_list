@@ -214,6 +214,11 @@ export type LiveDetailEventAttendee = {
 
 export type LiveDetailRow = {
   row_id: string;
+  /** Structured setlist position fields are optional during the compatibility window. */
+  absolute_order?: number;
+  segment_type?: string;
+  sub_order?: number;
+  song_id?: number;
   song_name: string;
   band_members: LiveDetailBandMember[];
   other_members: LiveDetailOtherMember[];
@@ -226,6 +231,7 @@ export type LiveDetailResponse = {
   live_date: string;
   live_title: string;
   live_type: string;
+  venue_id?: number | null;
   venue: string | null;
   opening_time: string | null;
   start_time: string | null;
