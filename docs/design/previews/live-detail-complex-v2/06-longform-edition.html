@@ -23,20 +23,27 @@
     .dateline { align-self:end; padding-top:1.2rem; border-top:1px solid var(--ink); }
     .dateline time { display:block; color:var(--accent); font-family:Georgia,serif; font-size:clamp(3rem,6vw,6rem); line-height:.9; }
     .dateline p { margin:1.2rem 0 0; line-height:1.7; }
-    .intro { max-width:720px; margin:3rem 0 4.5rem; font-family:Georgia,serif; font-size:1.25rem; line-height:1.8; }
+    .chronology { position:relative; margin-top:3rem; padding-left:7rem; }
+    .chronology::before { position:absolute; top:0; bottom:0; left:3.1rem; width:3px; content:""; background:var(--accent); }
+    .timeline-stop { position:relative; }
+    .timeline-stop::before { position:absolute; top:.55rem; left:-4.35rem; width:13px; height:13px; content:""; border:3px solid var(--paper); background:var(--accent); box-shadow:0 0 0 1px var(--accent); transform:rotate(45deg); }
+    .timeline-stop::after { position:absolute; top:.45rem; left:-7rem; width:2.1rem; content:attr(data-time); color:var(--accent); font-family:"Courier New",monospace; font-size:.65rem; font-weight:700; text-align:right; }
+    .intro { max-width:720px; margin:0 0 4.5rem; font-family:Georgia,serif; font-size:1.25rem; line-height:1.8; }
     .intro::first-letter { float:left; margin:.08em .12em 0 0; color:var(--accent); font-size:4.7em; line-height:.72; }
     .setlist-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:1.2rem; border-bottom:1px solid var(--ink); }
     h2 { margin:0 0 .5rem; font-family:Georgia,serif; font-size:2.7rem; font-weight:400; }
     .setlist-head span { font-size:.72rem; }
     .columns { column-count:3; column-gap:2.5rem; column-rule:1px solid #aaa69c; }
-    .chapter { break-inside:avoid; margin:0 0 2rem; }
+    .chapter { break-inside:auto; margin:0 0 2rem; }
     .chapter h3 { margin:0 0 1rem; padding-top:.7rem; border-top:3px solid var(--accent); font-size:.76rem; letter-spacing:.12em; text-transform:uppercase; }
     .tracks { margin:0; padding:0; list-style:none; counter-reset:track; }
     .tracks li { break-inside:avoid; margin:0 0 1.05rem; padding-left:2.5rem; position:relative; counter-increment:track; }
     .tracks li::before { position:absolute; left:0; content:counter(track,decimal-leading-zero); color:var(--accent); font-family:"Courier New",monospace; font-size:.72rem; }
     .tracks strong { display:block; font-family:Georgia,serif; font-size:1.03rem; line-height:1.28; }
     .tracks small { color:#68665f; }
-    .encore .tracks { counter-reset:track 12; }
+    .encore-stop { margin-top:3rem; padding-top:.2rem; border-top:3px solid var(--accent); }
+    .encore-stop h3 { margin:.4rem 0 1rem; font-size:.76rem; letter-spacing:.12em; text-transform:uppercase; }
+    .encore-stop .tracks { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; counter-reset:track 12; }
     .facts { display:grid; grid-template-columns:1.4fr .8fr 1fr; margin-top:5rem; border-top:1px solid var(--ink); border-bottom:1px solid var(--ink); }
     .facts div { padding:1.5rem 1rem 1.5rem 0; }
     .facts div+div { padding-left:1rem; border-left:1px solid #aaa69c; }
@@ -49,7 +56,12 @@
       article { padding:2.4rem 1rem 4rem; }
       .lede { grid-template-columns:1fr; gap:2.5rem; }
       h1 { font-size:clamp(3.2rem,18vw,5rem); }
+      .chronology { padding-left:3.5rem; }
+      .chronology::before { left:1rem; }
+      .timeline-stop::before { left:-2.9rem; }
+      .timeline-stop::after { top:1.55rem; left:-3.45rem; width:2.25rem; transform:rotate(-90deg); }
       .columns { column-count:1; }
+      .encore-stop .tracks { grid-template-columns:1fr; }
       .facts,footer { grid-template-columns:1fr; }
       .facts div+div { padding-left:0; border-top:1px solid #aaa69c; border-left:0; }
     }
@@ -62,18 +74,20 @@
       <div><p class="rubric">Roselia Asia Tour</p><h1>Neuweltfahrt</h1><p class="subtitle">東京公演 -Final- DAY2</p></div>
       <div class="dateline"><time datetime="2026-02-15">02.15</time><p>東京ガーデンシアター<br />16:30 doors<br />18:00 start</p></div>
     </header>
-    <p class="intro">一场单乐队公演的阅读重点不在复杂筛选，而在曲序如何逐步积累。十二首主篇之后，两首安可把整晚收束成一个清晰的尾声。</p>
-    <section aria-labelledby="setlist-title">
+    <div class="chronology">
+    <p class="intro timeline-stop" data-time="17:30">一场单乐队公演的阅读重点不在复杂筛选，而在曲序如何逐步积累。十二首主篇之后，两首安可把整晚收束成一个清晰的尾声。</p>
+    <section class="timeline-stop" data-time="18:00" aria-labelledby="setlist-title">
       <header class="setlist-head"><h2 id="setlist-title">The setlist</h2><span>Roselia / 14 songs</span></header>
       <div class="columns">
         <div class="chapter"><h3>Main program</h3><ol class="tracks">
           <li><strong>FRONTIER FANTASIA</strong><small>M1</small></li><li><strong>BLACK SHOUT</strong><small>M2</small></li><li><strong>Determination Symphony</strong><small>M3</small></li><li><strong>紫炎</strong><small>M4</small></li><li><strong>R</strong><small>M5</small></li><li><strong>ZEAL of proud</strong><small>M6</small></li><li><strong>Ringing Bloom</strong><small>M7</small></li><li><strong>陽だまりロードナイト</strong><small>M8</small></li><li><strong>軌跡</strong><small>M9</small></li><li><strong>Song I am.</strong><small>M10</small></li><li><strong>Steadfast Spirits</strong><small>M11</small></li><li><strong>Neo-Aspect</strong><small>M12</small></li>
         </ol></div>
-        <div class="chapter encore"><h3>Encore</h3><ol class="tracks"><li><strong>FIRE BIRD</strong><small>EN1</small></li><li><strong>PASSIONATE ANTHEM</strong><small>EN2</small></li></ol></div>
       </div>
     </section>
-    <dl class="facts"><div><dt>VENUE</dt><dd>東京ガーデンシアター</dd></div><div><dt>PERFORMER</dt><dd>Roselia</dd></div><div><dt>OPENING ACT</dt><dd>奈良育英高等学校 軽音楽部，17:30 左右</dd></div></dl>
+    <section class="encore-stop timeline-stop" data-time="EN"><h3>Encore</h3><ol class="tracks"><li><strong>FIRE BIRD</strong><small>EN1</small></li><li><strong>PASSIONATE ANTHEM</strong><small>EN2</small></li></ol></section>
+    <dl class="facts timeline-stop" data-time="END"><div><dt>VENUE</dt><dd>東京ガーデンシアター</dd></div><div><dt>PERFORMER</dt><dd>Roselia</dd></div><div><dt>OPENING ACT</dt><dd>奈良育英高等学校 軽音楽部，17:30 左右</dd></div></dl>
     <footer><span>公演事实依据 BanG Dream! 官方资料。曲序使用 LiveSetList 本地预览数据。</span><a href="https://bang-dream.com/neuweltfahrt-tokyo/">公式公演页</a></footer>
+    </div>
   </article>
 </body>
 </html>

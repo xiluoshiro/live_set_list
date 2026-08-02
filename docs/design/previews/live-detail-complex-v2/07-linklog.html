@@ -27,14 +27,20 @@
     .post-meta { margin:0 0 .7rem; color:#777; font-size:.72rem; }
     h1 { margin:0; color:var(--blue-dark); font-family:Georgia,serif; font-size:clamp(2.4rem,5vw,4.6rem); font-weight:400; line-height:.98; }
     .deck { margin:1rem 0 1.8rem; color:#555; font-family:Georgia,serif; font-size:1.05rem; line-height:1.55; }
-    .event-line { margin:0 0 1.8rem; padding:.8rem 0; border-top:1px solid #bbb; border-bottom:1px solid #bbb; font-size:.78rem; line-height:1.7; }
-    h2.section { margin:2rem 0 .4rem; font-family:Georgia,serif; font-size:1.6rem; font-weight:400; }
-    .setlist { display:grid; grid-template-columns:1fr 1fr; gap:.25rem 1.5rem; margin:.8rem 0; padding:0; list-style:none; counter-reset:track; }
+    .live-flow { position:relative; margin-top:2rem; }
+    .live-flow::before { position:absolute; top:.2rem; bottom:.2rem; left:3.6rem; width:2px; content:""; background:var(--blue); }
+    .log-entry { display:grid; grid-template-columns:3.6rem minmax(0,1fr); gap:1.25rem; position:relative; padding-bottom:1.7rem; }
+    .log-entry::before { position:absolute; top:.25rem; left:3.25rem; width:9px; height:9px; content:""; border:2px solid #fff; background:var(--blue); box-shadow:0 0 0 1px var(--blue-dark); }
+    .log-time { padding-top:.1rem; color:#777; font-family:"Courier New",monospace; font-size:.67rem; text-align:right; }
+    .log-body { min-width:0; }
+    .event-line { margin:0; padding:0 0 .8rem; border-bottom:1px solid #bbb; font-size:.78rem; line-height:1.7; }
+    h2.section { margin:0 0 .4rem; font-family:Georgia,serif; font-size:1.6rem; font-weight:400; }
+    .setlist { display:grid; grid-template-columns:1fr; gap:.15rem; margin:.8rem 0 0; padding:0; list-style:none; counter-reset:track; }
     .setlist li { position:relative; padding:.45rem .2rem .45rem 2.3rem; counter-increment:track; line-height:1.35; }
     .setlist li::before { position:absolute; left:0; content:"M" counter(track); color:#888; font-family:"Courier New",monospace; font-size:.72rem; }
     .setlist strong { font-size:.8rem; }
-    .encore { margin-top:1.2rem; padding:.8rem 1rem; background:#e8f3fb; border-left:5px solid var(--blue); font-size:.8rem; line-height:1.8; }
-    .note { margin:2rem 0; font-family:Georgia,serif; font-size:1rem; line-height:1.7; }
+    .encore { margin:0; padding:.8rem 1rem; background:#e8f3fb; border-left:5px solid var(--blue); font-size:.8rem; line-height:1.8; }
+    .note { margin:0; font-family:Georgia,serif; font-size:1rem; line-height:1.7; }
     .post-foot { display:flex; justify-content:space-between; margin-top:2rem; padding-top:.8rem; border-top:1px solid #aaa; color:#777; font-size:.7rem; }
     @media (max-width:900px) {
       .page { grid-template-columns:170px minmax(0,1fr); gap:1.4rem; }
@@ -48,7 +54,9 @@
       .left { padding:.8rem 0; border-bottom:1px solid #aaa; }
       .left nav { display:flex; flex-wrap:wrap; gap:.25rem 1rem; }
       .left .archive { display:none; }
-      .setlist { grid-template-columns:1fr; }
+      .live-flow::before { left:3rem; }
+      .log-entry { grid-template-columns:3rem minmax(0,1fr); gap:1rem; }
+      .log-entry::before { left:2.65rem; }
     }
   </style>
 </head>
@@ -60,11 +68,15 @@
       <p class="post-meta">Sunday, February 15, 2026 at 18:00 JP</p>
       <h1>Roselia ASIA TOUR「Neuweltfahrt」東京公演 -Final- DAY2</h1>
       <p class="deck">十四首歌，一支乐队，主篇和安可构成最直接的单 Band 演出记录。</p>
-      <p class="event-line"><strong>Venue:</strong> 東京ガーデンシアター　 <strong>Doors:</strong> 16:30　 <strong>Start:</strong> 18:00　 <strong>Status:</strong> 已结束</p>
-      <section id="songs"><h2 class="section">Main program</h2><ol class="setlist">
+      <div class="live-flow">
+      <div class="log-entry"><time class="log-time" datetime="2026-02-15T16:30:00+09:00">16:30</time><p class="event-line log-body"><strong>Doors:</strong> open at 東京ガーデンシアター　 <strong>Status:</strong> 已结束</p></div>
+      <div class="log-entry"><time class="log-time" datetime="2026-02-15T17:30:00+09:00">17:30</time><p class="event-line log-body"><strong>Opening act:</strong> 奈良育英高等学校 軽音楽部</p></div>
+      <section class="log-entry" id="songs"><time class="log-time" datetime="2026-02-15T18:00:00+09:00">18:00</time><div class="log-body"><h2 class="section">Main program</h2><ol class="setlist">
         <li><strong>FRONTIER FANTASIA</strong></li><li><strong>BLACK SHOUT</strong></li><li><strong>Determination Symphony</strong></li><li><strong>紫炎</strong></li><li><strong>R</strong></li><li><strong>ZEAL of proud</strong></li><li><strong>Ringing Bloom</strong></li><li><strong>陽だまりロードナイト</strong></li><li><strong>軌跡</strong></li><li><strong>Song I am.</strong></li><li><strong>Steadfast Spirits</strong></li><li><strong>Neo-Aspect</strong></li>
-      </ol><div class="encore"><strong>Encore</strong><br />EN1 FIRE BIRD<br />EN2 PASSIONATE ANTHEM</div></section>
-      <p class="note">DAY2 的 opening act 为奈良育英高等学校 軽音楽部，预计 17:30 左右登场。曲序沿用 LiveSetList 本地记录，公演事实链接到官方特设页。</p>
+      </ol></div></section>
+      <div class="log-entry"><span class="log-time">EN</span><div class="encore log-body"><strong>Encore</strong><br />EN1 FIRE BIRD<br />EN2 PASSIONATE ANTHEM</div></div>
+      <div class="log-entry"><span class="log-time">END</span><p class="note log-body">曲序沿用 LiveSetList 本地记录，公演事实链接到官方特设页。整页按入场、opening act、主篇与安可顺序归档。</p></div>
+      </div>
       <footer class="post-foot"><span>Posted in Roselia / Live reports</span><a href="https://bang-dream.com/neuweltfahrt-tokyo/">Permalink / source</a></footer>
     </main>
     <aside class="right"><h2>At a glance</h2><dl><dt>Performer</dt><dd>Roselia</dd><dt>Program</dt><dd>12 main + 2 encore</dd><dt>Tour</dt><dd>Neuweltfahrt</dd><dt>Live ID</dt><dd>78</dd></dl><h2 style="margin-top:2.5rem">Related</h2><p><a href="#">東京公演 DAY1</a><br /><a href="#">Roselia live archive</a><br /><a href="#">2026 February</a></p></aside>

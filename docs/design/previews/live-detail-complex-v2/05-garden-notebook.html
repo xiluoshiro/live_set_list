@@ -26,6 +26,11 @@
     .date-flower::before,.date-flower::after { position:absolute; width:62px; height:90px; content:""; background:var(--pink); border-radius:70% 30% 70% 30%; z-index:-1; }
     .date-flower::before { transform:translate(-65px,-42px) rotate(20deg); }
     .date-flower::after { transform:translate(68px,48px) rotate(20deg); }
+    .garden-timeline { position:relative; padding-left:4.5rem; }
+    .garden-timeline::before { position:absolute; top:0; bottom:0; left:1.35rem; width:4px; content:""; background:var(--leaf); border-radius:55% 45% 48% 52%; transform:rotate(.35deg); }
+    .garden-stage { position:relative; }
+    .garden-stage::before { position:absolute; top:1.2rem; left:-3.55rem; width:17px; height:28px; content:""; background:var(--leaf); border-radius:85% 15% 75% 25%; transform:rotate(-38deg); }
+    .garden-stage::after { position:absolute; top:1.65rem; left:-2.65rem; width:1.35rem; height:2px; content:""; background:var(--leaf); }
     .facts { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,.8fr) minmax(0,1fr); gap:1rem; margin:1.5rem 0 5rem; }
     .facts div { padding:1.1rem 1.2rem; background:#e3eddc; clip-path:polygon(0 4%,96% 0,100% 92%,5% 100%); }
     .facts div:nth-child(2) { background:#f6dfc3; transform:rotate(1deg); }
@@ -35,11 +40,13 @@
     .note-head { max-width:620px; margin-bottom:2rem; }
     h2 { margin:0 0 .7rem; font-size:clamp(2rem,4vw,3.8rem); letter-spacing:-.04em; }
     .note-head p { margin:0; color:#59675e; line-height:1.8; }
-    .songs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1.2rem 2rem; padding:0; list-style:none; counter-reset:song; }
-    .songs li { position:relative; min-height:92px; padding:1.1rem 1rem 1rem 4.6rem; background:#fffdf7; clip-path:polygon(0 0,96% 2%,100% 90%,3% 100%); counter-increment:song; }
-    .songs li:nth-child(3n+2) { background:#eef2d7; transform:rotate(.45deg); }
-    .songs li:nth-child(4n) { background:#f7e1e2; transform:rotate(-.55deg); }
+    .songs { display:grid; gap:.85rem; padding:0; list-style:none; counter-reset:song; }
+    .songs li { position:relative; width:min(100%,760px); min-height:76px; padding:1rem 1rem 1rem 4.6rem; background:#fffdf7; counter-increment:song; transform:skewX(-.7deg); }
+    .songs li:nth-child(even) { width:min(94%,720px); margin-left:4%; }
+    .songs li:nth-child(3n+2) { background:#eef2d7; transform:rotate(.45deg) skewX(-.7deg); }
+    .songs li:nth-child(4n) { background:#f7e1e2; transform:rotate(-.55deg) skewX(-.7deg); }
     .songs li::before { position:absolute; top:1.05rem; left:1rem; content:counter(song,decimal-leading-zero); color:var(--leaf); font-family:monospace; font-size:.74rem; }
+    .songs li::after { position:absolute; top:1.45rem; left:-3.42rem; width:1.05rem; height:.65rem; content:""; background:var(--sun); border:2px solid var(--leaf); border-radius:80% 20% 80% 20%; transform:rotate(34deg); }
     .songs strong { display:block; font-size:1.05rem; line-height:1.35; }
     .songs small { display:block; margin-top:.45rem; color:#64746a; }
     .encore { margin-top:2rem; padding:1.5rem; border:2px dashed var(--pink); }
@@ -56,7 +63,12 @@
       .hero { min-height:430px; padding-top:1rem; overflow:hidden; }
       .crumb { margin-bottom:2.2rem; }
       .date-flower { top:14rem; right:1rem; width:120px; height:120px; font-size:.95rem; }
-      .facts,.songs,.encore ol { grid-template-columns:1fr; }
+      .garden-timeline { padding-left:3rem; }
+      .garden-timeline::before { left:.8rem; }
+      .garden-stage::before { left:-2.72rem; }
+      .garden-stage::after { left:-1.82rem; width:1rem; }
+      .songs li::after { left:-2.58rem; }
+      .facts,.encore ol { grid-template-columns:1fr; }
       .facts { margin-top:1rem; }
     }
   </style>
@@ -74,8 +86,9 @@
         <h1>Neuweltfahrt <span>東京公演 -Final- DAY2</span></h1>
         <div class="date-flower"><time datetime="2026-02-15">2026.02.15</time></div>
       </header>
-      <dl class="facts"><div><dt>会场</dt><dd>東京ガーデンシアター</dd></div><div><dt>时间</dt><dd>16:30 开场<br />18:00 开演</dd></div><div><dt>出演</dt><dd>Roselia<br />14 songs</dd></div></dl>
-      <section id="setlist">
+      <div class="garden-timeline">
+      <dl class="facts garden-stage"><div><dt>会场</dt><dd>東京ガーデンシアター</dd></div><div><dt>时间</dt><dd>16:30 开场<br />18:00 开演</dd></div><div><dt>出演</dt><dd>Roselia<br />14 songs</dd></div></dl>
+      <section class="garden-stage" id="setlist">
         <header class="note-head"><h2>主篇曲目</h2><p>十二首歌像十二张散落的便笺。这里优先保留顺序、标题和演出者，不做组件化包装。</p></header>
         <ol class="songs">
           <li><strong>FRONTIER FANTASIA</strong><small>M1 / Roselia</small></li><li><strong>BLACK SHOUT</strong><small>M2 / Roselia</small></li>
@@ -85,9 +98,10 @@
           <li><strong>軌跡</strong><small>M9 / Roselia</small></li><li><strong>Song I am.</strong><small>M10 / Roselia</small></li>
           <li><strong>Steadfast Spirits</strong><small>M11 / Roselia</small></li><li><strong>Neo-Aspect</strong><small>M12 / Roselia</small></li>
         </ol>
-        <div class="encore"><h3>Encore</h3><ol><li><strong>EN1 FIRE BIRD</strong></li><li><strong>EN2 PASSIONATE ANTHEM</strong></li></ol></div>
+        <div class="encore garden-stage"><h3>Encore</h3><ol><li><strong>EN1 FIRE BIRD</strong></li><li><strong>EN2 PASSIONATE ANTHEM</strong></li></ol></div>
       </section>
-      <footer id="source">DAY2 opening act: 奈良育英高等学校 軽音楽部，17:30 左右登场。<br /><a href="https://bang-dream.com/neuweltfahrt-tokyo/">BanG Dream! 公式公演页</a></footer>
+      <footer class="garden-stage" id="source">DAY2 opening act: 奈良育英高等学校 軽音楽部，17:30 左右登场。<br /><a href="https://bang-dream.com/neuweltfahrt-tokyo/">BanG Dream! 公式公演页</a></footer>
+      </div>
     </main>
   </div>
 </body>
