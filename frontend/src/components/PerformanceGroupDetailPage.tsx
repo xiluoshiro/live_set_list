@@ -239,6 +239,7 @@ export function PerformanceGroupDetailPage({
                 displayTitle={getGroupedLiveShortTitle(selectedLive.live_title, detail.group_title)}
                 onOpenTour={onOpenTour}
                 embedded
+                onOpenBand={onOpenBand}
                 canFavorite={canFavorite}
                 isFavorite={selectedLiveId !== null && isFavorite(selectedLiveId)}
                 isFavoriteSyncing={selectedLiveId !== null && isSyncing(selectedLiveId)}
