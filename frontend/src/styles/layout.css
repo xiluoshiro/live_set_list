@@ -393,3 +393,51 @@
     flex-wrap: wrap;
   }
 }
+
+@media (max-width: 360px) {
+  .site-topbar {
+    gap: 4px;
+    padding-inline: 8px;
+  }
+
+  .site-title {
+    font-size: 14px;
+    letter-spacing: -0.02em;
+  }
+
+  .topbar-actions {
+    gap: 2px;
+  }
+
+  .theme-icon-btn,
+  .topbar-menu-btn {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 280px) {
+  .site-topbar {
+    gap: 2px;
+    padding-inline: 6px;
+  }
+
+  .site-title {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    letter-spacing: -0.04em;
+  }
+
+  .topbar-actions {
+    gap: 1px;
+  }
+
+  .theme-icon-btn,
+  .topbar-menu-btn {
+    width: 28px;
+    height: 28px;
+  }
+}

@@ -107,6 +107,10 @@ class LiveDetailEventAttendee(BaseModel):
 
 class LiveDetailRow(BaseModel):
     row_id: str = Field(..., description='segment_type + sub_order composite row ID')
+    absolute_order: int = Field(..., ge=1, description='Stable setlist order from live_setlist.absolute_order')
+    segment_type: str = Field(..., description='Raw setlist segment code; unknown values are preserved')
+    sub_order: int = Field(..., ge=1, description='Order within the raw segment')
+    song_id: int = Field(..., ge=1, description='Song primary key')
     song_name: str = Field(..., description='Song title')
     band_members: list[LiveDetailBandMember] = Field(..., description='Band member info for this row')
     other_members: list[LiveDetailOtherMember] = Field(..., description='Other member info for this row')
@@ -125,6 +129,7 @@ class LiveDetailResponse(BaseModel):
     )
     live_title: str = Field(..., description='Live title')
     live_type: str = Field(..., description='Stable live type code')
+    venue_id: int | None = Field(default=None, description='Stable venue entity ID when available')
     venue: str | None = Field(default=None, description='Venue name')
     opening_time: str | None = Field(default=None, description='Opening time')
     start_time: str | None = Field(default=None, description='Start time')

@@ -291,7 +291,7 @@ def test_get_lives_empty_result_returns_page_1_and_empty_items():
 
 
 def test_get_live_detail_success_maps_rows_and_rules():
-    # 测试点：详情接口只按固化版本化出演计算 full/partial，缺少出演关系的行保持空集合。
+    # 测试点：详情接口只按固化版本化出演计算 full/partial，并保留结构化曲目位置字段。
     header_row = (
         40,
         "2026-03-28",
@@ -315,8 +315,14 @@ def test_get_live_detail_success_maps_rows_and_rules():
             {"键盘支援": "远程连线", "嘉宾": "[\"Ommy\", \"荒幡亮平\"]"},
             True,
             True,
+            1,
+            "Poppin'Party",
+            12,
+            "M",
+            1,
+            301,
         ),
-        ("EN1", "Song 2", None, False, True),
+        ("EN1", "Song 2", None, False, True, 2, "Afterglow", 13, "EN", 1, 302),
     ]
     performance_rows = [
         (
@@ -354,6 +360,10 @@ def test_get_live_detail_success_maps_rows_and_rules():
 
     first_row = payload["detail_rows"][0]
     assert first_row["row_id"] == "M1"
+    assert first_row["absolute_order"] == 12
+    assert first_row["segment_type"] == "M"
+    assert first_row["sub_order"] == 1
+    assert first_row["song_id"] == 301
     assert first_row["song_name"] == "Song 1"
     assert first_row["comments"] == ["短版", "翻唱"]
     assert first_row["cover_band"] is None
@@ -377,6 +387,9 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert first_row_bands[1]["missing_members"] == ["E", "F"]
 
     second_row = payload["detail_rows"][1]
+    assert second_row["absolute_order"] == 13
+    assert second_row["segment_type"] == "EN"
+    assert second_row["song_id"] == 302
     assert second_row["comments"] == ["翻唱"]
     assert second_row["cover_band"] is None
     assert second_row["other_members"] == []
@@ -779,6 +792,12 @@ def test_get_live_details_batch_new_fields_without_versioned_performances():
             None,
             False,
             False,
+            3,
+            "Band3",
+            7,
+            "M",
+            1,
+            9001,
         )
     ]
     conn, _ = _build_batch_detail_connection_mock(header_rows, detail_rows)
@@ -797,6 +816,9 @@ def test_get_live_details_batch_new_fields_without_versioned_performances():
     assert item["bands"] == [1, 2, 3]
     assert item["band_names"] == ["Band1", "Band2", "Band3", "未映射"]
 
+    assert item["detail_rows"][0]["absolute_order"] == 7
+    assert item["detail_rows"][0]["segment_type"] == "M"
+    assert item["detail_rows"][0]["song_id"] == 9001
     assert item["detail_rows"][0]["band_members"] == []
 
 

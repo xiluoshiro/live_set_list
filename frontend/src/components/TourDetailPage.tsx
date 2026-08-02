@@ -11,7 +11,7 @@ import {
 import { logError } from "../logger";
 import { ContentState } from "./ContentState";
 import { DetailTitleLink } from "./DetailTitleLink";
-import { LiveDetailContent } from "./LiveDetailContent";
+import { StageLedgerContent } from "./StageLedgerContent";
 import { SectionTabs } from "./SectionTabs";
 import { getTourStopShortTitle } from "./tourHelpers";
 import { TourStatisticsPanel } from "./TourStatisticsPanel";
@@ -198,12 +198,17 @@ export function TourDetailPage({
               </nav>
               {selectedStop && (
                 <div className="detail-page tour-inline-live-detail">
-                  <LiveDetailContent
+                  <StageLedgerContent
                     detailData={liveDetail}
                     detailLoading={liveLoading}
                     detailError={liveError}
                     fallback={{ liveTitle: selectedStop.live_title, liveDate: selectedStop.live_date, url: selectedStop.url }}
                     showTourReference={false}
+                    embedded
+                    canFavorite={canFavorite}
+                    isFavorite={selectedLiveId !== null && isFavorite(selectedLiveId)}
+                    isFavoriteSyncing={selectedLiveId !== null && isSyncing(selectedLiveId)}
+                    onToggleFavorite={selectedLiveId === null || !onToggleFavorite ? undefined : () => onToggleFavorite(selectedLiveId)}
                   />
                 </div>
               )}

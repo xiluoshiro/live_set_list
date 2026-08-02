@@ -235,6 +235,10 @@ function makeDetailResponse(params: {
     event_attendees: [],
     detail_rows: Array.from({ length: rowCount }, (_, idx) => ({
       row_id: `M${idx + 1}`,
+      absolute_order: idx + 1,
+      segment_type: "M",
+      sub_order: idx + 1,
+      song_id: idx + 1,
       song_name: `曲目 ${idx + 1}`,
       band_members: [
         {
@@ -425,7 +429,7 @@ async function openAllContent(user: ReturnType<typeof userEvent.setup>) {
 
 describe("App", () => {
   beforeEach(() => {
-    window.history.replaceState(null, "", window.location.href);
+    window.history.replaceState(null, "", "/");
     localStorage.setItem("live-view-mode", "table");
     localStorage.removeItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY);
     Reflect.deleteProperty(window, "requestIdleCallback");
@@ -1332,7 +1336,7 @@ describe("App", () => {
     expect(screen.queryByText("stop_label")).not.toBeInTheDocument();
 
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(41));
-    expect(screen.getByText("曲目名称")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "演出流程" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "FINAL" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
     expect(getTourDetailMock).toHaveBeenCalledTimes(1);
@@ -1686,8 +1690,20 @@ describe("App", () => {
     expect(screen.queryByRole("heading", { name: firstLiveName })).not.toBeInTheDocument();
   });
 
-  test("详情页格式正确：返回按钮、基础信息、详情表格", async () => {
-    // 测试点：验证详情页的布局结构是否完整（返回按钮、meta 信息、标题链接、表格结构）。
+  test("直接访问永久 Live URL 会恢复详情并保留当前路径", async () => {
+    // 测试点：/lives/{live_id} 可直接刷新进入 Stage Ledger，而不是依赖列表页的内部 state。
+    window.history.replaceState(null, "", "/lives/77");
+    getLiveDetailMock.mockResolvedValueOnce(makeDetailResponse({ liveId: 77, rowCount: 1 }));
+
+    renderApp();
+
+    expect(await screen.findByRole("heading", { name: "示例 Live 名称 77" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/lives/77");
+    expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "detail", detailLiveId: 77 });
+  });
+
+  test("详情页呈现 Stage Ledger 结构与连续歌单", async () => {
+    // 测试点：详情页应呈现 Stage Ledger 的摘要、流程、来源与永久链接，而不是旧成员表格。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1697,38 +1713,24 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
 
-    // 返回按钮
     expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
-
-    // 基础信息行
-    expect(screen.getByText("日期：")).toBeInTheDocument();
-    expect(screen.getByText("乐队：")).toBeInTheDocument();
-    expect(screen.getByText("开场：")).toBeInTheDocument();
-    expect(screen.getByText("开演：")).toBeInTheDocument();
-    expect(screen.getByText("场地：")).toBeInTheDocument();
-    expect(screen.getByText("17:00(CN)")).toBeInTheDocument();
-    expect(screen.getByText("18:00(JP)")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "演出流程" })).toBeInTheDocument();
+    expect(screen.getByText("日期")).toBeInTheDocument();
+    expect(screen.getByText("开场")).toBeInTheDocument();
+    expect(screen.getByText("开演")).toBeInTheDocument();
+    expect(screen.getByText("场馆")).toBeInTheDocument();
+    expect(screen.getByText("17:00 (CN)")).toBeInTheDocument();
+    expect(screen.getByText("18:00 (JP)")).toBeInTheDocument();
     expect(screen.getByText("测试场地")).toBeInTheDocument();
-    const titleLink = screen.getByRole("link", { name: /示例 Live 名称 1/i });
-    expect(titleLink).toHaveAttribute("href", "https://example.com/live/1");
-
-    // 详情表格结构（已替换为独立的 5 列成员状态表）
-    expect(screen.getByRole("columnheader", { name: "编号" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "曲目名称" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "乐队成员" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "其他成员" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "备注" })).toBeInTheDocument();
-
-    const detailTable = container.querySelector(".detail-member-table-wrap .console-table");
-    expect(detailTable).not.toBeNull();
-    await waitFor(() => {
-      expect(within(detailTable as HTMLElement).getAllByRole("row")).toHaveLength(21);
-    });
+    expect(screen.getByRole("link", { name: "官方来源" })).toHaveAttribute("href", "https://example.com/live/1");
+    expect(container.querySelectorAll("ol.stage-track-list").length).toBeGreaterThan(0);
+    expect(screen.getByText("曲目 1")).toBeInTheDocument();
+    expect(container.querySelector(".detail-member-table-wrap")).toBeNull();
     expect(getLiveDetailMock).toHaveBeenCalledWith(1);
   });
 
-  test("详情弹窗信息区使用统一的对齐结构", async () => {
-    // 测试点：日期/开场/开演/场地应共用同一套 inline 信息项结构，避免标签列再次错位。
+  test("详情页使用摘要标尺与排期列表，而非旧 meta 行", async () => {
+    // 测试点：Stage Ledger 用语义 dl 和摘要标尺承载排期信息，旧 detail-meta 结构不应回归。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1738,23 +1740,12 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
 
-    const metaLine = container.querySelector(".detail-meta-line");
-    expect(metaLine).not.toBeNull();
-    const metaItems = Array.from(metaLine?.querySelectorAll("p") ?? []);
-    expect(metaItems).toHaveLength(5);
-    metaItems.forEach((item) => expect(item).toHaveClass("detail-inline-item"));
-
-    const dateRow = screen.getByText("日期：").closest("p");
-    const openingRow = screen.getByText("开场：").closest("p");
-    const venueRow = screen.getByText("场地：").closest("p");
-    const typeRow = screen.getByText("类型：").closest("p");
-
-    expect(dateRow).toHaveClass("detail-inline-item", "detail-inline-item-date");
-    expect(openingRow).toHaveClass("detail-inline-item");
-    expect(venueRow).toHaveClass("detail-inline-item", "detail-inline-item-venue");
-    expect(typeRow).toHaveClass("detail-inline-item", "detail-inline-item-type");
-    expect(screen.getByText("类型：").parentElement).toHaveTextContent("类型：专场");
-    expect(screen.getByText("乐队：").closest("p")).toHaveClass("detail-row");
+    const schedule = container.querySelector(".stage-schedule-list");
+    expect(schedule).not.toBeNull();
+    expect(schedule?.querySelectorAll("dt")).toHaveLength(4);
+    expect(container.querySelector(".stage-summary-ruler")).not.toBeNull();
+    expect(container.querySelector(".detail-meta-line")).toBeNull();
+    expect(container.querySelector(".detail-row")).toBeNull();
   });
 
   test("详情页返回按钮可回到列表页", async () => {
@@ -1774,7 +1765,7 @@ describe("App", () => {
   });
 
   test("详情页返回按钮样式类名正确", async () => {
-    // 测试点：看护返回按钮的样式类，避免回归改坏。
+    // 测试点：Stage Ledger 返回动作使用新作用域样式，避免旧 detail 按钮类名回归。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1785,11 +1776,9 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
 
     const backBtn = screen.getByRole("button", { name: "返回" });
-    expect(backBtn).toHaveClass("detail-back-btn");
-
-    const backGlyph = within(backBtn).getByText("←");
-    expect(backGlyph).toHaveClass("modal-action-glyph");
-    expect(backGlyph).not.toHaveClass("close");
+    expect(backBtn).toHaveClass("stage-back-action");
+    expect(backBtn).toHaveTextContent("返回资料");
+    expect(backBtn).not.toHaveClass("detail-back-btn");
   });
 
   test("详情弹窗在 url 为空时标题不渲染超链接", async () => {

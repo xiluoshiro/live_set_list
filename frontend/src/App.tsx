@@ -40,7 +40,7 @@ import { ContentState } from "./components/ContentState";
 import { HomeDashboard, type HomeLiveRow } from "./components/HomeDashboard";
 import { PageTitle } from "./components/PageTitle";
 import { formatPerformanceDate, LiveCardGrid } from "./components/LiveCardGrid";
-import { LiveDetailPage } from "./components/LiveDetailPage";
+import { StageLedgerPage } from "./components/StageLedgerPage";
 import { LiveListFiltersToolbar } from "./components/LiveListFilters";
 import { LiveTypeBadge } from "./components/LiveTypeBadge";
 import { LoginDialog } from "./components/LoginDialog";
@@ -190,6 +190,13 @@ function isAppHistoryState(value: unknown): value is AppHistoryState {
   return candidate.app === "live-set-list" && typeof candidate.tab === "string";
 }
 
+function getLiveIdFromPath(pathname: string): number | null {
+  const match = pathname.match(/^\/lives\/(\d+)\/?$/);
+  if (!match) return null;
+  const liveId = Number(match[1]);
+  return Number.isInteger(liveId) && liveId > 0 ? liveId : null;
+}
+
 const ROLE_PRIORITY: Record<string, number> = { viewer: 10, editor: 20, admin: 30 };
 
 function canAccessConsole(role: string | null | undefined): boolean {
@@ -235,6 +242,7 @@ function App() {
   const auth = useAuth();
   const favorites = useFavorites();
   const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
+  const initialLiveId = getLiveIdFromPath(window.location.pathname);
   const [pageSize, setPageSize] = useState<15 | 20>(20);
   const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
     const stored = localStorage.getItem("live-view-mode");
@@ -248,9 +256,13 @@ function App() {
   const [listFilters, setListFilters] = useState<LiveListFilters>({ ...DEFAULT_LIVE_LIST_FILTERS });
   const [listFilterBands, setListFilterBands] = useState<CatalogBandItem[]>([]);
   const [jumpPageInput, setJumpPageInput] = useState("1");
-  const [tab, setTab] = useState<TabKey>("home");
-  const [detailLiveId, setDetailLiveId] = useState<number | null>(null);
-  const [detailFallback, setDetailFallback] = useState<LiveDetailFallback | null>(null);
+  const [tab, setTab] = useState<TabKey>(initialLiveId === null ? "home" : "detail");
+  const [detailLiveId, setDetailLiveId] = useState<number | null>(initialLiveId);
+  const [detailFallback, setDetailFallback] = useState<LiveDetailFallback | null>(
+    initialLiveId === null
+      ? null
+      : { liveTitle: `Live #${initialLiveId}`, liveDate: "", url: null },
+  );
   const [previousTab, setPreviousTab] = useState<Exclude<TabKey, "detail">>("home");
   const [detailTourId, setDetailTourId] = useState<number | null>(null);
   const [tourFallback, setTourFallback] = useState<TourDetailFallback | null>(null);
@@ -404,7 +416,10 @@ function App() {
     if (isAppHistoryState(window.history.state)) {
       window.history.replaceState(captureCurrentListState(window.history.state), "", window.location.href);
     }
-    window.history.pushState(state, "", window.location.href);
+    const nextPath = state.tab === "detail" && state.detailLiveId
+      ? `/lives/${state.detailLiveId}`
+      : "/";
+    window.history.pushState(state, "", nextPath);
     applyHistoryState(state);
   };
 
@@ -447,7 +462,19 @@ function App() {
 
   useEffect(() => {
     if (!isAppHistoryState(window.history.state)) {
-      window.history.replaceState({ app: "live-set-list", tab: "home" } satisfies AppHistoryState, "", window.location.href);
+      if (initialLiveId !== null) {
+        const directState = {
+          app: "live-set-list",
+          tab: "detail",
+          previousTab: "home",
+          detailLiveId: initialLiveId,
+          detailFallback: { liveTitle: `Live #${initialLiveId}`, liveDate: "", url: null },
+        } satisfies AppHistoryState;
+        window.history.replaceState(directState, "", window.location.href);
+        applyHistoryState(directState);
+      } else {
+        window.history.replaceState({ app: "live-set-list", tab: "home" } satisfies AppHistoryState, "", window.location.href);
+      }
     }
     const onPopState = (event: PopStateEvent) => {
       if (isAppHistoryState(event.state)) {
@@ -456,7 +483,7 @@ function App() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [canUseConsoleFeatures, canUseFavoriteFeatures]);
+  }, [canUseConsoleFeatures, canUseFavoriteFeatures, initialLiveId]);
 
   const toLiveRow = (item: LiveItem): DisplayRow => ({
     kind: "live",
@@ -1495,7 +1522,26 @@ function App() {
         {favorites.favoriteSyncWarning && <p className="favorite-sync-warning">{favorites.favoriteSyncWarning}</p>}
 
         {tab === "detail" && detailLiveId !== null && detailFallback !== null ? (
-          <LiveDetailPage key={`live-${detailLiveId}-${liveDataRevision}`} liveId={detailLiveId} fallback={detailFallback} onBack={handleBackFromDetail} onOpenTour={openTourDetail} onOpenPerformanceGroup={openPerformanceGroupDetail} />
+          <StageLedgerPage
+            key={`live-${detailLiveId}-${liveDataRevision}`}
+            liveId={detailLiveId}
+            fallback={detailFallback}
+            onBack={handleBackFromDetail}
+            onOpenTour={openTourDetail}
+            onOpenPerformanceGroup={openPerformanceGroupDetail}
+            onOpenBand={(bandId) => {
+              setCatalogBandPage(1);
+              navigateToTab("browse", { catalogBandId: bandId });
+            }}
+            canFavorite={canUseFavoriteFeatures}
+            isFavorite={isFavorite(detailLiveId)}
+            isFavoriteSyncing={favorites.isFavoriteSyncing(detailLiveId)}
+            onToggleFavorite={() => void toggleFavorite(detailLiveId)}
+            onRequestLogin={() => {
+              setLoginError(null);
+              setLoginDialogOpen(true);
+            }}
+          />
         ) : showTourDetailPanel && detailTourId !== null && tourFallback !== null ? (
           <TourDetailPage
             key={`tour-${detailTourId}-${liveDataRevision}`}

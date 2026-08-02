@@ -166,6 +166,7 @@ function renderWithTheme() {
 
 describe("App dark mode", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/");
     localStorage.clear();
     localStorage.setItem("live-view-mode", "table");
     document.documentElement.removeAttribute("data-theme");
