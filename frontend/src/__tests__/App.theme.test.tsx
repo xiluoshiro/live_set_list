@@ -270,7 +270,6 @@ describe("App dark mode", () => {
       expect(screen.getByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
       expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     });
-    await user.click(screen.getByRole("button", { name: "关闭演出资料" }));
     await user.click(screen.getByRole("button", { name: "演出资料" }));
 
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
