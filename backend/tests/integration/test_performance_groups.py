@@ -666,6 +666,56 @@ def test_catalog_performances_paginates_expanded_group_lives(
         cur.execute("DELETE FROM live_attrs WHERE id = ANY(%s)", (live_ids,))
 
 
+# 测试点：演出列表按 未开始→进行中→已结束/已取消 分组排序，组内保持原有时间排序。
+def test_catalog_performances_groups_by_status_then_time(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    live_ids = [9501, 9502, 9503, 9504, 9505]
+    with integration_admin_connection.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO live_attrs (
+                id, live_date, live_title, url, opening_time, start_time,
+                venue_id, live_type, default_band_ids, event_status
+            )
+            SELECT
+                v.id,
+                ((CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '9 hours')::date + v.day_offset,
+                v.title,
+                'https://example.com/' || v.id,
+                TIME WITH TIME ZONE '17:00:00+09',
+                TIME WITH TIME ZONE '18:00:00+09',
+                1, 'oneman', ARRAY[1], v.event_status
+            FROM (VALUES
+                (9501, 30, 'StatusProbe Far Future', 'scheduled'),
+                (9502, -30, 'StatusProbe Ended', 'scheduled'),
+                (9503, 0, 'StatusProbe Today', 'scheduled'),
+                (9504, 60, 'StatusProbe Cancelled', 'cancelled'),
+                (9505, 10, 'StatusProbe Near Future', 'scheduled')
+            ) AS v(id, day_offset, title, event_status)
+            """
+        )
+
+    def _ordered_ids(sort: str) -> list[int]:
+        response = integration_test_client.get(
+            "/api/catalog/performances",
+            params={"scope": "all", "page": 1, "page_size": 20, "q": "StatusProbe", "sort": sort},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["pagination"]["total"] == 5
+        return [item["live"]["live_id"] for item in response.json()["items"]]
+
+    # date_desc：未开始组内按日期倒序（9501 最远→9505 最近），已取消与已结束同组按日期倒序。
+    assert _ordered_ids("date_desc") == [9501, 9505, 9503, 9504, 9502]
+    # date_asc：未开始组内按日期正序（9505 最近→9501 最远），组内时间排序逻辑保持不变。
+    assert _ordered_ids("date_asc") == [9505, 9501, 9503, 9502, 9504]
+
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("DELETE FROM live_attrs WHERE id = ANY(%s)", (live_ids,))
+
+
 # 测试点：全场命中或关键词直接命中组名时应继续返回完整活动组卡片数据。
 def test_catalog_performances_keeps_full_or_title_matched_group(
     integration_test_client,

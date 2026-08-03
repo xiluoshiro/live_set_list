@@ -568,6 +568,18 @@ def _build_scope_queries(
                 slw.event_status AS live_event_status,
                 slw.start_time AS live_start_time,
                 slw.was_rescheduled AS live_was_rescheduled,
+                CASE
+                    WHEN slw.event_status = 'cancelled' THEN 2
+                    WHEN slw.live_date > (
+                        CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
+                        + make_interval(secs => EXTRACT(TIMEZONE FROM slw.start_time))
+                    )::date THEN 0
+                    WHEN slw.live_date < (
+                        CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
+                        + make_interval(secs => EXTRACT(TIMEZONE FROM slw.start_time))
+                    )::date THEN 2
+                    ELSE 1
+                END AS sort_rank,
                 slw.live_date AS sort_date,
                 slw.start_time AS sort_time,
                 slw.id AS sort_id
@@ -598,6 +610,12 @@ def _build_scope_queries(
                 NULL::text AS live_event_status,
                 NULL::timetz AS live_start_time,
                 NULL::boolean AS live_was_rescheduled,
+                CASE
+                    WHEN gs.live_count > 0 AND gs.cancelled_live_count >= gs.live_count THEN 2
+                    WHEN CURRENT_DATE < gs.start_date THEN 0
+                    WHEN CURRENT_DATE > gs.end_date THEN 2
+                    ELSE 1
+                END AS sort_rank,
                 gs.{sort_group_date} AS sort_date,
                 gs.{sort_group_time} AS sort_time,
                 gs.group_id AS sort_id
@@ -611,7 +629,7 @@ def _build_scope_queries(
             group_display_type, group_bands, group_venues,
             live_event_status, live_start_time, live_was_rescheduled
         FROM merged
-        ORDER BY sort_date {sort_dir}, sort_time {sort_dir}, sort_id {sort_dir}
+        ORDER BY sort_rank ASC, sort_date {sort_dir}, sort_time {sort_dir}, sort_id {sort_dir}
         LIMIT %s OFFSET %s
     """
 

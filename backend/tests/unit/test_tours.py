@@ -69,8 +69,10 @@ def test_get_tours_returns_public_summaries():
         call(count_query, count_params),
         call(page_query, (*page_params, 20, 0)),
     ]
-    assert "ORDER BY boundary_live.live_date DESC, boundary_live.start_time DESC, t.id DESC" in page_query
-    assert "ORDER BY summary.end_date DESC, summary.end_time DESC, summary.tour_id DESC" in page_query
+    assert "END ASC,\n                boundary_live.live_date DESC, boundary_live.start_time DESC, t.id DESC" in page_query
+    assert "ORDER BY summary.status_rank ASC, summary.end_date DESC, summary.end_time DESC, summary.tour_id DESC" in page_query
+    assert "WHEN CURRENT_DATE < tour_stats.start_date THEN 0" in page_query
+    assert "WHEN CURRENT_DATE < MIN(l.live_date) THEN 0" in page_query
 
 
 # 测试点：巡演升序筛选必须参数化，并按第一场日期、开演时间、ID 排序。
@@ -92,8 +94,8 @@ def test_get_tours_binds_keyword_year_and_band_filters():
     assert str(count_params[4]) == "2027-01-01"
     assert count_params[5:] == (9, 9)
     page_query = str(cursor.execute.call_args_list[1].args[0])
-    assert "ORDER BY boundary_live.live_date ASC, boundary_live.start_time ASC, t.id ASC" in page_query
-    assert "ORDER BY summary.start_date ASC, summary.start_time ASC, summary.tour_id ASC" in page_query
+    assert "END ASC,\n                boundary_live.live_date ASC, boundary_live.start_time ASC, t.id ASC" in page_query
+    assert "ORDER BY summary.status_rank ASC, summary.start_date ASC, summary.start_time ASC, summary.tour_id ASC" in page_query
 
 
 # 测试点：巡演详情应保持活动组连续，并在同日起始时把含取消场次的组排在正常组之前。
