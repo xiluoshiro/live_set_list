@@ -15,6 +15,7 @@
 
 ## 当前设计
 
+- [首页 Live 日历改造设计](design/home-live-calendar.md)：以按月日期导航替换语义不准确的“最近收录”，并从首屏移除“个人与贡献”。
 - [巡演聚合实现设计](design/tour-aggregation.md)
 - [演出活动组聚合实现设计](design/performance-group-aggregation.md)：统一支持多日 Live、单日午场 / 晚场、演出资料列表聚合和完整收藏聚合。
 - [乐队改名与历史阵容实现设计](design/band-name-and-lineup-history.md)：同一 Band 身份下的历史名称、不可变阵容版本、同场交接共演、逐曲出演和控制台适配。
