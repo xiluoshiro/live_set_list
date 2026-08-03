@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { buildTitleLines, titleSegments } from "../titleSplit";
+import { buildTitleLines, titleTokens } from "../titleSplit";
 
 const MAX_WIDTH_FRACTION = 0.75;
 
@@ -27,8 +27,8 @@ export function MastheadTitle({ as, id, title }: MastheadTitleProps) {
       measureEl.textContent = "";
       return;
     }
-    const segments = titleSegments(title);
-    if (!segments) {
+    const tokens = titleTokens(title);
+    if (tokens.length < 2) {
       measureEl.textContent = "";
       return;
     }
@@ -36,7 +36,7 @@ export function MastheadTitle({ as, id, title }: MastheadTitleProps) {
       measureEl.textContent = line;
       return measureEl.scrollWidth > availableWidth * MAX_WIDTH_FRACTION;
     };
-    const result = buildTitleLines(segments, isLineTooLong);
+    const result = buildTitleLines(tokens, isLineTooLong);
     measureEl.textContent = "";
     setLines(result);
   }, [title]);
