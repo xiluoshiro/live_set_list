@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="LiveSetList 首页 Live 日历交互预览 v2，Stage Ledger 风格，移除个人与贡献侧栏。"
+    />
+    <title>Live 日历首页预览 v2 | LiveSetList</title>
+    <link rel="stylesheet" href="../../../../frontend/src/styles/theme.css" />
+    <link rel="stylesheet" href="./preview.css" />
+    <script src="./preview.js" defer></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-topbar">
+        <button type="button" class="site-title" data-home-button>BanG Dream! Live 资料库</button>
+
+        <nav class="desktop-nav" aria-label="主要导航">
+          <button type="button" class="nav-item">演出资料</button>
+          <button type="button" class="nav-item">巡演资料</button>
+          <button type="button" class="nav-item">数据统计</button>
+          <button type="button" class="nav-item">乐队浏览</button>
+        </nav>
+
+        <div class="topbar-actions">
+          <button type="button" class="login-button">登录</button>
+          <button
+            type="button"
+            class="icon-button theme-button"
+            aria-label="当前浅色模式，点击切换深色模式"
+            title="切换主题"
+          >
+            <span aria-hidden="true">◐</span>
+          </button>
+          <button
+            type="button"
+            class="icon-button mobile-menu-button"
+            aria-label="打开页面菜单"
+            aria-expanded="false"
+            aria-controls="mobile-navigation"
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+        </div>
+      </header>
+
+      <nav id="mobile-navigation" class="mobile-navigation" aria-label="移动端导航" hidden>
+        <button type="button">首页</button>
+        <button type="button">演出资料</button>
+        <button type="button">巡演资料</button>
+        <button type="button">数据统计</button>
+        <button type="button">乐队浏览</button>
+      </nav>
+
+      <main class="home-dashboard">
+        <section class="home-intro" aria-labelledby="home-title">
+          <div class="home-intro-copy">
+            <p class="page-kicker">Community live database</p>
+            <h1 id="home-title">查找 Live、曲目与出演记录</h1>
+            <p class="page-description">可搜索 Live、乐队、歌曲和场地。</p>
+          </div>
+
+          <form class="home-search" role="search">
+            <label for="home-search-input">搜索入口</label>
+            <div class="search-row">
+              <input
+                id="home-search-input"
+                type="search"
+                placeholder="搜索 Live、乐队、歌曲、场地"
+                aria-describedby="search-note"
+              />
+              <button type="submit">搜索</button>
+            </div>
+            <p id="search-note">支持按 Live、乐队、歌曲和场地搜索。</p>
+          </form>
+        </section>
+
+        <section class="home-metrics" aria-label="数据概览">
+          <div class="home-metric">
+            <span class="home-metric-label">已收录 Live</span>
+            <strong class="home-metric-value">47</strong>
+          </div>
+          <div class="home-metric">
+            <span class="home-metric-label">乐队</span>
+            <strong class="home-metric-value">3</strong>
+          </div>
+          <div class="home-metric">
+            <span class="home-metric-label">歌曲</span>
+            <strong class="home-metric-value">17</strong>
+          </div>
+          <div class="home-metric">
+            <span class="home-metric-label">场地</span>
+            <strong class="home-metric-value">3</strong>
+          </div>
+        </section>
+
+        <p class="latest-live-line">
+          <span>最新 Live 日期</span>
+          <strong>2026.09.20</strong>
+          <small>预览数据</small>
+        </p>
+
+        <section class="calendar-section" aria-labelledby="calendar-title">
+          <header class="calendar-header">
+            <div class="calendar-heading">
+              <h2 id="calendar-title">Live 日历</h2>
+              <p>按演出日期查看。色轨表示当前状态，数字表示当天场次。</p>
+            </div>
+
+            <div class="month-navigation" aria-label="月份导航">
+              <button type="button" class="month-button" data-month-action="previous">上个月</button>
+              <strong class="month-label" aria-live="polite">2026 年 8 月</strong>
+              <button type="button" class="month-button" data-month-action="next">下个月</button>
+              <button type="button" class="current-month-button" data-month-action="current">回到本月</button>
+            </div>
+          </header>
+
+          <div class="status-legend" aria-label="Live 状态图例">
+            <span><i class="legend-rail past" aria-hidden="true"></i>已结束</span>
+            <span><i class="legend-rail upcoming" aria-hidden="true"></i>待举行</span>
+            <span><i class="legend-rail today" aria-hidden="true"></i>进行中</span>
+            <span><i class="legend-rail postponed" aria-hidden="true"></i>延期</span>
+            <span><i class="legend-rail cancelled" aria-hidden="true"></i>已取消</span>
+          </div>
+
+          <div class="calendar-workspace">
+            <div class="calendar-pane">
+              <div class="weekday-row" aria-hidden="true">
+                <span>一</span>
+                <span>二</span>
+                <span>三</span>
+                <span>四</span>
+                <span>五</span>
+                <span>六</span>
+                <span>日</span>
+              </div>
+              <div class="calendar-grid" data-calendar-grid aria-label="2026 年 8 月 Live 日历"></div>
+            </div>
+
+            <aside class="day-detail" aria-labelledby="selected-date-title" aria-live="polite">
+              <div class="day-detail-heading">
+                <div>
+                  <p class="selected-date-weekday" data-selected-weekday>星期一</p>
+                  <h3 id="selected-date-title" data-selected-date>8 月 3 日</h3>
+                </div>
+                <strong class="selected-count" data-selected-count>2 场</strong>
+              </div>
+
+              <div class="event-list" data-event-list></div>
+
+              <button type="button" class="all-lives-button">
+                查看全部 Live <span aria-hidden="true">→</span>
+              </button>
+            </aside>
+          </div>
+        </section>
+
+        <footer class="preview-footer">
+          <p>首页优先服务公开浏览。登录、收藏和资料维护入口保留在顶部导航及对应页面。</p>
+          <button type="button">关于与反馈</button>
+        </footer>
+      </main>
+    </div>
+
+    <div class="preview-toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>
