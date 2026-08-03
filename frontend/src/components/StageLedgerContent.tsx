@@ -429,7 +429,7 @@ function StageFlow({
               <div className="stage-act-heading">
                 <h4>{block.bands.length > 0 ? block.bands.map((band) => band.band_name).join(" × ") : "出演关系未记录"}</h4>
               </div>
-              <ol className="stage-track-list" start={block.rows[0]?.absolute_order ?? 1}>
+              <ol className="stage-track-list" start={block.rows[0]?.sub_order ?? 1}>
                 {block.rows.map((row) => {
                   const isSelected = row.row_id === selectedTrackId;
                   const isMobileExpanded = row.row_id === mobileExpandedTrackId;
@@ -457,7 +457,7 @@ function StageFlow({
                             aria-expanded={isMobileExpanded}
                             aria-controls={inlineInspectorId}
                           >
-                            <span className="stage-track-number">{String(row.absolute_order).padStart(2, "0")}</span>
+                            <span className="stage-track-number">{String(row.sub_order).padStart(2, "0")}</span>
                             <span className="stage-track-copy">
                               <strong>{row.song_name}</strong>
                             </span>

@@ -103,7 +103,7 @@ describe("StageLedgerContent", () => {
     expect(screen.getAllByText("Opening Act").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("ZZ").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Song One")).toBeInTheDocument();
-    expect(screen.getByText("01")).toBeInTheDocument();
+    expect(screen.getAllByText("01").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/77");
     expect(container.querySelector(".stage-actions .stage-official-link")).not.toBeNull();
     expect(container.querySelector(".stage-sources-section")).toBeNull();
