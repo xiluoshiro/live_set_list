@@ -279,3 +279,75 @@ def test_console_tour_write_requires_editor_and_csrf(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute("SELECT COUNT(*) FROM tour_attrs WHERE tour_title = 'Unauthorized Tour'")
         assert cursor.fetchone() == (0,)
+
+
+# 测试点：巡演列表按 未开始→进行中→已结束/已取消 分组排序，组内保持原有时间排序。
+def test_tours_list_groups_by_status_then_time(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    live_ids = [9601, 9602, 9603, 9604]
+    with integration_admin_connection.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO live_attrs (
+                id, live_date, live_title, url, opening_time, start_time,
+                venue_id, live_type, default_band_ids, event_status
+            )
+            VALUES
+                (9601, CURRENT_DATE - 20, 'StatusTourProbe Ended Live', 'https://example.com/9601',
+                 TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
+                 1, 'oneman', ARRAY[1], 'scheduled'),
+                (9602, CURRENT_DATE, 'StatusTourProbe Today Live', 'https://example.com/9602',
+                 TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
+                 1, 'oneman', ARRAY[1], 'scheduled'),
+                (9603, CURRENT_DATE + 40, 'StatusTourProbe Far Future Live', 'https://example.com/9603',
+                 TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
+                 1, 'oneman', ARRAY[1], 'scheduled'),
+                (9604, CURRENT_DATE + 70, 'StatusTourProbe Cancelled Live', 'https://example.com/9604',
+                 TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
+                 1, 'oneman', ARRAY[1], 'cancelled')
+            """
+        )
+        cur.executemany(
+            """
+            INSERT INTO tour_attrs (tour_title) VALUES (%s)
+            """,
+            [("StatusTourProbe Ended Tour",), ("StatusTourProbe Today Tour",),
+             ("StatusTourProbe Far Future Tour",), ("StatusTourProbe Cancelled Tour",)],
+        )
+        cur.execute(
+            """
+            SELECT id FROM tour_attrs
+            WHERE tour_title LIKE 'StatusTourProbe%'
+            ORDER BY id
+            """
+        )
+        tour_ids = [int(row[0]) for row in cur.fetchall()]
+        cur.executemany(
+            "INSERT INTO tour_lives (tour_id, live_id, stop_order) VALUES (%s, %s, 1)",
+            [(tour_ids[0], 9601), (tour_ids[1], 9602), (tour_ids[2], 9603), (tour_ids[3], 9604)],
+        )
+
+    def _ordered_ids(sort: str) -> list[int]:
+        response = integration_test_client.get(
+            "/api/catalog/tours",
+            params={"page": 1, "page_size": 20, "q": "StatusTourProbe", "sort": sort},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["pagination"]["total"] == 4
+        return [item["tour_id"] for item in response.json()["items"]]
+
+    # date_desc：未开始组内按结束日期倒序（9603 远→9604 取消同组），进行中居中，已结束最后。
+    assert _ordered_ids("date_desc") == [tour_ids[2], tour_ids[1], tour_ids[3], tour_ids[0]]
+    # date_asc：组内按开始日期正序，已结束组（9601 最早→9604 取消最远）顺序随之翻转。
+    assert _ordered_ids("date_asc") == [tour_ids[2], tour_ids[1], tour_ids[0], tour_ids[3]]
+
+    with integration_admin_connection.cursor() as cur:
+        cur.execute(
+            "DELETE FROM tour_lives WHERE tour_id = ANY(%s) OR live_id = ANY(%s)",
+            (tour_ids, live_ids),
+        )
+        cur.execute("DELETE FROM tour_attrs WHERE id = ANY(%s)", (tour_ids,))
+        cur.execute("DELETE FROM live_attrs WHERE id = ANY(%s)", (live_ids,))

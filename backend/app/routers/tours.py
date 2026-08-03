@@ -119,9 +119,9 @@ def _build_tour_list_queries(
     where_sql, params = _build_tour_filters(query=query, year=year, band_id=band_id)
     sort_dir = "ASC" if sort == "date_asc" else "DESC"
     result_order = (
-        "summary.start_date ASC, summary.start_time ASC, summary.tour_id ASC"
+        "summary.status_rank ASC, summary.start_date ASC, summary.start_time ASC, summary.tour_id ASC"
         if sort == "date_asc"
-        else "summary.end_date DESC, summary.end_time DESC, summary.tour_id DESC"
+        else "summary.status_rank ASC, summary.end_date DESC, summary.end_time DESC, summary.tour_id DESC"
     )
 
     count_query = f"SELECT COUNT(*) FROM tour_attrs t WHERE {where_sql}"
@@ -137,8 +137,26 @@ def _build_tour_list_queries(
                 ORDER BY order_live.live_date {sort_dir}, order_live.start_time {sort_dir}, order_live.id {sort_dir}
                 LIMIT 1
             ) boundary_live ON true
+            LEFT JOIN LATERAL (
+                SELECT
+                    MIN(l.live_date) AS start_date,
+                    MAX(l.live_date) AS end_date,
+                    COUNT(*)::int AS collected_live_count,
+                    COUNT(*) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count
+                FROM tour_lives stats_stop
+                JOIN live_attrs l ON l.id = stats_stop.live_id
+                WHERE stats_stop.tour_id = t.id
+            ) tour_stats ON true
             WHERE {where_sql}
-            ORDER BY boundary_live.live_date {sort_dir}, boundary_live.start_time {sort_dir}, t.id {sort_dir}
+            ORDER BY
+                CASE
+                    WHEN tour_stats.collected_live_count > 0
+                         AND tour_stats.cancelled_live_count >= tour_stats.collected_live_count THEN 2
+                    WHEN CURRENT_DATE < tour_stats.start_date THEN 0
+                    WHEN CURRENT_DATE > tour_stats.end_date THEN 2
+                    ELSE 1
+                END ASC,
+                boundary_live.live_date {sort_dir}, boundary_live.start_time {sort_dir}, t.id {sort_dir}
             LIMIT %s OFFSET %s
         ),
         summary AS (
@@ -160,6 +178,13 @@ def _build_tour_list_queries(
                 (array_agg(l.start_time ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC))[1] AS end_time,
                 COUNT(*)::int AS collected_live_count,
                 COUNT(*) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count,
+                CASE
+                    WHEN COUNT(*)::int > 0
+                         AND COUNT(*) FILTER (WHERE l.event_status = 'cancelled')::int >= COUNT(*)::int THEN 2
+                    WHEN CURRENT_DATE < MIN(l.live_date) THEN 0
+                    WHEN CURRENT_DATE > MAX(l.live_date) THEN 2
+                    ELSE 1
+                END AS status_rank,
                 COALESCE(
                     (
                         SELECT jsonb_agg(
