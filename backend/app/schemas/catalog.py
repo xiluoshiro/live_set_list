@@ -2,7 +2,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from app.schemas.lives import LiveItem, LivesPagination
+from app.schemas.lives import DatePhase, EventStatus, LiveItem, LivesPagination
 
 
 class CatalogBandItem(BaseModel):
@@ -46,11 +46,28 @@ class CatalogBandListResponse(BaseModel):
 
 
 class CatalogStatsResponse(BaseModel):
+    live_count: int = Field(..., description="Total number of lives")
     band_count: int = Field(..., description="Total number of bands")
     song_count: int = Field(..., description="Total number of songs")
     venue_count: int = Field(..., description="Total number of venues")
     latest_live_date: str | None = Field(default=None, description="Most recent live date in ISO format")
     years: list[int] = Field(default_factory=list, description="Distinct Live years ordered descending")
+
+
+class CatalogCalendarLiveItem(BaseModel):
+    live_id: int = Field(..., description="live_attrs.id")
+    live_date: date = Field(..., description="Live date")
+    live_title: str = Field(..., description="Live title")
+    start_time: str | None = Field(default=None, description="Start time with UTC offset, e.g. 18:00:00+09:00")
+    bands: list[int] = Field(..., description="Deduplicated band IDs sorted ascending")
+    event_status: EventStatus = Field(..., description="Persisted event status")
+    date_phase: DatePhase = Field(..., description="Date phase computed in the Live UTC offset")
+    was_rescheduled: bool = Field(..., description="Whether the Live has schedule history")
+
+
+class CatalogCalendarResponse(BaseModel):
+    month: str = Field(..., description="Requested month key in YYYY-MM format")
+    items: list[CatalogCalendarLiveItem] = Field(..., description="All lives in the requested month")
 
 
 class StatisticsFilters(BaseModel):

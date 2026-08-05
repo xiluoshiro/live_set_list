@@ -60,6 +60,62 @@ describe("api cache behavior", () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ credentials: "include" }));
   });
 
+  test("getCatalogCalendar 相同月份命中缓存，不同月份分别请求", async () => {
+    // 测试点：日历缓存以月份为键，重复访问同月不重复请求。
+    fetchMock.mockResolvedValue(
+      makeJsonResponse({ month: "2026-08", items: [] }),
+    );
+    const { getCatalogCalendar } = await import("../api");
+
+    await getCatalogCalendar("2026-08");
+    await getCatalogCalendar("2026-08");
+    await getCatalogCalendar("2026-09");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/catalog/calendar?month=2026-08");
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/catalog/calendar?month=2026-09");
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ credentials: "include" }));
+  });
+
+  test("getCatalogCalendar 并发相同月份复用 inFlight promise", async () => {
+    // 测试点：并发请求同月时只发一次网络请求。
+    const d = deferred<Response>();
+    fetchMock.mockReturnValue(d.promise);
+    const { getCatalogCalendar } = await import("../api");
+
+    const first = getCatalogCalendar("2026-08");
+    const second = getCatalogCalendar("2026-08");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    d.resolve(makeJsonResponse({ month: "2026-08", items: [] }));
+    await Promise.all([first, second]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("getCatalogCalendar 失败后不写入缓存，下次重新请求", async () => {
+    // 测试点：失败请求不污染日历缓存。
+    fetchMock.mockResolvedValueOnce(makeJsonResponse({ detail: "boom" }, false, 500));
+    fetchMock.mockResolvedValueOnce(makeJsonResponse({ month: "2026-08", items: [] }));
+    const { getCatalogCalendar } = await import("../api");
+
+    await expect(getCatalogCalendar("2026-08")).rejects.toThrow();
+    await getCatalogCalendar("2026-08");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("clearLiveDataCaches 后日历缓存失效并重新请求", async () => {
+    // 测试点：控制台变更清缓存时日历月数据一并失效。
+    fetchMock.mockResolvedValue(makeJsonResponse({ month: "2026-08", items: [] }));
+    const { getCatalogCalendar, clearLiveDataCaches } = await import("../api");
+
+    await getCatalogCalendar("2026-08");
+    clearLiveDataCaches();
+    await getCatalogCalendar("2026-08");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   // 测试点：控制台无 setlist 候选每次都从服务端刷新，不能被公共列表或旧候选缓存污染。
   test("getLives 无 setlist 筛选绕过持久缓存", async () => {
     fetchMock.mockResolvedValue(

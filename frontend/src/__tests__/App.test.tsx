@@ -14,6 +14,7 @@ import {
   favoriteLivesBatch,
   getCatalogBandLives,
   getCatalogBands,
+  getCatalogCalendar,
   getCatalogStats,
   getCatalogStatistics,
   getLiveDetail,
@@ -32,6 +33,7 @@ import {
   searchCatalog,
   unfavoriteLive,
   type CatalogBandLivesResponse,
+  type CatalogCalendarResponse,
   type CatalogSearchResponse,
   type LiveDetailResponse,
   type LivesResponse,
@@ -49,6 +51,7 @@ vi.mock("../api", () => ({
   getLives: vi.fn(),
   searchCatalog: vi.fn(),
   getCatalogStats: vi.fn(),
+  getCatalogCalendar: vi.fn(),
   getCatalogStatistics: vi.fn(),
   getCatalogBands: vi.fn(),
   getCatalogBandLives: vi.fn(),
@@ -105,6 +108,7 @@ const searchCatalogMock = vi.mocked(searchCatalog);
 const getCatalogBandsMock = vi.mocked(getCatalogBands);
 const getCatalogBandLivesMock = vi.mocked(getCatalogBandLives);
 const getCatalogStatsMock = vi.mocked(getCatalogStats);
+const getCatalogCalendarMock = vi.mocked(getCatalogCalendar);
 const getCatalogStatisticsMock = vi.mocked(getCatalogStatistics);
 const getLiveDetailMock = vi.mocked(getLiveDetail);
 const getLiveDetailsBatchMock = vi.mocked(getLiveDetailsBatch);
@@ -155,6 +159,40 @@ function makeResponse(params: {
       total: params.total,
       total_pages: params.totalPages,
     },
+  };
+}
+
+function currentMonthKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function makeCalendarResponse(params: {
+  itemCount?: number;
+  startId?: number;
+  monthKey?: string;
+}): CatalogCalendarResponse {
+  const now = new Date();
+  const monthKey = params.monthKey ?? currentMonthKey();
+  const [year, month] = monthKey.split("-").map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  const day = Math.min(now.getDate() + 1, lastDay);
+  const liveDate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return {
+    month: monthKey,
+    items: Array.from({ length: params.itemCount ?? 2 }, (_, idx) => {
+      const id = (params.startId ?? 1) + idx;
+      return {
+        live_id: id,
+        live_date: liveDate,
+        live_title: `示例 Live 名称 ${id}`,
+        start_time: "18:00:00+09:00",
+        bands: [1, 2],
+        event_status: "scheduled",
+        date_phase: "upcoming",
+        was_rescheduled: false,
+      };
+    }),
   };
 }
 
@@ -441,6 +479,7 @@ describe("App", () => {
     getCatalogBandsMock.mockReset();
     getCatalogBandLivesMock.mockReset();
     getCatalogStatsMock.mockReset();
+    getCatalogCalendarMock.mockReset();
     getCatalogStatisticsMock.mockReset();
     getLiveDetailMock.mockReset();
     getLiveDetailsBatchMock.mockReset();
@@ -503,12 +542,14 @@ describe("App", () => {
     });
     getCatalogBandLivesMock.mockResolvedValue(makeBandLivesResponse());
     getCatalogStatsMock.mockResolvedValue({
+      live_count: 47,
       band_count: 3,
       song_count: 17,
       venue_count: 3,
       latest_live_date: "2026-05-30",
       years: [2026, 2025],
     });
+    getCatalogCalendarMock.mockResolvedValue(makeCalendarResponse({}));
     getCatalogStatisticsMock.mockResolvedValue({
       scope: "all",
       filters: { year: null, live_type: null, band_id: null },
@@ -566,11 +607,12 @@ describe("App", () => {
     );
     renderApp();
     expect(screen.getByRole("button", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "查找 Live、曲目与出演记录" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "我的收藏" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("47")).toBeInTheDocument());
-    expect(getLivesMock).toHaveBeenCalledWith(1, 15);
+    expect(getCatalogCalendarMock).toHaveBeenCalledWith(currentMonthKey());
+    expect(getLivesMock).not.toHaveBeenCalled();
   });
 
   // 测试点：顶层公共页签统一展示英文眉题、中文主标题和共享标题层级。
@@ -583,7 +625,7 @@ describe("App", () => {
     const mainNavigation = screen.getByRole("navigation", { name: "主导航" });
 
     expect(screen.getByText("Community live database")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "查找 Live、曲目与出演记录" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
 
     await user.click(within(mainNavigation).getByRole("button", { name: "演出资料" }));
     expect(screen.getByText("Live archive")).toBeInTheDocument();
@@ -599,7 +641,7 @@ describe("App", () => {
   });
 
   test("首页数据概览展示真实指标数据", async () => {
-    // 测试点：首页指标卡片应展示 Live/乐队/歌曲/场地四项及最新 Live 日期。
+    // 测试点：首页指标卡片应展示 Live/乐队/歌曲/场地四项真实数据。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -612,28 +654,31 @@ describe("App", () => {
     expect(within(metrics).getByText("场地")).toBeInTheDocument();
     expect(within(metrics).getByText("17")).toBeInTheDocument();
     expect(within(metrics).getAllByText("3")).toHaveLength(2);
-    expect(screen.getByText("2026.05.30")).toBeInTheDocument();
-    expect(screen.getByText("最新 Live 日期")).toBeInTheDocument();
+    expect(screen.queryByText("最新 Live 日期")).not.toBeInTheDocument();
     expect(getCatalogStatsMock).toHaveBeenCalled();
   });
 
-  // 测试点：首页最近收录复用详情页，并提供进入全量列表的入口。
-  test("首页最近 Live 可打开详情，并能进入演出资料", async () => {
+  // 测试点：首页 Live 日历进入真实详情，查看全部进入全量列表，且不再渲染旧栏目。
+  test("首页 Live 日历可打开详情并进入演出资料", async () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     const user = userEvent.setup();
     renderApp();
 
-    expect(await screen.findByText("2026.03.02")).toBeInTheDocument();
-    expect(screen.getAllByText("已结束")[0]).toHaveClass("live-status-pill");
+    expect(await screen.findByRole("heading", { name: "Live 日历" })).toBeInTheDocument();
+    expect(screen.queryByText("最近收录")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "个人与贡献" })).not.toBeInTheDocument();
+
     await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(1));
-    fireEvent.popState(window, { state: { app: "live-set-list", tab: "home" } });
+    expect(screen.getByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "BanG Dream! Live 资料库" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Live 日历" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /查看全部 Live/ }));
     await waitFor(() => expect(screen.getByRole("heading", { name: "演出资料" })).toBeInTheDocument());
     expect(screen.getByText("总计 47 条")).toBeInTheDocument();
-    expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "all" });
     expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
   });
 
@@ -1409,7 +1454,7 @@ describe("App", () => {
   });
 
   test("登录成功后切换到已登录模式并显示收藏入口", async () => {
-    // 测试点：用户登录成功后显示首页收藏快捷入口，并可打开用户下拉看到用户名/角色/退出。
+    // 测试点：用户登录成功后首页不再保留个人区占位，收藏入口迁移到演出资料页。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1423,7 +1468,10 @@ describe("App", () => {
     await user.click(loginButtons[loginButtons.length - 1]);
 
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith("admin", "test-admin-pass"));
-    expect(screen.getByRole("button", { name: /查看我的收藏/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Live 日历" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "个人与贡献" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "演出资料" }));
+    expect(screen.getByRole("button", { name: "仅收藏" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "用户菜单：Administrator" }));
     expect(screen.getByText("Administrator")).toBeInTheDocument();
@@ -1666,6 +1714,7 @@ describe("App", () => {
     );
     const user = userEvent.setup();
     render(<App />);
+    await openAllContent(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
 
     const firstLiveButton = screen.getAllByRole("button", { name: /示例 Live 名称/ })[0];
@@ -2354,17 +2403,15 @@ describe("App", () => {
     expect(getPerformancesMock).toHaveBeenCalledTimes(requestCount);
   });
 
-  // 测试点：首页真实跨标签刷新在途时保留最近 Live，首次点击仍可直接进入详情。
-  test("首页跨标签刷新在途时最近Live仍可点击", async () => {
-    const refresh = deferred<LivesResponse>();
-    getLivesMock
-      .mockResolvedValueOnce(
-        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
-      )
+  // 测试点：首页真实跨标签刷新在途时保留日历数据，首次点击仍可直接进入详情。
+  test("首页跨标签刷新在途时日历仍可点击", async () => {
+    const refresh = deferred<CatalogCalendarResponse>();
+    getCatalogCalendarMock
+      .mockResolvedValueOnce(makeCalendarResponse({}))
       .mockReturnValueOnce(refresh.promise);
     const user = userEvent.setup();
     renderApp();
-    const recentLive = await screen.findByRole("button", { name: "示例 Live 名称 1" });
+    const row = await screen.findByRole("button", { name: "示例 Live 名称 1" });
     const rawChange = JSON.stringify({
       action: "updated",
       liveId: 1,
@@ -2380,15 +2427,13 @@ describe("App", () => {
       }));
     });
 
-    await waitFor(() => expect(getLivesMock).toHaveBeenCalledTimes(2));
-    expect(recentLive).toBeInTheDocument();
-    await user.click(recentLive);
+    await waitFor(() => expect(getCatalogCalendarMock).toHaveBeenCalledTimes(2));
+    expect(row).toBeInTheDocument();
+    await user.click(row);
     expect(await screen.findByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
 
     await act(async () => {
-      refresh.resolve(
-        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
-      );
+      refresh.resolve(makeCalendarResponse({}));
     });
   });
 

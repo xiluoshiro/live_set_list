@@ -1,6 +1,9 @@
+from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import MagicMock, call, patch
 
 from fastapi.testclient import TestClient
+from psycopg2 import Error
+from psycopg2.errors import QueryCanceled
 
 from app.main import app
 from app.routers.catalog import (
@@ -8,6 +11,7 @@ from app.routers.catalog import (
     BAND_LIVES_COUNT_QUERY,
     BAND_LIVES_PAGE_QUERY,
     BAND_META_QUERY,
+    CALENDAR_QUERY,
     SEARCH_BANDS_QUERY,
     SEARCH_LIVES_QUERY,
     SEARCH_SONGS_QUERY,
@@ -126,3 +130,96 @@ def test_get_catalog_band_lives_returns_band_and_paginated_lives():
         call(BAND_LIVES_COUNT_QUERY, (1,)),
         call(BAND_LIVES_PAGE_QUERY, (1, 20, 20)),
     ]
+
+
+def test_get_catalog_calendar_returns_month_items_with_public_status():
+    # 测试点：日历接口应按指定自然月返回全部 Live，并带开始时间和公开状态字段。
+    # date_phase 按 Live 自身 UTC offset 计算，固定时钟避免服务器时区与 JST 跨日时结果抖动。
+    conn, cursor = _build_connection_mock()
+    jst = timezone(timedelta(hours=9))
+
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 8, 5, 4, 0, tzinfo=timezone.utc)
+
+    cursor.fetchall.return_value = [
+        (101, date(2026, 8, 4), "Past Live", [1, 2], time(18, 0, tzinfo=jst), "scheduled", True),
+        (102, date(2026, 8, 6), "Upcoming Live", [8], time(18, 30, tzinfo=jst), "cancelled", False),
+    ]
+
+    with patch("app.routers.catalog.get_db_connection", return_value=conn):
+        with patch("app.live_status.datetime", _FixedDatetime):
+            client = TestClient(app)
+            response = client.get("/api/catalog/calendar?month=2026-08")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["month"] == "2026-08"
+    assert payload["items"][0] == {
+        "live_id": 101,
+        "live_date": "2026-08-04",
+        "live_title": "Past Live",
+        "start_time": "18:00:00+09:00",
+        "bands": [1, 2],
+        "event_status": "scheduled",
+        "date_phase": "past",
+        "was_rescheduled": True,
+    }
+    assert payload["items"][1]["event_status"] == "cancelled"
+    assert payload["items"][1]["date_phase"] == "upcoming"
+    assert cursor.execute.call_args_list == [
+        call(CALENDAR_QUERY, {"month_start": date(2026, 8, 1), "next_month_start": date(2026, 9, 1)})
+    ]
+
+
+def test_get_catalog_calendar_december_month_rolls_to_next_year():
+    # 测试点：12 月的请求应把右边界推进到下一年 1 月 1 日。
+    conn, cursor = _build_connection_mock()
+    cursor.fetchall.return_value = []
+
+    with patch("app.routers.catalog.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.get("/api/catalog/calendar?month=2026-12")
+
+    assert response.status_code == 200
+    assert response.json() == {"month": "2026-12", "items": []}
+    assert cursor.execute.call_args_list == [
+        call(CALENDAR_QUERY, {"month_start": date(2026, 12, 1), "next_month_start": date(2027, 1, 1)})
+    ]
+
+
+def test_get_catalog_calendar_invalid_month_returns_422():
+    # 测试点：非法月份格式应由参数校验返回 422，而不是落到数据库查询。
+    client = TestClient(app)
+    for month in ("2026-13", "2026-00", "2026-8", "202608", "abc", ""):
+        response = client.get("/api/catalog/calendar", params={"month": month})
+        assert response.status_code == 422
+
+
+def test_get_catalog_calendar_query_timeout_returns_504():
+    # 测试点：日历查询超时应返回 504，不把超时解释为空月份。
+    conn, cursor = _build_connection_mock()
+    cursor.execute.side_effect = QueryCanceled("statement timeout")
+
+    with patch("app.routers.catalog.get_db_connection", return_value=conn), patch("app.routers.catalog.logger") as logger:
+        client = TestClient(app)
+        response = client.get("/api/catalog/calendar?month=2026-08")
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "Database query timeout"
+    logger.exception.assert_called_once()
+
+
+def test_get_catalog_calendar_database_error_returns_500():
+    # 测试点：一般数据库错误应返回 500 并保留错误详情。
+    conn, cursor = _build_connection_mock()
+    cursor.execute.side_effect = Error("db down")
+
+    with patch("app.routers.catalog.get_db_connection", return_value=conn), patch("app.routers.catalog.logger") as logger:
+        client = TestClient(app)
+        response = client.get("/api/catalog/calendar?month=2026-08")
+
+    assert response.status_code == 500
+    assert "Database error" in response.json()["detail"]
+    logger.exception.assert_called_once()

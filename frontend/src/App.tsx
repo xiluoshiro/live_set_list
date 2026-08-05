@@ -275,11 +275,6 @@ function App() {
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [homeRecentRows, setHomeRecentRows] = useState<DisplayRow[]>([]);
-  const [homeLiveTotal, setHomeLiveTotal] = useState(0);
-  const [homeLoading, setHomeLoading] = useState(false);
-  const [homeError, setHomeError] = useState<string | null>(null);
-  const [homeRefreshKey, setHomeRefreshKey] = useState(0);
   const [liveDataRevision, setLiveDataRevision] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResult, setSearchResult] = useState<CatalogSearchResponse | null>(null);
@@ -312,7 +307,6 @@ function App() {
   const pendingScrollRestoreRef = useRef<number | null>(null);
   const activeTabRef = useRef<TabKey>(tab);
   const preserveListDuringLiveRefreshRef = useRef(false);
-  const preserveHomeDuringLiveRefreshRef = useRef(false);
   const lastHandledConsoleLiveChangeNonceRef = useRef<string | null>(
     parseConsoleLiveChange(
       window.localStorage.getItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY),
@@ -499,29 +493,6 @@ function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, [canUseConsoleFeatures, canUseFavoriteFeatures, initialLiveId]);
 
-  const toLiveRow = (item: LiveItem): DisplayRow => ({
-    kind: "live",
-    liveId: item.live_id,
-    liveDate: item.live_date,
-    liveTitle: item.live_title,
-    liveType: item.live_type,
-    icons: item.bands ?? [],
-    url: item.url,
-    groupId: item.performance_group?.group_id ?? null,
-    groupTitle: item.performance_group?.group_title ?? null,
-    groupStartDate: null,
-    groupEndDate: null,
-    groupDayCount: null,
-    groupLiveCount: null,
-    groupCancelledLiveCount: null,
-    groupDisplayType: null,
-    groupIcons: [],
-    groupVenues: [],
-    eventStatus: item.event_status ?? "scheduled",
-    datePhase: item.date_phase ?? "past",
-    wasRescheduled: item.was_rescheduled ?? false,
-  });
-
   const performancesToDisplayRows = (pageItems: PerformanceItem[]): DisplayRow[] =>
     pageItems.map((item): DisplayRow => {
       if (item.kind === "live") {
@@ -624,45 +595,6 @@ function App() {
     });
     clearMyFavoriteLivesCache();
   }, [favorites.projectionVersion]);
-
-  useEffect(() => {
-    if (auth.isLoading) return;
-    let canceled = false;
-    const preserveVisibleRows = preserveHomeDuringLiveRefreshRef.current && homeRecentRows.length > 0;
-    preserveHomeDuringLiveRefreshRef.current = false;
-
-    const fetchHomeRecentLives = async () => {
-      setHomeLoading(!preserveVisibleRows);
-      setHomeError(null);
-      try {
-        const data = await getLives(1, 15);
-        if (canceled) return;
-        setHomeRecentRows(data.items.map(toLiveRow));
-        setHomeLiveTotal(data.pagination.total);
-      } catch (error) {
-        if (canceled) return;
-        const rawMessage = error instanceof Error ? error.message : "未知错误";
-        const message = rawMessage === "Request timeout" ? "请求超时，请稍后重试" : rawMessage;
-        logError("load_home_recent_lives_failed", {
-          page: 1,
-          pageSize: 15,
-          message,
-        });
-        if (!preserveVisibleRows) {
-          setHomeRecentRows([]);
-          setHomeLiveTotal(0);
-        }
-        setHomeError(message);
-      } finally {
-        if (!canceled) setHomeLoading(false);
-      }
-    };
-
-    void fetchHomeRecentLives();
-    return () => {
-      canceled = true;
-    };
-  }, [auth.isLoading, auth.isAuthenticated, auth.user?.id, homeRefreshKey]);
 
   useEffect(() => {
     if (tab !== "search" || searchQuery.trim() === "") return;
@@ -1047,12 +979,9 @@ function App() {
     preserveListDuringLiveRefreshRef.current = (
       activeTabRef.current === "all" || activeTabRef.current === "favorites"
     );
-    preserveHomeDuringLiveRefreshRef.current = activeTabRef.current === "home";
     listSnapshotsRef.current = {};
     cardSessionsRef.current = {};
     clearLiveDataCaches();
-    setHomeError(null);
-    setHomeRefreshKey((key) => key + 1);
     setLiveDataRevision((revision) => revision + 1);
   }, []);
 
@@ -1571,24 +1500,11 @@ function App() {
           />
         ) : showHomePanel ? (
           <HomeDashboard
-            isAuthenticated={auth.isAuthenticated}
-            canUseConsoleFeatures={canUseConsoleFeatures}
-            favoriteCount={favorites.favoriteLiveIds.length}
-            liveTotal={homeLiveTotal}
-            recentRows={homeRecentRows}
-            loading={homeLoading}
-            error={homeError}
             stats={catalogStats}
+            refreshKey={liveDataRevision}
             onOpenLive={(row: HomeLiveRow) => openLiveDetail(row, "home")}
             onShowAll={() => handleTabChange("all")}
-            onShowFavorites={() => handleTabChange("favorites")}
-            onShowConsole={() => handleTabChange("console")}
-            onLogin={() => {
-              setLoginError(null);
-              setLoginDialogOpen(true);
-            }}
             onSearch={handleCatalogSearch}
-            onShowBrowse={() => handleTabChange("browse")}
             onShowAbout={() => handleTabChange("about")}
           />
         ) : showSearchPanel ? (

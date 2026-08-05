@@ -161,6 +161,20 @@ const eventsByDate = {
 };
 
 const weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+const BAND_COLORS = {
+  1: "#ff3377",
+  2: "#e83848",
+  3: "#33ddaa",
+  4: "#3344aa",
+  5: "#f4b600",
+  6: "#22cccc",
+  7: "#2dc1f7",
+  8: "#3388bb",
+  9: "#881144",
+  10: "#ec7384",
+  11: "#aa22ee",
+  12: "#ffaa33",
+};
 const calendarGrid = document.querySelector("[data-calendar-grid]");
 const monthLabel = document.querySelector(".month-label");
 const previousButton = document.querySelector('[data-month-action="previous"]');
@@ -171,6 +185,7 @@ const selectedWeekdayLabel = document.querySelector("[data-selected-weekday]");
 const selectedCountLabel = document.querySelector("[data-selected-count]");
 const eventList = document.querySelector("[data-event-list]");
 const toast = document.querySelector(".preview-toast");
+const nextLiveSpotlight = document.querySelector("[data-next-live]");
 
 let visibleMonth = "2026-08";
 let selectedDate = previewToday;
@@ -272,6 +287,48 @@ function renderSelectedDay() {
     row.append(time, copy, status);
     eventList.append(row);
   });
+}
+
+function renderNextLiveSpotlight() {
+  const dates = Object.keys(eventsByDate)
+    .filter((date) => date >= previewToday)
+    .sort();
+  let chosenEvent = null;
+  let chosenDate = "";
+  for (const date of dates) {
+    const candidate = eventsByDate[date].find((event) => event.tone !== "cancelled");
+    if (candidate) {
+      chosenEvent = candidate;
+      chosenDate = date;
+      break;
+    }
+  }
+  if (!chosenEvent) {
+    nextLiveSpotlight.hidden = true;
+    return;
+  }
+
+  const [year, month, day] = chosenDate.split("-").map(Number);
+  const weekday = weekdays[new Date(year, month - 1, day).getDay()];
+  nextLiveSpotlight.querySelector("[data-next-live-title]").textContent = chosenEvent.title;
+  nextLiveSpotlight.querySelector("[data-next-live-meta]").textContent =
+    `${month} 月 ${day} 日（${weekday}）${chosenEvent.time} · ${STATUS_LABELS[chosenEvent.tone]}`;
+
+  const icons = nextLiveSpotlight.querySelector("[data-next-live-icons]");
+  icons.replaceChildren();
+  chosenEvent.bands.slice(0, 2).forEach((bandId) => icons.append(createBandIcon(bandId)));
+  const hiddenCount = chosenEvent.bands.length - 2;
+  if (hiddenCount > 0) {
+    const overflow = document.createElement("span");
+    overflow.className = "band-overflow";
+    overflow.textContent = `+${hiddenCount}`;
+    icons.append(overflow);
+  }
+
+  nextLiveSpotlight.querySelector(".next-live-rail").style.backgroundColor =
+    BAND_COLORS[chosenEvent.bands[0]] ?? "var(--stage-accent)";
+  nextLiveSpotlight.hidden = false;
+  nextLiveSpotlight.onclick = () => showToast(`预览：打开「${chosenEvent.title}」详情`);
 }
 
 function focusAdjacentDate(source, offset) {
@@ -422,3 +479,4 @@ document.querySelector(".preview-footer button").addEventListener("click", () =>
 
 renderCalendar();
 renderSelectedDay();
+renderNextLiveSpotlight();
