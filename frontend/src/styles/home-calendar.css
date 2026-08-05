@@ -80,11 +80,11 @@
 [data-home-calendar] .status-legend {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 14px 26px;
-  margin: 16px 0 18px;
-  padding: 12px 0;
-  border-top: 1px solid var(--stage-line-soft);
-  border-bottom: 1px solid var(--stage-line-soft);
+  margin: 14px 16px 0 0;
+  grid-column: 1;
+  grid-row: 3;
   color: var(--stage-muted);
   font-family: var(--stage-mono);
   font-size: 12px;
@@ -136,6 +136,13 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
   min-height: 338px;
+}
+
+[data-home-calendar] .calendar-workspace::before {
+  content: "";
+  grid-column: 2;
+  grid-row: 1 / 4;
+  border-left: 1px solid var(--stage-line-soft);
 }
 
 [data-home-calendar] .month-navigation {
@@ -363,7 +370,6 @@
   min-width: 0;
   flex-direction: column;
   padding-left: 16px;
-  border-left: 1px solid var(--stage-line-soft);
 }
 
 [data-home-calendar] .day-detail-heading {
@@ -629,7 +635,13 @@
 
   [data-home-calendar] .status-legend {
     gap: 8px 14px;
-    margin-top: 16px;
+    margin: 14px 0 0;
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  [data-home-calendar] .calendar-workspace::before {
+    display: none;
   }
 
   [data-home-calendar] .calendar-workspace {
