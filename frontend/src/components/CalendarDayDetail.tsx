@@ -67,7 +67,7 @@ export function CalendarDayDetail({
 
       <div className="event-list">
         {dayItems.length === 0 ? (
-          <p className="empty-day">这一天没有已收录的 Live。请选择带有状态色轨的日期。</p>
+          <p className="empty-day">这一天没有已收录的 Live。</p>
         ) : (
           dayItems.map((item) => {
             const status = getLiveStatusPresentation(
