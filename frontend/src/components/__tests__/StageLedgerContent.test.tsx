@@ -224,18 +224,59 @@ describe("StageLedgerContent", () => {
     expect(trigger).toHaveFocus();
   });
 
-  test("取消状态隐藏收藏和歌单，并保留状态说明", () => {
-    // 测试点：cancelled 路径只展示可核对的状态资料，不渲染可误解为已发生的演出流程。
+  test("取消状态隐藏收藏和歌单，并展示取消原因", () => {
+    // 测试点：cancelled 路径只展示可核对的状态资料，不渲染可误解为已发生的演出流程；正文固定为“本场演出已取消。”，原因以小字展示，且不再出现小字“取消”。
     const onToggleFavorite = vi.fn();
     renderStage(
       makeDetail({ event_status: "cancelled", status_note: "因场地原因取消" }),
       { canFavorite: true, onToggleFavorite },
     );
 
-    expect(screen.getByRole("heading", { name: "本场 Live 已取消" })).toBeInTheDocument();
-    expect(screen.getByText("因场地原因取消")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "本场演出已取消。" })).toBeInTheDocument();
+    expect(screen.getByText("取消原因：因场地原因取消")).toBeInTheDocument();
+    expect(screen.queryByText("取消")).not.toBeInTheDocument();
     expect(screen.queryByText("Song One")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument();
+  });
+
+  test("取消且无原因时只显示固定标题", () => {
+    // 测试点：没有取消原因时不显示原因行，取消正文只保留“本场演出已取消。”一句。
+    renderStage(makeDetail({ event_status: "cancelled", status_note: null }));
+
+    expect(screen.getByRole("heading", { name: "本场演出已取消。" })).toBeInTheDocument();
+    expect(screen.queryByText(/取消原因/)).not.toBeInTheDocument();
+  });
+
+  test("待举行 Live 空状态提示本场演出尚未举行", () => {
+    // 测试点：未举行场次无曲目时只显示“本场演出尚未举行。”，不再显示“演出流程尚未记录”。
+    renderStage(makeDetail({ date_phase: "upcoming", detail_rows: [] }));
+
+    expect(screen.getByRole("heading", { name: "本场演出尚未举行。" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "演出流程尚未记录" })).not.toBeInTheDocument();
+  });
+
+  test("已结束活动空状态提示本场活动暂无演出曲目", () => {
+    // 测试点：已结束且无出席阵容、无曲目的活动只显示一句“本场活动暂无演出曲目。”。
+    renderStage(makeDetail({ live_type: "event", date_phase: "past", detail_rows: [] }));
+
+    expect(screen.getByRole("heading", { name: "本场活动暂无演出曲目。" })).toBeInTheDocument();
+    expect(screen.queryByText("本页目前只收录演出基本资料")).not.toBeInTheDocument();
+  });
+
+  test("已结束普通场次空状态保留原提示", () => {
+    // 测试点：已结束且无曲目的普通场次仍显示“演出流程尚未记录”的原有提示。
+    renderStage(makeDetail({ date_phase: "past", detail_rows: [] }));
+
+    expect(screen.getByRole("heading", { name: "演出流程尚未记录" })).toBeInTheDocument();
+    expect(screen.getByText("本页目前只收录演出基本资料，暂无演出曲目记录。")).toBeInTheDocument();
+  });
+
+  test("进行中活动空状态保留原提示", () => {
+    // 测试点：进行中的活动空状态不受文案调整影响，保留原有两行提示。
+    renderStage(makeDetail({ live_type: "event", date_phase: "today", detail_rows: [] }));
+
+    expect(screen.getByRole("heading", { name: "本页目前只收录演出基本资料" })).toBeInTheDocument();
+    expect(screen.getByText("暂无出席阵容或演出曲目记录。")).toBeInTheDocument();
   });
 
   test("未登录时只提供登录后收藏入口", async () => {

@@ -654,6 +654,7 @@ export function StageLedgerContent({
   selectedTrackIdRef.current = selectedTrackId;
   const detailTitle = displayTitle ?? detailData?.live_title ?? fallback.liveTitle;
   const detailUrl = detailData?.url ?? fallback.url;
+  const datePhase = detailData?.date_phase ?? "past";
   const isCancelled = detailData?.event_status === "cancelled";
   const visibleRows = isCancelled ? [] : rows;
   const selectedRow = visibleRows.find((row) => row.row_id === selectedTrackId) ?? null;
@@ -791,9 +792,9 @@ export function StageLedgerContent({
               onOpenPerformanceGroup={onOpenPerformanceGroup}
               showTourReference={showTourReference}
             />
-            {detailData.status_note && (
+            {detailData.status_note && detailData.event_status !== "cancelled" && (
               <p className="stage-status-note" role="note">
-                {detailData.event_status === "cancelled" ? "取消说明" : detailData.event_status === "postponed" ? "延期说明" : "备注"}：{detailData.status_note}
+                {detailData.event_status === "postponed" ? "延期说明" : "备注"}：{detailData.status_note}
               </p>
             )}
           </div>
@@ -846,11 +847,9 @@ export function StageLedgerContent({
 
         {isCancelled ? (
           <section className="stage-status-body" id="stage-status" aria-labelledby="stage-status-title">
-            <div className="stage-status-mark" aria-hidden="true">取消</div>
             <div>
-              <h2 id="stage-status-title">本场 Live 已取消</h2>
-              <p>{detailData.status_note || "当前资料没有形成公开演出流程。"}</p>
-              <p className="stage-muted">保留当前日期、场馆和官方网页，供资料核对使用。</p>
+              <h2 id="stage-status-title">本场演出已取消。</h2>
+              {detailData.status_note && <p className="stage-muted">取消原因：{detailData.status_note}</p>}
             </div>
           </section>
         ) : (
@@ -859,8 +858,16 @@ export function StageLedgerContent({
               {detailData.live_type === "event" && showAttendance && <EventAttendees attendees={detailData.event_attendees} />}
               {detailData.live_type === "event" && !showAttendance && !showFlow && (
                 <section className="stage-empty-section" id="stage-attendance">
-                  <h2>本页目前只收录演出基本资料</h2>
-                  <p>暂无出席阵容或演出曲目记录。</p>
+                  {datePhase === "upcoming" ? (
+                    <h2>本场演出尚未举行。</h2>
+                  ) : datePhase === "past" ? (
+                    <h2>本场活动暂无演出曲目。</h2>
+                  ) : (
+                    <>
+                      <h2>本页目前只收录演出基本资料</h2>
+                      <p>暂无出席阵容或演出曲目记录。</p>
+                    </>
+                  )}
                 </section>
               )}
               {showFlow ? (
@@ -899,8 +906,14 @@ export function StageLedgerContent({
                 </section>
               ) : detailData.live_type !== "event" && (
                 <section className="stage-empty-section" id="stage-flow" tabIndex={-1}>
-                  <h2>演出流程尚未记录</h2>
-                  <p>本页目前只收录演出基本资料，暂无演出曲目记录。</p>
+                  {datePhase === "upcoming" ? (
+                    <h2>本场演出尚未举行。</h2>
+                  ) : (
+                    <>
+                      <h2>演出流程尚未记录</h2>
+                      <p>本页目前只收录演出基本资料，暂无演出曲目记录。</p>
+                    </>
+                  )}
                 </section>
               )}
               <ScheduleHistory detail={detailData} />
