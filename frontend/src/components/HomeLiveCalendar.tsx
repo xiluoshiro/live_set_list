@@ -91,29 +91,6 @@ export function HomeLiveCalendar({ onOpenLive, onShowAll, refreshKey = 0 }: Home
         </div>
       </header>
 
-      <div className="status-legend" aria-label="Live 状态图例">
-        <span>
-          <i className="legend-rail past" aria-hidden="true" />
-          已结束
-        </span>
-        <span>
-          <i className="legend-rail upcoming" aria-hidden="true" />
-          待举行
-        </span>
-        <span>
-          <i className="legend-rail today" aria-hidden="true" />
-          进行中
-        </span>
-        <span>
-          <i className="legend-rail postponed" aria-hidden="true" />
-          延期
-        </span>
-        <span>
-          <i className="legend-rail cancelled" aria-hidden="true" />
-          已取消
-        </span>
-      </div>
-
       <div className="calendar-workspace">
         <div className="month-navigation" aria-label="月份导航">
           <strong className="month-label" aria-live="polite">
@@ -191,6 +168,29 @@ export function HomeLiveCalendar({ onOpenLive, onShowAll, refreshKey = 0 }: Home
             onShowAll={onShowAll}
           />
         )}
+
+        <div className="status-legend" aria-label="Live 状态图例">
+          <span>
+            <i className="legend-rail past" aria-hidden="true" />
+            已结束
+          </span>
+          <span>
+            <i className="legend-rail upcoming" aria-hidden="true" />
+            待举行
+          </span>
+          <span>
+            <i className="legend-rail today" aria-hidden="true" />
+            进行中
+          </span>
+          <span>
+            <i className="legend-rail postponed" aria-hidden="true" />
+            延期
+          </span>
+          <span>
+            <i className="legend-rail cancelled" aria-hidden="true" />
+            已取消
+          </span>
+        </div>
       </div>
     </section>
   );
