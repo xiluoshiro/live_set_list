@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { CatalogCalendarLiveItem, CatalogCalendarResponse } from "../../api";
 import { getCatalogCalendar } from "../../api";
@@ -13,6 +13,14 @@ vi.mock("../../api", () => ({
 }));
 
 const getCatalogCalendarMock = vi.mocked(getCatalogCalendar);
+
+beforeEach(() => {
+  vi.stubEnv("TZ", "Asia/Tokyo");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function makeItem(overrides: Partial<CatalogCalendarLiveItem>): CatalogCalendarLiveItem {
   return {
