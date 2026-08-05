@@ -70,7 +70,7 @@
 [data-home-calendar] .month-label {
   color: var(--stage-heading);
   font-family: var(--stage-mono);
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-align: left;
@@ -366,7 +366,7 @@
 [data-home-calendar] .day-detail {
   display: flex;
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 1 / 4;
   min-width: 0;
   flex-direction: column;
   padding-left: 16px;
@@ -374,31 +374,29 @@
 
 [data-home-calendar] .day-detail-heading {
   display: flex;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 52px;
-  padding: 2px 0 11px;
+  min-height: 44px;
+  padding: 2px 0 10px;
 }
 
 [data-home-calendar] .selected-date-weekday {
-  margin: 0 0 4px;
   color: var(--stage-muted);
-  font-family: var(--stage-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: inherit;
 }
 
 [data-home-calendar] .day-detail h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin: 0;
   color: var(--stage-heading);
-  font-size: 21px;
+  font-size: 18px;
   letter-spacing: -0.02em;
 }
 
 [data-home-calendar] .selected-count {
-  padding-top: 3px;
   color: var(--stage-accent);
   font-family: var(--stage-mono);
   font-size: 11px;
@@ -407,6 +405,8 @@
 }
 
 [data-home-calendar] .event-list {
+  max-height: 340px;
+  overflow-y: auto;
   border-top: 1px solid var(--stage-line-soft);
 }
 
@@ -518,26 +518,20 @@
 [data-home-calendar] .all-lives-button {
   align-self: flex-end;
   margin-top: auto;
-  min-height: 36px;
-  padding: 12px 13px 8px;
-  border: 1px solid var(--stage-line);
-  border-radius: var(--stage-radius);
-  background: var(--stage-surface);
-  color: var(--stage-heading);
-  cursor: pointer;
+  border: 0;
+  padding: 4px 2px;
+  background: transparent;
+  color: var(--text-link);
+  font: inherit;
   font-size: 12px;
+  cursor: pointer;
   white-space: nowrap;
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+  text-decoration: underline;
+  transition: color 160ms ease;
 }
 
 [data-home-calendar] .all-lives-button:hover {
-  border-color: var(--stage-accent);
-  color: var(--stage-accent);
-  background: color-mix(in srgb, var(--stage-accent) 8%, var(--stage-surface));
-}
-
-[data-home-calendar] .all-lives-button:active {
-  transform: translateY(1px);
+  color: var(--accent-primary);
 }
 
 [data-home-calendar] .calendar-loading {

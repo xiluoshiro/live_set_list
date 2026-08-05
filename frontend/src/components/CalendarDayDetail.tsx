@@ -58,10 +58,10 @@ export function CalendarDayDetail({
   return (
     <aside className="day-detail" aria-labelledby="selected-date-title" aria-live="polite">
       <div className="day-detail-heading">
-        <div>
-          <p className="selected-date-weekday">{weekday}</p>
-          <h3 id="selected-date-title">{dateLabel}</h3>
-        </div>
+        <h3 id="selected-date-title">
+          <span className="selected-date-label">{dateLabel}</span>
+          <span className="selected-date-weekday">{weekday}</span>
+        </h3>
         <strong className="selected-count">{dayItems.length} 场</strong>
       </div>
 
