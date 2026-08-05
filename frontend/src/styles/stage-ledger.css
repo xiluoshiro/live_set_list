@@ -738,7 +738,10 @@
   padding: 46px 0;
 }
 
-.stage-status-mark,
+.stage-status-body > div:only-child {
+  grid-column: 1 / -1;
+}
+
 .stage-error-kicker {
   color: var(--live-status-cancelled-text);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
