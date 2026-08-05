@@ -9,10 +9,11 @@
 相关材料：
 
 - [Live 日历静态交互预览](previews/home-live-calendar/index.html)
+- [Live 日历 Stage Ledger 风格预览 v2](previews/home-live-calendar-v2/index.html)
 - [公共端 UI 精修与易用性改造设计](public-ui-refresh.md)
 - [Live 状态与日期阶段实现设计](../archive/completed-design/live-status.md)
 
-文档状态：`PROPOSED`。静态预览已完成，尚未接入真实接口或生产首页。
+文档状态：`IMPLEMENTED`。静态预览与生产实现均已落地，生产视觉以 v2 预览为准（见第 12 节差异记录）。
 
 ## 2. 结论摘要
 
@@ -354,6 +355,20 @@ WHERE l.live_date >= :month_start
 - 预览只提供 2026-07 至 2026-09，生产实现允许连续切换自然月。
 - 预览中的点击 toast 只是交互占位，生产实现进入真实 Live 详情或列表。
 - 生产状态色轨按状态去重，不能沿用原型的 `events.slice(0, 3)`。
+
+## 12.1 与 v2 预览及设计的实现差异记录
+
+生产实现（`frontend/src/components/HomeLiveCalendar.tsx`、`CalendarGrid.tsx`、`CalendarDayDetail.tsx`、`styles/home-calendar.css`）与本文及 v2 预览的落地差异：
+
+1. **视觉整体采用 v2 预览的 Stage Ledger 风格**：首页 hero、数据概览、最新 Live 日期、日历区与页脚全部按 v2 重做（hairline 分隔、4px 圆角、mono 元数据），不再保留旧的圆角卡片风格。
+2. **数据概览的“已收录 Live”来自新字段**：后端 `GET /api/catalog/stats` 新增 `live_count`，替代被移除的 `getLives(1, 15)` 分页总数。
+3. **日历格压缩**：工作区比例为 `1fr / 0.9fr`（日格约 85-90px）、日格高 44px、网格 gap 4px；分隔线经 `color-mix` 加深一档以适配浅色主题。
+4. **详情行 Band 图标与标题同行**：最多渲染 2 个图标 + `+N` 溢出计数（mono），悬停 `title` 展示完整列表；图标不带衬底。
+5. **详情行可访问名称**：整行按钮 `aria-label` 直接使用 Live 标题，键盘与测试均按标题定位。
+6. **“查看全部 Live”按钮**位于选中日详情底部（`onShowAll` 跳转演出资料页），不再有首页“乐队浏览”链接（顶部导航保留）。
+7. **`HomeDashboard` 删除** `isAuthenticated`、`canUseConsoleFeatures`、`favoriteCount`、`recentRows`、`onShowFavorites`、`onShowConsole`、`onLogin` 七个 props；`App.tsx` 不再请求 `getLives(1, 15)`，跨标签控制台变更通过 `liveDataRevision` 驱动日历重取当前月。
+8. **缓存**：`getCatalogCalendar(month)` 使用以月份为键的 10 分钟 LRU 缓存，并入 `clearLiveDataCaches` 失效链路。
+9. **键盘漫游**：方向键按天/周移动焦点、Enter 选择；今天用 `aria-current="date"`，选中用 `aria-pressed`，可访问名称包含日期、场次与各状态计数。
 
 ## 13. 实施顺序
 

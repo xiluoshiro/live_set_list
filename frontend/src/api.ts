@@ -117,11 +117,28 @@ export type CatalogBandLivesResponse = {
 };
 
 export type CatalogStatsResponse = {
+  live_count: number;
   band_count: number;
   song_count: number;
   venue_count: number;
   latest_live_date: string | null;
   years?: number[];
+};
+
+export type CatalogCalendarLiveItem = {
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  start_time: string | null;
+  bands: number[];
+  event_status: EventStatus;
+  date_phase: DatePhase;
+  was_rescheduled: boolean;
+};
+
+export type CatalogCalendarResponse = {
+  month: string;
+  items: CatalogCalendarLiveItem[];
 };
 
 export type StatisticsScope = "all" | "favorites";
@@ -832,6 +849,7 @@ type RequestKind =
   | "catalog_bands"
   | "catalog_band_lives"
   | "catalog_stats"
+  | "catalog_calendar"
   | "catalog_statistics"
   | "catalog_performance_group_detail"
   | "catalog_performances"
@@ -850,14 +868,17 @@ const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 const REQUEST_TIMEOUT_MS = 10000;
 const LIVES_CACHE_TTL_MS = 15 * 60 * 1000;
 const DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
+const CALENDAR_CACHE_TTL_MS = 10 * 60 * 1000;
 const LIVES_CACHE_MAX = 20;
 const DETAIL_CACHE_MAX = 100;
+const CALENDAR_CACHE_MAX = 12;
 const DETAIL_REQUEST_DEBOUNCE_MS = 300;
 const DETAIL_BATCH_MAX_IDS = 100;
 
 const livesCache = new LruRequestCache<LivesResponse>(LIVES_CACHE_MAX);
 const favoriteLivesCache = new LruRequestCache<LivesResponse>(LIVES_CACHE_MAX);
 const detailCache = new LruRequestCache<LiveDetailResponse>(DETAIL_CACHE_MAX);
+const calendarCache = new LruRequestCache<CatalogCalendarResponse>(CALENDAR_CACHE_MAX);
 const detailRecentRequest = new RecentPromiseDebouncer<number, LiveDetailResponse>();
 let authMeInFlight: Promise<AuthMeResponse> | null = null;
 
@@ -1072,6 +1093,7 @@ function clearLiveCollectionCaches(): void {
 export function clearLiveDataCaches(): void {
   clearLiveCollectionCaches();
   detailCache.clear();
+  calendarCache.clear();
 }
 
 export async function getMyFavoriteLives(
@@ -1413,6 +1435,40 @@ export async function getCatalogStats(): Promise<CatalogStatsResponse> {
     requestKind: "catalog_stats",
   });
   return expectJsonResponse<CatalogStatsResponse>(response);
+}
+
+function calendarCacheKey(month: string): string {
+  return `catalog_calendar:${month}`;
+}
+
+async function fetchCatalogCalendarRemote(month: string): Promise<CatalogCalendarResponse> {
+  const query = new URLSearchParams({ month });
+  const response = await fetchWithTimeout(`${BASE_URL}/api/catalog/calendar?${query.toString()}`, undefined, {
+    requestKind: "catalog_calendar",
+  });
+  return expectJsonResponse<CatalogCalendarResponse>(response);
+}
+
+export async function getCatalogCalendar(month: string): Promise<CatalogCalendarResponse> {
+  const key = calendarCacheKey(month);
+  const fresh = calendarCache.getFresh(key, CALENDAR_CACHE_TTL_MS);
+  if (fresh !== undefined) {
+    return fresh;
+  }
+  const inFlight = calendarCache.getInFlight(key);
+  if (inFlight) return inFlight;
+
+  const requestPromise = fetchCatalogCalendarRemote(month)
+    .then((payload) => {
+      calendarCache.setData(key, payload, Date.now());
+      return payload;
+    })
+    .finally(() => {
+      calendarCache.clearInFlightIfMatch(key, requestPromise);
+    });
+
+  calendarCache.setInFlight(key, requestPromise);
+  return requestPromise;
 }
 
 export async function getCatalogStatistics(

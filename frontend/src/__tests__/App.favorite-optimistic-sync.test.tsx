@@ -32,11 +32,29 @@ vi.mock("../api", () => ({
   getCatalogBands: vi.fn().mockResolvedValue({ items: [] }),
   getCatalogBandLives: vi.fn(),
   getCatalogStats: vi.fn().mockResolvedValue({
+    live_count: 4,
     band_count: 3,
     song_count: 17,
     venue_count: 3,
     latest_live_date: "2026-05-30",
   }),
+  getCatalogCalendar: vi.fn().mockImplementation((month: string) =>
+    Promise.resolve({
+      month,
+      items: [
+        {
+          live_id: 1,
+          live_date: `${month}-05`,
+          live_title: "示例 Live 名称 1",
+          start_time: "18:00:00+09:00",
+          bands: [1],
+          event_status: "scheduled",
+          date_phase: "upcoming",
+          was_rescheduled: false,
+        },
+      ],
+    }),
+  ),
   getLiveDetail: vi.fn(),
   getLiveDetailsBatch: vi.fn(),
   getAuthMe: vi.fn(),

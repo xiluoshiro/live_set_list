@@ -1,3 +1,4 @@
+from datetime import date
 from math import ceil
 from typing import Any, Literal
 
@@ -14,6 +15,7 @@ from app.live_status import build_public_live_status
 from app.schemas import (
     CatalogBandListResponse,
     CatalogBandLivesResponse,
+    CatalogCalendarResponse,
     CatalogSearchResponse,
     CatalogStatsResponse,
     CatalogStatisticsResponse,
@@ -488,6 +490,7 @@ def get_catalog_stats():
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT
+                    (SELECT COUNT(*) FROM live_attrs)  AS live_count,
                     (SELECT COUNT(*) FROM band_attrs) AS band_count,
                     (SELECT COUNT(*) FROM song_list)   AS song_count,
                     (SELECT COUNT(*) FROM venue_list)  AS venue_count,
@@ -500,11 +503,12 @@ def get_catalog_stats():
             """)
             row = cur.fetchone()
             return CatalogStatsResponse(
-                band_count=row[0],
-                song_count=row[1],
-                venue_count=row[2],
-                latest_live_date=row[3].isoformat() if row[3] else None,
-                years=list(row[4] or []),
+                live_count=row[0],
+                band_count=row[1],
+                song_count=row[2],
+                venue_count=row[3],
+                latest_live_date=row[4].isoformat() if row[4] else None,
+                years=list(row[5] or []),
             )
     except OperationalError as exc:
         if "timeout expired" in str(exc).lower():
@@ -515,6 +519,89 @@ def get_catalog_stats():
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     finally:
         conn.close()
+
+
+CALENDAR_QUERY = f"""
+SELECT
+    l.id,
+    l.live_date,
+    l.live_title,
+    {effective_band_ids_sql(live_alias="l", setlist_alias="ls", band_alias="b")},
+    l.start_time,
+    l.event_status,
+    EXISTS (
+        SELECT 1 FROM live_schedule_history history
+        WHERE history.live_id = l.id
+    ) AS was_rescheduled
+FROM live_attrs l
+WHERE l.live_date >= %(month_start)s
+  AND l.live_date < %(next_month_start)s
+ORDER BY l.live_date ASC, l.start_time ASC NULLS LAST, l.id ASC
+"""
+
+
+@router.get(
+    "/calendar",
+    response_model=CatalogCalendarResponse,
+    summary="公共 Live 日历",
+    description="返回指定自然月内全部 Live 的日历条目，按演出日期、开始时间和 Live ID 稳定排序。",
+    responses={
+        422: {"model": ValidationErrorResponse, "description": "查询参数验证失败"},
+        500: {"model": ErrorResponse, "description": "数据库一般错误"},
+        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
+    },
+)
+def get_catalog_calendar(
+    month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Month key in YYYY-MM format"),
+):
+    """Return every public Live in one natural month without pagination."""
+    year = int(month[:4])
+    month_number = int(month[5:7])
+    month_start = date(year, month_number, 1)
+    if month_number == 12:
+        next_month_start = date(year + 1, 1, 1)
+    else:
+        next_month_start = date(year, month_number + 1, 1)
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    CALENDAR_QUERY,
+                    {"month_start": month_start, "next_month_start": next_month_start},
+                )
+                rows = cur.fetchall()
+    except QueryCanceled as exc:
+        logger.exception("get_catalog_calendar timeout month=%s", month)
+        raise HTTPException(status_code=504, detail="Database query timeout") from exc
+    except OperationalError as exc:
+        logger.exception("get_catalog_calendar operational error month=%s", month)
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+    except Error as exc:
+        logger.exception("get_catalog_calendar failed month=%s", month)
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
+
+    items = []
+    for row in rows:
+        status = build_public_live_status(
+            event_status=str(row[5]),
+            live_date=row[1],
+            start_time=row[4],
+            was_rescheduled=bool(row[6]),
+        )
+        items.append(
+            {
+                "live_id": int(row[0]),
+                "live_date": row[1],
+                "live_title": row[2],
+                "start_time": str(row[4]) if row[4] is not None else None,
+                "bands": list(row[3] or []),
+                **status,
+            }
+        )
+    return {"month": month, "items": items}
 
 
 def _statistics_candidate_sql(

@@ -10,6 +10,7 @@ def test_catalog_stats_returns_seeded_counts(integration_test_client):
 
     assert response.status_code == 200
     body = response.json()
+    assert body["live_count"] == 4
     assert body["band_count"] == 4
     assert body["song_count"] == 17
     assert body["venue_count"] == 3
@@ -26,7 +27,8 @@ def test_catalog_stats_response_structure(integration_test_client):
     body = response.json()
 
     assert isinstance(body, dict)
-    assert set(body.keys()) == {"band_count", "song_count", "venue_count", "latest_live_date", "years"}
+    assert set(body.keys()) == {"live_count", "band_count", "song_count", "venue_count", "latest_live_date", "years"}
+    assert isinstance(body["live_count"], int)
     assert isinstance(body["band_count"], int)
     assert isinstance(body["song_count"], int)
     assert isinstance(body["venue_count"], int)
@@ -227,3 +229,187 @@ def test_catalog_statistics_requires_login_for_favorites(integration_test_client
     response = integration_test_client.get("/api/catalog/statistics", params={"scope": "favorites"})
 
     assert response.status_code == 401
+
+
+# 测试点：日历接口只返回指定自然月内的 Live，并按日期、开始时间、ID 稳定排序。
+def test_catalog_calendar_returns_only_requested_month_and_orders(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO live_attrs (
+                id, live_date, live_title, url, opening_time, start_time,
+                venue_id, live_type, default_band_ids, event_status
+            )
+            VALUES (
+                %s, DATE %s, %s, %s,
+                TIME WITH TIME ZONE '16:00:00+09', TIME WITH TIME ZONE %s,
+                1, 'other', %s, %s
+            )
+            """,
+            [
+                (
+                    910,
+                    "2026-08-29",
+                    "August Late Show",
+                    "https://example.com/calendar/910",
+                    "19:30:00+09",
+                    [1],
+                    "scheduled",
+                ),
+                (
+                    911,
+                    "2026-08-29",
+                    "August Early Show",
+                    "https://example.com/calendar/911",
+                    "15:00:00+09",
+                    [2, 1],
+                    "cancelled",
+                ),
+                (
+                    912,
+                    "2026-08-12",
+                    "August Mid Show",
+                    "https://example.com/calendar/912",
+                    "18:00:00+09",
+                    [3],
+                    "postponed",
+                ),
+                (
+                    913,
+                    "2026-07-31",
+                    "July Edge",
+                    "https://example.com/calendar/913",
+                    "18:00:00+09",
+                    [1],
+                    "scheduled",
+                ),
+                (
+                    914,
+                    "2026-09-01",
+                    "September Edge",
+                    "https://example.com/calendar/914",
+                    "18:00:00+09",
+                    [1],
+                    "scheduled",
+                ),
+            ],
+        )
+
+    response = integration_test_client.get("/api/catalog/calendar", params={"month": "2026-08"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["month"] == "2026-08"
+    items = body["items"]
+    assert [item["live_id"] for item in items] == [912, 911, 910]
+    statuses = {item["live_id"]: item["event_status"] for item in items}
+    assert statuses[910] == "scheduled"
+    assert statuses[911] == "cancelled"
+    assert statuses[912] == "postponed"
+    assert items[1]["bands"] == [1, 2]
+    assert items[1]["start_time"] == "15:00:00+09:00"
+    assert items[2]["date_phase"] in {"past", "today", "upcoming"}
+    assert all(item["live_date"].startswith("2026-08-") for item in items)
+
+
+# 测试点：日历条目的 date_phase 按 Live 自身 UTC offset 计算，不依赖服务器时区。
+def test_catalog_calendar_computes_date_phase_from_live_offset(
+    integration_test_client,
+    integration_admin_connection,
+):
+    # 固定时钟使 JST 当日确定在 2026-08-05，避免服务器本地日期与 JST 跨日时结果抖动。
+    from datetime import datetime, timezone
+    from unittest.mock import patch
+
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 8, 5, 4, 0, tzinfo=timezone.utc)
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO live_attrs (
+                id, live_date, live_title, url, opening_time, start_time,
+                venue_id, live_type, default_band_ids, event_status
+            )
+            VALUES (
+                %s, DATE %s, %s, %s,
+                TIME WITH TIME ZONE '16:00:00+09', TIME WITH TIME ZONE %s,
+                1, 'other', %s, 'scheduled'
+            )
+            """,
+            [
+                (915, "2026-08-04", "Offset Past", "https://example.com/c", "18:00:00+09", [1]),
+                (916, "2026-08-05", "Offset Today", "https://example.com/c", "18:00:00+09", [1]),
+                (917, "2026-08-06", "Offset Future", "https://example.com/c", "18:00:00+09", [1]),
+            ],
+        )
+
+    with patch("app.live_status.datetime", _FixedDatetime):
+        response = integration_test_client.get(
+            "/api/catalog/calendar",
+            params={"month": "2026-08"},
+        )
+
+    assert response.status_code == 200
+    phases = {item["live_id"]: item["date_phase"] for item in response.json()["items"]}
+    assert phases[915] == "past"
+    assert phases[916] == "today"
+    assert phases[917] == "upcoming"
+
+
+# 测试点：月初与月末边界按左闭右开规则过滤，月末最后一天属于当月。
+def test_catalog_calendar_month_boundaries(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO live_attrs (
+                id, live_date, live_title, url, opening_time, start_time,
+                venue_id, live_type, default_band_ids, event_status
+            )
+            VALUES (
+                %s, DATE %s, %s, %s,
+                TIME WITH TIME ZONE '16:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
+                1, 'other', %s, 'scheduled'
+            )
+            """,
+            [
+                (920, "2026-08-31", "Month End Show", "https://example.com/c", [1]),
+                (921, "2026-09-01", "Next Month Show", "https://example.com/c", [1]),
+            ],
+        )
+
+    august = integration_test_client.get("/api/catalog/calendar", params={"month": "2026-08"})
+    september = integration_test_client.get("/api/catalog/calendar", params={"month": "2026-09"})
+
+    august_ids = [item["live_id"] for item in august.json()["items"]]
+    september_ids = [item["live_id"] for item in september.json()["items"]]
+    assert 920 in august_ids
+    assert 921 not in august_ids
+    assert 921 in september_ids
+    assert 920 not in september_ids
+
+
+# 测试点：空月份返回空 items，而不是 404 或空态以外的错误。
+def test_catalog_calendar_empty_month_returns_empty_items(integration_test_client):
+    response = integration_test_client.get("/api/catalog/calendar", params={"month": "2027-01"})
+
+    assert response.status_code == 200
+    assert response.json() == {"month": "2027-01", "items": []}
+
+
+# 测试点：非法月份格式返回 422，非法格式不进入数据库查询。
+def test_catalog_calendar_invalid_month_returns_422(integration_test_client):
+    for month in ("2026-13", "2026-00", "2026-8", "202608", "abc"):
+        response = integration_test_client.get("/api/catalog/calendar", params={"month": month})
+        assert response.status_code == 422
