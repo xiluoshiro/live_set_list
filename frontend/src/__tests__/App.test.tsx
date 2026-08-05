@@ -682,8 +682,8 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
   });
 
-  // 测试点：从任意来源打开 Live 详情后，History popstate 都必须把 SPA 归一到演出资料页。
-  test("浏览器返回 Live 详情时一定回到演出资料页", async () => {
+  // 测试点：从首页打开 Live 详情后，浏览器返回应回到来源页（首页），而不是被归一到演出资料页。
+  test("浏览器返回 Live 详情时回到来源页", async () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -695,9 +695,26 @@ describe("App", () => {
 
     fireEvent.popState(window, { state: { app: "live-set-list", tab: "home" } });
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: "演出资料" })).toBeInTheDocument());
-    expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "all" });
-    expect(screen.getByRole("button", { name: "演出资料" })).toHaveClass("active");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Live 日历" })).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "演出资料" })).not.toHaveClass("active");
+  });
+
+  // 测试点：详情加载失败页的返回按钮回到来源页（首页），而不是固定去演出资料页。
+  test("详情失败页返回按钮回到来源页", async () => {
+    getLivesMock.mockResolvedValue(
+      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
+    );
+    getLiveDetailMock.mockRejectedValueOnce(new Error("Request failed: 500"));
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+
+    await user.click(await screen.findByRole("button", { name: "返回演出资料" }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Live 日历" })).toBeInTheDocument());
+    expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "home" });
   });
 
   test("卡片详情关闭会保留已加载页并继续触发无限加载", async () => {
