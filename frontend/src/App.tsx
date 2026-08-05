@@ -473,18 +473,6 @@ function App() {
       }
     }
     const onPopState = (event: PopStateEvent) => {
-      if (activeTabRef.current === "detail" && isAppHistoryState(event.state) && event.state.tab !== "detail") {
-        const archiveState: AppHistoryState = {
-          app: "live-set-list",
-          tab: "all",
-          ...(event.state.tab === "all" || event.state.tab === "favorites"
-            ? { listState: event.state.listState }
-            : {}),
-        };
-        window.history.replaceState(archiveState, "", "/");
-        applyHistoryState(archiveState);
-        return;
-      }
       if (isAppHistoryState(event.state)) {
         applyHistoryState(event.state);
       }
@@ -1260,14 +1248,15 @@ function App() {
   };
 
   const handleBackFromDetail = () => {
+    const backTab = previousTab;
     const archiveState: AppHistoryState = {
       app: "live-set-list",
-      tab: "all",
-      listState: {
-        page,
-        cardPage,
-        scrollY: 0,
-      },
+      tab: backTab,
+      ...(backTab === "all" || backTab === "favorites"
+        ? { listState: { page, cardPage, scrollY: 0 } }
+        : {}),
+      ...(backTab === "search" ? { searchQuery } : {}),
+      ...(backTab === "browse" ? { catalogBandId: selectedCatalogBandId } : {}),
     };
     window.history.replaceState(archiveState, "", "/");
     applyHistoryState(archiveState);
