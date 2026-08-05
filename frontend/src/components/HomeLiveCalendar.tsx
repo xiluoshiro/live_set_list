@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { CatalogCalendarLiveItem, CatalogCalendarResponse } from "../api";
 import { getCatalogCalendar } from "../api";
@@ -41,8 +41,7 @@ export function HomeLiveCalendar({ onOpenLive, onShowAll, refreshKey = 0 }: Home
   const [loadingMonth, setLoadingMonth] = useState<string | null>(visibleMonth);
   const [errorMonth, setErrorMonth] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
-
-  const currentMonth = useMemo(() => getCurrentMonthKey(), []);
+  const [slideDirection, setSlideDirection] = useState<"left" | "right" | null>(null);
 
   useEffect(() => {
     let canceled = false;
@@ -77,12 +76,8 @@ export function HomeLiveCalendar({ onOpenLive, onShowAll, refreshKey = 0 }: Home
   const changeMonth = useCallback((delta: number) => {
     setVisibleMonth((current) => shiftMonthKey(current, delta));
     setSelectedDate(null);
+    setSlideDirection(delta < 0 ? "left" : "right");
   }, []);
-
-  const goToCurrentMonth = useCallback(() => {
-    setVisibleMonth(currentMonth);
-    setSelectedDate(null);
-  }, [currentMonth]);
 
   const isLoading = loadingMonth === visibleMonth && month === undefined;
   const hasError = errorMonth === visibleMonth && month === undefined;
@@ -119,40 +114,65 @@ export function HomeLiveCalendar({ onOpenLive, onShowAll, refreshKey = 0 }: Home
         </span>
       </div>
 
-      <div className="month-navigation" aria-label="月份导航">
-        <button type="button" className="month-button" onClick={() => changeMonth(-1)}>
-          上个月
-        </button>
-        <strong className="month-label" aria-live="polite">
-          {monthKeyToLabel(visibleMonth)}
-        </strong>
-        <button type="button" className="month-button" onClick={() => changeMonth(1)}>
-          下个月
-        </button>
-        <button type="button" className="current-month-button" onClick={goToCurrentMonth}>
-          回到本月
-        </button>
-      </div>
-
-      {isLoading && (
-        <div className="calendar-loading" aria-busy="true" role="status">
-          <div className="calendar-loading-skeleton calendar-loading-calendar" />
-          <div className="calendar-loading-skeleton calendar-loading-detail" />
+      <div className="calendar-workspace">
+        <div className="month-navigation" aria-label="月份导航">
+          <strong className="month-label" aria-live="polite">
+            {monthKeyToLabel(visibleMonth)}
+          </strong>
+          <div className="month-nav-group">
+            <button
+              type="button"
+              className="month-button"
+              aria-label="上个月"
+              onClick={() => changeMonth(-1)}
+            >
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                fill="currentColor"
+              >
+                <polygon points="16 18.112 9.81111111 12 16 5.87733333 14.0888889 4 6 12 14.0888889 20" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="month-button"
+              aria-label="下个月"
+              onClick={() => changeMonth(1)}
+            >
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                fill="currentColor"
+              >
+                <polygon points="8 18.112 14.18888889 12 8 5.87733333 9.91111111 4 18 12 9.91111111 20" />
+              </svg>
+            </button>
+          </div>
         </div>
-      )}
 
-      {hasError && (
-        <div className="calendar-error" role="alert">
-          <span>Live 日历加载失败</span>
-          <button type="button" className="calendar-retry-button" onClick={() => setRetryKey((key) => key + 1)}>
-            重试
-          </button>
-        </div>
-      )}
+        {isLoading && (
+          <div className="calendar-loading" aria-busy="true" role="status">
+            <div className="calendar-loading-skeleton calendar-loading-calendar" />
+            <div className="calendar-loading-skeleton calendar-loading-detail" />
+          </div>
+        )}
 
-      {month && (
-        <div className="calendar-workspace">
-          <div className="calendar-pane">
+        {hasError && (
+          <div className="calendar-error" role="alert">
+            <span>Live 日历加载失败</span>
+            <button type="button" className="calendar-retry-button" onClick={() => setRetryKey((key) => key + 1)}>
+              重试
+            </button>
+          </div>
+        )}
+
+        {month && (
+          <div className="calendar-pane" key={visibleMonth} data-slide-dir={slideDirection ?? undefined}>
             <CalendarGrid
               monthKey={visibleMonth}
               items={month.items}
@@ -161,16 +181,17 @@ export function HomeLiveCalendar({ onOpenLive, onShowAll, refreshKey = 0 }: Home
             />
             {isEmptyMonth && <p className="calendar-month-empty">本月暂无已收录 Live</p>}
           </div>
-          {selectedDate && (
-            <CalendarDayDetail
-              selectedDate={selectedDate}
-              items={month.items}
-              onOpenLive={onOpenLive}
-              onShowAll={onShowAll}
-            />
-          )}
-        </div>
-      )}
+        )}
+
+        {month && selectedDate && (
+          <CalendarDayDetail
+            selectedDate={selectedDate}
+            items={month.items}
+            onOpenLive={onOpenLive}
+            onShowAll={onShowAll}
+          />
+        )}
+      </div>
     </section>
   );
 }
