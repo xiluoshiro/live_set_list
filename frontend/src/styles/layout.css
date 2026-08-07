@@ -375,6 +375,10 @@
     display: none;
   }
 
+  .topbar-actions {
+    margin-left: auto;
+  }
+
   .tab-btn {
     padding: 6px 10px;
   }
