@@ -6,7 +6,7 @@ import { getBandRepresentativeColor } from "./BandIconsCell";
 import { ContentState } from "./ContentState";
 
 type OtherPopoverState = {
-  rowId: string;
+  rowKey: string;
   left: number;
   top: number;
 };
@@ -173,7 +173,8 @@ function calcOtherPopoverPosition(rect: DOMRect, itemCount: number): { left: num
 }
 
 function normalizeRows(rows: LiveDetailRow[]): LiveDetailRow[] {
-  return rows.map((row) => ({
+  return rows.map((row, index) => ({
+    setlist_id: String(row.setlist_id ?? `${row.absolute_order ?? index + 1}:${row.row_id}`),
     row_id: String(row.row_id),
     song_name: String(row.song_name),
     band_members: (row.band_members ?? []).map((member) => ({
@@ -214,6 +215,10 @@ function normalizeRows(rows: LiveDetailRow[]): LiveDetailRow[] {
   }));
 }
 
+function getStableRowKey(row: LiveDetailRow, index = 0): string {
+  return String(row.setlist_id ?? `${row.absolute_order ?? index + 1}:${row.row_id}`);
+}
+
 export function MemberStatusTable({ rows, loading = false, error = null }: MemberStatusTableProps) {
   const sourceRows = useMemo(() => normalizeRows(rows ?? []), [rows]);
   const [bandDetailRow, setBandDetailRow] = useState<LiveDetailRow | null>(null);
@@ -221,7 +226,7 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
 
   const activeOtherRow = useMemo(() => {
     if (!otherPopover) return null;
-    return sourceRows.find((row) => row.row_id === otherPopover.rowId) ?? null;
+    return sourceRows.find((row, index) => getStableRowKey(row, index) === otherPopover.rowKey) ?? null;
   }, [otherPopover, sourceRows]);
 
   useEffect(() => {
@@ -247,10 +252,10 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
   }, [otherPopover]);
 
   useEffect(() => {
-    if (bandDetailRow && !sourceRows.some((row) => row.row_id === bandDetailRow.row_id)) {
+    if (bandDetailRow && !sourceRows.some((row) => getStableRowKey(row) === getStableRowKey(bandDetailRow))) {
       setBandDetailRow(null);
     }
-    if (otherPopover && !sourceRows.some((row) => row.row_id === otherPopover.rowId)) {
+    if (otherPopover && !sourceRows.some((row, index) => getStableRowKey(row, index) === otherPopover.rowKey)) {
       setOtherPopover(null);
     }
   }, [bandDetailRow, otherPopover, sourceRows]);
@@ -303,7 +308,8 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
               </tr>
             )}
             {!loading && !error &&
-              sourceRows.map((row) => {
+              sourceRows.map((row, rowIndex) => {
+                const rowKey = getStableRowKey(row, rowIndex);
                 const orderedMembers = getOrderedBandMembers(row.band_members);
                 const bandCount = orderedMembers.length;
                 const previewOthers = row.other_members.slice(0, 2);
@@ -311,7 +317,7 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                 const validComments = row.comments.filter((c) => c.trim() !== "");
                 const coverColor = getBandRepresentativeColor(row.cover_band?.band_id ?? 0);
                 return (
-                  <tr key={row.row_id}>
+                  <tr key={rowKey}>
                     <td>{row.row_id}</td>
                     <td title={row.song_name}>{row.song_name}</td>
                     <td>
@@ -323,7 +329,7 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                       >
                         <span className={`console-band-grid ${bandCount > 5 ? "grid-two" : "grid-one"}`}>
                           {orderedMembers.map((member, idx) => (
-                            <BandTile key={`${row.row_id}-${member.band_name}-${idx}`} member={member} />
+                            <BandTile key={`${rowKey}-${member.band_name}-${idx}`} member={member} />
                           ))}
                         </span>
                       </button>
@@ -339,16 +345,16 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                             return (
                               <button
                                 type="button"
-                                key={`${row.row_id}-${item.key}`}
+                                key={`${rowKey}-${item.key}`}
                                 className="other-tag other-tag-btn"
                                 title={labelText}
                                 onClick={(event) => {
                                   const rect = event.currentTarget.getBoundingClientRect();
                                   const nextPos = calcOtherPopoverPosition(rect, row.other_members.length);
                                   setOtherPopover((prev) =>
-                                    prev?.rowId === row.row_id
+                                    prev?.rowKey === rowKey
                                       ? null
-                                      : { rowId: row.row_id, left: nextPos.left, top: nextPos.top },
+                                      : { rowKey, left: nextPos.left, top: nextPos.top },
                                   );
                                 }}
                               >
@@ -364,9 +370,9 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                                 const rect = event.currentTarget.getBoundingClientRect();
                                 const nextPos = calcOtherPopoverPosition(rect, row.other_members.length);
                                 setOtherPopover((prev) =>
-                                  prev?.rowId === row.row_id
+                                  prev?.rowKey === rowKey
                                     ? null
-                                    : { rowId: row.row_id, left: nextPos.left, top: nextPos.top },
+                                    : { rowKey, left: nextPos.left, top: nextPos.top },
                                 );
                               }}
                             >
@@ -381,7 +387,7 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                         <div className="comment-tags">
                           {validComments.map((comment, commentIndex) => (
                             <span
-                              key={`${row.row_id}-${comment}-${commentIndex}`}
+                              key={`${rowKey}-${comment}-${commentIndex}`}
                               className={`comment-tag${comment === "翻唱" && row.cover_band ? " cover" : ""}`}
                               style={comment === "翻唱" && row.cover_band && coverColor ? ({ "--band-color": coverColor } as CSSProperties) : undefined}
                               title={comment === "翻唱" && row.cover_band ? `翻唱 ${row.cover_band.band_name} 的歌曲` : undefined}
@@ -414,7 +420,7 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
           <div className="other-popover-title">其他成员明细</div>
           <ul>
             {activeOtherRow.other_members.map((item, idx) => (
-              <li key={`${activeOtherRow.row_id}-${item.key}-${idx}`}>
+              <li key={`${getStableRowKey(activeOtherRow)}-${item.key}-${idx}`}>
                 <span>{item.key}</span>
                 <span>{item.value.join(" / ")}</span>
               </li>
@@ -440,7 +446,7 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
 
             <div className="console-band-member-list">
               {getOrderedBandMembers(bandDetailRow.band_members).map((member, idx) => (
-                <div key={`${bandDetailRow.row_id}-${member.band_name}-${idx}`} className="console-band-card">
+                <div key={`${getStableRowKey(bandDetailRow)}-${member.band_name}-${idx}`} className="console-band-card">
                   <div className="console-band-card-head">
                     <BandTile member={member} />
                     <strong>{member.band_name}</strong>

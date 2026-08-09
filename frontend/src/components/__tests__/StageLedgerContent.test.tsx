@@ -161,6 +161,53 @@ describe("StageLedgerContent", () => {
     expect(blocks[2]).toHaveClass("is-continuation");
   });
 
+  // 测试点：两支乐队分别从 M1 编号时，曲目分组和详情选择不能因重复 row_id 串行。
+  test("重复展示编号仍按 Setlist UUID 打开对应歌曲", async () => {
+    const user = userEvent.setup();
+    const baseRow = makeDetail().detail_rows[0];
+    const mygoMember = {
+      ...baseRow.band_members[0],
+      band_id: 8,
+      band_name: "MyGO!!!!!",
+      present_members: ["羊宮妃那"],
+      present_count: 1,
+    };
+    const detail = makeDetail({
+      bands: [1, 8],
+      band_names: ["Poppin'Party", "MyGO!!!!!"],
+      detail_rows: [
+        {
+          ...baseRow,
+          setlist_id: "setlist-first-m1",
+          row_id: "M1",
+          absolute_order: 1,
+          song_name: "First Band Song",
+        },
+        {
+          ...baseRow,
+          setlist_id: "setlist-second-m1",
+          row_id: "M1",
+          absolute_order: 2,
+          song_name: "Second Band Song",
+          band_members: [mygoMember],
+        },
+      ],
+    });
+    const { container } = renderStage(detail);
+
+    const blocks = container.querySelectorAll(".stage-act-block");
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toHaveTextContent("Poppin'Party");
+    expect(blocks[0]).not.toHaveTextContent("MyGO!!!!!");
+    expect(blocks[1]).toHaveTextContent("MyGO!!!!!");
+    expect(blocks[1]).not.toHaveTextContent("Poppin'Party");
+
+    await user.click(screen.getByRole("button", { name: /Second Band Song/ }));
+    expect(screen.getAllByRole("heading", { name: "Second Band Song" }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole("heading", { name: "First Band Song" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("实到成员：羊宮妃那").length).toBeGreaterThanOrEqual(1);
+  });
+
   test("流程摘要中的段落与乐队跳转分成两行", () => {
     // 测试点：长流程的页内跳转按段落与出演乐队分层，避免两类定位入口挤在同一行。
     const baseRow = makeDetail().detail_rows[0];

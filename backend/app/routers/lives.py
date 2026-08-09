@@ -257,7 +257,8 @@ SELECT
     stl.absolute_order,
     stl.segment_type,
     stl.sub_order,
-    stl.song_id
+    stl.song_id,
+    stl.id::text AS setlist_id
 FROM live_setlist stl
 JOIN song_list s
     ON s.id = stl.song_id
@@ -347,7 +348,8 @@ WITH row_base AS (
         stl.absolute_order,
         stl.segment_type,
         stl.sub_order,
-        stl.song_id
+        stl.song_id,
+        stl.id::text AS setlist_id
     FROM live_setlist stl
     JOIN song_list s
         ON s.id = stl.song_id
@@ -365,7 +367,8 @@ SELECT
     rb.absolute_order,
     rb.segment_type,
     rb.sub_order,
-    rb.song_id
+    rb.song_id,
+    rb.setlist_id
 FROM row_base rb
 LEFT JOIN band_attrs owner_band
     ON owner_band.id = rb.band_id
@@ -412,7 +415,8 @@ SELECT
               AND member.appearance_role IS NOT NULL
         ),
         '{}'::jsonb
-    ) AS appearance_roles
+    ) AS appearance_roles,
+    performance.setlist_id::text AS setlist_id
 FROM live_setlist_band_performances performance
 JOIN live_setlist setlist
     ON setlist.id = performance.setlist_id
@@ -441,6 +445,7 @@ ParsedDetailRow = tuple[
     str,
     int,
     int,
+    str,
 ]
 PerformanceRowsByDetail = dict[tuple[int, str], list[dict[str, Any]]]
 
@@ -566,13 +571,15 @@ def _load_detail_performances(cur: Any, live_ids: list[int]) -> PerformanceRowsB
             next_members,
             present_members,
             appearance_roles_raw,
+            *setlist_id_values,
         ) = row
+        setlist_id = str(setlist_id_values[0]) if setlist_id_values else str(row_id)
         appearance_roles: dict[str, AppearanceCategory] = {
             str(member): cast(AppearanceCategory, str(raw_role))
             for member, raw_role in dict(appearance_roles_raw or {}).items()
             if str(raw_role) in allowed_roles
         }
-        rows_by_detail.setdefault((int(live_id), str(row_id)), []).append(
+        rows_by_detail.setdefault((int(live_id), setlist_id), []).append(
             {
                 "band_id": int(band_id),
                 "band_name": str(band_name),
@@ -651,10 +658,10 @@ def _build_versioned_band_member(item: dict[str, Any]) -> dict[str, Any]:
 def _build_detail_band_members(
     *,
     live_id: int,
-    row_id: str,
+    setlist_id: str,
     performance_rows_by_detail: PerformanceRowsByDetail,
 ) -> list[dict[str, Any]]:
-    versioned_items = performance_rows_by_detail.get((live_id, row_id), [])
+    versioned_items = performance_rows_by_detail.get((live_id, setlist_id), [])
     band_members = [_build_versioned_band_member(item) for item in versioned_items]
     band_members.sort(
         key=lambda item: (
@@ -785,10 +792,11 @@ def _build_live_detail_payload(
         segment_type,
         sub_order,
         song_id,
+        setlist_id,
     ) in sorted(parsed_rows, key=lambda row: row[7]):
         band_members = _build_detail_band_members(
             live_id=live_id,
-            row_id=row_id,
+            setlist_id=setlist_id,
             performance_rows_by_detail=performance_rows_by_detail,
         )
 
@@ -806,6 +814,7 @@ def _build_live_detail_payload(
 
         detail_rows.append(
             {
+                "setlist_id": setlist_id,
                 "row_id": row_id,
                 "absolute_order": absolute_order,
                 "segment_type": segment_type,
@@ -875,6 +884,7 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
             song_band_values,
             row_index,
         )
+        setlist_id = str(song_band_values[6]) if len(song_band_values) > 6 else str(row_id)
         other_member_obj = _ensure_json_object(other_member_raw)
         parsed_rows.append(
             (
@@ -889,6 +899,7 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
                 segment_type,
                 sub_order,
                 song_id,
+                setlist_id,
             )
         )
 
@@ -1114,6 +1125,7 @@ def get_live_details_batch(
                         song_band_values,
                         row_index,
                     )
+                    setlist_id = str(song_band_values[6]) if len(song_band_values) > 6 else str(row_id)
                     live_id_int = int(live_id)
                     parsed_rows_by_live_id.setdefault(live_id_int, []).append(
                         (
@@ -1128,6 +1140,7 @@ def get_live_details_batch(
                             segment_type,
                             sub_order,
                             song_id,
+                            setlist_id,
                         )
                     )
 

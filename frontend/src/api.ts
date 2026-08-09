@@ -230,6 +230,8 @@ export type LiveDetailEventAttendee = {
 };
 
 export type LiveDetailRow = {
+  /** Stable live_setlist UUID. Older cached responses may omit it. */
+  setlist_id?: string;
   row_id: string;
   /** Structured setlist position fields are optional during the compatibility window. */
   absolute_order?: number;

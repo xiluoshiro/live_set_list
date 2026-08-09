@@ -166,6 +166,7 @@
 自动文档能看到详情结构，但这些行为不会自然体现在 OpenAPI schema 中：
 
 - `detail_rows` 实际按数据库中的 `absolute_order` 返回，不按 `row_id` 字典序排序
+- `detail_rows[].setlist_id` 是稳定的 `live_setlist` UUID，用于关联逐曲出演和前端交互；`row_id` 仍是 `segment_type + sub_order` 展示编号，同一 Live 中允许重复
 - `band_names` 会先去重，再按 `bands` 中的 `band_id` 顺序排列
 - 无法映射到 `band_id` 的乐队名称排在 `band_names` 末尾
 - `band_members` 优先按 `band_id` 升序排列，无法映射到 `band_id` 的项目排在后面
