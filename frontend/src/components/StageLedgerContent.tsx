@@ -42,6 +42,7 @@ export type StageLedgerContentProps = {
 };
 
 type StageRow = LiveDetailRow & {
+  stable_id: string;
   absolute_order: number;
   segment_type: string;
   sub_order: number;
@@ -146,6 +147,7 @@ function normalizeRows(rows: LiveDetailRow[] | undefined): StageRow[] {
       const fallback = parseRowPosition(rowId);
       return {
         ...row,
+        stable_id: String(row.setlist_id ?? `${row.absolute_order ?? index + 1}:${rowId}`),
         row_id: rowId,
         absolute_order: row.absolute_order ?? index + 1,
         segment_type: canonicalSegmentType(row.segment_type ?? fallback.segmentType),
@@ -431,18 +433,18 @@ function StageFlow({
               </div>
               <ol className="stage-track-list" start={block.rows[0]?.sub_order ?? 1}>
                 {block.rows.map((row) => {
-                  const isSelected = row.row_id === selectedTrackId;
-                  const isMobileExpanded = row.row_id === mobileExpandedTrackId;
-                  const inlineInspectorId = `stage-inline-${row.row_id}`;
+                  const isSelected = row.stable_id === selectedTrackId;
+                  const isMobileExpanded = row.stable_id === mobileExpandedTrackId;
+                  const inlineInspectorId = `stage-inline-${row.stable_id}`;
                   return (
-                    <li key={row.row_id} className={`stage-track-item${isSelected ? " is-selected" : ""}`}>
+                    <li key={row.stable_id} className={`stage-track-item${isSelected ? " is-selected" : ""}`}>
                       <Collapsible.Root
                         open={isMobileExpanded}
                         onOpenChange={(open) => {
-                          setMobileExpandedTrackId(open ? row.row_id : null);
+                          setMobileExpandedTrackId(open ? row.stable_id : null);
                           if (open) {
-                            onOpenTrack(row.row_id);
-                          } else if (selectedTrackId === row.row_id) {
+                            onOpenTrack(row.stable_id);
+                          } else if (selectedTrackId === row.stable_id) {
                             onCloseTrack();
                           }
                         }}
@@ -450,7 +452,7 @@ function StageFlow({
                         <Collapsible.Trigger asChild>
                           <button
                             ref={(element) => {
-                              triggerRefs.current[row.row_id] = element;
+                              triggerRefs.current[row.stable_id] = element;
                             }}
                             type="button"
                             className="stage-track-trigger"
@@ -657,7 +659,7 @@ export function StageLedgerContent({
   const datePhase = detailData?.date_phase ?? "past";
   const isCancelled = detailData?.event_status === "cancelled";
   const visibleRows = isCancelled ? [] : rows;
-  const selectedRow = visibleRows.find((row) => row.row_id === selectedTrackId) ?? null;
+  const selectedRow = visibleRows.find((row) => row.stable_id === selectedTrackId) ?? null;
   const shouldShowJump = visibleRows.length > 20
     || (new Set(visibleRows.flatMap((row) => row.band_members.map((member) => getBandKey(member)))).size > 3)
     || (new Set(visibleRows.map((row) => row.segment_type)).size > 2);

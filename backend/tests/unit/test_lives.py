@@ -400,6 +400,43 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert cursor.execute.call_args_list[2] == call(LIVE_DETAIL_PERFORMANCES_QUERY, ([40],))
 
 
+# 测试点：同一 Live 中重复的展示编号必须按 Setlist UUID 隔离逐曲出演关系。
+def test_get_live_detail_uses_setlist_id_to_isolate_duplicate_display_row_ids():
+    header_row = (
+        90, "2026-08-09", "Duplicate M1 Live", "Venue", "17:00", "18:00",
+        [6, 8], ["RAISE A SUILEN", "MyGO!!!!!"], None, "festival", None, None, None, None,
+    )
+    detail_rows = [
+        ("M1", "RAS Song", None, False, False, 6, "RAISE A SUILEN", 1, "M", 1, 601, "setlist-ras"),
+        ("M1", "MyGO Song", None, False, False, 8, "MyGO!!!!!", 2, "M", 1, 801, "setlist-mygo"),
+    ]
+    performance_rows = [
+        (
+            90, "M1", 6, "RAISE A SUILEN", "base", None, 61, "RAS V1",
+            ["Raychell"], None, None, [], ["Raychell"], {}, "setlist-ras",
+        ),
+        (
+            90, "M1", 8, "MyGO!!!!!", "base", None, 81, "MyGO V1",
+            ["羊宮妃那"], None, None, [], ["羊宮妃那"], {}, "setlist-mygo",
+        ),
+    ]
+    conn, _ = _build_detail_connection_mock(header_row, detail_rows, performance_rows)
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        response = TestClient(app).get("/api/lives/90")
+
+    assert response.status_code == 200
+    rows = response.json()["detail_rows"]
+    assert [(row["setlist_id"], row["row_id"]) for row in rows] == [
+        ("setlist-ras", "M1"),
+        ("setlist-mygo", "M1"),
+    ]
+    assert [[member["band_name"] for member in row["band_members"]] for row in rows] == [
+        ["RAISE A SUILEN"],
+        ["MyGO!!!!!"],
+    ]
+
+
 # 测试点：handover 可明确选择旧阵容为正式基准，并将新阵容新增成员分类为 incoming。
 def test_get_live_detail_handover_returns_full_plus_and_incoming_member():
     header_row = (
@@ -720,6 +757,42 @@ def test_get_live_details_batch_success_and_partial_missing():
     assert cursor.execute.call_args_list[0] == call(BATCH_LIVE_DETAIL_HEADERS_QUERY, ([2, 999, 1],))
     assert cursor.execute.call_args_list[1] == call(BATCH_LIVE_DETAIL_ROWS_QUERY, ([2, 999, 1],))
     assert cursor.execute.call_args_list[2] == call(LIVE_DETAIL_PERFORMANCES_QUERY, ([2, 999, 1],))
+
+
+# 测试点：批量详情也必须以 Setlist UUID 隔离同场重复展示编号的出演关系。
+def test_get_live_details_batch_isolates_duplicate_display_row_ids_by_setlist_id():
+    header_rows = [
+        (
+            90, "2026-08-09", "Duplicate M1 Live", "Venue", "17:00", "18:00",
+            [6, 8], ["RAISE A SUILEN", "MyGO!!!!!"], None, "festival", None, None, None, None,
+        )
+    ]
+    detail_rows = [
+        (90, "M1", "RAS Song", None, False, False, 6, "RAISE A SUILEN", 1, "M", 1, 601, "setlist-ras"),
+        (90, "M1", "MyGO Song", None, False, False, 8, "MyGO!!!!!", 2, "M", 1, 801, "setlist-mygo"),
+    ]
+    performance_rows = [
+        (
+            90, "M1", 6, "RAISE A SUILEN", "base", None, 61, "RAS V1",
+            ["Raychell"], None, None, [], ["Raychell"], {}, "setlist-ras",
+        ),
+        (
+            90, "M1", 8, "MyGO!!!!!", "base", None, 81, "MyGO V1",
+            ["羊宮妃那"], None, None, [], ["羊宮妃那"], {}, "setlist-mygo",
+        ),
+    ]
+    conn, _ = _build_batch_detail_connection_mock(header_rows, detail_rows, performance_rows)
+
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        response = TestClient(app).post("/api/lives/details:batch", json={"live_ids": [90]})
+
+    assert response.status_code == 200
+    rows = response.json()["items"][0]["detail_rows"]
+    assert [row["setlist_id"] for row in rows] == ["setlist-ras", "setlist-mygo"]
+    assert [[member["band_name"] for member in row["band_members"]] for row in rows] == [
+        ["RAISE A SUILEN"],
+        ["MyGO!!!!!"],
+    ]
 
 
 def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():

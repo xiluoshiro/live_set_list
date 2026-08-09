@@ -232,6 +232,61 @@ def test_get_live_detail_returns_seeded_detail_payload(
     assert second_row["band_members"][0]["missing_members"] == ["Rinko"]
 
 
+# 测试点：真实查询在同场重复 main1 时，单条与批量详情都按 Setlist UUID 隔离不同乐队。
+def test_live_detail_queries_isolate_duplicate_display_ids_by_setlist_uuid(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO live_setlist (
+                live_id, song_id, absolute_order, segment_type, sub_order,
+                is_short, other_member, comment
+            )
+            VALUES (1, 2, 99, 'main', 1, false, NULL, NULL)
+            RETURNING id
+            """
+        )
+        duplicate_setlist_id = cursor.fetchone()[0]
+        cursor.execute(
+            """
+            INSERT INTO live_setlist_band_performances (
+                setlist_id, live_id, band_id, lineup_usage
+            )
+            VALUES (%s, 1, 2, 'base')
+            """,
+            (duplicate_setlist_id,),
+        )
+        cursor.execute(
+            """
+            INSERT INTO live_setlist_band_performance_members (
+                setlist_id, band_id, member_name, display_order, appearance_role
+            )
+            VALUES (%s, 2, 'Yukina', 1, NULL)
+            """,
+            (duplicate_setlist_id,),
+        )
+
+    single_response = integration_test_client.get("/api/lives/1")
+    batch_response = integration_test_client.post("/api/lives/details:batch", json={"live_ids": [1]})
+
+    assert single_response.status_code == 200
+    assert batch_response.status_code == 200
+    single_rows = [row for row in single_response.json()["detail_rows"] if row["row_id"] == "main1"]
+    batch_rows = [row for row in batch_response.json()["items"][0]["detail_rows"] if row["row_id"] == "main1"]
+    assert len(single_rows) == 2
+    assert len(batch_rows) == 2
+    assert single_rows[0]["setlist_id"] != str(duplicate_setlist_id)
+    assert single_rows[1]["setlist_id"] == str(duplicate_setlist_id)
+    assert [[member["band_name"] for member in row["band_members"]] for row in single_rows] == [
+        ["Poppin'Party"],
+        ["Roselia"],
+    ]
+    assert batch_rows == single_rows
+
+
 # 测试点：活动无 Setlist 时，单条与批量详情都应回退默认 Band，并根据完整成员名单计算 partial/full。
 def test_event_detail_returns_default_bands_and_computed_attendees(
     integration_test_client,
