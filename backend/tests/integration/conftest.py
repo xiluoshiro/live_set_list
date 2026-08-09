@@ -12,6 +12,7 @@ os.environ.setdefault("APP_LOG_LEVEL", "CRITICAL")
 
 from app.auth import hash_password, normalize_username
 from app.main import app
+from tests.integration_lock import acquire_integration_db_lock, release_integration_db_lock
 
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -96,10 +97,15 @@ def integration_admin_connection(integration_db_config: dict[str, str]):
         password=integration_db_config["admin_password"],
         connect_timeout=5,
     )
+    conn.autocommit = True
+    acquire_integration_db_lock(conn, on_wait=lambda message: print(message, flush=True))
     try:
         yield conn
     finally:
-        conn.close()
+        try:
+            release_integration_db_lock(conn)
+        finally:
+            conn.close()
 
 
 @pytest.fixture(autouse=True)

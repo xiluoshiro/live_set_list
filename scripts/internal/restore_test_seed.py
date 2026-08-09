@@ -12,14 +12,16 @@ PG_MIGRATE_ENV_PATH = ROOT / "infra" / "postgres" / ".env.pg-migrate"
 AUTH_ENV_PATH = ROOT / "infra" / "auth" / ".env.auth"
 SEED_SQL_PATH = ROOT / "backend" / "db" / "postgres" / "seed" / "base_seed.sql"
 
+sys.path.insert(0, str(BACKEND_DIR))
+from tests.integration_lock import acquire_integration_db_lock, release_integration_db_lock
+
 
 def _env_value(values: dict[str, object], name: str, default: str = "") -> str:
     return str(values.get(name) or default)
 
 
-def _restore_seed(pg_values: dict[str, object]) -> None:
-    seed_sql = SEED_SQL_PATH.read_text(encoding="utf-8")
-    conn = psycopg2.connect(
+def _connect_admin(pg_values: dict[str, object]):
+    return psycopg2.connect(
         host=_env_value(pg_values, "POSTGRES_HOST", "localhost"),
         port=int(_env_value(pg_values, "POSTGRES_PORT", "15432")),
         dbname=_env_value(pg_values, "TEST_DB_NAME", "live_statistic_test"),
@@ -31,12 +33,12 @@ def _restore_seed(pg_values: dict[str, object]) -> None:
         ),
         connect_timeout=5,
     )
-    try:
-        conn.autocommit = True
-        with conn.cursor() as cursor:
-            cursor.execute(seed_sql)
-    finally:
-        conn.close()
+
+
+def _restore_seed(conn) -> None:
+    seed_sql = SEED_SQL_PATH.read_text(encoding="utf-8")
+    with conn.cursor() as cursor:
+        cursor.execute(seed_sql)
 
 
 def _configure_backend_env(pg_values: dict[str, object], auth_values: dict[str, object]) -> None:
@@ -60,7 +62,6 @@ def _configure_backend_env(pg_values: dict[str, object], auth_values: dict[str, 
 
 
 def _ensure_default_admin() -> None:
-    sys.path.insert(0, str(BACKEND_DIR))
     from app.auth import ensure_default_admin_user
 
     ensure_default_admin_user()
@@ -77,9 +78,18 @@ def main() -> int:
     pg_values = dotenv_values(PG_MIGRATE_ENV_PATH)
     auth_values = dotenv_values(AUTH_ENV_PATH) if AUTH_ENV_PATH.exists() else {}
 
-    _restore_seed(pg_values)
-    _configure_backend_env(pg_values, auth_values)
-    _ensure_default_admin()
+    conn = _connect_admin(pg_values)
+    conn.autocommit = True
+    acquire_integration_db_lock(conn, on_wait=lambda message: print(message, flush=True))
+    try:
+        _restore_seed(conn)
+        _configure_backend_env(pg_values, auth_values)
+        _ensure_default_admin()
+    finally:
+        try:
+            release_integration_db_lock(conn)
+        finally:
+            conn.close()
     print("测试库 seed 已还原，并已按 infra/auth/.env.auth 确保默认 admin。", flush=True)
     return 0
 
