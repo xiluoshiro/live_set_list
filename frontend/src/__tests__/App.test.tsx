@@ -837,7 +837,7 @@ describe("App", () => {
   });
 
   test("首页搜索会进入搜索结果，并可从结果打开详情", async () => {
-    // 测试点：首页搜索框接入公共搜索，Live 结果继续复用现有详情弹窗。
+    // 测试点：首页搜索框接入公共搜索，Live 结果继续复用现有详情弹窗，搜索结果页不重复展示联系我们入口。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -848,7 +848,11 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "搜索" }));
 
     await waitFor(() => expect(searchCatalogMock).toHaveBeenCalledWith("Party", 8));
-    expect(await screen.findByRole("heading", { name: "搜索结果" })).toBeInTheDocument();
+    const searchHeading = await screen.findByRole("heading", { name: "搜索结果" });
+    expect(searchHeading).toBeInTheDocument();
+    const searchPanel = searchHeading.closest(".catalog-panel");
+    expect(searchPanel).not.toBeNull();
+    expect(within(searchPanel as HTMLElement).queryByRole("button", { name: "联系我们" })).not.toBeInTheDocument();
     expect(screen.getByText("STAR BEAT!")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "検索対象 Live" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(101));

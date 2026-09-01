@@ -70,6 +70,20 @@ function renderCalendar() {
 }
 
 describe("HomeLiveCalendar", () => {
+  test("移动端状态图例按前三项和后两项分组", async () => {
+    // 测试点：状态图例保持前三项、后两项的顺序分组，移动端可分别居中排列。
+    const monthKey = getCurrentMonthKey();
+    getCatalogCalendarMock.mockResolvedValue(makeMonthResponse(monthKey, []));
+    renderCalendar();
+
+    await screen.findByText("本月暂无已收录 Live");
+    const rows = screen.getByLabelText("Live 状态图例").querySelectorAll(".status-legend-row");
+    expect(Array.from(rows, (row) => row.textContent?.replace(/\s+/g, ""))).toEqual([
+      "已结束待举行进行中",
+      "延期已取消",
+    ]);
+  });
+
   test("初次进入展示当前月，并按规则默认选中日期", async () => {
     // 测试点：当前月有今天 Live 时默认选中今天，标题显示当前月。
     const monthKey = getCurrentMonthKey();
