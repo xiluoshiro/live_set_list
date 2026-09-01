@@ -39,7 +39,6 @@ type SearchResultsPanelProps = {
   onOpenLive: (row: CatalogLiveRow) => void;
   onShowAllLives: (query: string) => void;
   onSelectBand: (bandId: number) => void;
-  onShowAbout: () => void;
 };
 
 type BandBrowsePanelProps = {
@@ -144,7 +143,6 @@ export function SearchResultsPanel({
   onOpenLive,
   onShowAllLives,
   onSelectBand,
-  onShowAbout,
 }: SearchResultsPanelProps) {
   const liveRows = result?.lives.map(catalogLiveToRow) ?? [];
   const hasAnyResult =
@@ -157,9 +155,6 @@ export function SearchResultsPanel({
     <div className="catalog-panel">
       <div className="catalog-panel-head">
         <PageTitle kicker="Search" title="搜索结果" description="按 Live、乐队、歌曲和场地分组展示。" />
-        <button type="button" className="secondary-btn" onClick={onShowAbout}>
-          联系我们
-        </button>
       </div>
       <SearchForm query={query} onSearch={onSearch} />
       {error ? (

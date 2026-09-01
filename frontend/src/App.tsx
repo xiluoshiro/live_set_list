@@ -1511,7 +1511,6 @@ function App() {
             onOpenLive={openCatalogLive}
             onShowAllLives={handleShowAllLiveSearchResults}
             onSelectBand={handleCatalogBandSelect}
-            onShowAbout={() => handleTabChange("about")}
           />
         ) : showBrowsePanel ? (
           <BandBrowsePanel

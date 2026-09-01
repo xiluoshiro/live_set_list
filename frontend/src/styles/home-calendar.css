@@ -91,6 +91,10 @@
   letter-spacing: 0.06em;
 }
 
+[data-home-calendar] .status-legend-row {
+  display: contents;
+}
+
 [data-home-calendar] .status-legend span {
   display: inline-flex;
   align-items: center;
@@ -609,10 +613,20 @@
   }
 
   [data-home-calendar] .status-legend {
-    gap: 8px 14px;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
     margin: 14px 0 0;
     grid-column: 1;
     grid-row: auto;
+  }
+
+  [data-home-calendar] .status-legend-row {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    gap: 14px;
+    width: 100%;
   }
 
   [data-home-calendar] .calendar-workspace::before {

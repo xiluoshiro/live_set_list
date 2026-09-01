@@ -170,26 +170,30 @@ export function HomeLiveCalendar({ onOpenLive, onShowAll, refreshKey = 0 }: Home
         )}
 
         <div className="status-legend" aria-label="Live 状态图例">
-          <span>
-            <i className="legend-rail past" aria-hidden="true" />
-            已结束
-          </span>
-          <span>
-            <i className="legend-rail upcoming" aria-hidden="true" />
-            待举行
-          </span>
-          <span>
-            <i className="legend-rail today" aria-hidden="true" />
-            进行中
-          </span>
-          <span>
-            <i className="legend-rail postponed" aria-hidden="true" />
-            延期
-          </span>
-          <span>
-            <i className="legend-rail cancelled" aria-hidden="true" />
-            已取消
-          </span>
+          <div className="status-legend-row">
+            <span>
+              <i className="legend-rail past" aria-hidden="true" />
+              已结束
+            </span>
+            <span>
+              <i className="legend-rail upcoming" aria-hidden="true" />
+              待举行
+            </span>
+            <span>
+              <i className="legend-rail today" aria-hidden="true" />
+              进行中
+            </span>
+          </div>
+          <div className="status-legend-row">
+            <span>
+              <i className="legend-rail postponed" aria-hidden="true" />
+              延期
+            </span>
+            <span>
+              <i className="legend-rail cancelled" aria-hidden="true" />
+              已取消
+            </span>
+          </div>
         </div>
       </div>
     </section>
