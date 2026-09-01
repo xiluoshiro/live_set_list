@@ -3,6 +3,7 @@ import ast
 import os
 import subprocess
 from pathlib import Path
+from typing import Protocol
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +15,16 @@ RECOVERY_INTEGRATION_TEST_DIR = ROOT / "recovery" / "tests" / "integration"
 
 CheckStep = tuple[str, str, list[str], Path, int]
 CheckFailure = tuple[str, str, int]
+TRANSIENT_ENVIRONMENT_MARKERS = (
+    "[WinError 10055]",
+    "由于系统缓冲区空间不足或队列已满",
+)
+TRANSIENT_ENVIRONMENT_RETRIES = 3
+
+
+class CompletedProcessLike(Protocol):
+    returncode: int
+    stdout: str | None
 
 
 def npm_command() -> str:
@@ -26,16 +37,61 @@ def backend_python() -> Path:
     return BACKEND_DIR / ".venv" / "bin" / "python"
 
 
-def run_step(label: str, args: list[str], cwd: Path, retries: int = 0) -> int:
-    for attempt in range(1, retries + 2):
-        suffix = f" (attempt {attempt}/{retries + 1})" if retries > 0 else ""
+def _run_captured_step(args: list[str], cwd: Path) -> CompletedProcessLike:
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+def _is_transient_environment_failure(output: str) -> bool:
+    return any(marker in output for marker in TRANSIENT_ENVIRONMENT_MARKERS)
+
+
+def run_step(
+    label: str,
+    args: list[str],
+    cwd: Path,
+    retries: int = 0,
+    transient_environment_retries: int = 0,
+) -> int:
+    attempt = 1
+    generic_retries_remaining = retries
+    environment_retries_remaining = transient_environment_retries
+    while True:
+        show_attempt = retries > 0 or transient_environment_retries > 0
+        total_attempts = 1 + retries + transient_environment_retries
+        suffix = f" (attempt {attempt}/{total_attempts})" if show_attempt else ""
         print(f"[{label}] {' '.join(args)}{suffix}", flush=True)
-        completed = subprocess.run(args, cwd=cwd)
+        if transient_environment_retries > 0:
+            completed = _run_captured_step(args, cwd)
+            output = completed.stdout or ""
+            if output:
+                print(output, end="" if output.endswith("\n") else "\n", flush=True)
+        else:
+            completed = subprocess.run(args, cwd=cwd)
+            output = ""
         if completed.returncode == 0:
             return 0
-        if attempt <= retries:
+        if environment_retries_remaining > 0 and _is_transient_environment_failure(output):
+            environment_retries_remaining -= 1
+            attempt += 1
+            print(
+                "检测到可重试的环境错误；仅重跑当前测试分组，不能将其作为通过或交付理由。",
+                flush=True,
+            )
+            continue
+        if generic_retries_remaining > 0:
+            generic_retries_remaining -= 1
+            attempt += 1
             print(f"命令失败，准备重试。退出码: {completed.returncode}", flush=True)
-    return completed.returncode
+            continue
+        return completed.returncode
 
 
 def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckFailure]]:
@@ -53,25 +109,43 @@ def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckF
         return steps, failures
 
     if mode in {"unit", "all"}:
-        steps.extend(
-            [
-                ("backend", "mypy", [str(python_path), "-m", "mypy", "--config-file", "mypy.ini"], BACKEND_DIR, 0),
-                ("backend", "pytest tests/unit", [str(python_path), "-m", "pytest", "-s", "tests/unit", "-q"], BACKEND_DIR, 0),
-            ]
-        )
+        steps.append(("backend", "mypy", [str(python_path), "-m", "mypy", "--config-file", "mypy.ini"], BACKEND_DIR, 0))
+        unit_test_dir = BACKEND_DIR / "tests" / "unit"
+        unit_test_files = sorted(unit_test_dir.glob("test_*.py"))
+        if not unit_test_files:
+            print("backend/tests/unit 中没有测试文件。")
+            failures.append(("backend", "unit 测试文件检查", 1))
+        for test_file in unit_test_files:
+            relative_test_file = test_file.relative_to(BACKEND_DIR)
+            steps.append(
+                (
+                    "backend",
+                    f"pytest {relative_test_file.as_posix()}",
+                    [str(python_path), "-m", "pytest", "-s", str(relative_test_file), "-q"],
+                    BACKEND_DIR,
+                    0,
+                )
+            )
 
     if mode in {"integration", "all"}:
         if mode == "integration":
             steps.append(("backend", "mypy", [str(python_path), "-m", "mypy", "--config-file", "mypy.ini"], BACKEND_DIR, 0))
-        steps.append(
-            (
-                "backend",
-                "pytest tests/integration",
-                [str(python_path), "-m", "pytest", "-s", "tests/integration", "-q"],
-                BACKEND_DIR,
-                0,
+        integration_test_dir = BACKEND_DIR / "tests" / "integration"
+        integration_test_files = sorted(integration_test_dir.glob("test_*.py"))
+        if not integration_test_files:
+            print("backend/tests/integration 中没有测试文件。")
+            failures.append(("backend", "integration 测试文件检查", 1))
+        for test_file in integration_test_files:
+            relative_test_file = test_file.relative_to(BACKEND_DIR)
+            steps.append(
+                (
+                    "backend",
+                    f"pytest {relative_test_file.as_posix()}",
+                    [str(python_path), "-m", "pytest", "-s", str(relative_test_file), "-q"],
+                    BACKEND_DIR,
+                    0,
+                )
             )
-        )
     return steps, failures
 
 
@@ -166,15 +240,28 @@ def restore_test_seed_after_integration() -> CheckFailure | None:
 
 def run_backend_check_steps(steps: list[CheckStep]) -> list[CheckFailure]:
     failures: list[CheckFailure] = []
+    ran_integration = False
     for label, step_name, command, cwd, retries in steps:
-        code = run_step(label, command, cwd, retries=retries)
+        is_integration_step = label == "backend" and step_name.startswith("pytest tests/integration/")
+        is_backend_test_file_step = is_integration_step or (
+            label == "backend" and step_name.startswith("pytest tests/unit/")
+        )
+        if is_integration_step:
+            ran_integration = True
+        code = run_step(
+            label,
+            command,
+            cwd,
+            retries=retries,
+            transient_environment_retries=(TRANSIENT_ENVIRONMENT_RETRIES if is_backend_test_file_step else 0),
+        )
         if code != 0:
             print(f"{label} 检查失败：{step_name}，退出码: {code}", flush=True)
             failures.append((label, step_name, code))
-        if label == "backend" and step_name == "pytest tests/integration":
-            restore_failure = restore_test_seed_after_integration()
-            if restore_failure is not None:
-                failures.append(restore_failure)
+    if ran_integration:
+        restore_failure = restore_test_seed_after_integration()
+        if restore_failure is not None:
+            failures.append(restore_failure)
     return failures
 
 
@@ -236,7 +323,7 @@ def run_backend_checks() -> int:
 
 def run_backend_unit_checks() -> int:
     steps, failures = build_backend_steps(mode="unit")
-    failures.extend(run_check_steps(steps))
+    failures.extend(run_backend_check_steps(steps))
     return print_summary("backend-unit", failures)
 
 
