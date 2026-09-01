@@ -45,8 +45,8 @@ python scripts/run_checks.py <arguments>
 
 - `frontend`：只运行前端 `typecheck + test`
 - `scripts`：只运行 `scripts/*.py` 语法检查，不写入 `__pycache__`
-- `backend-unit`：运行后端单元测试集
-- `backend-integration`：运行后端 `mypy(app + tests) + pytest tests/integration`
+- `backend-unit`：按 `test_*.py` 文件分组、每组使用独立 Python 进程运行后端单元测试集
+- `backend-integration`：运行后端 `mypy(app + tests)`，再按 `test_*.py` 文件分组、每组使用独立 Python 进程执行 integration 测试
 - `backend`：相当于运行 `backend-unit + backend-integration`
 - `recovery-unit`：运行恢复脚本的 mock/命令契约测试
 - `recovery-integration`：运行恢复脚本的 Docker 沙箱集成测试
@@ -55,6 +55,8 @@ python scripts/run_checks.py <arguments>
 - `full`：运行全部检查，等于 `scripts + frontend + backend + recovery`
 
 后端 integration 测试和 `restore_test_seed.py` 会共用 PostgreSQL advisory lock；如果另一轮检查仍在使用测试库，后启动的一轮会等待，避免并发 `TRUNCATE` 污染用例。integration 测试结束后，`run_checks.py` 会调用内部脚本 `scripts/internal/restore_test_seed.py`，重新导入测试库 seed，并按 `infra/auth/.env.auth` 恢复默认 admin，避免测试执行污染手工联调用的测试库状态。
+
+backend unit 与 integration 按文件拆进程是 Windows 下的稳定性契约：单个长进程连续创建大量 FastAPI `TestClient` 事件循环会累积 socket 资源，并可能触发 `WinError 10055`。执行器只会对输出命中明确环境错误白名单的当前文件分组自动重跑；断言、类型、数据库契约或业务失败不会套用该重试。任何必需检查都必须取得成功退出码，不能用“环境问题”或“与本次修改无关”作为通过或交付理由。若白名单错误连续耗尽重试预算，必须继续修正分组、隔离或清理规则。
 
 ## 导出 OpenAPI
 

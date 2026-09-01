@@ -305,4 +305,11 @@
     grid-template-columns: 1fr;
     gap: 6px;
   }
+
+  .catalog-live-title {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
