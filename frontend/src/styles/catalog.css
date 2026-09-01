@@ -263,6 +263,11 @@
   opacity: 0.6;
 }
 
+.catalog-search-more {
+  margin-top: 14px;
+  text-align: right;
+}
+
 .catalog-error {
   color: var(--accent-danger);
 }

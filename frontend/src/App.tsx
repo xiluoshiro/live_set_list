@@ -1013,6 +1013,11 @@ function App() {
     setSearchError(null);
   };
 
+  const handleShowAllLiveSearchResults = (query: string) => {
+    handleListFiltersChange({ ...DEFAULT_LIVE_LIST_FILTERS, q: query });
+    navigateToTab("all");
+  };
+
   const handleCatalogBandSelect = (bandId: number) => {
     setCatalogBandPage(1);
     navigateToTab("browse", { catalogBandId: bandId });
@@ -1504,6 +1509,7 @@ function App() {
             error={searchError}
             onSearch={handleCatalogSearch}
             onOpenLive={openCatalogLive}
+            onShowAllLives={handleShowAllLiveSearchResults}
             onSelectBand={handleCatalogBandSelect}
             onShowAbout={() => handleTabChange("about")}
           />

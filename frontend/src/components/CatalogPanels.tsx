@@ -37,6 +37,7 @@ type SearchResultsPanelProps = {
   error: string | null;
   onSearch: (query: string) => void;
   onOpenLive: (row: CatalogLiveRow) => void;
+  onShowAllLives: (query: string) => void;
   onSelectBand: (bandId: number) => void;
   onShowAbout: () => void;
 };
@@ -141,6 +142,7 @@ export function SearchResultsPanel({
   error,
   onSearch,
   onOpenLive,
+  onShowAllLives,
   onSelectBand,
   onShowAbout,
 }: SearchResultsPanelProps) {
@@ -176,6 +178,18 @@ export function SearchResultsPanel({
           <section className="catalog-section" aria-labelledby="catalog-live-results">
             <h3 id="catalog-live-results">Live</h3>
             <LiveResultList rows={liveRows} onOpenLive={onOpenLive} />
+            {result && result.live_total > result.lives.length && (
+              <div className="catalog-search-more">
+                <button
+                  type="button"
+                  className="all-lives-button"
+                  aria-label={`查看全部 ${result.live_total} 场 Live`}
+                  onClick={() => onShowAllLives(result.query)}
+                >
+                  查看全部 Live <span aria-hidden="true">→</span>
+                </button>
+              </div>
+            )}
           </section>
 
           <section className="catalog-section" aria-labelledby="catalog-band-results">

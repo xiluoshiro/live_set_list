@@ -371,6 +371,7 @@ function makeTourStatisticsResponse(): TourStatisticsResponse {
 function makeSearchResponse(query: string): CatalogSearchResponse {
   return {
     query,
+    live_total: 1,
     lives: [
       {
         live_id: 101,
@@ -855,7 +856,7 @@ describe("App", () => {
 
   test("搜索空结果展示明确空状态", async () => {
     // 测试点：公共搜索无任何分组结果时，应展示可理解的空结果提示。
-    searchCatalogMock.mockResolvedValueOnce({ query: "不存在", lives: [], bands: [], songs: [], venues: [] });
+    searchCatalogMock.mockResolvedValueOnce({ query: "不存在", live_total: 0, lives: [], bands: [], songs: [], venues: [] });
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -866,6 +867,30 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "搜索" }));
 
     expect(await screen.findByText("没有找到与“不存在”匹配的资料。")).toBeInTheDocument();
+  });
+
+  // 测试点：Live 搜索预览被截断时会显示轻量完整列表入口，并保留总数、原关键词和分页语义。
+  test("Live 搜索结果过多时可查看全部匹配项", async () => {
+    searchCatalogMock.mockResolvedValueOnce({ ...makeSearchResponse("Party"), live_total: 26 });
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.type(screen.getByRole("searchbox", { name: "搜索入口" }), "Party");
+    await user.click(screen.getByRole("button", { name: "搜索" }));
+
+    const showAllButton = await screen.findByRole("button", { name: "查看全部 26 场 Live" });
+    expect(showAllButton).toHaveTextContent("查看全部 Live →");
+    await user.click(showAllButton);
+
+    expect(await screen.findByRole("heading", { name: "演出资料" })).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: /^关键词/ })).toHaveValue("Party");
+    await waitFor(() => expect(getPerformancesMock).toHaveBeenCalledWith(1, 20, "all", {
+      q: "Party",
+      year: undefined,
+      live_type: undefined,
+      band_id: undefined,
+      sort: "date_desc",
+    }));
   });
 
   // 测试点：乐队浏览保留 Band 图案，并让关联 Live 复用首页的日期与状态 pill 布局。
