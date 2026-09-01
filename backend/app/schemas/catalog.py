@@ -29,6 +29,7 @@ class CatalogVenueItem(BaseModel):
 
 class CatalogSearchResponse(BaseModel):
     query: str = Field(..., description="Normalized search query")
+    live_total: int = Field(..., description="Total number of matched lives before the preview limit")
     lives: list[LiveItem] = Field(..., description="Matched live rows")
     bands: list[CatalogBandItem] = Field(..., description="Matched bands")
     songs: list[CatalogSongItem] = Field(..., description="Matched songs")

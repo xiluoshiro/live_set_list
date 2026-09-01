@@ -131,7 +131,8 @@ live_rows AS (
     GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, l.start_time, l.event_status,
              tour.id, tour.tour_title, pg.id, pg.group_title
 )
-SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title,
+SELECT (SELECT COUNT(*) FROM matched_live_ids) AS live_total,
+       id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title,
        performance_group_id, group_title, start_time, event_status, was_rescheduled
 FROM live_rows
 ORDER BY live_date DESC, id DESC
@@ -303,7 +304,7 @@ def search_catalog(
                 cur.execute(SEARCH_LIVES_QUERY, (pattern, pattern, pattern, pattern, pattern, limit))
                 live_rows = cur.fetchall()
                 favorite_live_ids = (
-                    get_favorite_live_id_set(cur, current_user.id, [int(row[0]) for row in live_rows])
+                    get_favorite_live_id_set(cur, current_user.id, [int(row[1]) for row in live_rows])
                     if current_user is not None
                     else set()
                 )
@@ -328,7 +329,8 @@ def search_catalog(
 
     return {
         "query": query_text,
-        "lives": [_live_item_from_row(row, favorite_live_ids) for row in live_rows],
+        "live_total": int(live_rows[0][0]) if live_rows else 0,
+        "lives": [_live_item_from_row(row[1:], favorite_live_ids) for row in live_rows],
         "bands": [
             {
                 "band_id": int(row[0]),

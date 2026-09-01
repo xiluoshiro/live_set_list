@@ -515,25 +515,6 @@
   line-height: 1.6;
 }
 
-[data-home-calendar] .all-lives-button {
-  align-self: flex-end;
-  margin-top: auto;
-  border: 0;
-  padding: 4px 2px;
-  background: transparent;
-  color: var(--text-link);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  text-decoration: underline;
-  transition: color 160ms ease;
-}
-
-[data-home-calendar] .all-lives-button:hover {
-  color: var(--accent-primary);
-}
-
 [data-home-calendar] .calendar-loading {
   display: grid;
   grid-column: 1 / -1;

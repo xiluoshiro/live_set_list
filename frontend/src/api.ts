@@ -100,6 +100,7 @@ export type CatalogVenueItem = {
 
 export type CatalogSearchResponse = {
   query: string;
+  live_total: number;
   lives: LiveItem[];
   bands: CatalogBandItem[];
   songs: CatalogSongItem[];

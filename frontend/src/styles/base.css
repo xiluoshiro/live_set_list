@@ -26,6 +26,25 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.all-lives-button {
+  align-self: flex-end;
+  margin-top: auto;
+  border: 0;
+  padding: 4px 2px;
+  background: transparent;
+  color: var(--text-link);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: underline;
+  transition: color 160ms ease;
+}
+
+.all-lives-button:hover {
+  color: var(--accent-primary);
+}
+
 :focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;

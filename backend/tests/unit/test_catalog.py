@@ -31,7 +31,7 @@ def test_search_catalog_returns_grouped_public_results():
     # 测试点：公共搜索应按 Live、乐队、歌曲和场地分组返回，且匿名访问不查收藏表。
     conn, cursor = _build_connection_mock()
     cursor.fetchall.side_effect = [
-        [(1, "2026-03-28", "Poppin'Party Live", [1], "https://example.com/live/1", "oneman", None, None, 5, "Party Weekend")],
+        [(24, 1, "2026-03-28", "Poppin'Party Live", [1], "https://example.com/live/1", "oneman", None, None, 5, "Party Weekend")],
         [(1, "Poppin'Party", "PoPiPa", ["Kasumi"], 12)],
         [(7, "STAR BEAT!", 1, "Poppin'Party", 5)],
         [(3, "有明アリーナ", 4)],
@@ -44,6 +44,7 @@ def test_search_catalog_returns_grouped_public_results():
     assert response.status_code == 200
     payload = response.json()
     assert payload["query"] == "Party"
+    assert payload["live_total"] == 24
     assert payload["lives"][0] == {
         "live_id": 1,
         "live_date": "2026-03-28",
