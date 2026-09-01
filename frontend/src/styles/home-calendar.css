@@ -664,6 +664,17 @@
     border-left: 0;
   }
 
+  [data-home-calendar] .event-copy {
+    align-items: flex-start;
+  }
+
+  [data-home-calendar] .event-title {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   [data-home-calendar] .calendar-loading {
     grid-column: 1;
     grid-row: auto;
