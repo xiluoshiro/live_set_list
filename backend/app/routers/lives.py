@@ -159,6 +159,7 @@ LEFT JOIN performance_group_lives pgl
 LEFT JOIN performance_group_attrs pg
     ON pg.id = pgl.group_id
 WHERE l.event_status <> 'cancelled'
+  AND l.live_date <= CURRENT_DATE
   AND NOT EXISTS (
       SELECT 1
       FROM live_setlist ls
