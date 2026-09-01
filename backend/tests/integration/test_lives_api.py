@@ -100,6 +100,29 @@ def test_get_lives_without_setlist_excludes_cancelled_lives(
     }
 
 
+# 测试点：新增 Setlist 的候选必须在 Live 日期当天才出现，未来日期不能进入服务端分页结果。
+def test_get_lives_without_setlist_excludes_future_lives(
+    integration_test_client,
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("UPDATE live_attrs SET live_date = CURRENT_DATE + 1 WHERE id = 41")
+
+    response = integration_test_client.get("/api/lives?page=1&page_size=20&without_setlist=true")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [],
+        "pagination": {
+            "page": 1,
+            "page_size": 20,
+            "total": 0,
+            "total_pages": 1,
+        },
+    }
+
+
 # 测试点：关键词、年份、类型和乐队应在分页前按 AND 组合，并保留正确的聚合列表字段。
 def test_get_lives_combines_public_filters(integration_test_client):
     response = integration_test_client.get(

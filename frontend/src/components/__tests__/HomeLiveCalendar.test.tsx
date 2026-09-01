@@ -234,29 +234,35 @@ describe("HomeLiveCalendar", () => {
   });
 
   test("键盘方向键移动焦点，Enter 选择日期", async () => {
-    // 测试点：方向键按天/周移动焦点，Enter 提交选中。
-    const monthKey = "2026-08";
+    // 测试点：方向键按天/周移动焦点，Enter 提交选中，目标日期随当前显示月份生成。
+    const monthKey = getCurrentMonthKey();
+    const monthNumber = Number(monthKey.split("-")[1]);
+    const targetDate = `${monthKey}-12`;
+    const previousDate = `${monthKey}-11`;
+    const followingWeekDate = `${monthKey}-19`;
     getCatalogCalendarMock.mockResolvedValue(
       makeMonthResponse(monthKey, [
-        makeItem({ live_date: "2026-08-12", live_title: "键盘目标 Live" }),
+        makeItem({ live_date: targetDate, live_title: "键盘目标 Live" }),
       ]),
     );
     renderCalendar();
 
-    const dayButton = await screen.findByRole("button", { name: /8 月 12 日/ });
+    const dayButton = await screen.findByRole("button", { name: new RegExp(`${monthNumber} 月 12 日`) });
     dayButton.focus();
     const user = userEvent.setup();
     await user.keyboard("{ArrowLeft}");
-    expect(document.activeElement).toHaveAttribute("data-date", "2026-08-11");
+    expect(document.activeElement).toHaveAttribute("data-date", previousDate);
     await user.keyboard("{ArrowRight}");
-    expect(document.activeElement).toHaveAttribute("data-date", "2026-08-12");
+    expect(document.activeElement).toHaveAttribute("data-date", targetDate);
     await user.keyboard("{ArrowDown}");
-    expect(document.activeElement).toHaveAttribute("data-date", "2026-08-19");
+    expect(document.activeElement).toHaveAttribute("data-date", followingWeekDate);
     await user.keyboard("{ArrowUp}");
-    expect(document.activeElement).toHaveAttribute("data-date", "2026-08-12");
+    expect(document.activeElement).toHaveAttribute("data-date", targetDate);
     await user.keyboard("{ArrowLeft}");
     await user.keyboard("{Enter}");
-    expect(screen.getByRole("button", { pressed: true })).toHaveAccessibleName(/8 月 11 日/);
+    expect(screen.getByRole("button", { pressed: true })).toHaveAccessibleName(
+      new RegExp(`${monthNumber} 月 11 日`),
+    );
     expect(screen.getByText(/这一天没有已收录的 Live/)).toBeInTheDocument();
   });
 

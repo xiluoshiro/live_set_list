@@ -125,7 +125,7 @@ def test_get_lives_returns_url_from_live_attrs():
 
 
 def test_get_lives_without_setlist_uses_filtered_pagination_queries():
-    # 测试点：without_setlist 应在数据库分页前排除已取消或已有 setlist 的 Live，并让非活动 Live 跨页优先。
+    # 测试点：without_setlist 应在数据库分页前排除未到日期、已取消或已有 setlist 的 Live，并让非活动 Live 跨页优先。
     rows = [(41, "2026-05-30", "Draft Live", [], None, "other", None, None, None, None)]
     conn, cursor = _build_connection_mock(1, rows)
 
@@ -142,6 +142,8 @@ def test_get_lives_without_setlist_uses_filtered_pagination_queries():
     ]
     assert "l.event_status <> 'cancelled'" in LIVES_WITHOUT_SETLIST_COUNT_QUERY
     assert "l.event_status <> 'cancelled'" in LIVES_WITHOUT_SETLIST_PAGE_QUERY
+    assert "l.live_date <= CURRENT_DATE" in LIVES_WITHOUT_SETLIST_COUNT_QUERY
+    assert "l.live_date <= CURRENT_DATE" in LIVES_WITHOUT_SETLIST_PAGE_QUERY
     assert "ORDER BY (l.live_type = 'event') ASC" in LIVES_WITHOUT_SETLIST_PAGE_QUERY
 
 
