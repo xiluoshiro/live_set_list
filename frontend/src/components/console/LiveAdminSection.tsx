@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { useState, type RefObject } from "react";
 
 import type {
   ConsoleBandHistory,
@@ -8,6 +8,7 @@ import type {
   EventStatus,
 } from "../../api";
 import { DATE_PHASE_LABELS } from "../../liveStatus";
+import { Collapsible } from "../ui/Collapsible";
 import { formatLiveType } from "./constants";
 import type { BandOption, Position, VenueOption } from "./types";
 
@@ -210,6 +211,7 @@ export function LiveAdminSection({
   queryInsertDisabled,
   submitInsertDisabled,
 }: LiveAdminSectionProps) {
+  const [scheduleAttentionOpen, setScheduleAttentionOpen] = useState(false);
   const selectedVenueText = (() => {
     if (!venueAnnounced) return "未公布";
     const selected = venues.find((venue) => venue.venue_id === selectedVenueId);
@@ -237,52 +239,68 @@ export function LiveAdminSection({
     <>
       {variant === "edit" && (
       <section className="live-admin-status-section live-schedule-attention" aria-labelledby="live-schedule-attention-title">
-        <div className="live-admin-status-head">
-          <h3 id="live-schedule-attention-title">待补排期资料</h3>
-          <span>补全最后一项后自动移出</span>
-        </div>
-        <div className="live-schedule-attention-counts" role="group" aria-label="待补排期资料分类">
-          {([
-            ["today", "今日未公布", scheduleAttentionCounts.today],
-            ["overdue", "已结束仍缺失", scheduleAttentionCounts.overdue],
-            ["upcoming", "未来待公布", scheduleAttentionCounts.upcoming],
-          ] as const).map(([attention, label, count]) => (
+        <Collapsible.Root open={scheduleAttentionOpen} onOpenChange={setScheduleAttentionOpen}>
+          <Collapsible.Trigger asChild>
             <button
-              key={attention}
               type="button"
-              className="console-ghost-btn"
-              data-attention={attention}
-              data-active={scheduleAttentionFilter === attention || undefined}
-              data-empty={count === 0 || undefined}
-              disabled={scheduleAttentionLoading}
-              onClick={() => onScheduleAttentionFilterChange(scheduleAttentionFilter === attention ? "" : attention)}
+              className="live-schedule-attention-trigger"
+              aria-expanded={scheduleAttentionOpen}
+              aria-controls="live-schedule-attention-content"
             >
-              <span>{label}</span><strong>{count}</strong>
+              <span className="live-schedule-attention-trigger-copy">
+                <strong id="live-schedule-attention-title">待补排期资料</strong>
+                <span>补全最后一项后自动移出</span>
+              </span>
+              <span className="live-schedule-attention-toggle" aria-hidden="true">
+                {scheduleAttentionOpen ? "收起" : "展开"}
+              </span>
             </button>
-          ))}
-        </div>
-        {scheduleAttentionItems.length === 0 ? (
-          <p className="console-admin-hint">当前筛选下没有待补活动。</p>
-        ) : (
-          <div className="live-schedule-attention-list">
-            {scheduleAttentionItems.map((live) => (
-              <article key={live.live_id} data-attention={live.schedule_attention}>
-                <div>
-                  <time>{live.live_date}</time>
-                  <strong>{live.live_title}</strong>
-                  <span className="live-schedule-missing-tags">
-                    {(live.missing_schedule_fields ?? []).map((field) => (
-                      <small key={field}>{field === "venue" ? "场馆" : field === "opening_time" ? "开场" : "开演"}未公布</small>
-                    ))}
-                  </span>
-                  {live.schedule_attention === "today" && <em>今日活动仍有资料未公布</em>}
-                  {live.schedule_attention === "overdue" && <em>活动已结束，资料仍未补全</em>}
-                </div>
-                <button type="button" className="console-ghost-btn" onClick={() => onSelectLiveForEdit(live.live_id)}>编辑</button>
-              </article>
-            ))}
-          </div>
-        )}
+          </Collapsible.Trigger>
+          <Collapsible.Content id="live-schedule-attention-content">
+            <div className="live-schedule-attention-counts" role="group" aria-label="待补排期资料分类">
+              {([
+                ["today", "今日未公布", scheduleAttentionCounts.today],
+                ["overdue", "已结束仍缺失", scheduleAttentionCounts.overdue],
+                ["upcoming", "未来待公布", scheduleAttentionCounts.upcoming],
+              ] as const).map(([attention, label, count]) => (
+                <button
+                  key={attention}
+                  type="button"
+                  className="console-ghost-btn"
+                  data-attention={attention}
+                  data-active={scheduleAttentionFilter === attention || undefined}
+                  data-empty={count === 0 || undefined}
+                  disabled={scheduleAttentionLoading}
+                  onClick={() => onScheduleAttentionFilterChange(scheduleAttentionFilter === attention ? "" : attention)}
+                >
+                  <span>{label}</span><strong>{count}</strong>
+                </button>
+              ))}
+            </div>
+            {scheduleAttentionItems.length === 0 ? (
+              <p className="console-admin-hint">当前筛选下没有待补活动。</p>
+            ) : (
+              <div className="live-schedule-attention-list">
+                {scheduleAttentionItems.map((live) => (
+                  <article key={live.live_id} data-attention={live.schedule_attention}>
+                    <div>
+                      <time>{live.live_date}</time>
+                      <strong>{live.live_title}</strong>
+                      <span className="live-schedule-missing-tags">
+                        {(live.missing_schedule_fields ?? []).map((field) => (
+                          <small key={field}>{field === "venue" ? "场馆" : field === "opening_time" ? "开场" : "开演"}未公布</small>
+                        ))}
+                      </span>
+                      {live.schedule_attention === "today" && <em>今日活动仍有资料未公布</em>}
+                      {live.schedule_attention === "overdue" && <em>活动已结束，资料仍未补全</em>}
+                    </div>
+                    <button type="button" className="console-ghost-btn" onClick={() => onSelectLiveForEdit(live.live_id)}>编辑</button>
+                  </article>
+                ))}
+              </div>
+            )}
+          </Collapsible.Content>
+        </Collapsible.Root>
       </section>
       )}
 

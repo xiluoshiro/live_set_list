@@ -476,8 +476,9 @@ describe("ConsoleInsertPanel", () => {
     ));
   });
 
-  // 测试点：待补面板只在 Live 管理显示，并为今日缺失活动给出计数和明确警告。
-  test("待补排期资料面板只在Live管理显示", async () => {
+  // 测试点：待补面板只在 Live 管理显示，默认折叠且可反复展开收起计数和活动列表。
+  test("待补排期资料面板只在Live管理显示并支持折叠", async () => {
+    const user = userEvent.setup();
     apiMocks.getConsoleLiveCandidates.mockResolvedValue({
       items: [{
         live_id: 72,
@@ -506,11 +507,25 @@ describe("ConsoleInsertPanel", () => {
     unmount();
     render(<ConsoleInsertPanel initialMode="live_edit" />);
 
+    const trigger = await screen.findByRole("button", { name: /待补排期资料/ });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(within(trigger).getByText("展开")).toBeInTheDocument();
+    expect(screen.queryByText("Today TBA Live")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "待补排期资料分类" })).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(screen.getByRole("button", { name: /待补排期资料/ })).toHaveAttribute("aria-expanded", "true");
+    expect(within(trigger).getByText("收起")).toBeInTheDocument();
     expect(await screen.findByText("Today TBA Live")).toBeInTheDocument();
     expect(screen.getByText("今日活动仍有资料未公布")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /今日未公布.*1/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /已结束仍缺失.*2/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /未来待公布.*3/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /待补排期资料/ }));
+    expect(screen.getByRole("button", { name: /待补排期资料/ })).toHaveAttribute("aria-expanded", "false");
+    expect(within(trigger).getByText("展开")).toBeInTheDocument();
+    expect(screen.queryByText("Today TBA Live")).not.toBeInTheDocument();
   });
 
   // 测试点：写请求响应超时后若后端已持久化完全一致的数据，应按成功收口而不是诱导重复提交。
