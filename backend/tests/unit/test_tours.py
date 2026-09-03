@@ -95,7 +95,7 @@ def test_get_tours_binds_keyword_year_and_band_filters():
     assert count_params[5:] == (9, 9)
     page_query = str(cursor.execute.call_args_list[1].args[0])
     assert "END ASC,\n                boundary_live.live_date ASC, boundary_live.start_time ASC, t.id ASC" in page_query
-    assert "ORDER BY summary.status_rank ASC, summary.start_date ASC, summary.start_time ASC, summary.tour_id ASC" in page_query
+    assert "ORDER BY summary.status_rank ASC, summary.start_date ASC, summary.start_time ASC NULLS LAST, summary.tour_id ASC" in page_query
 
 
 # 测试点：巡演详情应保持活动组连续，并在同日起始时把含取消场次的组排在正常组之前。

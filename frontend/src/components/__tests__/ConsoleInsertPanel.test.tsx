@@ -446,6 +446,60 @@ describe("ConsoleInsertPanel", () => {
     expect(within(resultTable).queryByRole("columnheader", { name: "song_id" })).not.toBeInTheDocument();
   });
 
+  // 测试点：三项排期可独立标记暂未公布，提交 null，并在切回已确定时恢复原输入。
+  test("新增Live可提交未公布排期并保留暂存值", async () => {
+    const user = userEvent.setup();
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+    await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalled());
+
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), "Schedule TBA");
+    await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/tba");
+    await user.selectOptions(screen.getByLabelText("场馆公布状态"), "unannounced");
+    await user.selectOptions(screen.getByLabelText("开场公布状态"), "unannounced");
+    expect(screen.getByLabelText("opening_time")).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText("开场公布状态"), "announced");
+    expect(screen.getByLabelText("opening_time")).toHaveValue("18:00");
+    await user.selectOptions(screen.getByLabelText("开场公布状态"), "unannounced");
+    await user.selectOptions(screen.getByLabelText("开演公布状态"), "unannounced");
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+
+    await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
+      expect.objectContaining({ venue_id: null, opening_time: null, start_time: null }),
+      "csrf-token",
+    ));
+  });
+
+  // 测试点：Live 管理顶部常驻显示三类计数，并为今日缺失活动给出可操作的明确警告。
+  test("待补排期资料面板显示计数和今日警告", async () => {
+    apiMocks.getConsoleLiveCandidates.mockResolvedValue({
+      items: [{
+        live_id: 72,
+        live_date: getTodayDateInputValue(),
+        live_title: "Today TBA Live",
+        live_type: "oneman",
+        venue_name: null,
+        event_status: "scheduled",
+        date_phase: "today",
+        missing_schedule_fields: ["venue", "opening_time"],
+        schedule_attention: "today",
+      }],
+      page: 1,
+      page_size: 10,
+      total: 1,
+      total_pages: 1,
+      attention_counts: { upcoming: 3, today: 1, overdue: 2 },
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+
+    expect(await screen.findByText("Today TBA Live")).toBeInTheDocument();
+    expect(screen.getByText("今日活动仍有资料未公布")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /今日未公布.*1/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /已结束仍缺失.*2/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /未来待公布.*3/ })).toBeInTheDocument();
+  });
+
   // 测试点：写请求响应超时后若后端已持久化完全一致的数据，应按成功收口而不是诱导重复提交。
   test("Setlist提交超时后会读取后端结果并确认已写入", async () => {
     const user = userEvent.setup();
@@ -1326,6 +1380,7 @@ describe("ConsoleInsertPanel", () => {
   test("Live管理查询命中后自动选中首个Live", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleLiveCandidates
+      .mockResolvedValueOnce({ items: [], page: 1, page_size: 10, total: 0, total_pages: 1 })
       .mockResolvedValueOnce({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 })
       .mockResolvedValueOnce({
         items: [{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "New Venue" }],
@@ -1336,7 +1391,7 @@ describe("ConsoleInsertPanel", () => {
       });
 
     render(<ConsoleInsertPanel initialMode="live_edit" />);
-    await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledTimes(2));
     await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "Event Live");
     await user.click(screen.getByRole("button", { name: "查询" }));
 

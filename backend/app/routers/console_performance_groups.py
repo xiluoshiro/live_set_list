@@ -78,7 +78,7 @@ def _validate_performance_group_relations(
         SELECT l.id
         FROM live_attrs l
         WHERE l.id = ANY(%s)
-        ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC
+        ORDER BY l.live_date ASC, l.start_time ASC NULLS LAST, l.id ASC
         """,
         (payload.live_ids,),
     )
@@ -215,7 +215,7 @@ def get_performance_group_live_candidates(
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     {where_sql}
-                    ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC
+                    ORDER BY l.live_date DESC, l.start_time DESC NULLS LAST, l.id DESC
                     LIMIT %s OFFSET %s
                     """,
                     (*params, page_size, (safe_page - 1) * page_size),
@@ -235,7 +235,7 @@ def get_performance_group_live_candidates(
                 "live_id": int(row[0]),
                 "live_date": row[1],
                 "live_title": str(row[2]),
-                "start_time": str(row[3]),
+                "start_time": str(row[3]) if row[3] is not None else None,
                 "venue": row[4],
                 "band_ids": list(row[5] or []),
             }
@@ -282,7 +282,7 @@ def get_console_performance_group(
                     JOIN live_attrs l ON l.id = pgl.live_id
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     WHERE pgl.group_id = %s
-                    ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC
+                    ORDER BY l.live_date ASC, l.start_time ASC NULLS LAST, l.id ASC
                     """,
                     (group_id,),
                 )

@@ -90,7 +90,7 @@ def test_tour_live_candidates_filter_occupied_before_pagination():
         for sql in executed_sql
     )
     assert "LEFT JOIN tour_lives" not in executed_sql[1]
-    assert "ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC" in executed_sql[1]
+    assert "ORDER BY l.live_date DESC, l.start_time DESC NULLS LAST, l.id DESC" in executed_sql[1]
 
 
 # 测试点：创建巡演应按日期、开演时间、ID 写入关系，并生成一条汇总审计日志。
@@ -116,7 +116,7 @@ def test_create_console_tour_persists_complete_collection_and_audit():
     assert any("INSERT INTO tour_bands" in sql for sql in executed_sql)
     assert any("INSERT INTO tour_lives" in sql for sql in executed_sql)
     assert any("INSERT INTO audit_logs" in sql for sql in executed_sql)
-    assert any("ORDER BY l.live_date, l.start_time, l.id" in sql for sql in executed_sql)
+    assert any("ORDER BY l.live_date, l.start_time NULLS LAST, l.id" in sql for sql in executed_sql)
 
 
 # 测试点：取消场次的显式巡演乐队校验也应统一读取 effective_live_bands。
@@ -137,7 +137,7 @@ def test_cancelled_tour_stop_validation_includes_default_bands():
     validation_sql = next(
         str(call.args[0])
         for call in cursor.execute.call_args_list
-        if "ORDER BY l.live_date, l.start_time, l.id" in str(call.args[0])
+        if "ORDER BY l.live_date, l.start_time NULLS LAST, l.id" in str(call.args[0])
     )
     assert "FROM effective_live_bands effective" in validation_sql
     assert "effective.live_id = l.id" in validation_sql

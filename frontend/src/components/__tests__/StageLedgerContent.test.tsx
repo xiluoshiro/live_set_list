@@ -92,6 +92,13 @@ describe("StageLedgerContent", () => {
     window.history.replaceState(null, "", "/");
   });
 
+  // 测试点：公开详情的场馆、开场和开演空值必须逐项显示“未公布”。
+  test("排期字段为空时显示未公布", () => {
+    renderStage(makeDetail({ venue_id: null, venue: null, opening_time: null, start_time: null }));
+
+    expect(screen.getAllByText("未公布")).toHaveLength(3);
+  });
+
   test("按结构化位置渲染连续流程，并展示曲目细节", async () => {
     // 测试点：Stage Ledger 保留 segment/absolute_order/song_id，点击曲目后详情可展开并由 Escape 还原焦点。
     const user = userEvent.setup();

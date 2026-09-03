@@ -212,8 +212,11 @@ def test_console_lookup_mock_returns_empty_items_for_no_match():
 def test_console_live_edit_reads_candidates_and_detail():
     _set_authenticated_role("editor")
     candidates_conn, candidates_cursor = _build_connection_mock(
-        fetchone_side_effect=[(1,)],
-        fetchall_side_effect=[[(55, "2026-07-05", "Event Live", "event", "Mock Venue")]],
+        fetchone_side_effect=[(1,), (0, 0, 0)],
+        fetchall_side_effect=[[(
+            55, "2026-07-05", "Event Live", "event", "Mock Venue",
+            "21:30:00+09", "scheduled", "09:00:00+09", 2, 540,
+        )]],
     )
     detail_conn, _ = _build_connection_mock(
         fetchone_side_effect=[(
@@ -228,6 +231,12 @@ def test_console_live_edit_reads_candidates_and_detail():
             "Mock Venue",
             [3],
             [{"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]}],
+            "scheduled",
+            None,
+            [],
+            False,
+            [],
+            540,
         )],
     )
 
@@ -246,11 +255,14 @@ def test_console_live_edit_reads_candidates_and_detail():
             "venue_name": "Mock Venue",
             "event_status": "scheduled",
             "date_phase": "past",
+            "missing_schedule_fields": [],
+            "schedule_attention": "none",
         }],
         "page": 1,
         "page_size": 20,
         "total": 1,
         "total_pages": 1,
+        "attention_counts": {"upcoming": 0, "today": 0, "overdue": 0},
     }
     assert detail_response.status_code == 200
     assert candidates_cursor.execute.call_args_list[0].args[1] == ("%55%", "55", "event")
@@ -571,6 +583,27 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
 
 
+# 测试点：场馆、开场与开演全部未公布时应以 null 创建，且仍由独立时区计算日期阶段。
+def test_console_create_live_mock_accepts_unannounced_schedule_fields():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(fetchone_side_effect=[(81,)])
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/lives",
+            json=_valid_live_payload(venue_id=None, opening_time=None, start_time=None),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["item"]["venue_id"] is None
+    assert response.json()["item"]["opening_time"] is None
+    assert response.json()["item"]["start_time"] is None
+    insert_params = cursor.execute.call_args_list[0].args[1]
+    assert insert_params[4:7] == (None, None, None)
+
+
 # 测试点：新增 Live 应校验默认 Band 存在，并将去重升序后的数组写入数据库。
 def test_console_create_live_mock_validates_and_persists_default_bands():
     _set_authenticated_role("editor")
@@ -590,7 +623,7 @@ def test_console_create_live_mock_validates_and_persists_default_bands():
     assert response.status_code == 201
     assert response.json()["item"]["default_band_ids"] == [1, 3]
     assert cursor.execute.call_args_list[1].args[1] == ([1, 3],)
-    assert cursor.execute.call_args_list[2].args[1][-4] == [1, 3]
+    assert cursor.execute.call_args_list[2].args[1][-5] == [1, 3]
 
 
 # 测试点：活动出席成员应按 Band 目录顺序持久化完整名单，并仅在响应中计算 partial/full。
@@ -626,7 +659,7 @@ def test_console_create_event_persists_members_and_computes_modes():
         {"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]},
         {"band_id": 8, "mode": "partial", "members": ["若葉睦"]},
     ]
-    persisted_json = cursor.execute.call_args_list[2].args[1][-3]
+    persisted_json = cursor.execute.call_args_list[2].args[1][-4]
     assert persisted_json.adapted == {"3": ["高松燈", "千早愛音"], "8": ["若葉睦"]}
 
 

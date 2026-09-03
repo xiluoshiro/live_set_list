@@ -58,6 +58,107 @@
   background: var(--surface-1);
 }
 
+.live-schedule-attention-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.live-schedule-attention-counts button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  text-align: left;
+}
+
+.live-schedule-attention-counts button strong {
+  margin-left: 8px;
+  font-size: 18px;
+}
+
+.live-schedule-attention-counts button[data-active="true"] {
+  border-color: var(--accent-primary);
+  color: var(--text-main);
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+}
+
+.live-schedule-attention-counts button[data-empty="true"] {
+  opacity: 0.58;
+}
+
+.live-schedule-attention-counts button[data-attention="today"] strong {
+  color: var(--accent-warning-strip);
+}
+
+.live-schedule-attention-counts button[data-attention="overdue"] strong {
+  color: var(--accent-danger);
+}
+
+.live-schedule-attention-list {
+  display: grid;
+  gap: 8px;
+}
+
+.live-schedule-attention-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface-input);
+}
+
+.live-schedule-attention-list article[data-attention="today"] {
+  border-left-color: var(--accent-warning-strip);
+}
+
+.live-schedule-attention-list article[data-attention="overdue"] {
+  border-left-color: var(--accent-danger);
+}
+
+.live-schedule-attention-list article > div {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.live-schedule-attention-list time,
+.live-schedule-attention-list em {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.live-schedule-attention-list article[data-attention="today"] em {
+  color: var(--accent-warning-strip);
+}
+
+.live-schedule-attention-list article[data-attention="overdue"] em {
+  color: var(--accent-danger);
+  font-weight: 600;
+}
+
+.live-schedule-missing-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.live-schedule-missing-tags small {
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: var(--surface-chip-soft);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 .live-admin-status-head {
   display: flex;
   align-items: baseline;
@@ -928,9 +1029,19 @@
 .live-admin-form-table td:nth-child(5),
 .live-admin-form-table th:nth-child(6),
 .live-admin-form-table td:nth-child(6) {
-  width: 112px;
-  min-width: 112px;
-  max-width: 112px;
+  width: 132px;
+  min-width: 132px;
+  max-width: 132px;
+}
+
+.live-admin-form-table td:nth-child(5),
+.live-admin-form-table td:nth-child(6) {
+  vertical-align: top;
+}
+
+.live-admin-form-table td:nth-child(5) select,
+.live-admin-form-table td:nth-child(6) select {
+  margin-bottom: 6px;
 }
 
 .live-admin-form-table th:nth-child(7),
@@ -1050,6 +1161,14 @@
 }
 
 @media (max-width: 720px) {
+  .live-schedule-attention-counts {
+    grid-template-columns: 1fr;
+  }
+
+  .live-schedule-attention-list article {
+    align-items: flex-start;
+  }
+
   .song-admin-fields {
     grid-template-columns: 1fr;
   }

@@ -25,7 +25,7 @@ class PerformanceGroupLiveItem(BaseModel):
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., description="Live title")
     live_type: str = Field(..., description="Stable live type code")
-    start_time: str = Field(..., description="Start time")
+    start_time: str | None = Field(default=None, description="Start time")
     venue: str | None = Field(default=None, description="Venue display name")
     bands: list[int] = Field(..., description="Deduplicated band IDs sorted ascending")
     url: str | None = Field(default=None, description="Live source URL")

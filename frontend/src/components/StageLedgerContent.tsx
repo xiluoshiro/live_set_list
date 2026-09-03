@@ -116,7 +116,7 @@ function canonicalSegmentType(value: string): string {
 
 function formatTimedLabel(value: string | null | undefined): string {
   const raw = value?.trim();
-  if (!raw) return "未记录";
+  if (!raw) return "未公布";
   const match = raw.match(/^(\d{2}:\d{2})(?::\d{2})?(?:([+-]\d{2})(?::?(\d{2}))?)?$/);
   if (!match) return raw;
   const [, timePart, offsetHour, offsetMinute] = match;
@@ -261,7 +261,7 @@ function formatScheduleHistoryParts(
     parts.push(`开演 ${formatTimedLabel(history.previous_start_time)}`);
   }
   if ((history.previous_venue ?? null) !== (nextVenue ?? null)) {
-    parts.push(`场地 ${history.previous_venue ?? "未记录"}`);
+    parts.push(`场地 ${history.previous_venue ?? "未公布"}`);
   }
   if (history.note) parts.push(history.note);
   return parts;
@@ -805,7 +805,7 @@ export function StageLedgerContent({
               <div className="stage-schedule-date"><dt>日期</dt><dd>{detailData.live_date}</dd></div>
               <div className="stage-schedule-opening"><dt>开场</dt><dd>{formatTimedLabel(detailData.opening_time)}</dd></div>
               <div className="stage-schedule-start"><dt>开演</dt><dd>{formatTimedLabel(detailData.start_time)}</dd></div>
-              <div className="stage-schedule-venue"><dt>场馆</dt><dd>{detailData.venue?.trim() || "未记录"}</dd></div>
+              <div className="stage-schedule-venue"><dt>场馆</dt><dd>{detailData.venue?.trim() || "未公布"}</dd></div>
             </dl>
             {showStageActions && (
               <div className="stage-actions" aria-label="演出操作">

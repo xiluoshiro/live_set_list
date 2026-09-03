@@ -38,9 +38,9 @@ class LiveItem(BaseModel):
 class LiveScheduleHistoryItem(BaseModel):
     previous_live_title: str | None
     previous_live_date: date
-    previous_opening_time: str
-    previous_start_time: str
-    previous_venue_id: int
+    previous_opening_time: str | None
+    previous_start_time: str | None
+    previous_venue_id: int | None
     previous_venue: str | None = None
     changed_at: datetime
     note: str | None = None

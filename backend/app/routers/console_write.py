@@ -91,6 +91,24 @@ def _normalize_time_with_timezone(value: str, timezone: str) -> str:
     return f"{normalized_time}{timezone}"
 
 
+def _timezone_offset_minutes(timezone: str) -> int:
+    """Validate an API UTC offset and return its signed minute value."""
+    if not TIMEZONE_PATTERN.fullmatch(timezone):
+        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid timezone format: {timezone}")
+    offset_sign = -1 if timezone.startswith("-") else 1
+    offset_hour, offset_minute = (int(part) for part in timezone[1:].split(":"))
+    offset_minutes = offset_sign * (offset_hour * 60 + offset_minute)
+    if offset_minute % 15 != 0 or offset_minutes < -12 * 60 or offset_minutes > 14 * 60:
+        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid timezone value: {timezone}")
+    return offset_minutes
+
+
+def _normalize_optional_time_with_timezone(value: str | None, timezone: str) -> str | None:
+    """Keep an unannounced time null while validating the shared UTC offset."""
+    _timezone_offset_minutes(timezone)
+    return None if value is None else _normalize_time_with_timezone(value, timezone)
+
+
 def _normalize_persisted_time_with_timezone(value: Any) -> str:
     """Normalize PostgreSQL JSON's whole-hour offset before field comparison."""
     return SHORT_TIMEZONE_SUFFIX_PATTERN.sub(r"\1:00", str(value))
@@ -148,9 +166,10 @@ def _validate_and_normalize_live_relations(
     existing_contexts: dict[int, PersistedLineupContext] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, list[str]], dict[int, PersistedLineupContext]]:
     """Validate Live foreign keys and normalize event attendance for create and update."""
-    cur.execute("SELECT 1 FROM venue_list WHERE id = %s", (payload.venue_id,))
-    if cur.fetchone() is None:
-        raise HTTPException(status_code=404, detail=f"Venue id {payload.venue_id} not found")
+    if payload.venue_id is not None:
+        cur.execute("SELECT 1 FROM venue_list WHERE id = %s", (payload.venue_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail=f"Venue id {payload.venue_id} not found")
 
     band_members_by_id: dict[int, list[str]] = {}
     band_rows: list[Any] = []
@@ -321,8 +340,8 @@ def _build_live_mutation_item(
     *,
     live_id: int,
     payload: ConsoleLiveBaseRequest,
-    opening_time: str,
-    start_time: str,
+    opening_time: str | None,
+    start_time: str | None,
     normalized_event_attendees: list[dict[str, Any]],
     lineup_contexts: dict[int, PersistedLineupContext],
 ) -> dict[str, Any]:
@@ -345,6 +364,7 @@ def _build_live_mutation_item(
             event_status=payload.event_status,
             live_date=payload.live_date,
             start_time=start_time,
+            timezone_offset_minutes=_timezone_offset_minutes(payload.timezone),
             was_rescheduled=False,
         )["date_phase"],
     }
@@ -682,8 +702,9 @@ def create_live(
     """Insert one live_attrs row from the console live form and record the corresponding audit log."""
     assert_valid_csrf(request, context)
 
-    opening_time = _normalize_time_with_timezone(payload.opening_time, payload.timezone)
-    start_time = _normalize_time_with_timezone(payload.start_time, payload.timezone)
+    opening_time = _normalize_optional_time_with_timezone(payload.opening_time, payload.timezone)
+    start_time = _normalize_optional_time_with_timezone(payload.start_time, payload.timezone)
+    timezone_offset_minutes = _timezone_offset_minutes(payload.timezone)
 
     try:
         with get_write_db_connection() as conn:
@@ -707,9 +728,10 @@ def create_live(
                         default_band_ids,
                         event_attendees,
                         event_status,
-                        status_note
+                        status_note,
+                        timezone_offset_minutes
                     )
-                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -724,6 +746,7 @@ def create_live(
                         Json(persisted_event_attendees),
                         payload.event_status,
                         payload.status_note,
+                        timezone_offset_minutes,
                     ),
                 )
                 created_row = cur.fetchone()
@@ -803,8 +826,9 @@ def update_live(
 ):
     """Update one Live under a row lock and record only meaningful field changes."""
     assert_valid_csrf(request, context)
-    opening_time = _normalize_time_with_timezone(payload.opening_time, payload.timezone)
-    start_time = _normalize_time_with_timezone(payload.start_time, payload.timezone)
+    opening_time = _normalize_optional_time_with_timezone(payload.opening_time, payload.timezone)
+    start_time = _normalize_optional_time_with_timezone(payload.start_time, payload.timezone)
+    timezone_offset_minutes = _timezone_offset_minutes(payload.timezone)
     try:
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
@@ -815,8 +839,15 @@ def update_live(
                 existing = dict(existing_row[0])
                 existing.setdefault("event_status", "scheduled")
                 existing.setdefault("status_note", None)
-                existing["opening_time"] = _normalize_persisted_time_with_timezone(existing["opening_time"])
-                existing["start_time"] = _normalize_persisted_time_with_timezone(existing["start_time"])
+                existing["opening_time"] = (
+                    _normalize_persisted_time_with_timezone(existing["opening_time"])
+                    if existing.get("opening_time") is not None else None
+                )
+                existing["start_time"] = (
+                    _normalize_persisted_time_with_timezone(existing["start_time"])
+                    if existing.get("start_time") is not None else None
+                )
+                existing.setdefault("timezone_offset_minutes", timezone_offset_minutes)
                 cur.execute("SELECT 1 FROM live_setlist WHERE live_id = %s LIMIT 1", (live_id,))
                 has_setlist = cur.fetchone() is not None
                 existing_lineup_contexts = load_lineup_contexts(cur, live_id)
@@ -849,20 +880,27 @@ def update_live(
                     "band_lineup_contexts": _serialize_lineup_contexts(lineup_contexts),
                     "event_status": payload.event_status,
                     "status_note": payload.status_note,
+                    "timezone_offset_minutes": timezone_offset_minutes,
                 }
                 changes = {
                     field: {"before": existing.get(field), "after": value}
                     for field, value in target.items()
                     if existing.get(field) != value
                 }
-                schedule_fields = {"live_date", "opening_time", "start_time", "venue_id"}
+                schedule_fields = {"live_date", "opening_time", "start_time", "venue_id", "timezone_offset_minutes"}
                 changed_schedule_fields = schedule_fields.intersection(changes)
-                if changed_schedule_fields and payload.schedule_change_kind is None:
+                announcement_only = bool(changed_schedule_fields) and all(
+                    field in {"opening_time", "start_time", "venue_id"}
+                    and existing.get(field) is None
+                    and target[field] is not None
+                    for field in changed_schedule_fields
+                )
+                if changed_schedule_fields and not announcement_only and payload.schedule_change_kind is None:
                     raise HTTPException(
                         status_code=422,
                         detail="schedule_change_kind is required when schedule fields change",
                     )
-                if not changed_schedule_fields and payload.schedule_change_kind is not None:
+                if (not changed_schedule_fields or announcement_only) and payload.schedule_change_kind is not None:
                     raise HTTPException(
                         status_code=422,
                         detail="schedule_change_kind is only allowed when schedule fields change",
@@ -908,7 +946,8 @@ def update_live(
                             default_band_ids = %s,
                             event_attendees = %s,
                             event_status = %s,
-                            status_note = %s
+                            status_note = %s,
+                            timezone_offset_minutes = %s
                         WHERE id = %s
                         """,
                         (
@@ -923,6 +962,7 @@ def update_live(
                             Json(persisted_event_attendees),
                             payload.event_status,
                             payload.status_note,
+                            timezone_offset_minutes,
                             live_id,
                         ),
                     )
