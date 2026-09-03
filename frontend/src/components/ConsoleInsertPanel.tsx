@@ -1461,11 +1461,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     void loadLiveForEdit(liveId);
   };
 
-  const openAttentionLiveForEdit = (liveId: number) => {
-    if (mode === "live_create") setMode("live_edit");
-    requestLiveForEdit(liveId);
-  };
-
   const changeConsoleMode = (nextMode: ConsoleMode) => {
     if (mode === "live_edit" && nextMode !== "live_edit" && isLiveDirty) {
       setPendingConfirmation({
@@ -1597,7 +1592,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   };
 
   useEffect(() => {
-    if (mode !== "live_create" && mode !== "live_edit") return;
+    if (mode !== "live_edit") return;
     void loadScheduleAttention("");
   }, [mode]);
 
@@ -2629,7 +2624,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           liveCandidateEventStatus,
         );
       }
-      await loadScheduleAttention(scheduleAttentionFilter);
+      if (mode === "live_edit") await loadScheduleAttention(scheduleAttentionFilter);
       setMessage(`已${action === "create" ? "新增" : "更新"}Live #${inserted.live_id}（${inserted.live_title}）`);
     } catch (error) {
       setMessage(`${action === "create" ? "新增" : "更新"}Live失败：${errorMessage(error)}`);
@@ -3202,7 +3197,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           }}
           onQueryLiveCandidates={queryLiveCandidates}
           onLiveCandidatePageChange={setLiveCandidatePage}
-          onSelectLiveForEdit={mode === "live_create" ? openAttentionLiveForEdit : requestLiveForEdit}
+          onSelectLiveForEdit={requestLiveForEdit}
           onScheduleAttentionFilterChange={(value) => { void loadScheduleAttention(value); }}
           onClearAfterCreateChange={setClearLiveAfterCreate}
           onOpenVenueMenu={openVenueMenu}

@@ -235,6 +235,7 @@ export function LiveAdminSection({
 
   return (
     <>
+      {variant === "edit" && (
       <section className="live-admin-status-section live-schedule-attention" aria-labelledby="live-schedule-attention-title">
         <div className="live-admin-status-head">
           <h3 id="live-schedule-attention-title">待补排期资料</h3>
@@ -283,6 +284,7 @@ export function LiveAdminSection({
           </div>
         )}
       </section>
+      )}
 
       {variant === "edit" && (
         <div className="tour-admin-toolbar live-admin-toolbar">
@@ -365,10 +367,6 @@ export function LiveAdminSection({
       </div>
       <div className="live-id-selector live-create-tools">
         <label className="live-management-label">选择 venue</label>
-        <select aria-label="场馆公布状态" value={venueAnnounced ? "announced" : "unannounced"} onChange={(event) => onVenueAnnouncedChange(event.target.value === "announced")}>
-          <option value="announced">已确定</option>
-          <option value="unannounced">暂未公布</option>
-        </select>
         <button
           ref={venueTriggerRef}
           type="button"
@@ -436,17 +434,9 @@ export function LiveAdminSection({
                 <input value={liveUrl} onChange={(e) => onLiveUrlChange(e.target.value)} placeholder="https://..." />
               </td>
               <td>
-                <select aria-label="开场公布状态" value={openingTimeAnnounced ? "announced" : "unannounced"} onChange={(event) => onOpeningTimeAnnouncedChange(event.target.value === "announced")}>
-                  <option value="announced">已确定</option>
-                  <option value="unannounced">暂未公布</option>
-                </select>
                 <input type="time" aria-label="opening_time" value={openingTime} disabled={!openingTimeAnnounced} onChange={(e) => onOpeningTimeChange(e.target.value)} />
               </td>
               <td>
-                <select aria-label="开演公布状态" value={startTimeAnnounced ? "announced" : "unannounced"} onChange={(event) => onStartTimeAnnouncedChange(event.target.value === "announced")}>
-                  <option value="announced">已确定</option>
-                  <option value="unannounced">暂未公布</option>
-                </select>
                 <input type="time" aria-label="start_time" value={startTime} disabled={!startTimeAnnounced} onChange={(e) => onStartTimeChange(e.target.value)} />
               </td>
               <td>
@@ -479,7 +469,8 @@ export function LiveAdminSection({
         </table>
       </div>
 
-      <section className="live-admin-status-section" aria-labelledby="live-admin-status-title">
+      <div className="live-admin-state-grid">
+        <section className="live-admin-status-section" aria-labelledby="live-admin-status-title">
         <div className="live-admin-status-head">
           <h3 id="live-admin-status-title">演出状态</h3>
           <span>人工状态与日期进度分开维护</span>
@@ -549,7 +540,55 @@ export function LiveAdminSection({
             />
           </div>
         )}
-      </section>
+        </section>
+
+        <section className="live-admin-status-section live-schedule-status-section" aria-labelledby="live-schedule-status-title">
+          <div className="live-admin-status-head">
+            <h3 id="live-schedule-status-title">排期资料</h3>
+            <span>分别标记是否已经公布</span>
+          </div>
+          <table className="console-admin-table live-schedule-status-table" aria-label="排期资料公布状态">
+            <thead>
+              <tr>
+                <th>场馆</th>
+                <th>开场</th>
+                <th>开演</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label="场馆公布状态"
+                    title={venueAnnounced ? "已确定" : "暂未公布"}
+                    checked={venueAnnounced}
+                    onChange={(event) => onVenueAnnouncedChange(event.target.checked)}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label="开场公布状态"
+                    title={openingTimeAnnounced ? "已确定" : "暂未公布"}
+                    checked={openingTimeAnnounced}
+                    onChange={(event) => onOpeningTimeAnnouncedChange(event.target.checked)}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label="开演公布状态"
+                    title={startTimeAnnounced ? "已确定" : "暂未公布"}
+                    checked={startTimeAnnounced}
+                    onChange={(event) => onStartTimeAnnouncedChange(event.target.checked)}
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
 
       <div className="console-submit-row live-admin-insert-row">
         {variant === "create" && (

@@ -58,6 +58,38 @@
   background: var(--surface-1);
 }
 
+.live-admin-state-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.live-admin-state-grid > .live-admin-status-section {
+  margin: 12px 0;
+}
+
+.console-admin-table.live-schedule-status-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.console-admin-table.live-schedule-status-table th,
+.console-admin-table.live-schedule-status-table td {
+  width: 33.333%;
+  padding: 7px 6px;
+  text-align: center;
+}
+
+.console-admin-table.live-schedule-status-table input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
 .live-schedule-attention-counts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -248,6 +280,10 @@
 }
 
 @media (max-width: 900px) {
+  .live-admin-state-grid {
+    grid-template-columns: 1fr;
+  }
+
   .live-admin-status-fields {
     grid-template-columns: 1fr;
   }
@@ -1032,16 +1068,6 @@
   width: 132px;
   min-width: 132px;
   max-width: 132px;
-}
-
-.live-admin-form-table td:nth-child(5),
-.live-admin-form-table td:nth-child(6) {
-  vertical-align: top;
-}
-
-.live-admin-form-table td:nth-child(5) select,
-.live-admin-form-table td:nth-child(6) select {
-  margin-bottom: 6px;
 }
 
 .live-admin-form-table th:nth-child(7),
