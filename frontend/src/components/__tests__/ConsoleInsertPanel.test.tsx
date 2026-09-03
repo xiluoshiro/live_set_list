@@ -1271,6 +1271,143 @@ describe("ConsoleInsertPanel", () => {
     expect(within(liveSelect).getAllByRole("option").map((option) => option.getAttribute("value"))).toEqual(["101"]);
   });
 
+  // 测试点：原本未公布的时间保持未公布时，只改标题不得误报排期变化或提交排期变更类型。
+  test("Live管理只改标题时不把未公布时间误判为排期变化", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleLiveCandidates.mockResolvedValue({
+      items: [{ live_id: 55, live_date: "2026-07-05", live_title: "Unannounced Live", live_type: "oneman", venue_name: "New Venue" }],
+      page: 1,
+      page_size: 20,
+      total: 1,
+      total_pages: 1,
+    });
+    apiMocks.getConsoleLive.mockResolvedValue({
+      item: {
+        live_id: 55,
+        live_date: "2026-07-05",
+        live_title: "Unannounced Live",
+        live_type: "oneman",
+        url: "https://example.com/unannounced",
+        opening_time: null,
+        start_time: null,
+        timezone: "+09:00",
+        venue_id: 88,
+        venue_name: "New Venue",
+        default_band_ids: [],
+        event_attendees: [],
+        band_lineup_contexts: [],
+        event_status: "scheduled",
+        status_note: null,
+        has_setlist: false,
+      },
+    });
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.updateConsoleLive.mockResolvedValue({
+      ok: true,
+      item: {
+        live_id: 55,
+        live_date: "2026-07-05",
+        live_title: "Unannounced Live renamed",
+        live_type: "oneman",
+        url: "https://example.com/unannounced",
+        opening_time: null,
+        start_time: null,
+        venue_id: 88,
+        default_band_ids: [],
+        event_attendees: [],
+        band_lineup_contexts: [],
+        event_status: "scheduled",
+        status_note: null,
+      },
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_edit" />);
+    await user.selectOptions(
+      await screen.findByRole("combobox", { name: "选择要编辑的 Live" }),
+      "55",
+    );
+    await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Unannounced Live"));
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), " renamed");
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+
+    const dialog = screen.getByRole("dialog", { name: "确认更新 Live #55" });
+    expect(within(dialog).getByRole("row", { name: "live_title Unannounced Live Unannounced Live renamed" })).toBeInTheDocument();
+    expect(within(dialog).queryByText("opening_time")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("start_time")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/本次排期变化/)).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
+
+    await waitFor(() => expect(apiMocks.updateConsoleLive).toHaveBeenCalledWith(
+      55,
+      expect.objectContaining({
+        live_title: "Unannounced Live renamed",
+        opening_time: null,
+        start_time: null,
+        schedule_change_kind: null,
+      }),
+      "csrf-token",
+    ));
+    expect(screen.getByText(/已更新Live #55/)).toBeInTheDocument();
+  });
+
+  // 测试点：撤销全部排期变化后，隐藏的排期说明不得进入普通标题更新请求。
+  test("Live管理撤销排期变化后不提交残留说明", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleLiveCandidates.mockResolvedValue({
+      items: [{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "New Venue" }],
+      page: 1,
+      page_size: 20,
+      total: 1,
+      total_pages: 1,
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_edit" />);
+    await user.selectOptions(await screen.findByRole("combobox", { name: "选择要编辑的 Live" }), "55");
+    await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live"));
+
+    fireEvent.change(screen.getByLabelText("opening_time"), { target: { value: "10:00" } });
+    await user.click(screen.getByRole("radio", { name: "资料修正" }));
+    await user.type(screen.getByLabelText("排期变化说明"), "不应残留的说明");
+    fireEvent.change(screen.getByLabelText("opening_time"), { target: { value: "09:00" } });
+    expect(screen.queryByLabelText("排期变化说明")).not.toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), " renamed");
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+    await user.click(screen.getByRole("button", { name: "确认更新" }));
+    await waitFor(() => expect(apiMocks.updateConsoleLive).toHaveBeenCalled());
+
+    expect(apiMocks.updateConsoleLive.mock.calls[0][1]).toEqual(expect.objectContaining({
+      schedule_change_kind: null,
+      schedule_change_note: null,
+    }));
+  });
+
+  // 测试点：撤销一次排期变化后，后续新的排期变化必须要求管理员重新选择变化类型。
+  test("Live管理新的排期变化不复用已撤销变化的类型", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleLiveCandidates.mockResolvedValue({
+      items: [{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "New Venue" }],
+      page: 1,
+      page_size: 20,
+      total: 1,
+      total_pages: 1,
+    });
+
+    render(<ConsoleInsertPanel initialMode="live_edit" />);
+    await user.selectOptions(await screen.findByRole("combobox", { name: "选择要编辑的 Live" }), "55");
+    await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live"));
+
+    fireEvent.change(screen.getByLabelText("opening_time"), { target: { value: "10:00" } });
+    await user.click(screen.getByRole("radio", { name: "资料修正" }));
+    fireEvent.change(screen.getByLabelText("opening_time"), { target: { value: "09:00" } });
+    expect(screen.queryByRole("radio", { name: "资料修正" })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("start_time"), { target: { value: "22:00" } });
+    expect(screen.getByRole("radio", { name: "资料修正" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "主办方正式改期" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+  });
+
   // 测试点：有 Setlist 的历史 Live 只改标题时必须原样提交阵容上下文，确认框不得误报删除。
   test("Live管理保留已有Setlist的历史阵容上下文", async () => {
     const user = userEvent.setup();

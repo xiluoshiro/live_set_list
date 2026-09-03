@@ -396,6 +396,8 @@ function normalizeLivePayload(payload: ConsoleLiveUpsertPayload): ConsoleLiveUps
     ...payload,
     live_title: payload.live_title.trim(),
     url: payload.url.trim(),
+    opening_time: payload.opening_time === "" ? null : payload.opening_time,
+    start_time: payload.start_time === "" ? null : payload.start_time,
     status_note: payload.status_note?.trim() || null,
     event_status: payload.event_status ?? "scheduled",
     default_band_ids: [...payload.default_band_ids].sort((left, right) => left - right),
@@ -800,6 +802,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     ));
   const requiresScheduleChangeKind = hasScheduleChanges && !isAnnouncementOnlyChange;
   const currentDatePhase = deriveDatePhaseForOffset(liveDate, timezone);
+
+  useEffect(() => {
+    if (requiresScheduleChangeKind) return;
+    if (scheduleChangeKind !== null) setScheduleChangeKind(null);
+    if (scheduleChangeNote !== "") setScheduleChangeNote("");
+  }, [requiresScheduleChangeKind, scheduleChangeKind, scheduleChangeNote]);
 
   const changeTimezoneHour = (hourValue: string) => {
     const minuteSuffix = hourValue === "-12" || hourValue === "+14" ? ":00" : timezoneMinute;
@@ -2486,7 +2494,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       venueName: venueAnnounced ? (selectedVenue?.venue_name ?? "-") : "未公布",
       changes,
       scheduleChangeKind: requiresScheduleChangeKind ? scheduleChangeKind : null,
-      scheduleChangeNote: scheduleChangeNote.trim() || null,
+      scheduleChangeNote: requiresScheduleChangeKind ? (scheduleChangeNote.trim() || null) : null,
     });
   };
 
