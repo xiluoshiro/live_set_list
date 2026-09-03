@@ -68,10 +68,11 @@ describe("formatStartTime 时区转换", () => {
     expect(formatStartTime("23:30:00-05:00", "2026-08-06")).toBe("12:30");
   });
 
-  it("null 返回 时间未定", async () => {
+  // 测试点：空开演时间统一使用公开端“未公布”语义。
+  it("null 返回未公布", async () => {
     // 测试点：无开演时间时应显示占位文案而非崩溃，验证空值回退。
     const formatStartTime = await loadFormatStartTime("Asia/Shanghai");
-    expect(formatStartTime(null)).toBe("时间未定");
+    expect(formatStartTime(null)).toBe("未公布");
   });
 
   it("无偏移或畸形字符串回退原解析逻辑", async () => {

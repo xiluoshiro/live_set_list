@@ -1106,6 +1106,89 @@ def test_console_live_schedule_change_separates_correction_from_reschedule(
     assert public_detail["schedule_history"][0]["note"] == "主办方正式改期"
 
 
+# 测试点：未公布排期可创建，首次公布不写改期历史，撤回确定值则必须声明改期类型并保存含空值快照。
+def test_console_live_unannounced_schedule_announcement_and_withdrawal_rules(
+    integration_test_client,
+    integration_admin_connection,
+):
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_tester",
+        password="editor-test-pass",
+    )
+    base_payload = {
+        "live_date": "2027-05-01",
+        "live_title": "Unannounced Schedule Live",
+        "live_type": "oneman",
+        "url": "https://example.com/unannounced-schedule",
+        "opening_time": None,
+        "start_time": None,
+        "timezone": "+09:00",
+        "venue_id": None,
+        "default_band_ids": [],
+        "event_attendees": [],
+    }
+    created = integration_test_client.post(
+        "/api/console/lives",
+        headers={"X-CSRF-Token": csrf_token},
+        json=base_payload,
+    )
+    assert created.status_code == 201
+    live_id = created.json()["item"]["live_id"]
+    queue = integration_test_client.get(
+        "/api/console/lives",
+        params={"q": str(live_id), "schedule_attention": "upcoming"},
+    )
+    assert queue.status_code == 200
+    assert queue.json()["items"][0]["missing_schedule_fields"] == [
+        "venue",
+        "opening_time",
+        "start_time",
+    ]
+    assert queue.json()["items"][0]["schedule_attention"] == "upcoming"
+    assert queue.json()["attention_counts"]["upcoming"] >= 1
+
+    announced = integration_test_client.put(
+        f"/api/console/lives/{live_id}",
+        headers={"X-CSRF-Token": csrf_token},
+        json={**base_payload, "start_time": "19:00"},
+    )
+    assert announced.status_code == 200
+    assert _count_rows(
+        integration_admin_connection,
+        "SELECT COUNT(*) FROM live_schedule_history WHERE live_id = %s",
+        (live_id,),
+    ) == 0
+
+    rejected_withdrawal = integration_test_client.put(
+        f"/api/console/lives/{live_id}",
+        headers={"X-CSRF-Token": csrf_token},
+        json=base_payload,
+    )
+    assert rejected_withdrawal.status_code == 422
+
+    withdrawn = integration_test_client.put(
+        f"/api/console/lives/{live_id}",
+        headers={"X-CSRF-Token": csrf_token},
+        json={**base_payload, "schedule_change_kind": "reschedule"},
+    )
+    assert withdrawn.status_code == 200
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT previous_opening_time, previous_start_time, previous_venue_id
+            FROM live_schedule_history
+            WHERE live_id = %s
+            """,
+            (live_id,),
+        )
+        history = cursor.fetchone()
+    assert history[0] is None
+    assert history[1] is not None
+    assert history[2] is None
+
+
 # 测试点：追加 Setlist 时应保留具名空成员，并将完全为空的 other_member 写成 NULL。
 def test_console_append_live_setlist_inserts_rows_to_clean_live(
     integration_test_client,

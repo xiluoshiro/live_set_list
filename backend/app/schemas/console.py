@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.schemas.lives import DatePhase, EventStatus, LiveScheduleHistoryItem
 
 LIVE_TYPE_VALUES = ("oneman", "taiban", "multi_act", "festival", "event", "other")
+ScheduleField = Literal["venue", "opening_time", "start_time"]
+ScheduleAttention = Literal["none", "upcoming", "today", "overdue", "inactive"]
 
 
 def _validate_live_type(value: str) -> str:
@@ -151,10 +153,10 @@ class ConsoleLiveBaseRequest(BaseModel):
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., min_length=1, max_length=255, description="Live title")
     url: str = Field(..., min_length=1, max_length=2048, description="Live URL")
-    opening_time: str = Field(..., min_length=5, max_length=8, description="Opening time, e.g. 18:00 or 18:00:00")
-    start_time: str = Field(..., min_length=5, max_length=8, description="Start time, e.g. 19:00 or 19:00:00")
+    opening_time: str | None = Field(default=None, min_length=5, max_length=8, description="Opening time, or null when unannounced")
+    start_time: str | None = Field(default=None, min_length=5, max_length=8, description="Start time, or null when unannounced")
     timezone: str = Field(..., min_length=6, max_length=6, description="UTC offset, e.g. +09:00")
-    venue_id: int = Field(..., ge=1, description="venue_list.id")
+    venue_id: int | None = Field(default=None, ge=1, description="venue_list.id, or null when unannounced")
     live_type: str = Field(
         ...,
         min_length=1,
@@ -227,7 +229,10 @@ class ConsoleLiveCreateRequest(ConsoleLiveBaseRequest):
 class ConsoleLiveUpdateRequest(ConsoleLiveBaseRequest):
     schedule_change_kind: Literal["correction", "reschedule"] | None = Field(
         default=None,
-        description="Required only when date, opening time, start time, or Venue changes",
+        description=(
+            "Required for date/timezone changes, confirmed-value edits, withdrawals, and mixed schedule changes; "
+            "not used when every schedule change is a first announcement from null"
+        ),
     )
     schedule_change_note: str | None = Field(
         default=None,
@@ -242,9 +247,9 @@ class ConsoleLiveItem(BaseModel):
     live_title: str = Field(..., description="Live title")
     live_type: str = Field(..., description="Stable live type code")
     url: str = Field(..., description="Live URL")
-    opening_time: str = Field(..., description="Opening time with timezone")
-    start_time: str = Field(..., description="Start time with timezone")
-    venue_id: int = Field(..., description="venue_list.id")
+    opening_time: str | None = Field(default=None, description="Opening time with timezone")
+    start_time: str | None = Field(default=None, description="Start time with timezone")
+    venue_id: int | None = Field(default=None, description="venue_list.id")
     default_band_ids: list[int] = Field(..., description="Normalized fallback band_attrs IDs")
     event_attendees: list[ConsoleEventAttendee] = Field(
         default_factory=list,
@@ -261,9 +266,17 @@ class ConsoleLiveCandidate(BaseModel):
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., description="Live title")
     live_type: str = Field(..., description="Stable live type code")
-    venue_name: str = Field(..., description="Venue display name")
+    venue_name: str | None = Field(default=None, description="Venue display name")
     event_status: EventStatus
     date_phase: DatePhase
+    missing_schedule_fields: list[ScheduleField] = Field(default_factory=list)
+    schedule_attention: ScheduleAttention = "none"
+
+
+class ConsoleLiveAttentionCounts(BaseModel):
+    upcoming: int = Field(default=0, ge=0)
+    today: int = Field(default=0, ge=0)
+    overdue: int = Field(default=0, ge=0)
 
 
 class ConsoleLiveCandidatesResponse(BaseModel):
@@ -272,11 +285,12 @@ class ConsoleLiveCandidatesResponse(BaseModel):
     page_size: int = Field(..., ge=1, description="Requested page size")
     total: int = Field(..., ge=0, description="Total matching Lives")
     total_pages: int = Field(..., ge=1, description="Total pages")
+    attention_counts: ConsoleLiveAttentionCounts = Field(default_factory=ConsoleLiveAttentionCounts)
 
 
 class ConsoleLiveEditItem(ConsoleLiveItem):
     timezone: str = Field(..., min_length=6, max_length=6, description="UTC offset used by both times")
-    venue_name: str = Field(..., description="Venue display name")
+    venue_name: str | None = Field(default=None, description="Venue display name")
     schedule_history: list[LiveScheduleHistoryItem] = Field(default_factory=list)
     has_setlist: bool = Field(..., description="Whether this Live already has Setlist rows")
 
@@ -464,7 +478,7 @@ class ConsoleTourMutationResponse(BaseModel):
 class ConsoleTourLiveCandidate(BaseModel):
     live_id: int = Field(..., description="live_attrs.id")
     live_date: date = Field(..., description="Live date")
-    start_time: str = Field(..., description="Live start time with timezone")
+    start_time: str | None = Field(default=None, description="Live start time with timezone")
     live_title: str = Field(..., description="Live title")
     venue: str | None = Field(default=None, description="Venue display name")
     tour_id: int | None = Field(default=None, description="Current tour ID, if assigned")
@@ -483,7 +497,7 @@ class ConsoleTourLiveCandidatesResponse(BaseModel):
 class ConsoleTourEditStop(BaseModel):
     live_id: int = Field(..., description="Associated Live ID")
     live_date: date = Field(..., description="Live date")
-    start_time: str = Field(..., description="Live start time with timezone")
+    start_time: str | None = Field(default=None, description="Live start time with timezone")
     live_title: str = Field(..., description="Live title")
     venue: str | None = Field(default=None, description="Venue display name")
     stop_label: str | None = Field(default=None, description="Optional stop label")
@@ -538,7 +552,7 @@ class ConsolePerformanceGroupLiveCandidate(BaseModel):
     live_id: int = Field(..., description="live_attrs.id")
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., description="Live title")
-    start_time: str = Field(..., description="Live start time")
+    start_time: str | None = Field(default=None, description="Live start time")
     venue: str | None = Field(default=None, description="Venue display name")
     band_ids: list[int] = Field(default_factory=list, description="Effective Live band IDs")
 
@@ -564,7 +578,7 @@ class ConsolePerformanceGroupEditStop(BaseModel):
     live_id: int = Field(..., description="Associated Live ID")
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., description="Live title")
-    start_time: str = Field(..., description="Start time")
+    start_time: str | None = Field(default=None, description="Start time")
     venue: str | None = Field(default=None, description="Venue display name")
     band_ids: list[int] = Field(default_factory=list, description="Effective Live band IDs")
 

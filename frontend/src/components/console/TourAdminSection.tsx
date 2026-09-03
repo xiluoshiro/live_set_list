@@ -19,7 +19,7 @@ import type { BandOption, Position } from "./types";
 type DraftStop = {
   live_id: number;
   live_date: string;
-  start_time: string;
+  start_time: string | null;
   live_title: string;
   venue: string | null;
   stop_label: string;
@@ -40,7 +40,7 @@ function sortStops(stops: DraftStop[]): DraftStop[] {
   return [...stops].sort(
     (left, right) =>
       left.live_date.localeCompare(right.live_date) ||
-      left.start_time.localeCompare(right.start_time) ||
+      (left.start_time === null ? 1 : right.start_time === null ? -1 : left.start_time.localeCompare(right.start_time)) ||
       left.live_id - right.live_id,
   );
 }

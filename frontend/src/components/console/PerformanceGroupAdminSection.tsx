@@ -17,7 +17,7 @@ type DraftStop = {
   live_id: number;
   live_date: string;
   live_title: string;
-  start_time: string;
+  start_time: string | null;
   venue: string | null;
 };
 
@@ -36,15 +36,15 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function formatStartTime(startTime: string): string {
-  return startTime.slice(0, 5);
+function formatStartTime(startTime: string | null): string {
+  return startTime?.slice(0, 5) ?? "未公布";
 }
 
 function sortStops(stops: DraftStop[]): DraftStop[] {
   return [...stops].sort(
     (left, right) =>
       left.live_date.localeCompare(right.live_date) ||
-      left.start_time.localeCompare(right.start_time) ||
+      (left.start_time === null ? 1 : right.start_time === null ? -1 : left.start_time.localeCompare(right.start_time)) ||
       left.live_id - right.live_id,
   );
 }

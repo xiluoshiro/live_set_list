@@ -104,17 +104,44 @@ def _build_exact_lookup_pattern(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _normalize_timetz_text(value: Any) -> tuple[str, str]:
+def _normalize_timetz_text(value: Any) -> str | None:
     """Return a stable timetz string and its explicit UTC offset for the edit form."""
+    if value is None:
+        return None
     raw = str(value)
     match = TIMEZONE_SUFFIX_PATTERN.search(raw)
     if match is None:
-        return raw, "+00:00"
+        return raw
     timezone = f"{match.group(1)}:{match.group(2) or '00'}"
     local_time = raw[: match.start()]
     if len(local_time) == 5:
         local_time = f"{local_time}:00"
-    return f"{local_time}{timezone}", timezone
+    return f"{local_time}{timezone}"
+
+
+def _format_timezone_offset(offset_minutes: int) -> str:
+    """Format a persisted fixed UTC offset for the console form."""
+    sign = "+" if offset_minutes >= 0 else "-"
+    absolute = abs(offset_minutes)
+    return f"{sign}{absolute // 60:02d}:{absolute % 60:02d}"
+
+
+def _missing_schedule_fields(venue_id: Any, opening_time: Any, start_time: Any) -> list[str]:
+    """Return missing schedule field codes in stable presentation order."""
+    return [
+        field
+        for field, value in (("venue", venue_id), ("opening_time", opening_time), ("start_time", start_time))
+        if value is None
+    ]
+
+
+def _schedule_attention(event_status: str, date_phase: str, missing_fields: list[str]) -> str:
+    """Derive the console-only urgency for incomplete schedule data."""
+    if not missing_fields:
+        return "none"
+    if event_status != "scheduled":
+        return "inactive"
+    return "overdue" if date_phase == "past" else date_phase
 
 
 def _normalize_console_event_attendees(raw: Any) -> list[dict[str, Any]]:
@@ -158,6 +185,11 @@ def list_editable_lives(
         default=None,
         description="Optional exact event status filter",
     ),
+    schedule_complete: bool | None = Query(default=None, description="Optional schedule completeness filter"),
+    schedule_attention: Literal["upcoming", "today", "overdue", "inactive"] | None = Query(
+        default=None,
+        description="Optional derived schedule attention filter",
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     _: Any = Depends(require_role("editor")),
@@ -179,6 +211,20 @@ def list_editable_lives(
     if event_status is not None:
         conditions.append("l.event_status = %s")
         params.append(event_status)
+    complete_sql = "l.venue_id IS NOT NULL AND l.opening_time IS NOT NULL AND l.start_time IS NOT NULL"
+    incomplete_sql = f"NOT ({complete_sql})"
+    local_today_sql = "(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' + make_interval(mins => l.timezone_offset_minutes))::date"
+    if schedule_complete is True:
+        conditions.append(complete_sql)
+    elif schedule_complete is False:
+        conditions.append(incomplete_sql)
+    if schedule_attention == "inactive":
+        conditions.append(f"{incomplete_sql} AND l.event_status <> 'scheduled'")
+    elif schedule_attention is not None:
+        phase_operator = {"upcoming": ">", "today": "=", "overdue": "<"}[schedule_attention]
+        conditions.append(
+            f"{incomplete_sql} AND l.event_status = 'scheduled' AND l.live_date {phase_operator} {local_today_sql}"
+        )
     where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     try:
         with get_db_connection() as conn:
@@ -190,12 +236,34 @@ def list_editable_lives(
                 safe_page = min(page, total_pages)
                 cur.execute(
                     f"""
-                    SELECT l.id, l.live_date, l.live_title, l.live_type, v.venue,
-                           l.start_time, l.event_status
+                    SELECT
+                        COUNT(*) FILTER (WHERE l.live_date > {local_today_sql}),
+                        COUNT(*) FILTER (WHERE l.live_date = {local_today_sql}),
+                        COUNT(*) FILTER (WHERE l.live_date < {local_today_sql})
                     FROM live_attrs l
-                    JOIN venue_list v ON v.id = l.venue_id
+                    WHERE l.event_status = 'scheduled' AND {incomplete_sql}
+                    """
+                )
+                attention_row = cur.fetchone() or (0, 0, 0)
+                attention_order_sql = (
+                    f"CASE WHEN l.event_status = 'scheduled' AND {incomplete_sql} THEN "
+                    f"CASE WHEN l.live_date = {local_today_sql} THEN 0 "
+                    f"WHEN l.live_date < {local_today_sql} THEN 1 ELSE 2 END ELSE 3 END, "
+                    f"CASE WHEN l.live_date < {local_today_sql} THEN l.live_date END DESC, "
+                    f"CASE WHEN l.live_date > {local_today_sql} THEN l.live_date END ASC, "
+                    "l.live_date ASC, l.id ASC"
+                    if schedule_complete is False or schedule_attention is not None
+                    else "l.live_date DESC, l.id DESC"
+                )
+                cur.execute(
+                    f"""
+                    SELECT l.id, l.live_date, l.live_title, l.live_type, v.venue,
+                           l.start_time, l.event_status, l.opening_time, l.venue_id,
+                           l.timezone_offset_minutes
+                    FROM live_attrs l
+                    LEFT JOIN venue_list v ON v.id = l.venue_id
                     {where_sql}
-                    ORDER BY l.live_date DESC, l.id DESC
+                    ORDER BY {attention_order_sql}
                     LIMIT %s OFFSET %s
                     """,
                     (*params, page_size, (safe_page - 1) * page_size),
@@ -214,25 +282,36 @@ def list_editable_lives(
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     return {
         "items": [
-            {
+            (lambda public_status, missing: {
                 "live_id": int(row[0]),
                 "live_date": row[1],
                 "live_title": str(row[2]),
                 "live_type": str(row[3]),
-                "venue_name": str(row[4]),
-                **build_public_live_status(
-                    event_status=str(row[6]) if len(row) > 6 else "scheduled",
+                "venue_name": str(row[4]) if row[4] is not None else None,
+                **public_status,
+                "missing_schedule_fields": missing,
+                "schedule_attention": _schedule_attention(str(row[6]), str(public_status["date_phase"]), missing),
+            })(
+                build_public_live_status(
+                    event_status=str(row[6]),
                     live_date=row[1],
-                    start_time=row[5] if len(row) > 5 else "00:00:00+00:00",
+                    start_time=row[5],
+                    timezone_offset_minutes=int(row[9]),
                     was_rescheduled=False,
                 ),
-            }
+                _missing_schedule_fields(row[8], row[7], row[5]),
+            )
             for row in rows
         ],
         "page": safe_page,
         "page_size": page_size,
         "total": total,
         "total_pages": total_pages,
+        "attention_counts": {
+            "upcoming": int(attention_row[0]),
+            "today": int(attention_row[1]),
+            "overdue": int(attention_row[2]),
+        },
     }
 
 
@@ -314,9 +393,10 @@ def get_editable_live(
                                 WHERE context.live_id = l.id
                             ),
                             '[]'::jsonb
-                        ) AS band_lineup_contexts
+                        ) AS band_lineup_contexts,
+                        l.timezone_offset_minutes
                     FROM live_attrs l
-                    JOIN venue_list v ON v.id = l.venue_id
+                    LEFT JOIN venue_list v ON v.id = l.venue_id
                     WHERE l.id = %s
                     """,
                     (live_id,),
@@ -335,8 +415,9 @@ def get_editable_live(
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     if row is None:
         raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
-    opening_time, timezone = _normalize_timetz_text(row[5])
-    start_time, _ = _normalize_timetz_text(row[6])
+    opening_time = _normalize_timetz_text(row[5])
+    start_time = _normalize_timetz_text(row[6])
+    timezone = _format_timezone_offset(int(row[16]))
     return {
         "item": {
             "live_id": int(row[0]),
@@ -347,8 +428,8 @@ def get_editable_live(
             "opening_time": opening_time,
             "start_time": start_time,
             "timezone": timezone,
-            "venue_id": int(row[7]),
-            "venue_name": str(row[8]),
+            "venue_id": int(row[7]) if row[7] is not None else None,
+            "venue_name": str(row[8]) if row[8] is not None else None,
             "default_band_ids": list(row[9] or []),
             "event_attendees": _normalize_console_event_attendees(row[10]),
             "event_status": str(row[11]) if len(row) > 11 else "scheduled",
@@ -357,6 +438,7 @@ def get_editable_live(
                 event_status=str(row[11]) if len(row) > 11 else "scheduled",
                 live_date=row[1],
                 start_time=row[6],
+                timezone_offset_minutes=int(row[16]),
                 was_rescheduled=bool(row[13]) if len(row) > 13 else False,
             )["date_phase"],
             "schedule_history": list(row[13] or []) if len(row) > 13 else [],

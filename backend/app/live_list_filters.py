@@ -184,7 +184,8 @@ def build_filtered_live_queries(
                 EXISTS (
                     SELECT 1 FROM live_schedule_history history
                     WHERE history.live_id = l.id
-                ) AS was_rescheduled
+                ) AS was_rescheduled,
+                l.timezone_offset_minutes
             FROM live_attrs l
             {favorite_join}
             LEFT JOIN tour_lives tour_live
@@ -212,7 +213,8 @@ def build_filtered_live_queries(
             matched.group_title,
             matched.start_time,
             matched.event_status,
-            matched.was_rescheduled
+            matched.was_rescheduled,
+            matched.timezone_offset_minutes
         FROM matched_lives matched
         GROUP BY
             matched.id,
@@ -227,7 +229,8 @@ def build_filtered_live_queries(
             matched.group_title,
             matched.start_time,
             matched.event_status,
-            matched.was_rescheduled
+            matched.was_rescheduled,
+            matched.timezone_offset_minutes
         ORDER BY {result_order_sql}
     """
     return count_query, matched_params, page_query, matched_params

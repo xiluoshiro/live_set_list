@@ -26,6 +26,18 @@ def test_derive_date_phase_ignores_time_within_local_day():
     assert derive_date_phase(date(2026, 7, 24), "00:00:00+08:00", now_utc) == "upcoming"
 
 
+# 测试点：开演时间未公布时必须由独立 UTC offset 继续准确派生当地日期阶段。
+def test_derive_date_phase_uses_independent_offset_when_start_time_is_unannounced():
+    now_utc = datetime(2026, 7, 22, 15, 30, tzinfo=UTC)
+
+    assert derive_date_phase(
+        date(2026, 7, 23),
+        None,
+        now_utc,
+        timezone_offset_minutes=540,
+    ) == "today"
+
+
 # 测试点：公开状态应保留人工状态与正式改期标记，并拒绝数据库中的未知状态值。
 def test_build_public_live_status_keeps_manual_status_and_validates_code():
     result = build_public_live_status(

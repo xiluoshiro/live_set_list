@@ -85,7 +85,7 @@ def _validate_tour_relations(
             ), ARRAY[]::int[]) AS band_ids
         FROM live_attrs l
         WHERE l.id = ANY(%s)
-        ORDER BY l.live_date, l.start_time, l.id
+        ORDER BY l.live_date, l.start_time NULLS LAST, l.id
         """,
         (live_ids,),
     )
@@ -211,7 +211,7 @@ def get_tour_live_candidates(
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     {where_sql}
-                    ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC
+                    ORDER BY l.live_date DESC, l.start_time DESC NULLS LAST, l.id DESC
                     LIMIT %s OFFSET %s
                     """,
                     (*params, page_size, (safe_page - 1) * page_size),
@@ -230,7 +230,7 @@ def get_tour_live_candidates(
             {
                 "live_id": int(row[0]),
                 "live_date": row[1],
-                "start_time": str(row[2]),
+                "start_time": str(row[2]) if row[2] is not None else None,
                 "live_title": str(row[3]),
                 "venue": row[4],
                 "tour_id": int(row[5]) if row[5] is not None else None,
@@ -283,7 +283,7 @@ def get_console_tour(
                     JOIN live_attrs l ON l.id = tl.live_id
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     WHERE tl.tour_id = %s
-                    ORDER BY l.live_date, l.start_time, l.id
+                    ORDER BY l.live_date, l.start_time NULLS LAST, l.id
                     """,
                     (tour_id,),
                 )

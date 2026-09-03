@@ -296,7 +296,7 @@ describe("console lookup api", () => {
     }));
   });
 
-  // 测试点：Live 管理 API 应把关键词和类型筛选传给候选路由，并由 PUT 更新调用携带完整请求体。
+  // 测试点：Live 管理 API 应传递关键词、类型和待补状态筛选，并由 PUT 更新调用携带完整请求体。
   test("Live 编辑 API 会查询候选和详情并通过 PUT 保存", async () => {
     fetchMock
       .mockResolvedValueOnce(makeJsonResponse({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 }))
@@ -316,11 +316,11 @@ describe("console lookup api", () => {
       event_attendees: [{ band_id: 3, members: ["高松燈"] }],
     };
 
-    await getConsoleLiveCandidates(" 55 ", 2, 20, "event");
+    await getConsoleLiveCandidates(" 55 ", 2, 20, "event", undefined, "scheduled", false, "overdue");
     await getConsoleLive(55);
     await updateConsoleLive(55, requestPayload, "csrf-token");
 
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/lives?page=2&page_size=20&q=55&live_type=event");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/lives?page=2&page_size=20&q=55&live_type=event&event_status=scheduled&schedule_complete=false&schedule_attention=overdue");
     expect(fetchMock.mock.calls[1][0]).toBe("/api/console/lives/55");
     expect(fetchMock.mock.calls[2][0]).toBe("/api/console/lives/55");
     expect(fetchMock.mock.calls[2][1]).toEqual(expect.objectContaining({

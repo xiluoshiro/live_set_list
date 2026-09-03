@@ -165,7 +165,7 @@ def test_scope_favorites_returns_only_favorited_items():
     assert items[0]["performance_group"]["group_id"] == 1
     page_sql = str(cursor.execute.call_args_list[1].args[0])
     assert "gs.end_time AS sort_time" in page_sql
-    assert "ORDER BY sort_rank ASC, sort_date DESC, sort_time DESC, sort_id DESC" in page_sql
+    assert "ORDER BY sort_rank ASC, sort_date DESC, sort_time DESC NULLS LAST, sort_id DESC" in page_sql
     assert "WHEN slw.event_status = 'cancelled' THEN 2" in page_sql
     assert "WHEN gs.live_count > 0 AND gs.cancelled_live_count >= gs.live_count THEN 2" in page_sql
 
@@ -285,7 +285,7 @@ def test_sort_date_desc_uses_correct_ordering():
     assert response.status_code == 200
     page_sql = str(cursor.execute.call_args_list[1].args[0])
     assert "gs.end_time AS sort_time" in page_sql
-    assert "ORDER BY sort_rank ASC, sort_date DESC, sort_time DESC, sort_id DESC" in page_sql
+    assert "ORDER BY sort_rank ASC, sort_date DESC, sort_time DESC NULLS LAST, sort_id DESC" in page_sql
 
 
 # 测试点：sort=date_asc 应按第一场日期、开演时间升序，ID 只作稳定兜底。
@@ -308,7 +308,7 @@ def test_sort_date_asc_uses_correct_ordering():
     assert response.status_code == 200
     page_sql = str(cursor.execute.call_args_list[1].args[0])
     assert "gs.start_time AS sort_time" in page_sql
-    assert "ORDER BY sort_rank ASC, sort_date ASC, sort_time ASC, sort_id ASC" in page_sql
+    assert "ORDER BY sort_rank ASC, sort_date ASC, sort_time ASC NULLS LAST, sort_id ASC" in page_sql
 
 
 # 测试点：page_size 必须为 15 或 20，其他值应返回 400。

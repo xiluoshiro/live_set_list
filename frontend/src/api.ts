@@ -208,9 +208,9 @@ export type DatePhase = "upcoming" | "today" | "past";
 export type LiveScheduleHistoryItem = {
   previous_live_title: string | null;
   previous_live_date: string;
-  previous_opening_time: string;
-  previous_start_time: string;
-  previous_venue_id: number;
+  previous_opening_time: string | null;
+  previous_start_time: string | null;
+  previous_venue_id: number | null;
   previous_venue: string | null;
   changed_at: string;
   note: string | null;
@@ -326,7 +326,7 @@ export type PerformanceGroupLiveItem = {
   live_date: string;
   live_title: string;
   live_type: string;
-  start_time: string;
+  start_time: string | null;
   venue: string | null;
   bands: number[];
   url: string | null;
@@ -570,10 +570,10 @@ export type ConsoleLiveUpsertPayload = {
   live_title: string;
   live_type: string;
   url: string;
-  opening_time: string;
-  start_time: string;
+  opening_time: string | null;
+  start_time: string | null;
   timezone: string;
-  venue_id: number;
+  venue_id: number | null;
   default_band_ids: number[];
   event_attendees: Array<{ band_id: number; members: string[] }>;
   /** Read-only draft context used for comparison/display; API serializers remove it. */
@@ -602,9 +602,9 @@ export type ConsoleLiveMutationItem = {
   live_title: string;
   live_type: string;
   url: string;
-  opening_time: string;
-  start_time: string;
-  venue_id: number;
+  opening_time: string | null;
+  start_time: string | null;
+  venue_id: number | null;
   default_band_ids: number[];
   event_attendees: ConsoleEventAttendee[];
   band_lineup_contexts?: ConsoleLiveBandLineupContext[];
@@ -694,7 +694,7 @@ export type ConsoleTourMutationResponse = {
 export type ConsoleTourLiveCandidate = {
   live_id: number;
   live_date: string;
-  start_time: string;
+  start_time: string | null;
   live_title: string;
   venue: string | null;
   tour_id: number | null;
@@ -717,7 +717,7 @@ export type ConsoleTourEditResponse = {
   stops: Array<{
     live_id: number;
     live_date: string;
-    start_time: string;
+    start_time: string | null;
     live_title: string;
     venue: string | null;
     stop_label: string | null;
@@ -729,7 +729,7 @@ export type ConsolePerformanceGroupLiveCandidate = {
   live_id: number;
   live_date: string;
   live_title: string;
-  start_time: string;
+  start_time: string | null;
   venue: string | null;
   band_ids: number[];
 };
@@ -739,9 +739,11 @@ export type ConsoleLiveCandidate = {
   live_date: string;
   live_title: string;
   live_type: string;
-  venue_name: string;
+  venue_name: string | null;
   event_status?: EventStatus;
   date_phase?: DatePhase;
+  missing_schedule_fields?: Array<"venue" | "opening_time" | "start_time">;
+  schedule_attention?: "none" | "upcoming" | "today" | "overdue" | "inactive";
 };
 
 export type ConsoleLiveCandidatesResponse = {
@@ -750,12 +752,13 @@ export type ConsoleLiveCandidatesResponse = {
   page_size: number;
   total: number;
   total_pages: number;
+  attention_counts?: { upcoming: number; today: number; overdue: number };
 };
 
 export type ConsoleLiveEditResponse = {
   item: ConsoleLiveMutationItem & {
     timezone: string;
-    venue_name: string;
+    venue_name: string | null;
     schedule_history?: LiveScheduleHistoryItem[];
     has_setlist?: boolean;
   };
@@ -780,7 +783,7 @@ export type ConsolePerformanceGroupEditStop = {
   live_id: number;
   live_date: string;
   live_title: string;
-  start_time: string;
+  start_time: string | null;
   venue: string | null;
   band_ids: number[];
 };
@@ -1762,12 +1765,16 @@ export async function getConsoleLiveCandidates(
   liveType = "",
   hasSetlist?: boolean,
   eventStatus = "",
+  scheduleComplete?: boolean,
+  scheduleAttention = "",
 ): Promise<ConsoleLiveCandidatesResponse> {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (q.trim()) query.set("q", q.trim());
   if (liveType) query.set("live_type", liveType);
   if (hasSetlist !== undefined) query.set("has_setlist", String(hasSetlist));
   if (eventStatus) query.set("event_status", eventStatus);
+  if (scheduleComplete !== undefined) query.set("schedule_complete", String(scheduleComplete));
+  if (scheduleAttention) query.set("schedule_attention", scheduleAttention);
   const response = await fetchWithTimeout(
     `${BASE_URL}/api/console/lives?${query.toString()}`,
     undefined,

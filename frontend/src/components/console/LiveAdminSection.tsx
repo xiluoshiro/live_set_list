@@ -25,6 +25,9 @@ type LiveAdminSectionProps = {
   liveUrl: string;
   openingTime: string;
   startTime: string;
+  venueAnnounced?: boolean;
+  openingTimeAnnounced?: boolean;
+  startTimeAnnounced?: boolean;
   timezoneHour: string;
   timezoneMinute: string;
   timezoneMinuteDisabled: boolean;
@@ -66,15 +69,19 @@ type LiveAdminSectionProps = {
     live_title: string;
     live_type: string;
     url: string | null;
-    opening_time: string;
-    start_time: string;
+    opening_time: string | null;
+    start_time: string | null;
     timezone: string;
-    venue_id: number;
+    venue_id: number | null;
     default_band_ids: number[];
     event_attendees: Array<{ band_id: number; mode: "partial" | "full"; members: string[] }>;
     event_status?: EventStatus;
     status_note?: string | null;
   }>;
+  scheduleAttentionItems?: ConsoleLiveCandidate[];
+  scheduleAttentionCounts?: { upcoming: number; today: number; overdue: number };
+  scheduleAttentionFilter?: "" | "upcoming" | "today" | "overdue";
+  scheduleAttentionLoading?: boolean;
   onLiveDateChange: (value: string) => void;
   onLiveTitleChange: (value: string) => void;
   onLiveTypeChange: (value: string) => void;
@@ -85,6 +92,9 @@ type LiveAdminSectionProps = {
   onLiveUrlChange: (value: string) => void;
   onOpeningTimeChange: (value: string) => void;
   onStartTimeChange: (value: string) => void;
+  onVenueAnnouncedChange?: (announced: boolean) => void;
+  onOpeningTimeAnnouncedChange?: (announced: boolean) => void;
+  onStartTimeAnnouncedChange?: (announced: boolean) => void;
   onTimezoneHourChange: (value: string) => void;
   onCycleTimezoneMinute: () => void;
   onVenueQueryTextChange: (value: string) => void;
@@ -94,6 +104,7 @@ type LiveAdminSectionProps = {
   onQueryLiveCandidates: () => void;
   onLiveCandidatePageChange: (page: number) => void;
   onSelectLiveForEdit: (liveId: number) => void;
+  onScheduleAttentionFilterChange?: (value: "" | "upcoming" | "today" | "overdue") => void;
   onClearAfterCreateChange: (checked: boolean) => void;
   onOpenVenueMenu: () => void;
   onOpenDefaultBandMenu: () => void;
@@ -122,6 +133,9 @@ export function LiveAdminSection({
   liveUrl,
   openingTime,
   startTime,
+  venueAnnounced = true,
+  openingTimeAnnounced = true,
+  startTimeAnnounced = true,
   timezoneHour,
   timezoneMinute,
   timezoneMinuteDisabled,
@@ -156,6 +170,10 @@ export function LiveAdminSection({
   defaultBandMenuRef,
   venueQueryInputRef,
   insertedLives,
+  scheduleAttentionItems = [],
+  scheduleAttentionCounts = { upcoming: 0, today: 0, overdue: 0 },
+  scheduleAttentionFilter = "",
+  scheduleAttentionLoading = false,
   onLiveDateChange,
   onLiveTitleChange,
   onLiveTypeChange,
@@ -166,6 +184,9 @@ export function LiveAdminSection({
   onLiveUrlChange,
   onOpeningTimeChange,
   onStartTimeChange,
+  onVenueAnnouncedChange = () => undefined,
+  onOpeningTimeAnnouncedChange = () => undefined,
+  onStartTimeAnnouncedChange = () => undefined,
   onTimezoneHourChange,
   onCycleTimezoneMinute,
   onVenueQueryTextChange,
@@ -175,6 +196,7 @@ export function LiveAdminSection({
   onQueryLiveCandidates,
   onLiveCandidatePageChange,
   onSelectLiveForEdit,
+  onScheduleAttentionFilterChange = () => undefined,
   onClearAfterCreateChange,
   onOpenVenueMenu,
   onOpenDefaultBandMenu,
@@ -189,6 +211,7 @@ export function LiveAdminSection({
   submitInsertDisabled,
 }: LiveAdminSectionProps) {
   const selectedVenueText = (() => {
+    if (!venueAnnounced) return "未公布";
     const selected = venues.find((venue) => venue.venue_id === selectedVenueId);
     if (!selected) return "请选择 venue";
     return `${selected.venue_id} - ${selected.venue_name}`;
@@ -212,6 +235,55 @@ export function LiveAdminSection({
 
   return (
     <>
+      <section className="live-admin-status-section live-schedule-attention" aria-labelledby="live-schedule-attention-title">
+        <div className="live-admin-status-head">
+          <h3 id="live-schedule-attention-title">待补排期资料</h3>
+          <span>补全最后一项后自动移出</span>
+        </div>
+        <div className="live-schedule-attention-counts" role="group" aria-label="待补排期资料分类">
+          {([
+            ["today", "今日未公布", scheduleAttentionCounts.today],
+            ["overdue", "已结束仍缺失", scheduleAttentionCounts.overdue],
+            ["upcoming", "未来待公布", scheduleAttentionCounts.upcoming],
+          ] as const).map(([attention, label, count]) => (
+            <button
+              key={attention}
+              type="button"
+              className="console-ghost-btn"
+              data-attention={attention}
+              data-active={scheduleAttentionFilter === attention || undefined}
+              data-empty={count === 0 || undefined}
+              disabled={scheduleAttentionLoading}
+              onClick={() => onScheduleAttentionFilterChange(scheduleAttentionFilter === attention ? "" : attention)}
+            >
+              <span>{label}</span><strong>{count}</strong>
+            </button>
+          ))}
+        </div>
+        {scheduleAttentionItems.length === 0 ? (
+          <p className="console-admin-hint">当前筛选下没有待补活动。</p>
+        ) : (
+          <div className="live-schedule-attention-list">
+            {scheduleAttentionItems.map((live) => (
+              <article key={live.live_id} data-attention={live.schedule_attention}>
+                <div>
+                  <time>{live.live_date}</time>
+                  <strong>{live.live_title}</strong>
+                  <span className="live-schedule-missing-tags">
+                    {(live.missing_schedule_fields ?? []).map((field) => (
+                      <small key={field}>{field === "venue" ? "场馆" : field === "opening_time" ? "开场" : "开演"}未公布</small>
+                    ))}
+                  </span>
+                  {live.schedule_attention === "today" && <em>今日活动仍有资料未公布</em>}
+                  {live.schedule_attention === "overdue" && <em>活动已结束，资料仍未补全</em>}
+                </div>
+                <button type="button" className="console-ghost-btn" onClick={() => onSelectLiveForEdit(live.live_id)}>编辑</button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
       {variant === "edit" && (
         <div className="tour-admin-toolbar live-admin-toolbar">
           <label className="live-management-label" htmlFor="live-admin-query">已有 Live</label>
@@ -282,22 +354,28 @@ export function LiveAdminSection({
           value={venueQueryText}
           onChange={(e) => onVenueQueryTextChange(e.target.value)}
           placeholder="输入 venue 关键词"
+          disabled={!venueAnnounced}
         />
-        <button type="button" className="console-ghost-btn" onClick={onQueryVid}>
+        <button type="button" className="console-ghost-btn" onClick={onQueryVid} disabled={!venueAnnounced}>
           查询
         </button>
-        <button type="button" className="console-submit-btn" onClick={onInsertVenue} disabled={queryInsertDisabled}>
+        <button type="button" className="console-submit-btn" onClick={onInsertVenue} disabled={!venueAnnounced || queryInsertDisabled}>
           插入
         </button>
       </div>
       <div className="live-id-selector live-create-tools">
         <label className="live-management-label">选择 venue</label>
+        <select aria-label="场馆公布状态" value={venueAnnounced ? "announced" : "unannounced"} onChange={(event) => onVenueAnnouncedChange(event.target.value === "announced")}>
+          <option value="announced">已确定</option>
+          <option value="unannounced">暂未公布</option>
+        </select>
         <button
           ref={venueTriggerRef}
           type="button"
           className="bands-picker-trigger venue-picker-trigger live-management-primary-control"
           onClick={onOpenVenueMenu}
           title={selectedVenueText}
+          disabled={!venueAnnounced}
         >
           {selectedVenueText}
         </button>
@@ -358,10 +436,18 @@ export function LiveAdminSection({
                 <input value={liveUrl} onChange={(e) => onLiveUrlChange(e.target.value)} placeholder="https://..." />
               </td>
               <td>
-                <input type="time" aria-label="opening_time" value={openingTime} onChange={(e) => onOpeningTimeChange(e.target.value)} />
+                <select aria-label="开场公布状态" value={openingTimeAnnounced ? "announced" : "unannounced"} onChange={(event) => onOpeningTimeAnnouncedChange(event.target.value === "announced")}>
+                  <option value="announced">已确定</option>
+                  <option value="unannounced">暂未公布</option>
+                </select>
+                <input type="time" aria-label="opening_time" value={openingTime} disabled={!openingTimeAnnounced} onChange={(e) => onOpeningTimeChange(e.target.value)} />
               </td>
               <td>
-                <input type="time" aria-label="start_time" value={startTime} onChange={(e) => onStartTimeChange(e.target.value)} />
+                <select aria-label="开演公布状态" value={startTimeAnnounced ? "announced" : "unannounced"} onChange={(event) => onStartTimeAnnouncedChange(event.target.value === "announced")}>
+                  <option value="announced">已确定</option>
+                  <option value="unannounced">暂未公布</option>
+                </select>
+                <input type="time" aria-label="start_time" value={startTime} disabled={!startTimeAnnounced} onChange={(e) => onStartTimeChange(e.target.value)} />
               </td>
               <td>
                 <div className="timezone-input-group">
@@ -618,10 +704,10 @@ export function LiveAdminSection({
                   <td>{row.live_title}</td>
                   <td>{formatLiveType(row.live_type)}</td>
                   <td>{row.url ?? "-"}</td>
-                  <td>{row.opening_time}</td>
-                  <td>{row.start_time}</td>
+                  <td>{row.opening_time ?? "未公布"}</td>
+                  <td>{row.start_time ?? "未公布"}</td>
                   <td>{row.timezone}</td>
-                  <td>{row.venue_id}</td>
+                  <td>{row.venue_id ?? "未公布"}</td>
                   <td>{(row.default_band_ids ?? []).join(", ") || "-"}</td>
                   <td>{row.event_attendees.map((item) => `${item.band_id}:${item.mode}(${item.members.join("/")})`).join("; ") || "-"}</td>
                   <td>{!row.event_status || row.event_status === "scheduled" ? "按计划" : row.event_status === "postponed" ? "延期" : "已取消"}</td>

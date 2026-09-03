@@ -119,7 +119,7 @@ def _build_tour_list_queries(
     where_sql, params = _build_tour_filters(query=query, year=year, band_id=band_id)
     sort_dir = "ASC" if sort == "date_asc" else "DESC"
     result_order = (
-        "summary.status_rank ASC, summary.start_date ASC, summary.start_time ASC, summary.tour_id ASC"
+        "summary.status_rank ASC, summary.start_date ASC, summary.start_time ASC NULLS LAST, summary.tour_id ASC"
         if sort == "date_asc"
         else "summary.status_rank ASC, summary.end_date DESC, summary.end_time DESC, summary.tour_id DESC"
     )
@@ -134,7 +134,7 @@ def _build_tour_list_queries(
                 FROM tour_lives order_stop
                 JOIN live_attrs order_live ON order_live.id = order_stop.live_id
                 WHERE order_stop.tour_id = t.id
-                ORDER BY order_live.live_date {sort_dir}, order_live.start_time {sort_dir}, order_live.id {sort_dir}
+                ORDER BY order_live.live_date {sort_dir}, order_live.start_time {sort_dir} NULLS LAST, order_live.id {sort_dir}
                 LIMIT 1
             ) boundary_live ON true
             LEFT JOIN LATERAL (
@@ -168,14 +168,14 @@ def _build_tour_list_queries(
                     FROM tour_lives first_stop
                     JOIN live_attrs first_live ON first_live.id = first_stop.live_id
                     WHERE first_stop.tour_id = t.id
-                    ORDER BY first_live.live_date, first_live.start_time, first_live.id
+                    ORDER BY first_live.live_date, first_live.start_time NULLS LAST, first_live.id
                     LIMIT 1
                 ) AS url,
                 NULL::text AS description,
                 MIN(l.live_date) AS start_date,
                 MAX(l.live_date) AS end_date,
-                (array_agg(l.start_time ORDER BY l.live_date ASC, l.start_time ASC, l.id ASC))[1] AS start_time,
-                (array_agg(l.start_time ORDER BY l.live_date DESC, l.start_time DESC, l.id DESC))[1] AS end_time,
+                (array_agg(l.start_time ORDER BY l.live_date ASC, l.start_time ASC NULLS LAST, l.id ASC))[1] AS start_time,
+                (array_agg(l.start_time ORDER BY l.live_date DESC, l.start_time DESC NULLS LAST, l.id DESC))[1] AS end_time,
                 COUNT(*)::int AS collected_live_count,
                 COUNT(*) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count,
                 CASE
@@ -219,7 +219,7 @@ def _build_tour_list_queries(
                     '[]'::jsonb
                 ) AS bands,
                 COALESCE(
-                    array_agg(tl.stop_label ORDER BY l.live_date, l.start_time, l.id)
+                    array_agg(tl.stop_label ORDER BY l.live_date, l.start_time NULLS LAST, l.id)
                         FILTER (WHERE tl.stop_label IS NOT NULL),
                     ARRAY[]::text[]
                 ) AS stop_labels
@@ -255,7 +255,7 @@ SELECT
         FROM tour_lives first_stop
         JOIN live_attrs first_live ON first_live.id = first_stop.live_id
         WHERE first_stop.tour_id = t.id
-        ORDER BY first_live.live_date, first_live.start_time, first_live.id
+        ORDER BY first_live.live_date, first_live.start_time NULLS LAST, first_live.id
         LIMIT 1
     ) AS url,
     NULL::text AS description,
@@ -264,7 +264,7 @@ SELECT
     COUNT(*)::int AS collected_live_count,
     COUNT(*) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count,
     COALESCE(
-        array_agg(tl.stop_label ORDER BY l.live_date, l.start_time, l.id)
+        array_agg(tl.stop_label ORDER BY l.live_date, l.start_time NULLS LAST, l.id)
             FILTER (WHERE tl.stop_label IS NOT NULL),
         ARRAY[]::text[]
     ) AS stop_labels
@@ -318,6 +318,7 @@ WITH stop_base AS (
             SELECT 1 FROM live_schedule_history history
             WHERE history.live_id = l.id
         ) AS was_rescheduled,
+        l.timezone_offset_minutes,
         CASE
             WHEN pgl.group_id IS NULL THEN (l.event_status = 'cancelled')
             ELSE BOOL_OR(l.event_status = 'cancelled') OVER (PARTITION BY pgl.group_id)
@@ -330,14 +331,14 @@ WITH stop_base AS (
             WHEN pgl.group_id IS NULL THEN l.start_time
             ELSE FIRST_VALUE(l.start_time) OVER (
                 PARTITION BY pgl.group_id
-                ORDER BY l.live_date, l.start_time, l.id
+                ORDER BY l.live_date, l.start_time NULLS LAST, l.id
             )
         END AS block_time,
         CASE
             WHEN pgl.group_id IS NULL THEN l.id
             ELSE FIRST_VALUE(l.id) OVER (
                 PARTITION BY pgl.group_id
-                ORDER BY l.live_date, l.start_time, l.id
+                ORDER BY l.live_date, l.start_time NULLS LAST, l.id
             )
         END AS block_id
     FROM tour_lives tl
@@ -351,11 +352,11 @@ SELECT
         ORDER BY
             block_date,
             block_has_cancelled DESC,
-            block_time,
+            block_time NULLS LAST,
             block_id,
             live_date,
             (event_status = 'cancelled') DESC,
-            start_time,
+            start_time NULLS LAST,
             id
     )::int AS stop_order,
     stop_label,
@@ -369,16 +370,17 @@ SELECT
     has_setlist,
     event_status,
     start_time,
-    was_rescheduled
+    was_rescheduled,
+    timezone_offset_minutes
 FROM stop_base
 ORDER BY
     block_date,
     block_has_cancelled DESC,
-    block_time,
+    block_time NULLS LAST,
     block_id,
     live_date,
     (event_status = 'cancelled') DESC,
-    start_time,
+    start_time NULLS LAST,
     id
 """
 
@@ -420,7 +422,7 @@ LEFT JOIN live_setlist stl
    )
 LEFT JOIN song_list s ON s.id = stl.song_id
 WHERE tl.tour_id = %s
-ORDER BY l.live_date, l.start_time, l.id, stl.absolute_order
+ORDER BY l.live_date, l.start_time NULLS LAST, l.id, stl.absolute_order
 """
 
 
@@ -846,6 +848,7 @@ def get_tour_detail(
                     event_status=str(row[10]) if len(row) > 10 else "scheduled",
                     live_date=row[3],
                     start_time=row[11] if len(row) > 11 else "00:00:00+00:00",
+                    timezone_offset_minutes=int(row[13]) if len(row) > 13 and row[13] is not None else None,
                     was_rescheduled=bool(row[12]) if len(row) > 12 else False,
                 ),
             }

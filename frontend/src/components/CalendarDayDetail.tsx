@@ -17,7 +17,7 @@ type CalendarDayDetailProps = {
 };
 
 function formatStartTime(value: string | null, dateIso?: string): string {
-  if (!value) return "时间未定";
+  if (!value) return "未公布";
   const match = value.match(/^(\d{2}):(\d{2})(?::(\d{2}))?([+-])(\d{2}):(\d{2})$/);
   if (match) {
     const [, hour, minute, second, sign, zoneHour, zoneMinute] = match;

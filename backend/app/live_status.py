@@ -27,15 +27,23 @@ def _offset_from_start_time(start_time: str | time) -> timedelta:
 
 def derive_date_phase(
     live_date: date | str,
-    start_time: str | time,
+    start_time: str | time | None = None,
     now_utc: datetime | None = None,
+    *,
+    timezone_offset_minutes: int | None = None,
 ) -> DatePhase:
     """Compare a Live date with today in the fixed offset stored on that Live."""
     normalized_live_date = date.fromisoformat(live_date) if isinstance(live_date, str) else live_date
     current = now_utc or datetime.now(timezone.utc)
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
-    local_today = (current.astimezone(timezone.utc) + _offset_from_start_time(start_time)).date()
+    if timezone_offset_minutes is not None:
+        offset = timedelta(minutes=timezone_offset_minutes)
+    elif start_time is not None:
+        offset = _offset_from_start_time(start_time)
+    else:
+        raise ValueError("timezone_offset_minutes is required when start_time is unannounced")
+    local_today = (current.astimezone(timezone.utc) + offset).date()
     if normalized_live_date < local_today:
         return "past"
     if normalized_live_date > local_today:
@@ -47,7 +55,8 @@ def build_public_live_status(
     *,
     event_status: str,
     live_date: date | str,
-    start_time: str | time,
+    start_time: str | time | None = None,
+    timezone_offset_minutes: int | None = None,
     was_rescheduled: bool,
     now_utc: datetime | None = None,
 ) -> dict[str, EventStatus | DatePhase | bool]:
@@ -56,6 +65,11 @@ def build_public_live_status(
         raise ValueError(f"unknown event_status: {event_status}")
     return {
         "event_status": cast(EventStatus, event_status),
-        "date_phase": derive_date_phase(live_date, start_time, now_utc),
+        "date_phase": derive_date_phase(
+            live_date,
+            start_time=start_time,
+            timezone_offset_minutes=timezone_offset_minutes,
+            now_utc=now_utc,
+        ),
         "was_rescheduled": was_rescheduled,
     }
