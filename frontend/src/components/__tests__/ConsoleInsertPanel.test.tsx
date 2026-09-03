@@ -452,15 +452,21 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalled());
 
+    const scheduleStatusTable = screen.getByRole("table", { name: "排期资料公布状态" });
+    expect(within(scheduleStatusTable).getByLabelText("场馆公布状态")).toBeInTheDocument();
+    expect(within(scheduleStatusTable).getByLabelText("开场公布状态")).toBeInTheDocument();
+    expect(within(scheduleStatusTable).getByLabelText("开演公布状态")).toBeInTheDocument();
+    expect(within(scheduleStatusTable).queryByRole("combobox")).not.toBeInTheDocument();
+
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Schedule TBA");
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/tba");
-    await user.selectOptions(screen.getByLabelText("场馆公布状态"), "unannounced");
-    await user.selectOptions(screen.getByLabelText("开场公布状态"), "unannounced");
+    await user.click(screen.getByLabelText("场馆公布状态"));
+    await user.click(screen.getByLabelText("开场公布状态"));
     expect(screen.getByLabelText("opening_time")).toBeDisabled();
-    await user.selectOptions(screen.getByLabelText("开场公布状态"), "announced");
+    await user.click(screen.getByLabelText("开场公布状态"));
     expect(screen.getByLabelText("opening_time")).toHaveValue("18:00");
-    await user.selectOptions(screen.getByLabelText("开场公布状态"), "unannounced");
-    await user.selectOptions(screen.getByLabelText("开演公布状态"), "unannounced");
+    await user.click(screen.getByLabelText("开场公布状态"));
+    await user.click(screen.getByLabelText("开演公布状态"));
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
@@ -470,8 +476,8 @@ describe("ConsoleInsertPanel", () => {
     ));
   });
 
-  // 测试点：Live 管理顶部常驻显示三类计数，并为今日缺失活动给出可操作的明确警告。
-  test("待补排期资料面板显示计数和今日警告", async () => {
+  // 测试点：待补面板只在 Live 管理显示，并为今日缺失活动给出计数和明确警告。
+  test("待补排期资料面板只在Live管理显示", async () => {
     apiMocks.getConsoleLiveCandidates.mockResolvedValue({
       items: [{
         live_id: 72,
@@ -491,7 +497,14 @@ describe("ConsoleInsertPanel", () => {
       attention_counts: { upcoming: 3, today: 1, overdue: 2 },
     });
 
-    render(<ConsoleInsertPanel initialMode="live_create" />);
+    const { unmount } = render(<ConsoleInsertPanel initialMode="live_create" />);
+
+    expect(screen.queryByRole("region", { name: "待补排期资料" })).not.toBeInTheDocument();
+    await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalled());
+    expect(apiMocks.getConsoleLiveCandidates).not.toHaveBeenCalled();
+
+    unmount();
+    render(<ConsoleInsertPanel initialMode="live_edit" />);
 
     expect(await screen.findByText("Today TBA Live")).toBeInTheDocument();
     expect(screen.getByText("今日活动仍有资料未公布")).toBeInTheDocument();
