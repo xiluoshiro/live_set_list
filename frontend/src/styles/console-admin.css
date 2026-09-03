@@ -97,6 +97,48 @@
   margin-bottom: 12px;
 }
 
+.live-schedule-attention-trigger {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.live-schedule-attention-trigger[data-state="open"] {
+  margin-bottom: 12px;
+}
+
+.live-schedule-attention-trigger-copy {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.live-schedule-attention-trigger-copy > strong {
+  color: var(--text-heading);
+  font-size: 14px;
+}
+
+.live-schedule-attention-trigger-copy > span,
+.live-schedule-attention-toggle {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.live-schedule-attention-toggle {
+  flex: 0 0 auto;
+}
+
 .live-schedule-attention-counts button {
   display: flex;
   align-items: center;
