@@ -66,9 +66,9 @@ def build_live_where(filters: LiveListFilters) -> tuple[str, list[object]]:
                 l.live_title ILIKE %s ESCAPE '\\'
                 OR EXISTS (
                     SELECT 1
-                    FROM venue_list filter_venue
-                    WHERE filter_venue.id = l.venue_id
-                      AND filter_venue.venue ILIKE %s ESCAPE '\\'
+                    FROM venue_name_versions filter_venue
+                    WHERE filter_venue.venue_id = l.venue_id
+                      AND filter_venue.venue_name ILIKE %s ESCAPE '\\'
                 )
                 OR EXISTS (
                     SELECT 1

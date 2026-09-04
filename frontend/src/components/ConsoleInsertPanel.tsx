@@ -52,6 +52,7 @@ import { BandAdminSection } from "./console/BandAdminSection";
 import { CompactConfirmationTable } from "./console/CompactConfirmationTable";
 import { PerformanceGroupAdminSection } from "./console/PerformanceGroupAdminSection";
 import { TourAdminSection } from "./console/TourAdminSection";
+import { VenueAdminSection } from "./console/VenueAdminSection";
 import {
   UpdateDiffTable,
   type UpdateChange,
@@ -95,6 +96,7 @@ type LiveInsertDraft = {
   start_time: string | null;
   timezone: string;
   venue_id: number | null;
+  venue_name_version_id?: number | null;
   default_band_ids: number[];
   event_attendees: ConsoleEventAttendee[];
   event_status: EventStatus;
@@ -187,7 +189,10 @@ function toBandOption(item: ConsoleBandItem): BandOption {
 function toVenueOption(item: ConsoleVenueItem): VenueOption {
   return {
     venue_id: item.venue_id,
-    venue_name: item.venue_name,
+    venue_name: item.match_kind === "historical" && item.matched_name
+      ? `${item.matched_name}（现名：${item.venue_name}）`
+      : item.venue_name,
+    venue_name_version_id: item.matched_name_version_id ?? item.venue_name_version_id,
   };
 }
 
@@ -742,6 +747,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     start_time: startTimeAnnounced ? startTime : null,
     timezone,
     venue_id: venueAnnounced ? selectedVenueId : null,
+    ...(venueAnnounced && venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_name_version_id
+      ? { venue_name_version_id: venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_name_version_id }
+      : {}),
     default_band_ids: defaultBandIds,
     event_attendees: liveType === "event"
       ? defaultBandIds.flatMap((bandId) => {
@@ -771,6 +779,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     openingTimeAnnounced,
     originalLivePayload,
     selectedVenueId,
+    venues,
     startTime,
     startTimeAnnounced,
     statusNote,
@@ -784,6 +793,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     "start_time",
     "timezone",
     "venue_id",
+    "venue_name_version_id",
   ]);
   const hasScheduleChanges = editingLiveId !== null && originalLivePayload !== null
     && [...scheduleFields].some((field) => (
@@ -796,7 +806,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   ));
   const isAnnouncementOnlyChange = changedScheduleFields.length > 0
     && changedScheduleFields.every((field) => (
-      (field === "venue_id" || field === "opening_time" || field === "start_time")
+      (field === "venue_id" || field === "venue_name_version_id" || field === "opening_time" || field === "start_time")
       && originalLivePayload?.[field] === null
       && currentLivePayload[field] !== null
     ));
@@ -1430,6 +1440,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         start_time: getClockValue(item.start_time),
         timezone: item.timezone,
         venue_id: item.venue_id,
+        venue_name_version_id: item.venue_name_version_id,
         default_band_ids: item.default_band_ids,
         event_attendees: item.event_attendees.map((attendee) => ({
           band_id: attendee.band_id,
@@ -1440,9 +1451,14 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         status_note: item.status_note,
       });
       if (item.venue_id !== null && item.venue_name !== null) {
-        setVenues((current) => current.some((venue) => venue.venue_id === item.venue_id)
-          ? current
-          : sortById([...current, { venue_id: item.venue_id as number, venue_name: item.venue_name as string }], (venue) => venue.venue_id));
+        setVenues((current) => sortById([
+          ...current.filter((venue) => venue.venue_id !== item.venue_id),
+          {
+            venue_id: item.venue_id as number,
+            venue_name: item.venue_name as string,
+            venue_name_version_id: item.venue_name_version_id,
+          },
+        ], (venue) => venue.venue_id));
       }
       setEditingLiveId(item.live_id);
       setOriginalLivePayload(payload);
@@ -2554,6 +2570,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         start_time: response.item.start_time,
         timezone: payload.timezone,
         venue_id: response.item.venue_id,
+        venue_name_version_id: response.item.venue_name_version_id,
         default_band_ids: response.item.default_band_ids ?? [],
         event_attendees: response.item.event_attendees ?? [],
         event_status: response.item.event_status ?? "scheduled",
@@ -2568,6 +2585,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         start_time: getClockValue(response.item.start_time),
         timezone: response.item.opening_time?.match(/[+-]\d{2}:\d{2}$/)?.[0] ?? payload.timezone,
         venue_id: response.item.venue_id,
+        venue_name_version_id: response.item.venue_name_version_id,
         default_band_ids: response.item.default_band_ids ?? [],
         event_attendees: (response.item.event_attendees ?? []).map((attendee) => ({
           band_id: attendee.band_id,
@@ -3113,6 +3131,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           { value: "setlist_edit", label: "Setlist管理" },
           { value: "song", label: "歌曲管理" },
           { value: "band", label: "乐队管理" },
+          { value: "venue", label: "场地管理" },
           { value: "tour", label: "巡演管理" },
           { value: "performance_group", label: "活动组管理" },
         ]}
@@ -3315,6 +3334,16 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onBandsChanged={async () => {
             const response = await getConsoleBands(undefined, 100);
             setBands(sortById(response.items.map(toBandOption), (band) => band.band_id));
+          }}
+        />
+      )}
+
+      {mode === "venue" && (
+        <VenueAdminSection
+          onMessage={setMessage}
+          onVenuesChanged={async () => {
+            const response = await getConsoleVenues(undefined, 100);
+            setVenues(sortById(response.items.map(toVenueOption), (venue) => venue.venue_id));
           }}
         />
       )}

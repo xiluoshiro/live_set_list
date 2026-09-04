@@ -89,17 +89,34 @@ class ConsoleBandListResponse(BaseModel):
     items: list[ConsoleBandItem] = Field(..., description="Bands available for console lookup")
 
 
+VenueKind = Literal["physical", "online", "undisclosed"]
+
+
 class ConsoleVenueItem(BaseModel):
     venue_id: int = Field(..., description="venue_list.id")
     venue_name: str = Field(..., description="Venue display name")
+    venue_name_version_id: int | None = None
+    venue_kind: VenueKind = "physical"
+    matched_name: str | None = None
+    matched_name_version_id: int | None = None
+    match_kind: Literal["current", "historical"] = "current"
+    live_count: int = Field(default=0, ge=0)
+    first_live_date: date | None = None
+    last_live_date: date | None = None
+    merged_into_venue_id: int | None = None
 
 
 class ConsoleVenueListResponse(BaseModel):
     items: list[ConsoleVenueItem] = Field(..., description="Venues available for console lookup")
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1)
+    total: int = Field(default=0, ge=0)
+    total_pages: int = Field(default=1, ge=1)
 
 
 class ConsoleVenueCreateRequest(BaseModel):
     venue_name: str = Field(..., min_length=1, max_length=255, description="Venue display name")
+    venue_kind: VenueKind = "physical"
 
     @field_validator("venue_name")
     @classmethod
@@ -111,6 +128,82 @@ class ConsoleVenueCreateRequest(BaseModel):
 class ConsoleVenueMutationResponse(BaseModel):
     ok: bool = Field(..., description="Whether the write succeeded")
     item: ConsoleVenueItem = Field(..., description="Created venue payload")
+
+
+class ConsoleVenueUpdateRequest(BaseModel):
+    venue_kind: VenueKind
+
+
+class ConsoleVenueNameVersion(BaseModel):
+    venue_name_version_id: int
+    venue_name: str
+    valid_from: date | None = None
+    valid_to: date | None = None
+    live_count: int = Field(default=0, ge=0)
+    schedule_history_count: int = Field(default=0, ge=0)
+    is_current: bool
+
+
+class ConsoleVenueDetailResponse(BaseModel):
+    venue_id: int
+    venue_name: str
+    venue_name_version_id: int
+    venue_kind: VenueKind
+    merged_into_venue_id: int | None = None
+    live_count: int = Field(default=0, ge=0)
+    first_live_date: date | None = None
+    last_live_date: date | None = None
+    name_versions: list[ConsoleVenueNameVersion]
+
+
+class ConsoleVenueNameVersionCreateRequest(BaseModel):
+    venue_name: str = Field(..., min_length=1, max_length=255)
+    valid_from: date
+
+    @field_validator("venue_name")
+    @classmethod
+    def validate_venue_name(cls, value: str) -> str:
+        return _strip_required_text(value)
+
+
+class ConsoleVenueNameVersionUpdateRequest(BaseModel):
+    venue_name: str = Field(..., min_length=1, max_length=255)
+
+    @field_validator("venue_name")
+    @classmethod
+    def validate_venue_name(cls, value: str) -> str:
+        return _strip_required_text(value)
+
+
+class ConsoleVenueMergeVersionMapping(BaseModel):
+    source_version_id: int = Field(..., ge=1)
+    target_version_id: int = Field(..., ge=1)
+
+
+class ConsoleVenueMergeRequest(BaseModel):
+    target_venue_id: int = Field(..., ge=1)
+    version_mappings: list[ConsoleVenueMergeVersionMapping] = Field(default_factory=list)
+
+
+class ConsoleVenueMergePreviewResponse(BaseModel):
+    source: ConsoleVenueDetailResponse
+    target: ConsoleVenueDetailResponse
+    required_source_version_ids: list[int]
+
+
+class ConsoleVenueLiveItem(BaseModel):
+    live_id: int
+    live_date: date
+    live_title: str
+    venue_name: str
+
+
+class ConsoleVenueLivesResponse(BaseModel):
+    items: list[ConsoleVenueLiveItem]
+    page: int = Field(..., ge=1)
+    page_size: int = Field(..., ge=1)
+    total: int = Field(..., ge=0)
+    total_pages: int = Field(..., ge=1)
 
 
 class ConsoleEventAttendeeRequest(BaseModel):
@@ -157,6 +250,11 @@ class ConsoleLiveBaseRequest(BaseModel):
     start_time: str | None = Field(default=None, min_length=5, max_length=8, description="Start time, or null when unannounced")
     timezone: str = Field(..., min_length=6, max_length=6, description="UTC offset, e.g. +09:00")
     venue_id: int | None = Field(default=None, ge=1, description="venue_list.id, or null when unannounced")
+    venue_name_version_id: int | None = Field(
+        default=None,
+        ge=1,
+        description="venue_name_versions.id; omitted clients temporarily resolve the current version",
+    )
     live_type: str = Field(
         ...,
         min_length=1,
@@ -250,6 +348,7 @@ class ConsoleLiveItem(BaseModel):
     opening_time: str | None = Field(default=None, description="Opening time with timezone")
     start_time: str | None = Field(default=None, description="Start time with timezone")
     venue_id: int | None = Field(default=None, description="venue_list.id")
+    venue_name_version_id: int | None = Field(default=None, description="venue_name_versions.id")
     default_band_ids: list[int] = Field(..., description="Normalized fallback band_attrs IDs")
     event_attendees: list[ConsoleEventAttendee] = Field(
         default_factory=list,

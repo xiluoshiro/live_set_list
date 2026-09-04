@@ -4,10 +4,12 @@ from app.routers.console_bands import router as console_bands_router
 from app.routers.console_performance_groups import router as console_performance_groups_router
 from app.routers.console_read import router as console_read_router
 from app.routers.console_tours import router as console_tours_router
+from app.routers.console_venues import router as console_venues_router
 from app.routers.console_write import router as console_write_router
 
 router = APIRouter(prefix="/api/console", tags=["console"])
 router.include_router(console_bands_router)
+router.include_router(console_venues_router)
 router.include_router(console_read_router)
 router.include_router(console_write_router)
 router.include_router(console_tours_router)

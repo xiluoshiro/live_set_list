@@ -211,6 +211,7 @@ export type LiveScheduleHistoryItem = {
   previous_opening_time: string | null;
   previous_start_time: string | null;
   previous_venue_id: number | null;
+  previous_venue_name_version_id?: number | null;
   previous_venue: string | null;
   changed_at: string;
   note: string | null;
@@ -554,15 +555,50 @@ export type ConsoleBandTransitionLiveCandidate = {
 export type ConsoleVenueItem = {
   venue_id: number;
   venue_name: string;
+  venue_name_version_id?: number | null;
+  venue_kind?: "physical" | "online" | "undisclosed";
+  matched_name?: string | null;
+  matched_name_version_id?: number | null;
+  match_kind?: "current" | "historical";
+  live_count?: number;
+  first_live_date?: string | null;
+  last_live_date?: string | null;
+  merged_into_venue_id?: number | null;
 };
 
 export type ConsoleVenueListResponse = {
   items: ConsoleVenueItem[];
+  page?: number;
+  page_size?: number;
+  total?: number;
+  total_pages?: number;
 };
 
 export type ConsoleVenueMutationResponse = {
   ok: boolean;
   item: ConsoleVenueItem;
+};
+
+export type ConsoleVenueNameVersion = {
+  venue_name_version_id: number;
+  venue_name: string;
+  valid_from: string | null;
+  valid_to: string | null;
+  live_count: number;
+  schedule_history_count: number;
+  is_current: boolean;
+};
+
+export type ConsoleVenueDetail = {
+  venue_id: number;
+  venue_name: string;
+  venue_name_version_id: number;
+  venue_kind: "physical" | "online" | "undisclosed";
+  merged_into_venue_id: number | null;
+  live_count: number;
+  first_live_date: string | null;
+  last_live_date: string | null;
+  name_versions: ConsoleVenueNameVersion[];
 };
 
 export type ConsoleLiveUpsertPayload = {
@@ -574,6 +610,7 @@ export type ConsoleLiveUpsertPayload = {
   start_time: string | null;
   timezone: string;
   venue_id: number | null;
+  venue_name_version_id?: number | null;
   default_band_ids: number[];
   event_attendees: Array<{ band_id: number; members: string[] }>;
   /** Read-only draft context used for comparison/display; API serializers remove it. */
@@ -605,6 +642,7 @@ export type ConsoleLiveMutationItem = {
   opening_time: string | null;
   start_time: string | null;
   venue_id: number | null;
+  venue_name_version_id?: number | null;
   default_band_ids: number[];
   event_attendees: ConsoleEventAttendee[];
   band_lineup_contexts?: ConsoleLiveBandLineupContext[];
@@ -833,6 +871,11 @@ type RequestKind =
   | "console_band_transition_live_candidates"
   | "console_venues"
   | "console_venue_create"
+  | "console_venue_page"
+  | "console_venue_detail"
+  | "console_venue_update"
+  | "console_venue_name_create"
+  | "console_venue_name_update"
   | "console_live_candidates"
   | "console_live_detail"
   | "console_live_create"
@@ -1348,6 +1391,28 @@ export async function getConsoleVenues(q?: string, limit = 20): Promise<ConsoleV
   return expectJsonResponse<ConsoleVenueListResponse>(response);
 }
 
+export async function getConsoleVenuePage(
+  q = "",
+  page = 1,
+  limit = 20,
+  includeMerged = false,
+): Promise<ConsoleVenueListResponse> {
+  const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (q.trim()) query.set("q", q.trim());
+  if (includeMerged) query.set("include_merged", "true");
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/venues?${query.toString()}`, undefined, {
+    requestKind: "console_venue_page",
+  });
+  return expectJsonResponse<ConsoleVenueListResponse>(response);
+}
+
+export async function getConsoleVenue(venueId: number): Promise<ConsoleVenueDetail> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/venues/${venueId}`, undefined, {
+    requestKind: "console_venue_detail",
+  });
+  return expectJsonResponse<ConsoleVenueDetail>(response);
+}
+
 export async function getConsoleTourLiveCandidates(
   q?: string,
   page = 1,
@@ -1550,13 +1615,14 @@ export async function createConsoleSongsBatch(
 export async function createConsoleVenue(
   venueName: string,
   csrfToken: string,
+  venueKind: ConsoleVenueDetail["venue_kind"] = "physical",
 ): Promise<ConsoleVenueMutationResponse> {
   const response = await fetchWithTimeout(
     `${BASE_URL}/api/console/venues`,
     {
       method: "POST",
       headers: jsonHeaders(csrfToken),
-      body: JSON.stringify({ venue_name: venueName }),
+      body: JSON.stringify({ venue_name: venueName, venue_kind: venueKind }),
     },
     {
       requestKind: "console_venue_create",
@@ -1564,6 +1630,47 @@ export async function createConsoleVenue(
     },
   );
   return expectJsonResponse<ConsoleVenueMutationResponse>(response);
+}
+
+export async function updateConsoleVenueKind(
+  venueId: number,
+  venueKind: ConsoleVenueDetail["venue_kind"],
+  csrfToken: string,
+): Promise<ConsoleVenueDetail> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/venues/${venueId}`, {
+    method: "PATCH",
+    headers: jsonHeaders(csrfToken),
+    body: JSON.stringify({ venue_kind: venueKind }),
+  }, { requestKind: "console_venue_update", method: "PATCH" });
+  return expectJsonResponse<ConsoleVenueDetail>(response);
+}
+
+export async function createConsoleVenueNameVersion(
+  venueId: number,
+  venueName: string,
+  validFrom: string,
+  csrfToken: string,
+): Promise<ConsoleVenueDetail> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/venues/${venueId}/name-versions`, {
+    method: "POST",
+    headers: jsonHeaders(csrfToken),
+    body: JSON.stringify({ venue_name: venueName, valid_from: validFrom }),
+  }, { requestKind: "console_venue_name_create", method: "POST" });
+  return expectJsonResponse<ConsoleVenueDetail>(response);
+}
+
+export async function updateConsoleVenueNameVersion(
+  venueId: number,
+  versionId: number,
+  venueName: string,
+  csrfToken: string,
+): Promise<ConsoleVenueDetail> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/venues/${venueId}/name-versions/${versionId}`, {
+    method: "PATCH",
+    headers: jsonHeaders(csrfToken),
+    body: JSON.stringify({ venue_name: venueName }),
+  }, { requestKind: "console_venue_name_update", method: "PATCH" });
+  return expectJsonResponse<ConsoleVenueDetail>(response);
 }
 
 export async function createConsoleLive(

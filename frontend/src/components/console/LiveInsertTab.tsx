@@ -303,7 +303,7 @@ export function LiveInsertTab({
               <p className="console-admin-hint">在下方任一曲目选择乐队后，这里会出现阵容设置。</p>
             ) : (
               <div className="console-table-wrap">
-                <table className="console-admin-table band-history-table" aria-label="本场乐队阵容">
+                <table className="console-admin-table entity-history-table" aria-label="本场乐队阵容">
                   <thead>
                     <tr><th>乐队</th><th>固化名称</th><th>基础阵容</th><th>交接后继阵容</th></tr>
                   </thead>

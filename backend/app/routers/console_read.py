@@ -18,7 +18,6 @@ from app.schemas.console import (
     ConsoleLiveEditResponse,
     ConsoleSongListResponse,
     ConsoleLiveSetlistEditResponse,
-    ConsoleVenueListResponse,
 )
 from app.song_lookup import (
     SONG_LOOKUP_SQL_FROM_CHARS,
@@ -257,11 +256,14 @@ def list_editable_lives(
                 )
                 cur.execute(
                     f"""
-                    SELECT l.id, l.live_date, l.live_title, l.live_type, v.venue,
+                    SELECT l.id, l.live_date, l.live_title, l.live_type,
+                           COALESCE(venue_version.venue_name, v.venue),
                            l.start_time, l.event_status, l.opening_time, l.venue_id,
                            l.timezone_offset_minutes
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
+                    LEFT JOIN venue_name_versions venue_version
+                      ON venue_version.id = l.venue_name_version_id
                     {where_sql}
                     ORDER BY {attention_order_sql}
                     LIMIT %s OFFSET %s
@@ -313,8 +315,6 @@ def list_editable_lives(
             "overdue": int(attention_row[2]),
         },
     }
-
-
 @router.get(
     "/lives/{live_id}",
     response_model=ConsoleLiveEditResponse,
@@ -348,7 +348,8 @@ def get_editable_live(
                         l.opening_time::text,
                         l.start_time::text,
                         l.venue_id,
-                        v.venue,
+                        l.venue_name_version_id,
+                        COALESCE(venue_version.venue_name, v.venue),
                         l.default_band_ids,
                         {CONSOLE_EVENT_ATTENDEES_SQL} AS event_attendees,
                         l.event_status,
@@ -362,7 +363,8 @@ def get_editable_live(
                                         'previous_opening_time', history.previous_opening_time::text,
                                         'previous_start_time', history.previous_start_time::text,
                                         'previous_venue_id', history.previous_venue_id,
-                                        'previous_venue', history_venue.venue,
+                                        'previous_venue_name_version_id', history.previous_venue_name_version_id,
+                                        'previous_venue', COALESCE(history_version.venue_name, history_venue.venue),
                                         'changed_at', history.changed_at,
                                         'note', history.note
                                     )
@@ -370,6 +372,8 @@ def get_editable_live(
                                 )
                                 FROM live_schedule_history history
                                 LEFT JOIN venue_list history_venue ON history_venue.id = history.previous_venue_id
+                                LEFT JOIN venue_name_versions history_version
+                                  ON history_version.id = history.previous_venue_name_version_id
                                 WHERE history.live_id = l.id
                             ),
                             '[]'::jsonb
@@ -397,6 +401,8 @@ def get_editable_live(
                         l.timezone_offset_minutes
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
+                    LEFT JOIN venue_name_versions venue_version
+                      ON venue_version.id = l.venue_name_version_id
                     WHERE l.id = %s
                     """,
                     (live_id,),
@@ -417,7 +423,7 @@ def get_editable_live(
         raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
     opening_time = _normalize_timetz_text(row[5])
     start_time = _normalize_timetz_text(row[6])
-    timezone = _format_timezone_offset(int(row[16]))
+    timezone = _format_timezone_offset(int(row[17]))
     return {
         "item": {
             "live_id": int(row[0]),
@@ -429,21 +435,22 @@ def get_editable_live(
             "start_time": start_time,
             "timezone": timezone,
             "venue_id": int(row[7]) if row[7] is not None else None,
-            "venue_name": str(row[8]) if row[8] is not None else None,
-            "default_band_ids": list(row[9] or []),
-            "event_attendees": _normalize_console_event_attendees(row[10]),
-            "event_status": str(row[11]) if len(row) > 11 else "scheduled",
-            "status_note": row[12] if len(row) > 12 else None,
+            "venue_name_version_id": int(row[8]) if row[8] is not None else None,
+            "venue_name": str(row[9]) if row[9] is not None else None,
+            "default_band_ids": list(row[10] or []),
+            "event_attendees": _normalize_console_event_attendees(row[11]),
+            "event_status": str(row[12]),
+            "status_note": row[13],
             "date_phase": build_public_live_status(
-                event_status=str(row[11]) if len(row) > 11 else "scheduled",
+                event_status=str(row[12]),
                 live_date=row[1],
                 start_time=row[6],
-                timezone_offset_minutes=int(row[16]),
-                was_rescheduled=bool(row[13]) if len(row) > 13 else False,
+                timezone_offset_minutes=int(row[17]),
+                was_rescheduled=bool(row[14]),
             )["date_phase"],
-            "schedule_history": list(row[13] or []) if len(row) > 13 else [],
-            "has_setlist": bool(row[14]) if len(row) > 14 else False,
-            "band_lineup_contexts": list(row[15] or []) if len(row) > 15 else [],
+            "schedule_history": list(row[14] or []),
+            "has_setlist": bool(row[15]),
+            "band_lineup_contexts": list(row[16] or []),
         }
     }
 
@@ -575,7 +582,6 @@ def get_editable_live_setlist(
             for row in rows
         ],
     }
-
 
 @router.get(
     "/songs",
@@ -850,71 +856,4 @@ def list_bands(
         ],
     }
 
-
-@router.get(
-    "/venues",
-    response_model=ConsoleVenueListResponse,
-    summary="查询场地候选",
-    description="`editor+` 用户查询控制台录入时可选择的场地。`q` 为空时返回默认候选列表。",
-    responses={
-        401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
-        403: {"model": AuthErrorResponse, "description": "缺少权限"},
-        422: {"model": ValidationErrorResponse, "description": "查询参数验证失败"},
-        500: {"model": ErrorResponse, "description": "数据库一般错误"},
-        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
-    },
-)
-def list_venues(
-    q: str | None = Query(default=None, max_length=255, description="Venue keyword"),
-    limit: int = Query(default=20, ge=1, le=100, description="Maximum number of venues to return"),
-    _: Any = Depends(require_role("editor")),
-):
-    """Return venue_list rows for the console venue selector without mutating any data."""
-    query_text = _normalize_lookup_query(q)
-
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                if query_text:
-                    cur.execute(
-                        """
-                        SELECT id, venue
-                        FROM venue_list
-                        WHERE venue ILIKE %s ESCAPE '\\'
-                        ORDER BY venue, id
-                        LIMIT %s
-                        """,
-                        (_build_lookup_pattern(query_text), limit),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        SELECT id, venue
-                        FROM venue_list
-                        ORDER BY venue, id
-                        LIMIT %s
-                        """,
-                        (limit,),
-                    )
-                rows = cur.fetchall()
-    except QueryCanceled as exc:
-        logger.exception("list_venues timeout q=%s limit=%s", query_text, limit)
-        raise HTTPException(status_code=504, detail="Database query timeout") from exc
-    except OperationalError as exc:
-        logger.exception("list_venues operational error q=%s limit=%s", query_text, limit)
-        if "timeout expired" in str(exc).lower():
-            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-    except Error as exc:
-        logger.exception("list_venues failed q=%s limit=%s", query_text, limit)
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-
-    return {
-        "items": [
-            {
-                "venue_id": int(row[0]),
-                "venue_name": row[1],
-            }
-            for row in rows
-        ]
-    }
+# Venue routes live in console_venues.py so their management lifecycle stays isolated.

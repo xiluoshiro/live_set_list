@@ -136,8 +136,21 @@ def test_console_lookup_endpoints_return_seeded_options(
             {
                 "venue_id": 2,
                 "venue_name": "Zepp Shinjuku",
+                "venue_name_version_id": 2,
+                "venue_kind": "physical",
+                "matched_name": "Zepp Shinjuku",
+                "matched_name_version_id": 2,
+                "match_kind": "current",
+                "live_count": 1,
+                "first_live_date": "2026-04-05",
+                "last_live_date": "2026-04-05",
+                "merged_into_venue_id": None,
             }
-        ]
+        ],
+        "page": 1,
+        "page_size": 10,
+        "total": 1,
+        "total_pages": 1,
     }
 
 
@@ -609,7 +622,7 @@ def test_console_create_song_requires_editor_role_and_csrf(
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
 
 
-# 测试点：新增 venue 接口应写入 venue_list 的 NOT NULL 列 venue，并追加 venue_create 审计。
+# 测试点：新增 Venue 应原子写入稳定实体、首个名称版本与 venue_create 审计。
 def test_console_create_venue_persists_row_and_audit_log(
     integration_test_client,
     integration_admin_connection,
@@ -637,17 +650,72 @@ def test_console_create_venue_persists_row_and_audit_log(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "SELECT id, venue FROM venue_list WHERE id = %s",
+            """
+            SELECT venue.id, venue.venue, venue.venue_kind, version.id, version.venue_name
+            FROM venue_list venue
+            JOIN venue_name_versions version ON version.venue_id = venue.id
+            WHERE venue.id = %s AND version.valid_to IS NULL
+            """,
             (venue_id,),
         )
         row = cursor.fetchone()
 
-    assert row == (venue_id, "Console Created Venue")
+    assert row == (venue_id, "Console Created Venue", "physical", payload["item"]["venue_name_version_id"], "Console Created Venue")
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "venue_create",
         str(venue_id),
-        {"venue_name": "Console Created Venue"},
+        {
+            "venue_name": "Console Created Venue",
+            "venue_kind": "physical",
+            "venue_name_version_id": payload["item"]["venue_name_version_id"],
+        },
     )
+
+
+# 测试点：正式更名应保留旧 Live 的名称版本，同时让旧名称搜索命中同一个 Venue。
+def test_console_venue_rename_preserves_live_name_and_searches_history(
+    integration_test_client,
+    integration_admin_connection,
+):
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client,
+        username="editor_tester",
+        password="editor-test-pass",
+    )
+
+    response = integration_test_client.post(
+        "/api/console/venues/1/name-versions",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"venue_name": "Shibuya Stage X", "valid_from": "2026-09-01"},
+    )
+
+    assert response.status_code == 201
+    detail = response.json()
+    assert detail["venue_name"] == "Shibuya Stage X"
+    assert [version["venue_name"] for version in detail["name_versions"]] == [
+        "Shibuya WWW X",
+        "Shibuya Stage X",
+    ]
+    search = integration_test_client.get("/api/console/venues?q=Shibuya%20WWW%20X&limit=20")
+    assert search.status_code == 200
+    item = search.json()["items"][0]
+    assert item["venue_id"] == 1
+    assert item["venue_name"] == "Shibuya Stage X"
+    assert item["matched_name"] == "Shibuya WWW X"
+    assert item["match_kind"] == "historical"
+
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT version.venue_name
+            FROM live_attrs live
+            JOIN venue_name_versions version ON version.id = live.venue_name_version_id
+            WHERE live.id = 1
+            """
+        )
+        row = cursor.fetchone()
+    assert row == ("Shibuya WWW X",)
 
 
 # 测试点：新增 Live 和追加 setlist 连到测试库时缺少 CSRF 应被拒绝，并且不会落库。
@@ -709,7 +777,7 @@ def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
 
 
-# 测试点：新增 Live 接口应校验、去重并持久化 default_band_ids 与 live_type。
+# 测试点：新增 Live 应校验并持久化 Venue 名称版本、default_band_ids 与 live_type。
 def test_console_create_live_persists_live_row(
     integration_test_client,
     integration_admin_connection,
@@ -741,6 +809,13 @@ def test_console_create_live_persists_live_row(
             }
             for row in cursor.fetchall()
         ]
+        cursor.execute(
+            "SELECT id FROM venue_name_versions WHERE venue_id = %s AND valid_to IS NULL",
+            (2,),
+        )
+        venue_version_row = cursor.fetchone()
+        assert venue_version_row is not None
+        expected_venue_name_version_id = int(venue_version_row[0])
 
     response = integration_test_client.post(
         "/api/console/lives",
@@ -772,6 +847,7 @@ def test_console_create_live_persists_live_row(
             "opening_time": "18:00:00+09:00",
             "start_time": "19:00:30+09:00",
             "venue_id": 2,
+            "venue_name_version_id": expected_venue_name_version_id,
             "default_band_ids": [1, 3],
             "event_attendees": [],
             "band_lineup_contexts": expected_contexts,
@@ -793,9 +869,10 @@ def test_console_create_live_persists_live_row(
                 is_internal,
                 url,
                 opening_time::text,
-                start_time::text,
-                venue_id,
-                default_band_ids
+                    start_time::text,
+                    venue_id,
+                    venue_name_version_id,
+                    default_band_ids
             FROM live_attrs
             WHERE id = %s
             """,
@@ -811,16 +888,18 @@ def test_console_create_live_persists_live_row(
         False,
         "https://example.com/lives/console-created",
         "18:00:00+09",
-        "19:00:30+09",
-        2,
-        [1, 3],
+            "19:00:30+09",
+            2,
+            expected_venue_name_version_id,
+            [1, 3],
     )
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "live_create",
         str(live_id),
-        {
-            "venue_id": 2,
-            "opening_time": "18:00:00+09:00",
+            {
+                "venue_id": 2,
+                "venue_name_version_id": expected_venue_name_version_id,
+                "opening_time": "18:00:00+09:00",
             "start_time": "19:00:30+09:00",
             "live_type": "oneman",
             "default_band_ids": [1, 3],

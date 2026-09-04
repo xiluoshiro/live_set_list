@@ -36,8 +36,6 @@ from app.schemas.console import (
     ConsoleSongMutationResponse,
     ConsoleSongUpdateRequest,
     ConsoleLiveSetlistReplaceResponse,
-    ConsoleVenueCreateRequest,
-    ConsoleVenueMutationResponse,
 )
 
 router = APIRouter()
@@ -166,11 +164,6 @@ def _validate_and_normalize_live_relations(
     existing_contexts: dict[int, PersistedLineupContext] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, list[str]], dict[int, PersistedLineupContext]]:
     """Validate Live foreign keys and normalize event attendance for create and update."""
-    if payload.venue_id is not None:
-        cur.execute("SELECT 1 FROM venue_list WHERE id = %s", (payload.venue_id,))
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail=f"Venue id {payload.venue_id} not found")
-
     band_members_by_id: dict[int, list[str]] = {}
     band_rows: list[Any] = []
     if payload.default_band_ids:
@@ -242,6 +235,45 @@ def _validate_and_normalize_live_relations(
             }
         )
     return normalized_event_attendees, persisted_event_attendees, resolved_contexts
+
+
+def _resolve_venue_name_version(cur: Any, payload: ConsoleLiveBaseRequest) -> int | None:
+    """Validate an explicit Venue name version or resolve the current version for old clients."""
+    if payload.venue_id is None:
+        if payload.venue_name_version_id is not None:
+            raise HTTPException(status_code=422, detail="venue_name_version_id requires venue_id")
+        return None
+    if payload.venue_name_version_id is None:
+        cur.execute(
+            """
+            SELECT version.id
+            FROM venue_list venue
+            JOIN venue_name_versions version
+              ON version.venue_id = venue.id
+             AND version.valid_to IS NULL
+            WHERE venue.id = %s
+              AND venue.merged_into_venue_id IS NULL
+            """,
+            (payload.venue_id,),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT version.id
+            FROM venue_list venue
+            JOIN venue_name_versions version ON version.venue_id = venue.id
+            WHERE venue.id = %s
+              AND version.id = %s
+              AND venue.merged_into_venue_id IS NULL
+            """,
+            (payload.venue_id, payload.venue_name_version_id),
+        )
+    row = cur.fetchone()
+    if row is None:
+        if payload.venue_name_version_id is None:
+            raise HTTPException(status_code=404, detail=f"Venue id {payload.venue_id} not found")
+        raise HTTPException(status_code=422, detail="Venue name version does not belong to venue_id")
+    return int(row[0])
 
 
 def _serialize_lineup_contexts(
@@ -344,6 +376,7 @@ def _build_live_mutation_item(
     start_time: str | None,
     normalized_event_attendees: list[dict[str, Any]],
     lineup_contexts: dict[int, PersistedLineupContext],
+    venue_name_version_id: int | None,
 ) -> dict[str, Any]:
     """Build the common normalized response item for Live create and update."""
     return {
@@ -355,6 +388,7 @@ def _build_live_mutation_item(
         "opening_time": opening_time,
         "start_time": start_time,
         "venue_id": payload.venue_id,
+        "venue_name_version_id": venue_name_version_id,
         "default_band_ids": payload.default_band_ids,
         "event_attendees": normalized_event_attendees,
         "band_lineup_contexts": _serialize_lineup_contexts(lineup_contexts),
@@ -608,73 +642,6 @@ def create_songs_batch(
 
 
 @router.post(
-    "/venues",
-    status_code=201,
-    response_model=ConsoleVenueMutationResponse,
-    summary="新增场地",
-    description="`editor+` 用户新增 venue_list 场地。当前表结构的 NOT NULL 列为 `venue`，`id` 由 sequence 自动生成。",
-    responses={
-        401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
-        403: {"model": AuthErrorResponse, "description": "缺少权限或 CSRF 校验失败"},
-        422: {"model": ValidationErrorResponse, "description": "请求体验证失败"},
-        500: {"model": ErrorResponse, "description": "数据库一般错误"},
-        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
-    },
-)
-def create_venue(
-    payload: ConsoleVenueCreateRequest,
-    request: Request,
-    _: Any = Depends(require_role("editor")),
-    context: AuthSessionContext = Depends(get_current_auth_context),
-):
-    """Insert one venue_list row from the console venue quick-insert control and audit it."""
-    assert_valid_csrf(request, context)
-
-    try:
-        with get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO venue_list (venue)
-                    VALUES (%s)
-                    RETURNING id
-                    """,
-                    (payload.venue_name,),
-                )
-                created_row = cur.fetchone()
-                assert created_row is not None
-                venue_id = int(created_row[0])
-
-                _write_console_audit_log(
-                    cur,
-                    user_id=context.user.id,
-                    action="venue_create",
-                    resource_type="venue",
-                    resource_id=str(venue_id),
-                    payload_json={"venue_name": payload.venue_name},
-                )
-    except QueryCanceled as exc:
-        logger.exception("create_venue timeout user_id=%s venue_name=%s", context.user.id, payload.venue_name)
-        raise HTTPException(status_code=504, detail="Database query timeout") from exc
-    except OperationalError as exc:
-        logger.exception("create_venue operational error user_id=%s venue_name=%s", context.user.id, payload.venue_name)
-        if "timeout expired" in str(exc).lower():
-            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-    except Error as exc:
-        logger.exception("create_venue failed user_id=%s venue_name=%s", context.user.id, payload.venue_name)
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-
-    return {
-        "ok": True,
-        "item": {
-            "venue_id": venue_id,
-            "venue_name": payload.venue_name,
-        },
-    }
-
-
-@router.post(
     "/lives",
     status_code=201,
     response_model=ConsoleLiveMutationResponse,
@@ -713,6 +680,7 @@ def create_live(
                     cur,
                     payload,
                 )
+                venue_name_version_id = _resolve_venue_name_version(cur, payload)
 
                 cur.execute(
                     """
@@ -725,13 +693,14 @@ def create_live(
                         opening_time,
                         start_time,
                         venue_id,
+                        venue_name_version_id,
                         default_band_ids,
                         event_attendees,
                         event_status,
                         status_note,
                         timezone_offset_minutes
                     )
-                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -742,6 +711,7 @@ def create_live(
                         opening_time,
                         start_time,
                         payload.venue_id,
+                        venue_name_version_id,
                         payload.default_band_ids,
                         Json(persisted_event_attendees),
                         payload.event_status,
@@ -757,6 +727,7 @@ def create_live(
 
                 audit_payload = {
                     "venue_id": payload.venue_id,
+                    "venue_name_version_id": venue_name_version_id,
                     "opening_time": opening_time,
                     "start_time": start_time,
                     "live_type": payload.live_type,
@@ -798,6 +769,7 @@ def create_live(
             start_time=start_time,
             normalized_event_attendees=normalized_event_attendees,
             lineup_contexts=lineup_contexts,
+            venue_name_version_id=venue_name_version_id,
         ),
     }
 
@@ -866,6 +838,7 @@ def update_live(
                             existing_contexts=existing_lineup_contexts,
                         )
                     )
+                venue_name_version_id = _resolve_venue_name_version(cur, payload)
                 existing["band_lineup_contexts"] = _serialize_lineup_contexts(existing_lineup_contexts)
                 target = {
                     "live_date": _format_date(payload.live_date),
@@ -875,6 +848,7 @@ def update_live(
                     "opening_time": opening_time,
                     "start_time": start_time,
                     "venue_id": payload.venue_id,
+                    "venue_name_version_id": venue_name_version_id,
                     "default_band_ids": payload.default_band_ids,
                     "event_attendees": persisted_event_attendees,
                     "band_lineup_contexts": _serialize_lineup_contexts(lineup_contexts),
@@ -887,10 +861,10 @@ def update_live(
                     for field, value in target.items()
                     if existing.get(field) != value
                 }
-                schedule_fields = {"live_date", "opening_time", "start_time", "venue_id", "timezone_offset_minutes"}
+                schedule_fields = {"live_date", "opening_time", "start_time", "venue_id", "venue_name_version_id", "timezone_offset_minutes"}
                 changed_schedule_fields = schedule_fields.intersection(changes)
                 announcement_only = bool(changed_schedule_fields) and all(
-                    field in {"opening_time", "start_time", "venue_id"}
+                    field in {"opening_time", "start_time", "venue_id", "venue_name_version_id"}
                     and existing.get(field) is None
                     and target[field] is not None
                     for field in changed_schedule_fields
@@ -916,10 +890,11 @@ def update_live(
                                 previous_opening_time,
                                 previous_start_time,
                                 previous_venue_id,
+                                previous_venue_name_version_id,
                                 changed_by,
                                 note
                             )
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                             """,
                             (
                                 live_id,
@@ -928,6 +903,7 @@ def update_live(
                                 existing["opening_time"],
                                 existing["start_time"],
                                 existing["venue_id"],
+                                existing.get("venue_name_version_id"),
                                 context.user.id,
                                 payload.schedule_change_note,
                             ),
@@ -943,6 +919,7 @@ def update_live(
                             opening_time = %s,
                             start_time = %s,
                             venue_id = %s,
+                            venue_name_version_id = %s,
                             default_band_ids = %s,
                             event_attendees = %s,
                             event_status = %s,
@@ -958,6 +935,7 @@ def update_live(
                             opening_time,
                             start_time,
                             payload.venue_id,
+                            venue_name_version_id,
                             payload.default_band_ids,
                             Json(persisted_event_attendees),
                             payload.event_status,
@@ -1002,6 +980,7 @@ def update_live(
             start_time=start_time,
             normalized_event_attendees=normalized_event_attendees,
             lineup_contexts=lineup_contexts,
+            venue_name_version_id=venue_name_version_id,
         ),
     }
 

@@ -200,7 +200,7 @@ def get_tour_live_candidates(
                         l.live_date,
                         l.start_time::text,
                         l.live_title,
-                        v.venue,
+                        COALESCE(venue_version.venue_name, v.venue),
                         NULL::integer AS tour_id,
                         NULL::text AS tour_title,
                         COALESCE((
@@ -210,6 +210,7 @@ def get_tour_live_candidates(
                         ), ARRAY[]::int[]) AS band_ids
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
+                    LEFT JOIN venue_name_versions venue_version ON venue_version.id = l.venue_name_version_id
                     {where_sql}
                     ORDER BY l.live_date DESC, l.start_time DESC NULLS LAST, l.id DESC
                     LIMIT %s OFFSET %s
@@ -272,7 +273,7 @@ def get_console_tour(
                         l.live_date,
                         to_jsonb(l) ->> 'start_time' AS start_time,
                         l.live_title,
-                        v.venue,
+                        COALESCE(venue_version.venue_name, v.venue),
                         tl.stop_label,
                         COALESCE((
                             SELECT array_agg(effective.band_id ORDER BY effective.band_id)
@@ -282,6 +283,7 @@ def get_console_tour(
                     FROM tour_lives tl
                     JOIN live_attrs l ON l.id = tl.live_id
                     LEFT JOIN venue_list v ON v.id = l.venue_id
+                    LEFT JOIN venue_name_versions venue_version ON venue_version.id = l.venue_name_version_id
                     WHERE tl.tour_id = %s
                     ORDER BY l.live_date, l.start_time NULLS LAST, l.id
                     """,
