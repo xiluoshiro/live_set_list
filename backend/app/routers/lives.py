@@ -185,7 +185,7 @@ SELECT
     l.id AS live_id,
     l.live_date,
     l.live_title,
-    COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
+    COALESCE(venue_version.venue_name, v.venue) AS venue,
     to_jsonb(l) ->> 'opening_time' AS opening_time,
     to_jsonb(l) ->> 'start_time' AS start_time,
     COALESCE((
@@ -220,7 +220,8 @@ SELECT
                     'previous_opening_time', history.previous_opening_time::text,
                     'previous_start_time', history.previous_start_time::text,
                     'previous_venue_id', history.previous_venue_id,
-                    'previous_venue', history_venue.venue,
+                    'previous_venue_name_version_id', history.previous_venue_name_version_id,
+                    'previous_venue', COALESCE(history_version.venue_name, history_venue.venue),
                     'changed_at', history.changed_at,
                     'note', history.note
                 )
@@ -228,6 +229,8 @@ SELECT
             )
             FROM live_schedule_history history
             LEFT JOIN venue_list history_venue ON history_venue.id = history.previous_venue_id
+            LEFT JOIN venue_name_versions history_version
+              ON history_version.id = history.previous_venue_name_version_id
             WHERE history.live_id = l.id
         ),
         '[]'::jsonb
@@ -237,6 +240,8 @@ SELECT
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
+LEFT JOIN venue_name_versions venue_version
+    ON venue_version.id = l.venue_name_version_id
 LEFT JOIN tour_lives tour_live
     ON tour_live.live_id = l.id
 LEFT JOIN tour_attrs tour
@@ -276,7 +281,7 @@ SELECT
     l.id AS live_id,
     l.live_date,
     l.live_title,
-    COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
+    COALESCE(venue_version.venue_name, v.venue) AS venue,
     to_jsonb(l) ->> 'opening_time' AS opening_time,
     to_jsonb(l) ->> 'start_time' AS start_time,
     COALESCE((
@@ -311,7 +316,8 @@ SELECT
                     'previous_opening_time', history.previous_opening_time::text,
                     'previous_start_time', history.previous_start_time::text,
                     'previous_venue_id', history.previous_venue_id,
-                    'previous_venue', history_venue.venue,
+                    'previous_venue_name_version_id', history.previous_venue_name_version_id,
+                    'previous_venue', COALESCE(history_version.venue_name, history_venue.venue),
                     'changed_at', history.changed_at,
                     'note', history.note
                 )
@@ -319,6 +325,8 @@ SELECT
             )
             FROM live_schedule_history history
             LEFT JOIN venue_list history_venue ON history_venue.id = history.previous_venue_id
+            LEFT JOIN venue_name_versions history_version
+              ON history_version.id = history.previous_venue_name_version_id
             WHERE history.live_id = l.id
         ),
         '[]'::jsonb
@@ -328,6 +336,8 @@ SELECT
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
+LEFT JOIN venue_name_versions venue_version
+    ON venue_version.id = l.venue_name_version_id
 LEFT JOIN tour_lives tour_live
     ON tour_live.live_id = l.id
 LEFT JOIN tour_attrs tour

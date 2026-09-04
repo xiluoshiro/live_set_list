@@ -429,6 +429,7 @@
 
 .tour-admin-section {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -544,18 +545,18 @@
   grid-column: 1 / -1;
 }
 
-.band-history-table td {
+.entity-history-table td {
   vertical-align: top;
   white-space: normal;
 }
 
-.band-history-table th:first-child,
-.band-history-table td:first-child {
+.entity-history-table th:first-child,
+.entity-history-table td:first-child {
   width: 92px;
 }
 
-.band-history-table th:last-child,
-.band-history-table td:last-child {
+.entity-history-table th:last-child,
+.entity-history-table td:last-child {
   width: auto;
 }
 

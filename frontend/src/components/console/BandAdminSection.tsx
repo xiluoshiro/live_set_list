@@ -254,7 +254,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
           <div className="tour-admin-block">
             <h3>历史名称（只读）</h3>
             <div className="console-table-wrap">
-              <table className="console-admin-table band-history-table" aria-label="乐队历史名称">
+              <table className="console-admin-table entity-history-table" aria-label="乐队历史名称">
                 <thead><tr><th>ID</th><th>名称</th><th>缩写</th><th>有效期</th><th>引用 Live</th></tr></thead>
                 <tbody>
                   {history.name_versions.map((version) => (
@@ -271,7 +271,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
           <div className="tour-admin-block">
             <h3>阵容时间线（只读）</h3>
             <div className="console-table-wrap">
-              <table className="console-admin-table band-history-table" aria-label="乐队阵容时间线">
+              <table className="console-admin-table entity-history-table" aria-label="乐队阵容时间线">
                 <thead><tr><th>版本</th><th>类型</th><th>成员</th><th>变化</th><th>有效期</th><th>交接 Live</th></tr></thead>
                 <tbody>
                   {history.lineup_versions.map((version) => (

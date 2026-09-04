@@ -304,7 +304,7 @@ WITH stop_base AS (
         l.live_date,
         l.live_title,
         l.live_type,
-        COALESCE(to_jsonb(v) ->> 'venue', to_jsonb(v) ->> 'venue_name') AS venue,
+        COALESCE(venue_version.venue_name, v.venue) AS venue,
         COALESCE((
             SELECT array_agg(effective.band_id ORDER BY effective.band_id)
             FROM effective_live_bands effective
@@ -344,6 +344,7 @@ WITH stop_base AS (
     FROM tour_lives tl
     JOIN live_attrs l ON l.id = tl.live_id
     LEFT JOIN venue_list v ON v.id = l.venue_id
+    LEFT JOIN venue_name_versions venue_version ON venue_version.id = l.venue_name_version_id
     LEFT JOIN performance_group_lives pgl ON pgl.live_id = l.id
     WHERE tl.tour_id = %s
 )

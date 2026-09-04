@@ -1,4 +1,4 @@
-export type ConsoleMode = "live_create" | "live_edit" | "setlist" | "setlist_edit" | "song" | "band" | "tour" | "performance_group";
+export type ConsoleMode = "live_create" | "live_edit" | "setlist" | "setlist_edit" | "song" | "band" | "venue" | "tour" | "performance_group";
 
 export type Position = {
   top: number;
@@ -16,6 +16,7 @@ export type BandOption = {
 export type VenueOption = {
   venue_id: number;
   venue_name: string;
+  venue_name_version_id?: number | null;
 };
 
 export type LiveInsertRow = {

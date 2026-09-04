@@ -206,7 +206,7 @@ def get_performance_group_live_candidates(
                         l.live_date,
                         l.live_title,
                         l.start_time::text,
-                        v.venue,
+                        COALESCE(venue_version.venue_name, v.venue),
                         COALESCE((
                             SELECT array_agg(effective.band_id ORDER BY effective.band_id)
                             FROM effective_live_bands effective
@@ -214,6 +214,7 @@ def get_performance_group_live_candidates(
                         ), ARRAY[]::int[]) AS band_ids
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
+                    LEFT JOIN venue_name_versions venue_version ON venue_version.id = l.venue_name_version_id
                     {where_sql}
                     ORDER BY l.live_date DESC, l.start_time DESC NULLS LAST, l.id DESC
                     LIMIT %s OFFSET %s
@@ -272,7 +273,7 @@ def get_console_performance_group(
                         l.live_date,
                         l.live_title,
                         to_jsonb(l) ->> 'start_time' AS start_time,
-                        v.venue,
+                        COALESCE(venue_version.venue_name, v.venue),
                         COALESCE((
                             SELECT array_agg(effective.band_id ORDER BY effective.band_id)
                             FROM effective_live_bands effective
@@ -281,6 +282,7 @@ def get_console_performance_group(
                     FROM performance_group_lives pgl
                     JOIN live_attrs l ON l.id = pgl.live_id
                     LEFT JOIN venue_list v ON v.id = l.venue_id
+                    LEFT JOIN venue_name_versions venue_version ON venue_version.id = l.venue_name_version_id
                     WHERE pgl.group_id = %s
                     ORDER BY l.live_date ASC, l.start_time ASC NULLS LAST, l.id ASC
                     """,

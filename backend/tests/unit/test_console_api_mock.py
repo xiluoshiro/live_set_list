@@ -162,10 +162,13 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
         fetchall_side_effect=[[(2, "Roselia", "rsl", ["Yukina", "Sayo"])]],
     )
     venues_conn, _ = _build_connection_mock(
-        fetchall_side_effect=[[(3, "Zepp Shinjuku")]],
+        fetchall_side_effect=[[(3, "Zepp Shinjuku", 7, "physical", None, "Zepp Shinjuku", 7, True, 0, None, None, 1)]],
     )
 
-    with patch("app.routers.console_read.get_db_connection", side_effect=[songs_conn, bands_conn, venues_conn]):
+    with patch("app.routers.console_read.get_db_connection", side_effect=[songs_conn, bands_conn]), patch(
+        "app.routers.console_venues.get_db_connection",
+        return_value=venues_conn,
+    ):
         client = TestClient(app)
         songs_response = client.get("/api/console/songs?q=BanG&band_id=1&limit=10&page=1")
         bands_response = client.get("/api/console/bands?q=rsl&limit=10")
@@ -192,7 +195,25 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
         "items": [{"band_id": 2, "band_name": "Roselia", "band_abbr": "rsl", "band_members": ["Yukina", "Sayo"]}],
     }
     assert venues_response.status_code == 200
-    assert venues_response.json() == {"items": [{"venue_id": 3, "venue_name": "Zepp Shinjuku"}]}
+    assert venues_response.json() == {
+        "items": [{
+            "venue_id": 3,
+            "venue_name": "Zepp Shinjuku",
+            "venue_name_version_id": 7,
+            "venue_kind": "physical",
+            "matched_name": "Zepp Shinjuku",
+            "matched_name_version_id": 7,
+            "match_kind": "current",
+            "live_count": 0,
+            "first_live_date": None,
+            "last_live_date": None,
+            "merged_into_venue_id": None,
+        }],
+        "page": 1,
+        "page_size": 10,
+        "total": 1,
+        "total_pages": 1,
+    }
 
 
 # 测试点：console 只读查询接口在无匹配结果时应返回空 items，而不是报错。
@@ -200,12 +221,18 @@ def test_console_lookup_mock_returns_empty_items_for_no_match():
     _set_authenticated_role("admin")
     conn, _ = _build_connection_mock(fetchall_side_effect=[[]])
 
-    with patch("app.routers.console_read.get_db_connection", return_value=conn):
+    with patch("app.routers.console_venues.get_db_connection", return_value=conn):
         client = TestClient(app)
         response = client.get("/api/console/venues?q=not-found")
 
     assert response.status_code == 200
-    assert response.json() == {"items": []}
+    assert response.json() == {
+        "items": [],
+        "page": 1,
+        "page_size": 20,
+        "total": 0,
+        "total_pages": 1,
+    }
 
 
 # 测试点：Live 编辑候选必须支持类型筛选和分页，并能加载带计算 mode 的完整编辑数据。
@@ -228,6 +255,7 @@ def test_console_live_edit_reads_candidates_and_detail():
             "09:00:00+09",
             "21:30:00+09",
             2,
+            7,
             "Mock Venue",
             [3],
             [{"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]}],
@@ -525,12 +553,12 @@ def test_console_update_song_mock_success_persists_and_audits():
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
 
 
-# 测试点：新增 venue 成功时应只写入 venue_list 的 NOT NULL 业务列 venue，并记录审计日志。
+# 测试点：新增 Venue 成功时应原子建立实体、首个名称版本并记录审计日志。
 def test_console_create_venue_mock_success_persists_and_audits():
     _set_authenticated_role("editor")
-    conn, cursor = _build_connection_mock(fetchone_side_effect=[(88,)])
+    conn, cursor = _build_connection_mock(fetchone_side_effect=[None, (88,), (99,)])
 
-    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+    with patch("app.routers.console_venues.get_write_db_connection", return_value=conn):
         client = TestClient(app)
         response = client.post(
             "/api/console/venues",
@@ -541,12 +569,26 @@ def test_console_create_venue_mock_success_persists_and_audits():
     assert response.status_code == 201
     assert response.json() == {
         "ok": True,
-        "item": {"venue_id": 88, "venue_name": "New Venue"},
+        "item": {
+            "venue_id": 88,
+            "venue_name": "New Venue",
+            "venue_name_version_id": 99,
+            "venue_kind": "physical",
+            "matched_name": None,
+            "matched_name_version_id": None,
+            "match_kind": "current",
+            "live_count": 0,
+            "first_live_date": None,
+            "last_live_date": None,
+            "merged_into_venue_id": None,
+        },
     }
-    assert cursor.execute.call_count == 2
-    assert "INSERT INTO venue_list (venue)" in cursor.execute.call_args_list[0].args[0]
-    assert cursor.execute.call_args_list[0].args[1] == ("New Venue",)
-    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[1].args[0]
+    assert cursor.execute.call_count == 5
+    assert "pg_advisory_xact_lock" in cursor.execute.call_args_list[0].args[0]
+    assert "INSERT INTO venue_list (venue, venue_kind)" in cursor.execute.call_args_list[2].args[0]
+    assert cursor.execute.call_args_list[2].args[1] == ("New Venue", "physical")
+    assert "INSERT INTO venue_name_versions" in cursor.execute.call_args_list[3].args[0]
+    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[4].args[0]
 
 
 # 测试点：新增 Live 成功时应补齐时间秒数和时区，并返回规范化的空默认 Band。
@@ -572,6 +614,7 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         "opening_time": "18:00:00+09:00",
         "start_time": "19:00:30+09:00",
         "venue_id": 2,
+        "venue_name_version_id": 1,
         "default_band_ids": [],
         "event_attendees": [],
         "band_lineup_contexts": [],
@@ -622,7 +665,7 @@ def test_console_create_live_mock_validates_and_persists_default_bands():
 
     assert response.status_code == 201
     assert response.json()["item"]["default_band_ids"] == [1, 3]
-    assert cursor.execute.call_args_list[1].args[1] == ([1, 3],)
+    assert cursor.execute.call_args_list[0].args[1] == ([1, 3],)
     assert cursor.execute.call_args_list[2].args[1][-5] == [1, 3]
 
 
@@ -674,6 +717,7 @@ def test_console_update_live_mock_persists_changes_and_audits():
         "opening_time": "18:00:00+09:00",
         "start_time": "19:00:30+09:00",
         "venue_id": 2,
+        "venue_name_version_id": 1,
         "default_band_ids": [3],
         "event_attendees": {"3": ["高松燈"]},
     }
@@ -717,6 +761,7 @@ def test_console_update_live_mock_noop_skips_update_and_audit():
         "opening_time": "18:00:00+09:00",
         "start_time": "19:00:30+09:00",
         "venue_id": 2,
+        "venue_name_version_id": 1,
         "default_band_ids": [],
         "event_attendees": {},
     }

@@ -78,6 +78,8 @@ WITH matched_live_ids AS (
     FROM live_attrs l
     LEFT JOIN venue_list v
         ON v.id = l.venue_id
+    LEFT JOIN venue_name_versions venue_version
+        ON venue_version.id = l.venue_name_version_id
     LEFT JOIN live_setlist ls
         ON ls.live_id = l.id
     LEFT JOIN song_list s
@@ -87,7 +89,7 @@ WITH matched_live_ids AS (
     LEFT JOIN current_band_versions b
         ON b.band_id = effective.band_id
     WHERE l.live_title ILIKE %s ESCAPE '\\'
-       OR v.venue ILIKE %s ESCAPE '\\'
+       OR venue_version.venue_name ILIKE %s ESCAPE '\\'
        OR s.song_name ILIKE %s ESCAPE '\\'
        OR b.band_name ILIKE %s ESCAPE '\\'
        OR b.band_abbr ILIKE %s ESCAPE '\\'
@@ -181,15 +183,21 @@ LIMIT %s
 
 SEARCH_VENUES_QUERY = """
 SELECT
-    v.id,
-    v.venue,
+    venue.id,
+    current_version.venue_name,
     COUNT(DISTINCT l.id) AS live_count
-FROM venue_list v
+FROM venue_list venue
+JOIN venue_name_versions current_version
+  ON current_version.venue_id = venue.id
+ AND current_version.valid_to IS NULL
+JOIN venue_name_versions matched_version
+  ON matched_version.venue_id = venue.id
 LEFT JOIN live_attrs l
-    ON l.venue_id = v.id
-WHERE v.venue ILIKE %s ESCAPE '\\'
-GROUP BY v.id, v.venue
-ORDER BY live_count DESC, v.venue, v.id
+    ON l.venue_id = venue.id
+WHERE matched_version.venue_name ILIKE %s ESCAPE '\\'
+  AND venue.merged_into_venue_id IS NULL
+GROUP BY venue.id, current_version.venue_name
+ORDER BY live_count DESC, current_version.venue_name, venue.id
 LIMIT %s
 """
 

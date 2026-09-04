@@ -13,6 +13,7 @@ TRUNCATE TABLE
     public.band_lineup_version_members,
     public.band_lineup_versions,
     public.band_name_versions,
+    public.venue_name_versions,
     public.tour_lives,
     public.tour_bands,
     public.tour_attrs,
@@ -28,6 +29,11 @@ VALUES
     (1, 'Shibuya WWW X'),
     (2, 'Zepp Shinjuku'),
     (24, '東京ガーデンシアター');
+
+INSERT INTO public.venue_name_versions (venue_id, venue_name, valid_from, valid_to)
+SELECT id, venue, NULL, NULL
+FROM public.venue_list
+ORDER BY id;
 
 INSERT INTO public.band_attrs (id, band_abbr, band_name)
 VALUES
@@ -65,6 +71,7 @@ INSERT INTO public.live_attrs (
     opening_time,
     start_time,
     venue_id,
+    venue_name_version_id,
     live_type,
     default_band_ids,
     event_status
@@ -79,6 +86,7 @@ VALUES
         TIME WITH TIME ZONE '16:30:00+09',
         TIME WITH TIME ZONE '17:30:00+09',
         1,
+        (SELECT id FROM public.venue_name_versions WHERE venue_id = 1),
         'multi_act',
         ARRAY[3],
         'scheduled'
@@ -92,6 +100,7 @@ VALUES
         TIME WITH TIME ZONE '15:00:00+09',
         TIME WITH TIME ZONE '16:00:00+09',
         2,
+        (SELECT id FROM public.venue_name_versions WHERE venue_id = 2),
         'festival',
         ARRAY[2],
         'scheduled'
@@ -105,6 +114,7 @@ VALUES
         TIME WITH TIME ZONE '17:00:00+09',
         TIME WITH TIME ZONE '18:00:00+09',
         24,
+        (SELECT id FROM public.venue_name_versions WHERE venue_id = 24),
         'oneman',
         ARRAY[2],
         'scheduled'
@@ -118,6 +128,7 @@ VALUES
         TIME WITH TIME ZONE '17:00:00+09',
         TIME WITH TIME ZONE '18:00:00+09',
         1,
+        (SELECT id FROM public.venue_name_versions WHERE venue_id = 1),
         'other',
         ARRAY[3],
         'scheduled'
@@ -515,6 +526,7 @@ CROSS JOIN LATERAL unnest(
 SELECT setval('public.live_attrs_id_seq', (SELECT MAX(id) FROM public.live_attrs), true);
 SELECT setval('public.song_list_id_seq', (SELECT MAX(id) FROM public.song_list), true);
 SELECT setval('public.venue_list_id_seq', (SELECT MAX(id) FROM public.venue_list), true);
+SELECT setval('public.venue_name_versions_id_seq', (SELECT MAX(id) FROM public.venue_name_versions), true);
 SELECT setval('public.tour_attrs_id_seq', (SELECT MAX(id) FROM public.tour_attrs), true);
 SELECT setval('public.band_name_versions_id_seq', (SELECT MAX(id) FROM public.band_name_versions), true);
 SELECT setval('public.band_lineup_versions_id_seq', (SELECT MAX(id) FROM public.band_lineup_versions), true);
