@@ -257,7 +257,7 @@ def list_editable_lives(
                 cur.execute(
                     f"""
                     SELECT l.id, l.live_date, l.live_title, l.live_type,
-                           COALESCE(venue_version.venue_name, v.venue),
+                           venue_version.venue_name,
                            l.start_time, l.event_status, l.opening_time, l.venue_id,
                            l.timezone_offset_minutes
                     FROM live_attrs l
@@ -349,7 +349,7 @@ def get_editable_live(
                         l.start_time::text,
                         l.venue_id,
                         l.venue_name_version_id,
-                        COALESCE(venue_version.venue_name, v.venue),
+                        venue_version.venue_name,
                         l.default_band_ids,
                         {CONSOLE_EVENT_ATTENDEES_SQL} AS event_attendees,
                         l.event_status,
@@ -364,7 +364,7 @@ def get_editable_live(
                                         'previous_start_time', history.previous_start_time::text,
                                         'previous_venue_id', history.previous_venue_id,
                                         'previous_venue_name_version_id', history.previous_venue_name_version_id,
-                                        'previous_venue', COALESCE(history_version.venue_name, history_venue.venue),
+                                        'previous_venue', history_version.venue_name,
                                         'changed_at', history.changed_at,
                                         'note', history.note
                                     )

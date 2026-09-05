@@ -188,7 +188,7 @@ describe("VenueAdminSection", () => {
     expect(onVenuesChanged).toHaveBeenCalledTimes(1);
   });
 
-  // 测试点：类型和正式更名都必须先展示变更边界，用户二次确认后才调用写接口。
+  // 测试点：正式更名使用明确的 ISO 日期输入，并在二次确认后才调用写接口。
   test("confirms kind and formal rename changes before submitting", async () => {
     const user = userEvent.setup();
     apiMocks.updateConsoleVenueKind.mockResolvedValue(details[1]);
@@ -208,6 +208,8 @@ describe("VenueAdminSection", () => {
 
     const renameBlock = screen.getByRole("heading", { name: "追加正式名称版本" }).closest(".tour-admin-block") as HTMLElement | null;
     if (!renameBlock) throw new Error("missing rename block");
+    expect(within(renameBlock).getByLabelText("生效日期")).toHaveAttribute("placeholder", "YYYY-MM-DD");
+    expect(within(renameBlock).getByLabelText("生效日期")).toHaveAttribute("type", "text");
     await user.type(within(renameBlock).getByLabelText("新名称"), "Renamed Hall");
     await user.type(within(renameBlock).getByLabelText("生效日期"), "2026-09-04");
     await user.click(within(renameBlock).getByRole("button", { name: "检查名称版本变化" }));

@@ -265,6 +265,7 @@ describe("console lookup api", () => {
           opening_time: "18:00:00+09:00",
           start_time: "19:00:00+09:00",
           venue_id: 88,
+          venue_name_version_id: 188,
           default_band_ids: [1, 3],
           event_attendees: [],
         },
@@ -280,6 +281,7 @@ describe("console lookup api", () => {
       start_time: "19:00",
       timezone: "+09:00",
       venue_id: 88,
+      venue_name_version_id: 188,
       default_band_ids: [1, 3],
       event_attendees: [],
     };
@@ -312,6 +314,7 @@ describe("console lookup api", () => {
       start_time: "21:30",
       timezone: "+09:00",
       venue_id: 2,
+      venue_name_version_id: 22,
       default_band_ids: [3],
       event_attendees: [{ band_id: 3, members: ["高松燈"] }],
     };

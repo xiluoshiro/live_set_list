@@ -321,12 +321,14 @@ def test_event_detail_returns_default_bands_and_computed_attendees(
             """
             INSERT INTO live_attrs (
                 id, live_date, live_title, live_type, is_internal, url,
-                opening_time, start_time, venue_id, default_band_ids, event_attendees
+                opening_time, start_time, venue_id, venue_name_version_id,
+                default_band_ids, event_attendees
             )
             VALUES (
                 9002, '2026-08-08', 'Event Attendees Live', 'event', false,
                 'https://example.com/lives/9002', TIME WITH TIME ZONE '12:00:00+09',
-                TIME WITH TIME ZONE '13:00:00+09', 1, ARRAY[1, 3],
+                TIME WITH TIME ZONE '13:00:00+09', 1,
+                (SELECT id FROM venue_name_versions WHERE venue_id = 1), ARRAY[1, 3],
                 '{"1":["Kasumi"],"3":["Tomori","Anon","Raana","Soyo","Taki"]}'::jsonb
             )
             """

@@ -53,6 +53,7 @@ def test_catalog_band_lives_uses_default_bands_for_event_without_setlist(
                 opening_time,
                 start_time,
                 venue_id,
+                venue_name_version_id,
                 live_type,
                 default_band_ids
             )
@@ -64,6 +65,7 @@ def test_catalog_band_lives_uses_default_bands_for_event_without_setlist(
                 TIME WITH TIME ZONE '17:00:00+09',
                 TIME WITH TIME ZONE '18:00:00+09',
                 1,
+                (SELECT id FROM venue_name_versions WHERE venue_id = 1),
                 'event',
                 ARRAY[1, 3]
             )
@@ -140,6 +142,7 @@ def test_catalog_statistics_limits_stale_song_kinds_independently(
                 opening_time,
                 start_time,
                 venue_id,
+                venue_name_version_id,
                 live_type,
                 default_band_ids
             )
@@ -151,6 +154,7 @@ def test_catalog_statistics_limits_stale_song_kinds_independently(
                 TIME WITH TIME ZONE '17:00:00+09',
                 TIME WITH TIME ZONE '18:00:00+09',
                 1,
+                (SELECT id FROM venue_name_versions WHERE venue_id = 1),
                 'oneman',
                 ARRAY[2]
             )
@@ -242,12 +246,12 @@ def test_catalog_calendar_returns_only_requested_month_and_orders(
             """
             INSERT INTO live_attrs (
                 id, live_date, live_title, url, opening_time, start_time,
-                venue_id, live_type, default_band_ids, event_status
+                venue_id, venue_name_version_id, live_type, default_band_ids, event_status
             )
             VALUES (
                 %s, DATE %s, %s, %s,
                 TIME WITH TIME ZONE '16:00:00+09', TIME WITH TIME ZONE %s,
-                1, 'other', %s, %s
+                1, (SELECT id FROM venue_name_versions WHERE venue_id = 1), 'other', %s, %s
             )
             """,
             [
@@ -336,12 +340,12 @@ def test_catalog_calendar_computes_date_phase_from_live_offset(
             """
             INSERT INTO live_attrs (
                 id, live_date, live_title, url, opening_time, start_time,
-                venue_id, live_type, default_band_ids, event_status
+                venue_id, venue_name_version_id, live_type, default_band_ids, event_status
             )
             VALUES (
                 %s, DATE %s, %s, %s,
                 TIME WITH TIME ZONE '16:00:00+09', TIME WITH TIME ZONE %s,
-                1, 'other', %s, 'scheduled'
+                1, (SELECT id FROM venue_name_versions WHERE venue_id = 1), 'other', %s, 'scheduled'
             )
             """,
             [
@@ -375,12 +379,12 @@ def test_catalog_calendar_month_boundaries(
             """
             INSERT INTO live_attrs (
                 id, live_date, live_title, url, opening_time, start_time,
-                venue_id, live_type, default_band_ids, event_status
+                venue_id, venue_name_version_id, live_type, default_band_ids, event_status
             )
             VALUES (
                 %s, DATE %s, %s, %s,
                 TIME WITH TIME ZONE '16:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
-                1, 'other', %s, 'scheduled'
+                1, (SELECT id FROM venue_name_versions WHERE venue_id = 1), 'other', %s, 'scheduled'
             )
             """,
             [

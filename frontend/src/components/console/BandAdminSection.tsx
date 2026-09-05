@@ -12,6 +12,7 @@ import {
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
+import { ConsoleDateInput, isIsoCalendarDate } from "./ConsoleDateInput";
 import type { BandOption } from "./types";
 
 
@@ -196,11 +197,12 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
   const removedMembers = (currentLineup?.members ?? []).filter((member) => !nextMemberSet.has(member));
   const selectedTransition = transitionCandidates.find((candidate) => candidate.live_id === transitionLiveId);
   const createDisabled =
-    submitting || createName.trim() === "" || parseMembers(createMembers).length === 0;
+    submitting || createName.trim() === "" || parseMembers(createMembers).length === 0
+    || (createValidFrom !== "" && !isIsoCalendarDate(createValidFrom));
   const lineupDisabled =
     submitting ||
     lineupLabel.trim() === "" ||
-    lineupValidFrom === "" ||
+    !isIsoCalendarDate(lineupValidFrom) ||
     nextMembers.length === 0;
 
   return (
@@ -235,7 +237,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
             </label>
             <label>当前名称<input value={createName} onChange={(event) => setCreateName(event.target.value)} /></label>
             <label>缩写<input value={createAbbr} onChange={(event) => setCreateAbbr(event.target.value)} /></label>
-            <label>V1 生效日期（可空）<input type="date" value={createValidFrom} onChange={(event) => setCreateValidFrom(event.target.value)} /></label>
+            <label>V1 生效日期（可空）<ConsoleDateInput value={createValidFrom} onChange={(event) => setCreateValidFrom(event.target.value)} /></label>
             <label className="band-admin-members-field">V1 成员（每行一人）
               <textarea rows={6} value={createMembers} onChange={(event) => setCreateMembers(event.target.value)} />
             </label>
@@ -303,7 +305,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
                   <option value="replacement">更换</option><option value="correction">追加式资料修正</option>
                 </select>
               </label>
-              <label>生效日期<input type="date" value={lineupValidFrom} onChange={(event) => setLineupValidFrom(event.target.value)} /></label>
+              <label>生效日期<ConsoleDateInput value={lineupValidFrom} onChange={(event) => setLineupValidFrom(event.target.value)} /></label>
               <label className="band-admin-members-field">新版本成员（每行一人）
                 <textarea rows={6} value={lineupMembers} onChange={(event) => setLineupMembers(event.target.value)} />
               </label>
@@ -312,13 +314,15 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
               </label>
             </div>
             {lineupChangeType !== "correction" && (
-              <div className="tour-admin-fields band-version-form">
-                <label>交接 Live 日期（可空）
-                  <input type="date" value={transitionDate} onChange={(event) => setTransitionDate(event.target.value)} />
-                </label>
-                <button type="button" className="console-ghost-btn" disabled={loading || !transitionDate} onClick={() => void queryTransitionLives()}>
-                  查询候选
-                </button>
+              <div className="tour-admin-fields band-transition-fields">
+                <div className="band-transition-query">
+                  <label>交接 Live 日期（可空）
+                    <ConsoleDateInput value={transitionDate} onChange={(event) => setTransitionDate(event.target.value)} />
+                  </label>
+                  <button type="button" className="console-ghost-btn" disabled={loading || !isIsoCalendarDate(transitionDate)} onClick={() => void queryTransitionLives()}>
+                    查询候选
+                  </button>
+                </div>
                 <label>交接 Live（可空）
                   <select value={transitionLiveId ?? ""} onChange={(event) => setTransitionLiveId(event.target.value ? Number(event.target.value) : null)}>
                     <option value="">不设置交接 Live</option>

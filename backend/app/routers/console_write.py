@@ -238,40 +238,22 @@ def _validate_and_normalize_live_relations(
 
 
 def _resolve_venue_name_version(cur: Any, payload: ConsoleLiveBaseRequest) -> int | None:
-    """Validate an explicit Venue name version or resolve the current version for old clients."""
+    """Validate the explicit Venue/name-version pair required by the console contract."""
     if payload.venue_id is None:
-        if payload.venue_name_version_id is not None:
-            raise HTTPException(status_code=422, detail="venue_name_version_id requires venue_id")
         return None
-    if payload.venue_name_version_id is None:
-        cur.execute(
-            """
-            SELECT version.id
-            FROM venue_list venue
-            JOIN venue_name_versions version
-              ON version.venue_id = venue.id
-             AND version.valid_to IS NULL
-            WHERE venue.id = %s
-              AND venue.merged_into_venue_id IS NULL
-            """,
-            (payload.venue_id,),
-        )
-    else:
-        cur.execute(
-            """
-            SELECT version.id
-            FROM venue_list venue
-            JOIN venue_name_versions version ON version.venue_id = venue.id
-            WHERE venue.id = %s
-              AND version.id = %s
-              AND venue.merged_into_venue_id IS NULL
-            """,
-            (payload.venue_id, payload.venue_name_version_id),
-        )
+    cur.execute(
+        """
+        SELECT version.id
+        FROM venue_list venue
+        JOIN venue_name_versions version ON version.venue_id = venue.id
+        WHERE venue.id = %s
+          AND version.id = %s
+          AND venue.merged_into_venue_id IS NULL
+        """,
+        (payload.venue_id, payload.venue_name_version_id),
+    )
     row = cur.fetchone()
     if row is None:
-        if payload.venue_name_version_id is None:
-            raise HTTPException(status_code=404, detail=f"Venue id {payload.venue_id} not found")
         raise HTTPException(status_code=422, detail="Venue name version does not belong to venue_id")
     return int(row[0])
 

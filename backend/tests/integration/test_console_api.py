@@ -718,6 +718,41 @@ def test_console_venue_rename_preserves_live_name_and_searches_history(
     assert row == ("Shibuya WWW X",)
 
 
+# 测试点：V29 以 MATCH FULL 复合外键锁定 Live 与改期历史中的 Venue/名称版本配对。
+def test_venue_name_version_pairs_are_enforced_by_composite_foreign_keys(
+    integration_admin_connection,
+):
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conname IN (
+                'live_attrs_venue_name_version_fkey',
+                'live_schedule_history_venue_name_version_fkey'
+            )
+            ORDER BY conname
+            """
+        )
+        rows = cursor.fetchall()
+
+    assert rows == [
+        (
+            "live_attrs",
+            "live_attrs_venue_name_version_fkey",
+            "FOREIGN KEY (venue_id, venue_name_version_id) "
+            "REFERENCES venue_name_versions(venue_id, id) MATCH FULL ON DELETE RESTRICT",
+        ),
+        (
+            "live_schedule_history",
+            "live_schedule_history_venue_name_version_fkey",
+            "FOREIGN KEY (previous_venue_id, previous_venue_name_version_id) "
+            "REFERENCES venue_name_versions(venue_id, id) MATCH FULL ON DELETE RESTRICT",
+        ),
+    ]
+
+
 # 测试点：新增 Live 和追加 setlist 连到测试库时缺少 CSRF 应被拒绝，并且不会落库。
 def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
     integration_test_client,
@@ -748,6 +783,7 @@ def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
             "start_time": "19:00",
             "timezone": "+09:00",
             "venue_id": 1,
+            "venue_name_version_id": 1,
         },
     )
     setlist_response = integration_test_client.post(
@@ -829,6 +865,7 @@ def test_console_create_live_persists_live_row(
             "start_time": "19:00:30",
             "timezone": "+09:00",
             "venue_id": 2,
+            "venue_name_version_id": expected_venue_name_version_id,
             "default_band_ids": [3, 1, 3],
         },
     )
@@ -989,6 +1026,7 @@ def test_console_create_event_rejects_historical_default_band_context(
             "start_time": "19:00",
             "timezone": "+09:00",
             "venue_id": 2,
+            "venue_name_version_id": 2,
             "default_band_ids": [3],
             "event_attendees": [{"band_id": 3, "members": ["Old Guitar", "Old Vocal"]}],
             "band_lineup_contexts": [{
@@ -1014,6 +1052,7 @@ def test_console_create_event_rejects_historical_default_band_context(
             "start_time": "19:00",
             "timezone": "+09:00",
             "venue_id": 2,
+            "venue_name_version_id": 2,
             "default_band_ids": [3],
             "event_attendees": [
                 {"band_id": 3, "members": ["Current Vocal", "Current Guitar"]}
@@ -1074,6 +1113,7 @@ def test_console_update_live_persists_base_fields_without_touching_relations(
             "start_time": item["start_time"][:5],
             "timezone": item["timezone"],
             "venue_id": item["venue_id"],
+            "venue_name_version_id": item["venue_name_version_id"],
             "default_band_ids": item["default_band_ids"],
             "event_attendees": [],
         },
@@ -1122,6 +1162,7 @@ def test_console_live_schedule_change_separates_correction_from_reschedule(
         "start_time": original["start_time"][:5],
         "timezone": original["timezone"],
         "venue_id": original["venue_id"],
+        "venue_name_version_id": original["venue_name_version_id"],
         "default_band_ids": original["default_band_ids"],
         "event_attendees": original["event_attendees"],
         "event_status": original["event_status"],
@@ -1204,6 +1245,7 @@ def test_console_live_unannounced_schedule_announcement_and_withdrawal_rules(
         "start_time": None,
         "timezone": "+09:00",
         "venue_id": None,
+        "venue_name_version_id": None,
         "default_band_ids": [],
         "event_attendees": [],
     }
@@ -1572,6 +1614,7 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
             "start_time": live_item["start_time"][:5],
             "timezone": live_item["timezone"],
             "venue_id": live_item["venue_id"],
+            "venue_name_version_id": live_item["venue_name_version_id"],
             "default_band_ids": live_item["default_band_ids"],
             "event_attendees": [],
         },

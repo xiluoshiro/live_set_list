@@ -64,7 +64,7 @@ function renderSection(
       editingLiveId={options.editingLiveId ?? null}
       isLiveDirty={options.isLiveDirty ?? (options.editingLiveId != null)}
       clearAfterCreate
-      venues={[{ venue_id: 1, venue_name: "Test Venue" }]}
+      venues={[{ venue_id: 1, venue_name: "Test Venue", venue_name_version_id: 11 }]}
       timezoneHourOptions={["+9"]}
       liveTypeOptions={[{ value: "other", label: "其他" }, { value: "event", label: "活动" }]}
       venueOpen={false}

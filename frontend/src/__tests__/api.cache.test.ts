@@ -330,6 +330,7 @@ describe("api cache behavior", () => {
         start_time: "18:00",
         timezone: "+09:00",
         venue_id: 1,
+        venue_name_version_id: 11,
         default_band_ids: [3],
         event_attendees: [],
       },

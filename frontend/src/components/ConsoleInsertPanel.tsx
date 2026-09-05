@@ -96,7 +96,7 @@ type LiveInsertDraft = {
   start_time: string | null;
   timezone: string;
   venue_id: number | null;
-  venue_name_version_id?: number | null;
+  venue_name_version_id: number | null;
   default_band_ids: number[];
   event_attendees: ConsoleEventAttendee[];
   event_status: EventStatus;
@@ -747,9 +747,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     start_time: startTimeAnnounced ? startTime : null,
     timezone,
     venue_id: venueAnnounced ? selectedVenueId : null,
-    ...(venueAnnounced && venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_name_version_id
-      ? { venue_name_version_id: venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_name_version_id }
-      : {}),
+    venue_name_version_id: venueAnnounced
+      ? (venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_name_version_id ?? null)
+      : null,
     default_band_ids: defaultBandIds,
     event_attendees: liveType === "event"
       ? defaultBandIds.flatMap((bandId) => {
@@ -865,6 +865,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   // 校验规则 2：已确定的排期字段必须有值；暂未公布的排期字段允许为空。
   const isLiveSubmitDisabled =
     (venueAnnounced && selectedVenueId <= 0) ||
+    (venueAnnounced && currentLivePayload.venue_name_version_id === null) ||
     liveDate.trim() === "" ||
     liveTitle.trim() === "" ||
     liveType.trim() === "" ||
@@ -1450,13 +1451,17 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         event_status: item.event_status,
         status_note: item.status_note,
       });
-      if (item.venue_id !== null && item.venue_name !== null) {
+      if (
+        item.venue_id !== null
+        && item.venue_name !== null
+        && item.venue_name_version_id !== null
+      ) {
         setVenues((current) => sortById([
           ...current.filter((venue) => venue.venue_id !== item.venue_id),
           {
             venue_id: item.venue_id as number,
             venue_name: item.venue_name as string,
-            venue_name_version_id: item.venue_name_version_id,
+            venue_name_version_id: item.venue_name_version_id as number,
           },
         ], (venue) => venue.venue_id));
       }
@@ -2476,6 +2481,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }
     if (venueAnnounced && selectedVenueId <= 0) {
       setMessage(`${action === "create" ? "新增" : "更新"}Live失败：请先选择 venue。`);
+      return;
+    }
+    if (venueAnnounced && currentLivePayload.venue_name_version_id === null) {
+      setMessage(`${action === "create" ? "新增" : "更新"}Live失败：所选 venue 缺少当前名称版本。`);
       return;
     }
     if (!auth.isAuthenticated || !auth.csrfToken) {

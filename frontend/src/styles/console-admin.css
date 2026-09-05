@@ -545,6 +545,23 @@
   grid-column: 1 / -1;
 }
 
+.band-transition-query {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.band-transition-query label {
+  min-width: 0;
+}
+
+.band-transition-query .console-ghost-btn {
+  min-height: 31px;
+  white-space: nowrap;
+}
+
 .entity-history-table td {
   vertical-align: top;
   white-space: normal;

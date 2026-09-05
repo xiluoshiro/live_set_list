@@ -185,7 +185,7 @@ SELECT
     l.id AS live_id,
     l.live_date,
     l.live_title,
-    COALESCE(venue_version.venue_name, v.venue) AS venue,
+    venue_version.venue_name AS venue,
     to_jsonb(l) ->> 'opening_time' AS opening_time,
     to_jsonb(l) ->> 'start_time' AS start_time,
     COALESCE((
@@ -221,7 +221,7 @@ SELECT
                     'previous_start_time', history.previous_start_time::text,
                     'previous_venue_id', history.previous_venue_id,
                     'previous_venue_name_version_id', history.previous_venue_name_version_id,
-                    'previous_venue', COALESCE(history_version.venue_name, history_venue.venue),
+                    'previous_venue', history_version.venue_name,
                     'changed_at', history.changed_at,
                     'note', history.note
                 )
@@ -281,7 +281,7 @@ SELECT
     l.id AS live_id,
     l.live_date,
     l.live_title,
-    COALESCE(venue_version.venue_name, v.venue) AS venue,
+    venue_version.venue_name AS venue,
     to_jsonb(l) ->> 'opening_time' AS opening_time,
     to_jsonb(l) ->> 'start_time' AS start_time,
     COALESCE((
@@ -317,7 +317,7 @@ SELECT
                     'previous_start_time', history.previous_start_time::text,
                     'previous_venue_id', history.previous_venue_id,
                     'previous_venue_name_version_id', history.previous_venue_name_version_id,
-                    'previous_venue', COALESCE(history_version.venue_name, history_venue.venue),
+                    'previous_venue', history_version.venue_name,
                     'changed_at', history.changed_at,
                     'note', history.note
                 )

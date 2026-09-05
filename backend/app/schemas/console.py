@@ -253,7 +253,7 @@ class ConsoleLiveBaseRequest(BaseModel):
     venue_name_version_id: int | None = Field(
         default=None,
         ge=1,
-        description="venue_name_versions.id; omitted clients temporarily resolve the current version",
+        description="venue_name_versions.id; must be supplied together with venue_id",
     )
     live_type: str = Field(
         ...,
@@ -306,6 +306,8 @@ class ConsoleLiveBaseRequest(BaseModel):
     @model_validator(mode="after")
     def validate_status_and_event_attendees(self) -> "ConsoleLiveBaseRequest":
         """Keep status notes and event attendance aligned with their owning fields."""
+        if (self.venue_id is None) != (self.venue_name_version_id is None):
+            raise ValueError("venue_id and venue_name_version_id must both be null or both be set")
         if self.event_status == "scheduled":
             self.status_note = None
         if self.live_type != "event" and self.event_attendees:

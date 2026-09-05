@@ -474,18 +474,18 @@ def test_catalog_performances_expands_partial_group_matches(
             """
             INSERT INTO live_attrs (
                 id, live_date, live_title, url, opening_time, start_time,
-                venue_id, live_type, default_band_ids
+                venue_id, venue_name_version_id, live_type, default_band_ids
             )
             VALUES
                 (9101, DATE '2026-06-01', 'PartialProbe Opening', 'https://example.com/9101',
                  TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
-                 1, 'oneman', ARRAY[1]),
+                 1, (SELECT id FROM venue_name_versions WHERE venue_id = 1), 'oneman', ARRAY[1]),
                 (9102, DATE '2026-06-02', 'PartialProbe Finale', 'https://example.com/9102',
                  TIME WITH TIME ZONE '18:00:00+09', TIME WITH TIME ZONE '19:00:00+09',
-                 2, 'oneman', ARRAY[2]),
+                 2, (SELECT id FROM venue_name_versions WHERE venue_id = 2), 'oneman', ARRAY[2]),
                 (9103, DATE '2027-06-03', 'Unrelated Closing', 'https://example.com/9103',
                  TIME WITH TIME ZONE '16:00:00+09', TIME WITH TIME ZONE '17:00:00+09',
-                 1, 'event', ARRAY[3])
+                 1, (SELECT id FROM venue_name_versions WHERE venue_id = 1), 'event', ARRAY[3])
             """
         )
         cur.execute(
@@ -578,7 +578,7 @@ def test_catalog_performances_paginates_expanded_group_lives(
             """
             INSERT INTO live_attrs (
                 id, live_date, live_title, url, opening_time, start_time,
-                venue_id, live_type, default_band_ids
+                venue_id, venue_name_version_id, live_type, default_band_ids
             )
             SELECT
                 live_id,
@@ -588,6 +588,7 @@ def test_catalog_performances_paginates_expanded_group_lives(
                 TIME WITH TIME ZONE '17:00:00+09',
                 TIME WITH TIME ZONE '18:00:00+09',
                 1,
+                (SELECT id FROM venue_name_versions WHERE venue_id = 1),
                 'oneman',
                 ARRAY[1]
             FROM generate_series(9401, 9416) AS live_id
@@ -597,14 +598,14 @@ def test_catalog_performances_paginates_expanded_group_lives(
             """
             INSERT INTO live_attrs (
                 id, live_date, live_title, url, opening_time, start_time,
-                venue_id, live_type, default_band_ids
+                venue_id, venue_name_version_id, live_type, default_band_ids
             )
             VALUES (
                 9417, DATE '2030-01-17', 'Unrelated Paging Tail',
                 'https://example.com/9417',
                 TIME WITH TIME ZONE '17:00:00+09',
                 TIME WITH TIME ZONE '18:00:00+09',
-                1, 'oneman', ARRAY[1]
+                1, (SELECT id FROM venue_name_versions WHERE venue_id = 1), 'oneman', ARRAY[1]
             )
             """
         )
@@ -678,7 +679,7 @@ def test_catalog_performances_groups_by_status_then_time(
             """
             INSERT INTO live_attrs (
                 id, live_date, live_title, url, opening_time, start_time,
-                venue_id, live_type, default_band_ids, event_status
+                venue_id, venue_name_version_id, live_type, default_band_ids, event_status
             )
             SELECT
                 v.id,
@@ -687,7 +688,8 @@ def test_catalog_performances_groups_by_status_then_time(
                 'https://example.com/' || v.id,
                 TIME WITH TIME ZONE '17:00:00+09',
                 TIME WITH TIME ZONE '18:00:00+09',
-                1, 'oneman', ARRAY[1], v.event_status
+                1, (SELECT id FROM venue_name_versions WHERE venue_id = 1),
+                'oneman', ARRAY[1], v.event_status
             FROM (VALUES
                 (9501, 30, 'StatusProbe Far Future', 'scheduled'),
                 (9502, -30, 'StatusProbe Ended', 'scheduled'),
@@ -728,15 +730,15 @@ def test_catalog_performances_keeps_full_or_title_matched_group(
             """
             INSERT INTO live_attrs (
                 id, live_date, live_title, url, opening_time, start_time,
-                venue_id, live_type, default_band_ids
+                venue_id, venue_name_version_id, live_type, default_band_ids
             )
             VALUES
                 (9201, DATE '2028-07-01', 'FullProbe Opening', 'https://example.com/9201',
                  TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
-                 1, 'oneman', ARRAY[1]),
+                 1, (SELECT id FROM venue_name_versions WHERE venue_id = 1), 'oneman', ARRAY[1]),
                 (9202, DATE '2028-07-02', 'FullProbe Finale', 'https://example.com/9202',
                  TIME WITH TIME ZONE '18:00:00+09', TIME WITH TIME ZONE '19:00:00+09',
-                 2, 'oneman', ARRAY[1])
+                 2, (SELECT id FROM venue_name_versions WHERE venue_id = 2), 'oneman', ARRAY[1])
             """
         )
         cur.execute(
@@ -793,10 +795,14 @@ def test_deleting_live_cascades_to_performance_group_lives(
         # First create a standalone live to delete
         cursor.execute(
             """
-            INSERT INTO live_attrs (id, live_date, live_title, url, opening_time, start_time, venue_id, live_type, default_band_ids)
+            INSERT INTO live_attrs (
+                id, live_date, live_title, url, opening_time, start_time,
+                venue_id, venue_name_version_id, live_type, default_band_ids
+            )
             VALUES (9001, '2027-01-01'::date, 'Cascade Test Live', 'https://example.com/9001',
                     TIME WITH TIME ZONE '16:00:00+09', TIME WITH TIME ZONE '17:00:00+09',
-                    1, 'other', ARRAY[1])
+                    1, (SELECT id FROM venue_name_versions WHERE venue_id = 1),
+                    'other', ARRAY[1])
             """
         )
         cursor.execute(
