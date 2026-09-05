@@ -293,21 +293,25 @@ def test_tours_list_groups_by_status_then_time(
             """
             INSERT INTO live_attrs (
                 id, live_date, live_title, url, opening_time, start_time,
-                venue_id, live_type, default_band_ids, event_status
+                venue_id, venue_name_version_id, live_type, default_band_ids, event_status
             )
             VALUES
                 (9601, CURRENT_DATE - 20, 'StatusTourProbe Ended Live', 'https://example.com/9601',
                  TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
-                 1, 'oneman', ARRAY[1], 'scheduled'),
+                 1, (SELECT id FROM venue_name_versions WHERE venue_id = 1),
+                 'oneman', ARRAY[1], 'scheduled'),
                 (9602, CURRENT_DATE, 'StatusTourProbe Today Live', 'https://example.com/9602',
                  TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
-                 1, 'oneman', ARRAY[1], 'scheduled'),
+                 1, (SELECT id FROM venue_name_versions WHERE venue_id = 1),
+                 'oneman', ARRAY[1], 'scheduled'),
                 (9603, CURRENT_DATE + 40, 'StatusTourProbe Far Future Live', 'https://example.com/9603',
                  TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
-                 1, 'oneman', ARRAY[1], 'scheduled'),
+                 1, (SELECT id FROM venue_name_versions WHERE venue_id = 1),
+                 'oneman', ARRAY[1], 'scheduled'),
                 (9604, CURRENT_DATE + 70, 'StatusTourProbe Cancelled Live', 'https://example.com/9604',
                  TIME WITH TIME ZONE '17:00:00+09', TIME WITH TIME ZONE '18:00:00+09',
-                 1, 'oneman', ARRAY[1], 'cancelled')
+                 1, (SELECT id FROM venue_name_versions WHERE venue_id = 1),
+                 'oneman', ARRAY[1], 'cancelled')
             """
         )
         cur.executemany(

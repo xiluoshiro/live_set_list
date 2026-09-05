@@ -157,6 +157,7 @@ describe("ConsoleInsertPanel", () => {
         start_time: "21:30:00+09:00",
         timezone: "+09:00",
         venue_id: 88,
+        venue_name_version_id: 188,
         venue_name: "New Venue",
         default_band_ids: [3],
         event_attendees: [{ band_id: 3, mode: "partial", members: ["高松燈"] }],
@@ -185,6 +186,7 @@ describe("ConsoleInsertPanel", () => {
         opening_time: "18:00:00+09:00",
         start_time: "19:00:00+09:00",
         venue_id: 88,
+        venue_name_version_id: 188,
         default_band_ids: [3],
         event_attendees: [],
         band_lineup_contexts: [],
@@ -203,6 +205,7 @@ describe("ConsoleInsertPanel", () => {
         opening_time: "09:00:00+09:00",
         start_time: "21:30:00+09:00",
         venue_id: 88,
+        venue_name_version_id: 188,
         default_band_ids: [3],
         event_attendees: [{ band_id: 3, mode: "partial", members: ["高松燈"] }],
       },
@@ -219,7 +222,10 @@ describe("ConsoleInsertPanel", () => {
       ok: true,
       created: [{ song_id: 902, song_name: "Requiem for Fate", band_id: 2, cover: false }],
     });
-    apiMocks.createConsoleVenue.mockResolvedValue({ ok: true, item: { venue_id: 88, venue_name: "New Venue" } });
+    apiMocks.createConsoleVenue.mockResolvedValue({
+      ok: true,
+      item: { venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 },
+    });
     apiMocks.getLiveDetail.mockResolvedValue({
       live_id: 101,
       live_date: "2026-03-30",
@@ -1024,8 +1030,8 @@ describe("ConsoleInsertPanel", () => {
     });
     apiMocks.getConsoleVenues.mockResolvedValue({
       items: [
-        { venue_id: 301, venue_name: "Later Venue" },
-        { venue_id: 101, venue_name: "Early Venue" },
+        { venue_id: 301, venue_name: "Later Venue", venue_name_version_id: 301 },
+        { venue_id: 101, venue_name: "Early Venue", venue_name_version_id: 101 },
       ],
     });
     apiMocks.getLives.mockResolvedValue({
@@ -1097,7 +1103,7 @@ describe("ConsoleInsertPanel", () => {
     const onLiveDataChanged = vi.fn();
     const todayDate = getTodayDateInputValue();
     apiMocks.getConsoleVenues.mockResolvedValue({
-      items: [{ venue_id: 88, venue_name: "New Venue" }],
+      items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }],
     });
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: [] }],
@@ -1139,6 +1145,7 @@ describe("ConsoleInsertPanel", () => {
         start_time: "19:00",
         timezone: "-03:30",
         venue_id: 88,
+        venue_name_version_id: 188,
         default_band_ids: [3],
         event_attendees: [],
         band_lineup_contexts: [],
@@ -1195,7 +1202,7 @@ describe("ConsoleInsertPanel", () => {
   test("新增Live确认框回显演出状态和状态说明", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleVenues.mockResolvedValue({
-      items: [{ venue_id: 88, venue_name: "New Venue" }],
+      items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }],
     });
 
     render(<ConsoleInsertPanel initialMode="live_create" />);
@@ -1217,7 +1224,7 @@ describe("ConsoleInsertPanel", () => {
   test("新增Live关闭清空选项后保留录入数据", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleVenues.mockResolvedValue({
-      items: [{ venue_id: 88, venue_name: "New Venue" }],
+      items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }],
     });
 
     render(<ConsoleInsertPanel initialMode="live_create" />);
@@ -1247,7 +1254,7 @@ describe("ConsoleInsertPanel", () => {
       total: 1,
       total_pages: 1,
     });
-    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }] });
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["高松燈", "千早愛音"] }],
     });
@@ -1307,6 +1314,7 @@ describe("ConsoleInsertPanel", () => {
         start_time: null,
         timezone: "+09:00",
         venue_id: 88,
+        venue_name_version_id: 188,
         venue_name: "New Venue",
         default_band_ids: [],
         event_attendees: [],
@@ -1316,7 +1324,7 @@ describe("ConsoleInsertPanel", () => {
         has_setlist: false,
       },
     });
-    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }] });
     apiMocks.updateConsoleLive.mockResolvedValue({
       ok: true,
       item: {
@@ -1328,6 +1336,7 @@ describe("ConsoleInsertPanel", () => {
         opening_time: null,
         start_time: null,
         venue_id: 88,
+        venue_name_version_id: 188,
         default_band_ids: [],
         event_attendees: [],
         band_lineup_contexts: [],
@@ -1450,6 +1459,7 @@ describe("ConsoleInsertPanel", () => {
         start_time: "19:00:00+09:00",
         timezone: "+09:00",
         venue_id: 88,
+        venue_name_version_id: 188,
         venue_name: "New Venue",
         default_band_ids: [3],
         event_attendees: [],
@@ -1470,6 +1480,7 @@ describe("ConsoleInsertPanel", () => {
         opening_time: "18:00:00+09:00",
         start_time: "19:00:00+09:00",
         venue_id: 88,
+        venue_name_version_id: 188,
         default_band_ids: [3],
         event_attendees: [],
         band_lineup_contexts: [historicalContext],
@@ -1477,7 +1488,7 @@ describe("ConsoleInsertPanel", () => {
         status_note: null,
       },
     });
-    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }] });
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: [] }],
     });
@@ -1569,7 +1580,7 @@ describe("ConsoleInsertPanel", () => {
   // 测试点：活动 Live 应把默认 Band 下勾选的完整成员名单提交给后端，不在前端写入 mode。
   test("活动Live会提交完整出演成员名单", async () => {
     const user = userEvent.setup();
-    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }] });
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [
         {
@@ -1591,6 +1602,7 @@ describe("ConsoleInsertPanel", () => {
         opening_time: "18:00:00+09:00",
         start_time: "19:00:00+09:00",
         venue_id: 88,
+        venue_name_version_id: 188,
         default_band_ids: [3],
         event_attendees: [{ band_id: 3, mode: "full", members: ["高松燈", "千早愛音"] }],
       },
@@ -1623,7 +1635,7 @@ describe("ConsoleInsertPanel", () => {
   // 测试点：历史版本选择入口永久移除，无 Setlist 活动也只能提交当前名称、阵容和成员。
   test("无Setlist活动只提交默认Band当前版本", async () => {
     const user = userEvent.setup();
-    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }] });
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{
         band_id: 3,
@@ -1724,7 +1736,7 @@ describe("ConsoleInsertPanel", () => {
   // 测试点：关闭临时开关后隐藏旧版本选择器，但新默认 Band 仍固化当前名称和当前阵容。
   test("关闭临时入口后默认Band只提交当前版本", async () => {
     const user = userEvent.setup();
-    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue" }] });
+    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }] });
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["Current Vocal"] }],
     });
@@ -1773,7 +1785,7 @@ describe("ConsoleInsertPanel", () => {
   test("活动未选择默认Band时在新增Live确认框显示提示", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleVenues.mockResolvedValue({
-      items: [{ venue_id: 88, venue_name: "New Venue" }],
+      items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }],
     });
 
     render(<ConsoleInsertPanel />);
@@ -2954,8 +2966,8 @@ describe("ConsoleInsertPanel", () => {
     const user = userEvent.setup();
     apiMocks.getConsoleVenues.mockResolvedValue({
       items: [
-        { venue_id: 1, venue_name: "TOKYO DOME CITY HALL", venue_alias: "TDC" },
-        { venue_id: 2, venue_name: "日本武道館", venue_alias: "武道館" },
+        { venue_id: 1, venue_name: "TOKYO DOME CITY HALL", venue_name_version_id: 11, venue_alias: "TDC" },
+        { venue_id: 2, venue_name: "日本武道館", venue_name_version_id: 22, venue_alias: "武道館" },
       ],
     });
     render(<ConsoleInsertPanel />);

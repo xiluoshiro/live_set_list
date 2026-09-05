@@ -53,13 +53,13 @@ ORDER BY ba.band_id
 """
 
 PERFORMANCE_GROUP_VENUES_QUERY = """
-SELECT DISTINCT COALESCE(venue_version.venue_name, v.venue) AS venue_name
+SELECT DISTINCT venue_version.venue_name AS venue_name
 FROM performance_group_lives pgl
 JOIN live_attrs l ON l.id = pgl.live_id
 LEFT JOIN venue_list v ON v.id = l.venue_id
 LEFT JOIN venue_name_versions venue_version ON venue_version.id = l.venue_name_version_id
 WHERE pgl.group_id = %s
-  AND COALESCE(venue_version.venue_name, v.venue) IS NOT NULL
+  AND venue_version.venue_name IS NOT NULL
 ORDER BY venue_name
 """
 
@@ -70,7 +70,7 @@ SELECT
     l.live_title,
     l.live_type,
     to_jsonb(l) ->> 'start_time' AS start_time,
-    COALESCE(venue_version.venue_name, v.venue) AS venue,
+    venue_version.venue_name AS venue,
     COALESCE((
         SELECT array_agg(effective.band_id ORDER BY effective.band_id)
         FROM effective_live_bands effective
@@ -501,13 +501,13 @@ def _build_scope_queries(
         ),
         group_venues AS (
             SELECT DISTINCT full_group.group_id,
-                   COALESCE(venue_version.venue_name, venue.venue) AS venue_name
+                   venue_version.venue_name AS venue_name
             FROM full_group_matches full_group
             JOIN performance_group_lives pgl ON pgl.group_id = full_group.group_id
             JOIN live_attrs l ON l.id = pgl.live_id
             LEFT JOIN venue_list venue ON venue.id = l.venue_id
             LEFT JOIN venue_name_versions venue_version ON venue_version.id = l.venue_name_version_id
-            WHERE COALESCE(venue_version.venue_name, venue.venue) IS NOT NULL
+            WHERE venue_version.venue_name IS NOT NULL
         ),
         group_summary AS (
             SELECT

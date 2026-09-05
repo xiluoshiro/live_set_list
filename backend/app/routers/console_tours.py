@@ -200,7 +200,7 @@ def get_tour_live_candidates(
                         l.live_date,
                         l.start_time::text,
                         l.live_title,
-                        COALESCE(venue_version.venue_name, v.venue),
+                        venue_version.venue_name,
                         NULL::integer AS tour_id,
                         NULL::text AS tour_title,
                         COALESCE((
@@ -273,7 +273,7 @@ def get_console_tour(
                         l.live_date,
                         to_jsonb(l) ->> 'start_time' AS start_time,
                         l.live_title,
-                        COALESCE(venue_version.venue_name, v.venue),
+                        venue_version.venue_name,
                         tl.stop_label,
                         COALESCE((
                             SELECT array_agg(effective.band_id ORDER BY effective.band_id)

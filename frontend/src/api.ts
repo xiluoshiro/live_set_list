@@ -211,7 +211,7 @@ export type LiveScheduleHistoryItem = {
   previous_opening_time: string | null;
   previous_start_time: string | null;
   previous_venue_id: number | null;
-  previous_venue_name_version_id?: number | null;
+  previous_venue_name_version_id: number | null;
   previous_venue: string | null;
   changed_at: string;
   note: string | null;
@@ -555,7 +555,7 @@ export type ConsoleBandTransitionLiveCandidate = {
 export type ConsoleVenueItem = {
   venue_id: number;
   venue_name: string;
-  venue_name_version_id?: number | null;
+  venue_name_version_id: number;
   venue_kind?: "physical" | "online" | "undisclosed";
   matched_name?: string | null;
   matched_name_version_id?: number | null;
@@ -610,7 +610,7 @@ export type ConsoleLiveUpsertPayload = {
   start_time: string | null;
   timezone: string;
   venue_id: number | null;
-  venue_name_version_id?: number | null;
+  venue_name_version_id: number | null;
   default_band_ids: number[];
   event_attendees: Array<{ band_id: number; members: string[] }>;
   /** Read-only draft context used for comparison/display; API serializers remove it. */
@@ -642,7 +642,7 @@ export type ConsoleLiveMutationItem = {
   opening_time: string | null;
   start_time: string | null;
   venue_id: number | null;
-  venue_name_version_id?: number | null;
+  venue_name_version_id: number | null;
   default_band_ids: number[];
   event_attendees: ConsoleEventAttendee[];
   band_lineup_contexts?: ConsoleLiveBandLineupContext[];

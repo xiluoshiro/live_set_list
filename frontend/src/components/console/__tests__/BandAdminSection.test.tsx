@@ -112,7 +112,7 @@ describe("BandAdminSection", () => {
     expect(onBandsChanged).toHaveBeenCalledTimes(1);
   });
 
-  // 测试点：追加阵容确认必须回显完整提交资料、自动闭合、成员差异和唯一交接 Live。
+  // 测试点：阵容日期采用 ISO 输入，交接查询保持紧凑分组且确认回显完整变化。
   test("appends a locked successor with an optional transition Live", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBandTransitionLiveCandidates.mockResolvedValue([
@@ -153,6 +153,9 @@ describe("BandAdminSection", () => {
     await user.type(screen.getByLabelText("生效日期"), "2026-07-29");
     await user.type(screen.getByLabelText("新版本成员（每行一人）"), "\nNew Member");
     await user.type(screen.getByLabelText("备注"), "正式新增成员");
+    expect(screen.getByLabelText("生效日期")).toHaveAttribute("placeholder", "YYYY-MM-DD");
+    expect(screen.getByLabelText("交接 Live 日期（可空）")).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "查询候选" }).closest(".band-transition-query")).not.toBeNull();
     await user.type(screen.getByLabelText("交接 Live 日期（可空）"), "2026-07-28");
     await user.click(screen.getByRole("button", { name: "查询候选" }));
     await screen.findByRole("option", { name: "#55 Transition Show" });

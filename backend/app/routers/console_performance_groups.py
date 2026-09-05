@@ -206,7 +206,7 @@ def get_performance_group_live_candidates(
                         l.live_date,
                         l.live_title,
                         l.start_time::text,
-                        COALESCE(venue_version.venue_name, v.venue),
+                        venue_version.venue_name,
                         COALESCE((
                             SELECT array_agg(effective.band_id ORDER BY effective.band_id)
                             FROM effective_live_bands effective
@@ -273,7 +273,7 @@ def get_console_performance_group(
                         l.live_date,
                         l.live_title,
                         to_jsonb(l) ->> 'start_time' AS start_time,
-                        COALESCE(venue_version.venue_name, v.venue),
+                        venue_version.venue_name,
                         COALESCE((
                             SELECT array_agg(effective.band_id ORDER BY effective.band_id)
                             FROM effective_live_bands effective

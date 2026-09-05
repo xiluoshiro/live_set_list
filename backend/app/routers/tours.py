@@ -304,7 +304,7 @@ WITH stop_base AS (
         l.live_date,
         l.live_title,
         l.live_type,
-        COALESCE(venue_version.venue_name, v.venue) AS venue,
+        venue_version.venue_name AS venue,
         COALESCE((
             SELECT array_agg(effective.band_id ORDER BY effective.band_id)
             FROM effective_live_bands effective

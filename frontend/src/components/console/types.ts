@@ -16,7 +16,7 @@ export type BandOption = {
 export type VenueOption = {
   venue_id: number;
   venue_name: string;
-  venue_name_version_id?: number | null;
+  venue_name_version_id: number;
 };
 
 export type LiveInsertRow = {

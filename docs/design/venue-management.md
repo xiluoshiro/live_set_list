@@ -8,8 +8,8 @@
 
 ## 状态与已确认口径
 
-- 文档状态：V28 与应用层首期实现已落地，待迁移部署和运行数据人工整理。
-- 当前仓库最新 migration 为 `V27__allow_unannounced_live_schedule.sql`。
+- 文档状态：V28、运行数据人工整理与应用层首期实现已完成；V29 约束收口已落地，待部署执行。
+- 当前仓库最新 migration 为 `V29__enforce_venue_name_version_pairs.sql`。
 - `live_attrs.venue_id` 和 `live_schedule_history.previous_venue_id` 已允许 `NULL`，表示场地尚未公布；不得为此创建“未定”Venue。
 - V28 在兼容字段 `venue_list.venue` 之外增加 Venue 类型、合并指向和独立名称版本表。
 - 同一物理场地的正式更名保持同一个 `venue_id`；搬迁到不同地址或新建替代场馆时创建新的 `venue_id`。
@@ -505,7 +505,7 @@ Venue管理
 
 ## 迁移与实现流程
 
-当前最新 migration 为 V27；如果实施前没有其他 migration 插入，以下版本从 V28 开始。实际文件编号必须在开发时重新确认。
+Venue 改造由 V28 建立加法式结构，运行数据整理完成后由 V29 收口约束。
 
 ### 阶段 1：加法式 schema
 
@@ -566,7 +566,7 @@ Venue管理
 
 ### 阶段 6：约束收口
 
-下一份 migration 在执行前断言：
+V29 migration 在执行前断言：
 
 - 每个未合并 Venue 恰有一个开放名称版本。
 - 每个非空 `live_attrs.venue_id` 都有同 Venue 的名称版本。
@@ -581,11 +581,13 @@ Venue管理
 3. 移除读取时对 `venue_list.venue` 的回退。
 4. 在再后续独立 migration 中删除 `venue_list.venue`；不得与首期结构创建放在同一 migration。
 
+当前实现已完成第 1～3 项。第 4 项仍待独立 migration，确保部署 V29 后保留一个明确的观察窗口。
+
 ## 测试与验收
 
 ### 数据库
 
-- V27 数据能完整回填，每个 Venue 有一个初始名称版本。
+- V28 数据能完整回填，每个 Venue 有一个初始名称版本。
 - `venue_id` 和名称版本必须同时为空或同时有效。
 - 不能引用其他 Venue 的名称版本。
 - 同一 Venue 不能存在两个开放名称版本。

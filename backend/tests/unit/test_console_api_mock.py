@@ -89,6 +89,7 @@ def _valid_live_payload(**overrides):
         "start_time": "19:00:30",
         "timezone": "+09:00",
         "venue_id": 2,
+        "venue_name_version_id": 1,
     }
     payload.update(overrides)
     return payload
@@ -635,7 +636,12 @@ def test_console_create_live_mock_accepts_unannounced_schedule_fields():
         client = TestClient(app)
         response = client.post(
             "/api/console/lives",
-            json=_valid_live_payload(venue_id=None, opening_time=None, start_time=None),
+            json=_valid_live_payload(
+                venue_id=None,
+                venue_name_version_id=None,
+                opening_time=None,
+                start_time=None,
+            ),
             headers={"X-CSRF-Token": CSRF_TOKEN},
         )
 
@@ -645,6 +651,24 @@ def test_console_create_live_mock_accepts_unannounced_schedule_fields():
     assert response.json()["item"]["start_time"] is None
     insert_params = cursor.execute.call_args_list[0].args[1]
     assert insert_params[4:7] == (None, None, None)
+
+
+# 测试点：已公布 Venue 必须显式携带同批名称版本，旧客户端不得再由服务端自动补全。
+def test_console_create_live_mock_rejects_missing_venue_name_version():
+    _set_authenticated_role("editor")
+    conn, _cursor = _build_connection_mock()
+
+    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
+        client = TestClient(app)
+        response = client.post(
+            "/api/console/lives",
+            json=_valid_live_payload(venue_name_version_id=None),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
+
+    assert response.status_code == 422
+    assert "must both be null or both be set" in response.text
+    conn.cursor.assert_not_called()
 
 
 # 测试点：新增 Live 应校验默认 Band 存在，并将去重升序后的数组写入数据库。
@@ -839,7 +863,7 @@ def test_console_create_live_mock_accepts_24_00_and_quarter_hour_timezone():
     assert response.json()["item"]["opening_time"] == "24:00:00+05:45"
 
 
-# 测试点：新增 Live 应拒绝非法时间、非法时区和不存在的 venue。
+# 测试点：新增 Live 应拒绝非法时间、非法时区和无效的 Venue/名称版本配对。
 @pytest.mark.parametrize(
     ("payload", "expected_status", "expected_detail"),
     [
@@ -847,7 +871,11 @@ def test_console_create_live_mock_accepts_24_00_and_quarter_hour_timezone():
         (_valid_live_payload(opening_time="24:01"), 400, "Invalid time value: 24:01"),
         (_valid_live_payload(timezone="+14:15"), 400, "Invalid timezone value: +14:15"),
         (_valid_live_payload(timezone="+9"), 422, None),
-        (_valid_live_payload(venue_id=999), 404, "Venue id 999 not found"),
+        (
+            _valid_live_payload(venue_id=999, venue_name_version_id=999),
+            422,
+            "Venue name version does not belong to venue_id",
+        ),
     ],
 )
 def test_console_create_live_mock_business_errors(payload: dict, expected_status: int, expected_detail: str | None):

@@ -12,6 +12,7 @@ import {
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
+import { ConsoleDateInput, isIsoCalendarDate } from "./ConsoleDateInput";
 
 type VenueAdminSectionProps = {
   onMessage: (message: string) => void;
@@ -354,10 +355,10 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
             <p className="console-admin-hint">当前名称为“{currentVersion?.venue_name ?? detail.venue_name}”。提交后关闭当前版本并建立唯一后继，不改写旧 Live。</p>
             <div className="tour-admin-fields">
               <label>新名称<input value={renameName} onChange={(event) => setRenameName(event.target.value)} /></label>
-              <label>生效日期<input type="date" value={renameDate} onChange={(event) => setRenameDate(event.target.value)} /></label>
+              <label>生效日期<ConsoleDateInput value={renameDate} onChange={(event) => setRenameDate(event.target.value)} /></label>
             </div>
             <div className="console-submit-row">
-              <button type="button" className="console-submit-btn" disabled={submitting || !renameName.trim() || !renameDate || currentVersion === null} onClick={() => setConfirmationKind("rename")}>检查名称版本变化</button>
+              <button type="button" className="console-submit-btn" disabled={submitting || !renameName.trim() || !isIsoCalendarDate(renameDate) || currentVersion === null} onClick={() => setConfirmationKind("rename")}>检查名称版本变化</button>
             </div>
           </div>
 

@@ -42,9 +42,9 @@ export const MOCK_SONGS: SongInsertRow[] = [
 ];
 
 export const MOCK_VENUES: VenueOption[] = [
-  { venue_id: 301, venue_name: "武道馆" },
-  { venue_id: 302, venue_name: "Zepp Haneda" },
-  { venue_id: 303, venue_name: "有明Arena" },
+  { venue_id: 301, venue_name: "武道馆", venue_name_version_id: 301 },
+  { venue_id: 302, venue_name: "Zepp Haneda", venue_name_version_id: 302 },
+  { venue_id: 303, venue_name: "有明Arena", venue_name_version_id: 303 },
 ];
 
 export const INITIAL_SETLIST_ROWS: SetlistDraftRow[] = [

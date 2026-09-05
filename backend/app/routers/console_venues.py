@@ -304,7 +304,7 @@ def list_venue_lives(
                 cur.execute(
                     """
                     SELECT live.id, live.live_date, live.live_title,
-                           COALESCE(version.venue_name, venue.venue)
+                           version.venue_name
                     FROM live_attrs live
                     JOIN venue_list venue ON venue.id = live.venue_id
                     LEFT JOIN venue_name_versions version ON version.id = live.venue_name_version_id
