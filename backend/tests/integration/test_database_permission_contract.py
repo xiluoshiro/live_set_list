@@ -2,6 +2,7 @@ READONLY_ROLE = "live_project_ro"
 CONSOLE_WRITE_ROLE = "live_project_super_ro"
 
 CONSOLE_DELETABLE_TABLES = {
+    "venue_map_links",
     "band_lineup_version_members",
     "live_band_lineup_contexts",
     "live_setlist",
@@ -13,7 +14,7 @@ CONSOLE_DELETABLE_TABLES = {
 }
 
 
-# 测试点：所有业务表与序列都必须满足运行时角色矩阵，DELETE 只能开放给完整集合替换关系表。
+# 测试点：所有业务表与序列满足角色矩阵，DELETE 仅开放给集合替换关系表和可取消的地图关联。
 def test_all_business_objects_follow_runtime_permission_matrix(
     integration_admin_connection,
 ):

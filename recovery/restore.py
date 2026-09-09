@@ -494,6 +494,13 @@ GRANT DELETE ON TABLE
     public.live_setlist_band_performances,
     public.live_setlist_band_performance_members
 TO {super_user};
+DO $$
+BEGIN
+    IF to_regclass('public.venue_map_links') IS NOT NULL THEN
+        EXECUTE 'GRANT DELETE ON TABLE public.venue_map_links TO {super_user}';
+    END IF;
+END
+$$;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.flyway_schema_history TO {flyway_user};
 GRANT SELECT ON TABLE public.live_attrs TO {user_rw_user};
 GRANT SELECT, INSERT, DELETE ON TABLE public.user_live_favorites TO {user_rw_user};

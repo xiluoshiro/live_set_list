@@ -395,6 +395,13 @@ def update_venue(
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
                 _lock_active_venue(cur, venue_id)
+                if payload.venue_kind == "online":
+                    cur.execute(
+                        "SELECT 1 FROM venue_list WHERE id=%s AND (locality_id IS NOT NULL OR address IS NOT NULL OR latitude IS NOT NULL OR timezone_id IS NOT NULL)",
+                        (venue_id,),
+                    )
+                    if cur.fetchone() is not None:
+                        raise HTTPException(status_code=409, detail="请先清空实体所在地资料，再改为线上场馆")
                 cur.execute("UPDATE venue_list SET venue_kind = %s WHERE id = %s", (payload.venue_kind, venue_id))
                 _write_audit(cur, user_id=context.user.id, action="venue_update", venue_id=venue_id, payload={"venue_kind": payload.venue_kind})
                 return _load_detail(cur, venue_id)
@@ -535,6 +542,14 @@ def merge_venue(
             with conn.cursor() as cur:
                 for venue_id in sorted((source_venue_id, payload.target_venue_id)):
                     _lock_active_venue(cur, venue_id)
+                cur.execute(
+                    """SELECT 1 FROM venue_list v WHERE v.id = ANY(%s) AND
+                       (v.locality_id IS NOT NULL OR v.address IS NOT NULL OR v.latitude IS NOT NULL
+                        OR v.timezone_id IS NOT NULL OR EXISTS (SELECT 1 FROM venue_map_links m WHERE m.venue_id=v.id)) LIMIT 1""",
+                    ([source_venue_id, payload.target_venue_id],),
+                )
+                if cur.fetchone() is not None:
+                    raise HTTPException(status_code=409, detail="场馆已有地理资料；须先完成地理与地图关联的合并核对，本阶段不自动合并")
                 cur.execute("SELECT id FROM venue_name_versions WHERE venue_id = %s ORDER BY id", (source_venue_id,))
                 source_version_ids = [int(row[0]) for row in cur.fetchall()]
                 if set(mapping) != set(source_version_ids):

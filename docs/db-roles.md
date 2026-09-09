@@ -220,6 +220,7 @@ schema 级权限：
 - `INSERT, UPDATE ON ALL TABLES IN SCHEMA public`
 - `DELETE ON public.tour_bands, public.tour_lives, public.performance_group_lives`（V13/V14，仅用于聚合关系的完整集合替换）
 - `DELETE ON public.live_setlist`（V17，仅用于 Setlist 管理的完整集合替换）
+- `DELETE ON public.venue_map_links`（V30，仅用于取消已确认地图关联；Venue 和城市主数据不可删除）
 
 序列权限：
 

@@ -69,7 +69,8 @@
   margin: 12px 0;
 }
 
-.console-admin-table.live-schedule-status-table {
+.console-admin-table.live-schedule-status-table,
+.console-admin-table.venue-map-table {
   width: 100%;
   min-width: 0;
   table-layout: fixed;
