@@ -451,3 +451,18 @@
 3. 若有必要，再更新本文档中的补充规则
 
 这样可以减少“手写 Markdown 文档”和“实际代码行为”之间的漂移。
+
+## Venue 地理资料框架（V30）
+
+以下接口位于 `/api/console`，要求 `editor+`。写入要求会话和 `X-CSRF-Token`，只读位置预览不写库。
+
+- `GET /localities?q=&page=1&limit=20`：城市搜索与总数；即使页码超出范围也保留总数。
+- `POST /localities`：登记城市，包含 `country_code`、可空 `admin_area`、`locality_name`、可空 IANA `timezone_id`。当前仅新增和查询。
+- `GET /timezones`：本地时区数据支持的 IANA 标识列表。
+- `GET /venues/{id}/location`：独立位置详情、有效时区来源和各地图的平台链接／坐标回退链接。
+- `POST /venues/{id}/location-preview`：返回修改前后值、关联 Live 数及失效地图关联数，不修改排期。
+- `PUT /venues/{id}/location`：完整替换地理资料，要求 `expected_revision`；坐标仅接受 `coordinate_system=WGS84`。过期返回 409，坐标／时区冲突返回 422。
+- `PUT /venues/{id}/map-links`：确认 `provider`、地点 ID 或平台 HTTPS 详情链接，要求 `expected_revision`；Apple 必须提供详情 URL。
+- `DELETE /venues/{id}/map-links/{provider}?expected_revision=`：取消对应平台关联，保留场馆坐标并写审计。
+
+平台枚举为 `google`、`apple`、`amap`。关联前须有已确认坐标，位置修订后关联返回 `is_current=false`。本阶段不调用外部地图查询服务，也不改变 Live 的现有手工偏移请求契约。完整计划见 [地理资料设计](design/venue-location-and-timezone.md)。

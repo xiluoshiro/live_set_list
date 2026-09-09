@@ -13,6 +13,7 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleDateInput, isIsoCalendarDate } from "./ConsoleDateInput";
+import { VenueLocationPanel } from "./VenueLocationPanel";
 
 type VenueAdminSectionProps = {
   onMessage: (message: string) => void;
@@ -319,6 +320,7 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
 
       {detail && (
         <>
+          <VenueLocationPanel key={`${detail.venue_id}:${detail.venue_kind}`} venueId={detail.venue_id} venueKind={detail.venue_kind} />
           <div className="tour-admin-block">
             <h3>历史名称（只读）</h3>
             <div className="console-table-wrap">
