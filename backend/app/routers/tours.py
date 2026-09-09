@@ -319,6 +319,7 @@ WITH stop_base AS (
             WHERE history.live_id = l.id
         ) AS was_rescheduled,
         l.timezone_offset_minutes,
+        l.timezone_id,
         CASE
             WHEN pgl.group_id IS NULL THEN (l.event_status = 'cancelled')
             ELSE BOOL_OR(l.event_status = 'cancelled') OVER (PARTITION BY pgl.group_id)
@@ -372,7 +373,8 @@ SELECT
     event_status,
     start_time,
     was_rescheduled,
-    timezone_offset_minutes
+    timezone_offset_minutes,
+    timezone_id
 FROM stop_base
 ORDER BY
     block_date,
@@ -850,6 +852,7 @@ def get_tour_detail(
                     live_date=row[3],
                     start_time=row[11] if len(row) > 11 else "00:00:00+00:00",
                     timezone_offset_minutes=int(row[13]) if len(row) > 13 and row[13] is not None else None,
+                    timezone_id=str(row[14]) if len(row) > 14 and row[14] is not None else None,
                     was_rescheduled=bool(row[12]) if len(row) > 12 else False,
                 ),
             }

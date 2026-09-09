@@ -83,7 +83,8 @@ SELECT
         SELECT 1 FROM live_schedule_history history
         WHERE history.live_id = l.id
     ) AS was_rescheduled,
-    l.timezone_offset_minutes
+    l.timezone_offset_minutes,
+    l.timezone_id
 FROM performance_group_lives pgl
 JOIN live_attrs l ON l.id = pgl.live_id
 LEFT JOIN venue_list v ON v.id = l.venue_id
@@ -198,6 +199,7 @@ def get_performance_group_detail(
                     live_date=row[1],
                     start_time=row[4],
                     timezone_offset_minutes=int(row[11]) if len(row) > 11 and row[11] is not None else None,
+                    timezone_id=str(row[12]) if len(row) > 12 and row[12] is not None else None,
                     was_rescheduled=bool(row[10]) if len(row) > 10 else False,
                 ),
             }
@@ -458,6 +460,7 @@ def _build_scope_queries(
                 matched.group_title,
                 l.event_status,
                 l.timezone_offset_minutes,
+                l.timezone_id,
                 EXISTS (
                     SELECT 1 FROM live_schedule_history history
                     WHERE history.live_id = l.id
@@ -482,12 +485,13 @@ def _build_scope_queries(
                 sl.group_title,
                 sl.event_status,
                 sl.was_rescheduled,
-                sl.timezone_offset_minutes
+                sl.timezone_offset_minutes,
+                sl.timezone_id
             FROM selected_lives sl
             GROUP BY sl.id, sl.live_date, sl.start_time, sl.live_title, sl.url, sl.live_type,
                      sl.default_band_ids, sl.tour_id, sl.tour_title,
                      sl.performance_group_id, sl.group_title, sl.event_status,
-                     sl.was_rescheduled, sl.timezone_offset_minutes
+                     sl.was_rescheduled, sl.timezone_offset_minutes, sl.timezone_id
         ),
         group_bands AS (
             SELECT grouped_band.group_id, ba.band_id, ba.band_name, ba.band_abbr
@@ -576,16 +580,17 @@ def _build_scope_queries(
                 slw.start_time AS live_start_time,
                 slw.was_rescheduled AS live_was_rescheduled,
                 slw.timezone_offset_minutes AS live_timezone_offset_minutes,
+                slw.timezone_id AS live_timezone_id,
                 CASE
                     WHEN slw.event_status = 'cancelled' THEN 2
-                    WHEN slw.live_date > (
-                        CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
-                        + make_interval(mins => slw.timezone_offset_minutes)
-                    )::date THEN 0
-                    WHEN slw.live_date < (
-                        CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
-                        + make_interval(mins => slw.timezone_offset_minutes)
-                    )::date THEN 2
+                    WHEN slw.live_date > COALESCE(
+                        (CURRENT_TIMESTAMP AT TIME ZONE slw.timezone_id)::date,
+                        (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' + make_interval(mins => slw.timezone_offset_minutes))::date
+                    ) THEN 0
+                    WHEN slw.live_date < COALESCE(
+                        (CURRENT_TIMESTAMP AT TIME ZONE slw.timezone_id)::date,
+                        (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' + make_interval(mins => slw.timezone_offset_minutes))::date
+                    ) THEN 2
                     ELSE 1
                 END AS sort_rank,
                 slw.live_date AS sort_date,
@@ -619,6 +624,7 @@ def _build_scope_queries(
                 NULL::timetz AS live_start_time,
                 NULL::boolean AS live_was_rescheduled,
                 NULL::smallint AS live_timezone_offset_minutes,
+                NULL::text AS live_timezone_id,
                 CASE
                     WHEN gs.live_count > 0 AND gs.cancelled_live_count >= gs.live_count THEN 2
                     WHEN CURRENT_DATE < gs.start_date THEN 0
@@ -636,7 +642,7 @@ def _build_scope_queries(
             group_result_id, group_result_title, group_start_date, group_end_date,
             group_day_count, group_live_count, group_cancelled_live_count,
             group_display_type, group_bands, group_venues,
-            live_event_status, live_start_time, live_was_rescheduled, live_timezone_offset_minutes
+            live_event_status, live_start_time, live_was_rescheduled, live_timezone_offset_minutes, live_timezone_id
         FROM merged
         ORDER BY sort_rank ASC, sort_date {sort_dir}, sort_time {sort_dir} NULLS LAST, sort_id {sort_dir}
         LIMIT %s OFFSET %s
@@ -672,6 +678,7 @@ def _parse_performances_row(
                     live_date=row[2],
                     start_time=row[22] if has_status_columns else "00:00:00+00:00",
                     timezone_offset_minutes=int(row[24]) if has_status_columns else None,
+                    timezone_id=str(row[25]) if has_status_columns and row[25] is not None else None,
                     was_rescheduled=bool(row[23]) if has_status_columns else False,
                 ),
             },

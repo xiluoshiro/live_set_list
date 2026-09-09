@@ -106,7 +106,8 @@ SELECT
         SELECT 1 FROM live_schedule_history history
         WHERE history.live_id = l.id
     ) AS was_rescheduled,
-    l.timezone_offset_minutes
+    l.timezone_offset_minutes,
+    l.timezone_id
 FROM live_attrs l
 LEFT JOIN tour_lives tour_live
     ON tour_live.live_id = l.id
@@ -117,7 +118,7 @@ LEFT JOIN performance_group_lives pgl
 LEFT JOIN performance_group_attrs pg
     ON pg.id = pgl.group_id
 GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids,
-         l.start_time, l.event_status, l.timezone_offset_minutes, tour.id, tour.tour_title, pg.id, pg.group_title
+         l.start_time, l.event_status, l.timezone_offset_minutes, l.timezone_id, tour.id, tour.tour_title, pg.id, pg.group_title
 """
 
 LIVES_COUNT_QUERY = f"""
@@ -149,7 +150,9 @@ SELECT
     EXISTS (
         SELECT 1 FROM live_schedule_history history
         WHERE history.live_id = l.id
-    ) AS was_rescheduled
+    ) AS was_rescheduled,
+    l.timezone_offset_minutes,
+    l.timezone_id
 FROM live_attrs l
 LEFT JOIN tour_lives tour_live
     ON tour_live.live_id = l.id
@@ -222,6 +225,10 @@ SELECT
                     'previous_venue_id', history.previous_venue_id,
                     'previous_venue_name_version_id', history.previous_venue_name_version_id,
                     'previous_venue', history_version.venue_name,
+                    'previous_announced_locality_id', history.previous_announced_locality_id,
+                    'previous_timezone_id', history.previous_timezone_id,
+                    'previous_timezone_source', history.previous_timezone_source,
+                    'previous_timezone_offset_minutes', history.previous_timezone_offset_minutes,
                     'changed_at', history.changed_at,
                     'note', history.note
                 )
@@ -236,7 +243,8 @@ SELECT
         '[]'::jsonb
     ) AS schedule_history,
     NULLIF(to_jsonb(l) ->> 'venue_id', '')::int AS venue_id,
-    l.timezone_offset_minutes
+    l.timezone_offset_minutes,
+    l.timezone_id
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -318,6 +326,10 @@ SELECT
                     'previous_venue_id', history.previous_venue_id,
                     'previous_venue_name_version_id', history.previous_venue_name_version_id,
                     'previous_venue', history_version.venue_name,
+                    'previous_announced_locality_id', history.previous_announced_locality_id,
+                    'previous_timezone_id', history.previous_timezone_id,
+                    'previous_timezone_source', history.previous_timezone_source,
+                    'previous_timezone_offset_minutes', history.previous_timezone_offset_minutes,
                     'changed_at', history.changed_at,
                     'note', history.note
                 )
@@ -332,7 +344,8 @@ SELECT
         '[]'::jsonb
     ) AS schedule_history,
     NULLIF(to_jsonb(l) ->> 'venue_id', '')::int AS venue_id,
-    l.timezone_offset_minutes
+    l.timezone_offset_minutes,
+    l.timezone_id
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -851,6 +864,7 @@ def _build_live_detail_payload(
         live_date=header_row[1],
         start_time=header_row[5] if len(header_row) > 15 else "00:00:00+00:00",
         timezone_offset_minutes=int(header_row[19]) if len(header_row) > 19 and header_row[19] is not None else None,
+        timezone_id=str(header_row[20]) if len(header_row) > 20 and header_row[20] is not None else None,
         was_rescheduled=bool(schedule_history),
     )
     return {
@@ -1057,6 +1071,7 @@ def get_lives(
                 live_date=row[1],
                 start_time=row[10] if len(row) > 10 else "00:00:00+00:00",
                 timezone_offset_minutes=int(row[13]) if len(row) > 13 and row[13] is not None else None,
+                timezone_id=str(row[14]) if len(row) > 14 and row[14] is not None else None,
                 was_rescheduled=bool(row[12]) if len(row) > 12 else False,
             ),
         }

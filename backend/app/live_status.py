@@ -1,6 +1,7 @@
 import re
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal, cast
+from zoneinfo import ZoneInfo
 
 EventStatus = Literal["scheduled", "postponed", "cancelled"]
 DatePhase = Literal["upcoming", "today", "past"]
@@ -31,19 +32,23 @@ def derive_date_phase(
     now_utc: datetime | None = None,
     *,
     timezone_offset_minutes: int | None = None,
+    timezone_id: str | None = None,
 ) -> DatePhase:
-    """Compare a Live date with today in the fixed offset stored on that Live."""
+    """Compare a Live date with today in its IANA zone, falling back to legacy offsets."""
     normalized_live_date = date.fromisoformat(live_date) if isinstance(live_date, str) else live_date
     current = now_utc or datetime.now(timezone.utc)
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
-    if timezone_offset_minutes is not None:
+    if timezone_id is not None:
+        local_today = current.astimezone(ZoneInfo(timezone_id)).date()
+    elif timezone_offset_minutes is not None:
         offset = timedelta(minutes=timezone_offset_minutes)
+        local_today = (current.astimezone(timezone.utc) + offset).date()
     elif start_time is not None:
         offset = _offset_from_start_time(start_time)
+        local_today = (current.astimezone(timezone.utc) + offset).date()
     else:
         raise ValueError("timezone_offset_minutes is required when start_time is unannounced")
-    local_today = (current.astimezone(timezone.utc) + offset).date()
     if normalized_live_date < local_today:
         return "past"
     if normalized_live_date > local_today:
@@ -57,6 +62,7 @@ def build_public_live_status(
     live_date: date | str,
     start_time: str | time | None = None,
     timezone_offset_minutes: int | None = None,
+    timezone_id: str | None = None,
     was_rescheduled: bool,
     now_utc: datetime | None = None,
 ) -> dict[str, EventStatus | DatePhase | bool]:
@@ -69,6 +75,7 @@ def build_public_live_status(
             live_date,
             start_time=start_time,
             timezone_offset_minutes=timezone_offset_minutes,
+            timezone_id=timezone_id,
             now_utc=now_utc,
         ),
         "was_rescheduled": was_rescheduled,

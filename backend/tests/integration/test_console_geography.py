@@ -102,3 +102,35 @@ def test_city_pagination_and_permissions(integration_test_client):
     assert client.get("/api/console/localities").status_code == 403
     assert client.get("/api/console/venues/1/location").status_code == 403
     assert client.get("/api/console/timezones").status_code == 403
+
+
+# 测试点：新 Live 从已核验场馆／城市写入 IANA 快照，旧固定 offset 不参与推导。
+def test_live_uses_verified_venue_and_city_timezone(integration_test_client, integration_admin_connection):
+    client = integration_test_client
+    headers = login(client)
+    locality_response = client.post("/api/console/localities", headers=headers, json={
+        "country_code": "US", "admin_area": "New York", "locality_name": "New York", "timezone_id": "America/New_York",
+    })
+    assert locality_response.status_code == 201, locality_response.text
+    locality_id = locality_response.json()["id"]
+    saved = client.put("/api/console/venues/1/location", headers=headers, json={
+        "expected_revision": 1, "locality_id": locality_id,
+    })
+    assert saved.status_code == 200, saved.text
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("SELECT id FROM venue_name_versions WHERE venue_id=1 AND valid_to IS NULL")
+        version_id = cur.fetchone()[0]
+    response = client.post("/api/console/lives", headers=headers, json={
+        "live_date": "2026-07-22", "live_title": "IANA Venue Live", "live_type": "oneman",
+        "url": "https://example.com/iana-venue", "opening_time": "18:00", "start_time": "19:00",
+        "venue_id": 1, "venue_name_version_id": version_id,
+    })
+    assert response.status_code == 201, response.text
+    item = response.json()["item"]
+    assert item["timezone_id"] == "America/New_York"
+    assert item["timezone_source"] == "venue"
+    assert item["opening_time"] == "18:00:00-04:00"
+    assert item["start_time"] == "19:00:00-04:00"
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("SELECT timezone_id, timezone_source, timezone_offset_minutes FROM live_attrs WHERE id=%s", (item["live_id"],))
+        assert cur.fetchone() == ("America/New_York", "venue", -240)

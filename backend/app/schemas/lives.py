@@ -43,6 +43,10 @@ class LiveScheduleHistoryItem(BaseModel):
     previous_venue_id: int | None
     previous_venue_name_version_id: int | None = None
     previous_venue: str | None = None
+    previous_announced_locality_id: int | None = None
+    previous_timezone_id: str | None = None
+    previous_timezone_source: Literal["venue", "locality", "explicit", "legacy_offset"] | None = None
+    previous_timezone_offset_minutes: int | None = None
     changed_at: datetime
     note: str | None = None
 

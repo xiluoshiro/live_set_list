@@ -243,7 +243,7 @@ def test_console_live_edit_reads_candidates_and_detail():
         fetchone_side_effect=[(1,), (0, 0, 0)],
         fetchall_side_effect=[[(
             55, "2026-07-05", "Event Live", "event", "Mock Venue",
-            "21:30:00+09", "scheduled", "09:00:00+09", 2, 540,
+            "21:30:00+09", "scheduled", "09:00:00+09", 2, 540, None,
         )]],
     )
     detail_conn, _ = _build_connection_mock(
@@ -266,6 +266,12 @@ def test_console_live_edit_reads_candidates_and_detail():
             False,
             [],
             540,
+            None,
+            None,
+            "legacy_offset",
+            None,
+            None,
+            None,
         )],
     )
 
@@ -616,6 +622,12 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         "start_time": "19:00:30+09:00",
         "venue_id": 2,
         "venue_name_version_id": 1,
+        "announced_locality_id": None,
+        "timezone_id": None,
+        "timezone_source": "legacy_offset",
+        "timezone_source_revision": None,
+        "opening_time_fold": None,
+        "start_time_fold": None,
         "default_band_ids": [],
         "event_attendees": [],
         "band_lineup_contexts": [],

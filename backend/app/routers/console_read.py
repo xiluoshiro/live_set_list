@@ -212,7 +212,7 @@ def list_editable_lives(
         params.append(event_status)
     complete_sql = "l.venue_id IS NOT NULL AND l.opening_time IS NOT NULL AND l.start_time IS NOT NULL"
     incomplete_sql = f"NOT ({complete_sql})"
-    local_today_sql = "(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' + make_interval(mins => l.timezone_offset_minutes))::date"
+    local_today_sql = "COALESCE((CURRENT_TIMESTAMP AT TIME ZONE l.timezone_id)::date, (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' + make_interval(mins => l.timezone_offset_minutes))::date)"
     if schedule_complete is True:
         conditions.append(complete_sql)
     elif schedule_complete is False:
@@ -259,7 +259,7 @@ def list_editable_lives(
                     SELECT l.id, l.live_date, l.live_title, l.live_type,
                            venue_version.venue_name,
                            l.start_time, l.event_status, l.opening_time, l.venue_id,
-                           l.timezone_offset_minutes
+                           l.timezone_offset_minutes, l.timezone_id
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     LEFT JOIN venue_name_versions venue_version
@@ -299,6 +299,7 @@ def list_editable_lives(
                     live_date=row[1],
                     start_time=row[5],
                     timezone_offset_minutes=int(row[9]),
+                    timezone_id=str(row[10]) if row[10] is not None else None,
                     was_rescheduled=False,
                 ),
                 _missing_schedule_fields(row[8], row[7], row[5]),
@@ -365,6 +366,10 @@ def get_editable_live(
                                         'previous_venue_id', history.previous_venue_id,
                                         'previous_venue_name_version_id', history.previous_venue_name_version_id,
                                         'previous_venue', history_version.venue_name,
+                                        'previous_announced_locality_id', history.previous_announced_locality_id,
+                                        'previous_timezone_id', history.previous_timezone_id,
+                                        'previous_timezone_source', history.previous_timezone_source,
+                                        'previous_timezone_offset_minutes', history.previous_timezone_offset_minutes,
                                         'changed_at', history.changed_at,
                                         'note', history.note
                                     )
@@ -398,7 +403,13 @@ def get_editable_live(
                             ),
                             '[]'::jsonb
                         ) AS band_lineup_contexts,
-                        l.timezone_offset_minutes
+                        l.timezone_offset_minutes,
+                        l.announced_locality_id,
+                        l.timezone_id,
+                        l.timezone_source,
+                        l.timezone_source_revision,
+                        l.opening_time_fold,
+                        l.start_time_fold
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     LEFT JOIN venue_name_versions venue_version
@@ -436,6 +447,12 @@ def get_editable_live(
             "timezone": timezone,
             "venue_id": int(row[7]) if row[7] is not None else None,
             "venue_name_version_id": int(row[8]) if row[8] is not None else None,
+            "announced_locality_id": int(row[18]) if row[18] is not None else None,
+            "timezone_id": str(row[19]) if row[19] is not None else None,
+            "timezone_source": str(row[20]),
+            "timezone_source_revision": int(row[21]) if row[21] is not None else None,
+            "opening_time_fold": int(row[22]) if row[22] is not None else None,
+            "start_time_fold": int(row[23]) if row[23] is not None else None,
             "venue_name": str(row[9]) if row[9] is not None else None,
             "default_band_ids": list(row[10] or []),
             "event_attendees": _normalize_console_event_attendees(row[11]),
@@ -446,6 +463,7 @@ def get_editable_live(
                 live_date=row[1],
                 start_time=row[6],
                 timezone_offset_minutes=int(row[17]),
+                timezone_id=str(row[19]) if row[19] is not None else None,
                 was_rescheduled=bool(row[14]),
             )["date_phase"],
             "schedule_history": list(row[14] or []),

@@ -40,9 +40,6 @@ function renderSection(
       liveUrl="https://example.com/live"
       openingTime="18:00"
       startTime="19:00"
-      timezoneHour="+9"
-      timezoneMinute=":00"
-      timezoneMinuteDisabled={false}
       selectedVenueId={1}
       defaultBandIds={options.defaultBandIds ?? [3]}
       defaultBandLineupContexts={options.defaultBandLineupContexts ?? {}}
@@ -65,7 +62,6 @@ function renderSection(
       isLiveDirty={options.isLiveDirty ?? (options.editingLiveId != null)}
       clearAfterCreate
       venues={[{ venue_id: 1, venue_name: "Test Venue", venue_name_version_id: 11 }]}
-      timezoneHourOptions={["+9"]}
       liveTypeOptions={[{ value: "other", label: "其他" }, { value: "event", label: "活动" }]}
       venueOpen={false}
       venueMenuPos={null}
@@ -84,8 +80,6 @@ function renderSection(
       onLiveUrlChange={vi.fn()}
       onOpeningTimeChange={vi.fn()}
       onStartTimeChange={vi.fn()}
-      onTimezoneHourChange={vi.fn()}
-      onCycleTimezoneMinute={vi.fn()}
       onVenueQueryTextChange={vi.fn()}
       onLiveCandidateQueryChange={vi.fn()}
       onLiveCandidateTypeChange={vi.fn()}

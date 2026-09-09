@@ -885,6 +885,12 @@ def test_console_create_live_persists_live_row(
             "start_time": "19:00:30+09:00",
             "venue_id": 2,
             "venue_name_version_id": expected_venue_name_version_id,
+            "announced_locality_id": None,
+            "timezone_id": None,
+            "timezone_source": "legacy_offset",
+            "timezone_source_revision": None,
+            "opening_time_fold": None,
+            "start_time_fold": None,
             "default_band_ids": [1, 3],
             "event_attendees": [],
             "band_lineup_contexts": expected_contexts,
@@ -909,6 +915,12 @@ def test_console_create_live_persists_live_row(
                     start_time::text,
                     venue_id,
                     venue_name_version_id,
+                    announced_locality_id,
+                    timezone_id,
+                    timezone_source,
+                    timezone_source_revision,
+                    opening_time_fold,
+                    start_time_fold,
                     default_band_ids
             FROM live_attrs
             WHERE id = %s
@@ -928,6 +940,12 @@ def test_console_create_live_persists_live_row(
             "19:00:30+09",
             2,
             expected_venue_name_version_id,
+            None,
+            None,
+            "legacy_offset",
+            None,
+            None,
+            None,
             [1, 3],
     )
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
@@ -936,6 +954,10 @@ def test_console_create_live_persists_live_row(
             {
                 "venue_id": 2,
                 "venue_name_version_id": expected_venue_name_version_id,
+                "announced_locality_id": None,
+                "timezone_id": None,
+                "timezone_source": "legacy_offset",
+                "timezone_source_revision": None,
                 "opening_time": "18:00:00+09:00",
             "start_time": "19:00:30+09:00",
             "live_type": "oneman",

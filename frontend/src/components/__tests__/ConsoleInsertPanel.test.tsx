@@ -30,6 +30,8 @@ const apiMocks = vi.hoisted(() => ({
   getConsoleBandTransitionLiveCandidates: vi.fn(),
   getConsoleLive: vi.fn(),
   getConsoleLiveCandidates: vi.fn(),
+  getConsoleLocalities: vi.fn(),
+  getConsoleTimezones: vi.fn(),
   getConsoleVenues: vi.fn(),
   getLiveDetail: vi.fn(),
   getLives: vi.fn(),
@@ -66,6 +68,8 @@ vi.mock("../../api", () => ({
   getConsoleBandTransitionLiveCandidates: apiMocks.getConsoleBandTransitionLiveCandidates,
   getConsoleLive: apiMocks.getConsoleLive,
   getConsoleLiveCandidates: apiMocks.getConsoleLiveCandidates,
+  getConsoleLocalities: apiMocks.getConsoleLocalities,
+  getConsoleTimezones: apiMocks.getConsoleTimezones,
   getConsoleVenues: apiMocks.getConsoleVenues,
   getLiveDetail: apiMocks.getLiveDetail,
   getLives: apiMocks.getLives,
@@ -140,12 +144,16 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleBandTransitionLiveCandidates.mockReset();
     apiMocks.getConsoleLive.mockReset();
     apiMocks.getConsoleLiveCandidates.mockReset();
+    apiMocks.getConsoleLocalities.mockReset();
+    apiMocks.getConsoleTimezones.mockReset();
     apiMocks.getConsoleVenues.mockReset();
     apiMocks.getLiveDetail.mockReset();
     apiMocks.getLives.mockReset();
     apiMocks.getConsoleSongs.mockResolvedValue({ items: [] });
     apiMocks.getConsoleBands.mockResolvedValue({ items: [] });
     apiMocks.getConsoleLiveCandidates.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 });
+    apiMocks.getConsoleLocalities.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0 });
+    apiMocks.getConsoleTimezones.mockResolvedValue(["Asia/Tokyo"]);
     apiMocks.getConsoleLive.mockResolvedValue({
       item: {
         live_id: 55,
@@ -276,40 +284,20 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("opening_time")).toHaveAttribute("type", "time");
     expect(screen.getByLabelText("start_time")).toHaveValue("19:00");
     expect(screen.getByLabelText("start_time")).toHaveAttribute("type", "time");
-    expect(screen.getByLabelText("timezone")).toHaveValue("+9");
-    expect(screen.getByLabelText("timezone minute offset")).toHaveTextContent(":00");
+    expect(screen.getByText("由场馆资料决定")).toBeInTheDocument();
+    expect(screen.queryByLabelText("timezone")).not.toBeInTheDocument();
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
-  // 测试点：时区分钟后缀按 15 分钟循环，切换普通小时时保留，边界小时强制归零。
-  test("时区分钟后缀可循环并处理边界小时", async () => {
+  // 测试点：重复的夏令时当地钟点可分别选择第一次或第二次，不再编辑固定 UTC 偏移。
+  test("重复时间选择会分别写入开场和开演控件", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel initialMode="live_create" />);
 
-    const timezoneSelect = screen.getByLabelText("timezone");
-    const minuteButton = screen.getByLabelText("timezone minute offset");
-
-    for (const expectedMinute of [":15", ":30", ":45", ":00"]) {
-      await user.click(minuteButton);
-      expect(minuteButton).toHaveTextContent(expectedMinute);
-    }
-
-    await user.selectOptions(timezoneSelect, "-3");
-    await user.click(minuteButton);
-    await user.click(minuteButton);
-    expect(timezoneSelect).toHaveValue("-3");
-    expect(minuteButton).toHaveTextContent(":30");
-
-    await user.selectOptions(timezoneSelect, "+10");
-    expect(minuteButton).toHaveTextContent(":30");
-
-    await user.selectOptions(timezoneSelect, "-12");
-    expect(minuteButton).toHaveTextContent(":00");
-    expect(minuteButton).toBeDisabled();
-
-    await user.selectOptions(timezoneSelect, "+14");
-    expect(minuteButton).toHaveTextContent(":00");
-    expect(minuteButton).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText("opening time fold"), "0");
+    await user.selectOptions(screen.getByLabelText("start time fold"), "1");
+    expect(screen.getByLabelText("opening time fold")).toHaveValue("0");
+    expect(screen.getByLabelText("start time fold")).toHaveValue("1");
   });
 
   // 测试点：新增 Setlist 复用 Live 管理候选栏，并把活动 Live 后置且弱化显示。
@@ -473,11 +461,17 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("opening_time")).toHaveValue("18:00");
     await user.click(screen.getByLabelText("开场公布状态"));
     await user.click(screen.getByLabelText("开演公布状态"));
+    await user.selectOptions(screen.getByLabelText("explicit timezone"), "Asia/Tokyo");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
-      expect.objectContaining({ venue_id: null, opening_time: null, start_time: null }),
+      expect.objectContaining({
+        venue_id: null,
+        opening_time: null,
+        start_time: null,
+        explicit_timezone_id: "Asia/Tokyo",
+      }),
       "csrf-token",
     ));
   });
@@ -1123,16 +1117,13 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.change(screen.getByLabelText("live_date"), { target: { value: "2026-04-01" } });
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Inserted Live");
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/inserted");
-    await user.selectOptions(screen.getByLabelText("timezone"), "-3");
-    await user.click(screen.getByLabelText("timezone minute offset"));
-    await user.click(screen.getByLabelText("timezone minute offset"));
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
     expect(apiMocks.createConsoleLive).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "确认新增 Live" })).toBeInTheDocument();
     expect(screen.getByText("Inserted Live")).toBeInTheDocument();
     expect(screen.getByText("New Venue")).toBeInTheDocument();
-    expect(screen.getByText("-03:30")).toBeInTheDocument();
+    expect(screen.getByText("由场馆资料决定")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
@@ -1143,9 +1134,12 @@ describe("ConsoleInsertPanel", () => {
         url: "https://example.com/inserted",
         opening_time: "18:00",
         start_time: "19:00",
-        timezone: "-03:30",
         venue_id: 88,
         venue_name_version_id: 188,
+        announced_locality_id: null,
+        explicit_timezone_id: null,
+        opening_time_fold: null,
+        start_time_fold: null,
         default_band_ids: [3],
         event_attendees: [],
         band_lineup_contexts: [],
@@ -1161,8 +1155,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
     expect(screen.getByLabelText("查询 venue")).toHaveValue("");
     expect(screen.getByRole("button", { name: "请选择 venue" })).toBeInTheDocument();
-    expect(screen.getByLabelText("timezone")).toHaveValue("+9");
-    expect(screen.getByLabelText("timezone minute offset")).toHaveTextContent(":00");
+    expect(screen.queryByLabelText("timezone")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "请选择默认 Band" })).toHaveAttribute("aria-expanded", "false");
     await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
     expect(screen.getByRole("checkbox", { name: /MyGO/ })).not.toBeChecked();
