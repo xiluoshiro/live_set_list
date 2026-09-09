@@ -17,6 +17,7 @@ export type VenueOption = {
   venue_id: number;
   venue_name: string;
   venue_name_version_id: number;
+  venue_kind?: "physical" | "online" | "undisclosed";
 };
 
 export type LiveInsertRow = {

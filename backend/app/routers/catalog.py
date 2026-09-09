@@ -56,6 +56,7 @@ def _live_item_from_row(row: tuple[Any, ...], favorite_live_ids: set[int]) -> di
         live_date=row[1],
         start_time=row[10] if len(row) > 10 else "00:00:00+00:00",
         timezone_offset_minutes=int(row[13]) if len(row) > 13 and row[13] is not None else None,
+        timezone_id=str(row[14]) if len(row) > 14 and row[14] is not None else None,
         was_rescheduled=bool(row[12]) if len(row) > 12 else False,
     )
     return {
@@ -116,7 +117,8 @@ live_rows AS (
             SELECT 1 FROM live_schedule_history history
             WHERE history.live_id = l.id
         ) AS was_rescheduled,
-        l.timezone_offset_minutes
+        l.timezone_offset_minutes,
+        l.timezone_id
     FROM live_attrs l
     JOIN matched_live_ids m
         ON m.id = l.id
@@ -132,12 +134,12 @@ live_rows AS (
         ON effective.live_id = l.id
     LEFT JOIN current_band_versions b
         ON b.band_id = effective.band_id
-    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, l.start_time, l.event_status, l.timezone_offset_minutes,
+    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, l.start_time, l.event_status, l.timezone_offset_minutes, l.timezone_id,
              tour.id, tour.tour_title, pg.id, pg.group_title
 )
 SELECT (SELECT COUNT(*) FROM matched_live_ids) AS live_total,
        id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title,
-       performance_group_id, group_title, start_time, event_status, was_rescheduled, timezone_offset_minutes
+       performance_group_id, group_title, start_time, event_status, was_rescheduled, timezone_offset_minutes, timezone_id
 FROM live_rows
 ORDER BY live_date DESC, id DESC
 LIMIT %s
@@ -265,7 +267,8 @@ live_rows AS (
             SELECT 1 FROM live_schedule_history history
             WHERE history.live_id = l.id
         ) AS was_rescheduled,
-        l.timezone_offset_minutes
+        l.timezone_offset_minutes,
+        l.timezone_id
     FROM live_attrs l
     JOIN matched_live_ids m
         ON m.id = l.id
@@ -278,10 +281,10 @@ live_rows AS (
     LEFT JOIN performance_group_attrs pg
         ON pg.id = pgl.group_id
     GROUP BY l.id, l.live_date, l.live_title, l.default_band_ids, l.url, l.live_type,
-             l.start_time, l.event_status, l.timezone_offset_minutes, tour.id, tour.tour_title, pg.id, pg.group_title
+             l.start_time, l.event_status, l.timezone_offset_minutes, l.timezone_id, tour.id, tour.tour_title, pg.id, pg.group_title
 )
 SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title,
-       performance_group_id, group_title, start_time, event_status, was_rescheduled, timezone_offset_minutes
+       performance_group_id, group_title, start_time, event_status, was_rescheduled, timezone_offset_minutes, timezone_id
 FROM live_rows
 ORDER BY live_date DESC, id DESC
 LIMIT %s OFFSET %s
@@ -546,7 +549,8 @@ SELECT
         SELECT 1 FROM live_schedule_history history
         WHERE history.live_id = l.id
     ) AS was_rescheduled,
-    l.timezone_offset_minutes
+    l.timezone_offset_minutes,
+    l.timezone_id
 FROM live_attrs l
 WHERE l.live_date >= %(month_start)s
   AND l.live_date < %(next_month_start)s
@@ -604,6 +608,7 @@ def get_catalog_calendar(
             live_date=row[1],
             start_time=row[4],
             timezone_offset_minutes=int(row[7]) if len(row) > 7 and row[7] is not None else None,
+            timezone_id=str(row[8]) if len(row) > 8 and row[8] is not None else None,
             was_rescheduled=bool(row[6]),
         )
         items.append(

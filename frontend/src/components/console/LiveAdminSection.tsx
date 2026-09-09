@@ -29,9 +29,12 @@ type LiveAdminSectionProps = {
   venueAnnounced?: boolean;
   openingTimeAnnounced?: boolean;
   startTimeAnnounced?: boolean;
-  timezoneHour: string;
-  timezoneMinute: string;
-  timezoneMinuteDisabled: boolean;
+  announcedLocalityId?: number | null;
+  explicitTimezoneId?: string | null;
+  openingTimeFold?: 0 | 1 | null;
+  startTimeFold?: 0 | 1 | null;
+  localities?: Array<{ id: number; country_code: string; admin_area: string | null; locality_name: string; timezone_id: string | null }>;
+  timezoneOptions?: string[];
   selectedVenueId: number;
   defaultBandIds: number[];
   defaultBandLineupContexts: Record<number, ConsoleLiveBandLineupContext>;
@@ -51,7 +54,6 @@ type LiveAdminSectionProps = {
   isLiveDirty: boolean;
   clearAfterCreate: boolean;
   venues: VenueOption[];
-  timezoneHourOptions: string[];
   liveTypeOptions: { value: string; label: string }[];
   venueOpen: boolean;
   venueMenuPos: Position | null;
@@ -96,8 +98,10 @@ type LiveAdminSectionProps = {
   onVenueAnnouncedChange?: (announced: boolean) => void;
   onOpeningTimeAnnouncedChange?: (announced: boolean) => void;
   onStartTimeAnnouncedChange?: (announced: boolean) => void;
-  onTimezoneHourChange: (value: string) => void;
-  onCycleTimezoneMinute: () => void;
+  onAnnouncedLocalityChange?: (value: number | null) => void;
+  onExplicitTimezoneChange?: (value: string | null) => void;
+  onOpeningTimeFoldChange?: (value: 0 | 1 | null) => void;
+  onStartTimeFoldChange?: (value: 0 | 1 | null) => void;
   onVenueQueryTextChange: (value: string) => void;
   onLiveCandidateQueryChange: (value: string) => void;
   onLiveCandidateTypeChange: (value: string) => void;
@@ -137,9 +141,12 @@ export function LiveAdminSection({
   venueAnnounced = true,
   openingTimeAnnounced = true,
   startTimeAnnounced = true,
-  timezoneHour,
-  timezoneMinute,
-  timezoneMinuteDisabled,
+  announcedLocalityId = null,
+  explicitTimezoneId = null,
+  openingTimeFold = null,
+  startTimeFold = null,
+  localities = [],
+  timezoneOptions = [],
   selectedVenueId,
   defaultBandIds,
   defaultBandLineupContexts,
@@ -159,7 +166,6 @@ export function LiveAdminSection({
   isLiveDirty,
   clearAfterCreate,
   venues,
-  timezoneHourOptions,
   liveTypeOptions,
   venueOpen,
   venueMenuPos,
@@ -188,8 +194,10 @@ export function LiveAdminSection({
   onVenueAnnouncedChange = () => undefined,
   onOpeningTimeAnnouncedChange = () => undefined,
   onStartTimeAnnouncedChange = () => undefined,
-  onTimezoneHourChange,
-  onCycleTimezoneMinute,
+  onAnnouncedLocalityChange = () => undefined,
+  onExplicitTimezoneChange = () => undefined,
+  onOpeningTimeFoldChange = () => undefined,
+  onStartTimeFoldChange = () => undefined,
   onVenueQueryTextChange,
   onLiveCandidateQueryChange,
   onLiveCandidateTypeChange,
@@ -453,33 +461,68 @@ export function LiveAdminSection({
               </td>
               <td>
                 <input type="time" aria-label="opening_time" value={openingTime} disabled={!openingTimeAnnounced} onChange={(e) => onOpeningTimeChange(e.target.value)} />
+                <select
+                  aria-label="opening time fold"
+                  value={openingTimeFold ?? ""}
+                  disabled={!openingTimeAnnounced}
+                  onChange={(e) => onOpeningTimeFoldChange(e.target.value === "" ? null : Number(e.target.value) as 0 | 1)}
+                >
+                  <option value="">非重复时间</option>
+                  <option value="0">重复时间：第一次</option>
+                  <option value="1">重复时间：第二次</option>
+                </select>
               </td>
               <td>
                 <input type="time" aria-label="start_time" value={startTime} disabled={!startTimeAnnounced} onChange={(e) => onStartTimeChange(e.target.value)} />
+                <select
+                  aria-label="start time fold"
+                  value={startTimeFold ?? ""}
+                  disabled={!startTimeAnnounced}
+                  onChange={(e) => onStartTimeFoldChange(e.target.value === "" ? null : Number(e.target.value) as 0 | 1)}
+                >
+                  <option value="">非重复时间</option>
+                  <option value="0">重复时间：第一次</option>
+                  <option value="1">重复时间：第二次</option>
+                </select>
               </td>
               <td>
                 <div className="timezone-input-group">
-                  <select
-                    aria-label="timezone"
-                    value={timezoneHour}
-                    onChange={(e) => onTimezoneHourChange(e.target.value)}
-                  >
-                    {timezoneHourOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="timezone-minute-btn"
-                    aria-label="timezone minute offset"
-                    title="每次增加 15 分钟"
-                    disabled={timezoneMinuteDisabled}
-                    onClick={onCycleTimezoneMinute}
-                  >
-                    {timezoneMinute}
-                  </button>
+                  {venueAnnounced ? (
+                    <>
+                      <strong>由场馆资料决定</strong>
+                      <small>请先在场馆管理中核验城市或精确位置</small>
+                    </>
+                  ) : (
+                    <label>
+                      <span>已公布城市</span>
+                      <select
+                        aria-label="announced locality"
+                        value={announcedLocalityId ?? ""}
+                        onChange={(e) => onAnnouncedLocalityChange(e.target.value === "" ? null : Number(e.target.value))}
+                      >
+                        <option value="">未公布城市</option>
+                        {localities.map((locality) => (
+                          <option key={locality.id} value={locality.id} disabled={locality.timezone_id === null}>
+                            {locality.country_code} {locality.admin_area ? `${locality.admin_area} ` : ""}{locality.locality_name}
+                            {locality.timezone_id ? ` · ${locality.timezone_id}` : " · 待核验时区"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {(!venueAnnounced || venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_kind === "online") && announcedLocalityId === null && (
+                    <label>
+                      <span>活动时区例外</span>
+                      <select
+                        aria-label="explicit timezone"
+                        value={explicitTimezoneId ?? ""}
+                        onChange={(e) => onExplicitTimezoneChange(e.target.value || null)}
+                      >
+                        <option value="">仅线上或完全未公布所在地时选择</option>
+                        {timezoneOptions.map((timezoneId) => <option key={timezoneId} value={timezoneId}>{timezoneId}</option>)}
+                      </select>
+                    </label>
+                  )}
                 </div>
               </td>
             </tr>

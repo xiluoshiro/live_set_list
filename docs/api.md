@@ -350,8 +350,9 @@
 - `POST /api/console/venues`
   - 写入 `venue_list(venue)`，`id` 由 sequence 生成
 - `POST /api/console/lives`
-  - 要求 `venue_id` 已存在
-  - `opening_time` / `start_time` 接受 `HH:mm` 或 `HH:mm:ss`，并与 `timezone` 组合成带时区时间
+  - 可选择已核验的 `venue_id`，或在场馆未公布时提交 `announced_locality_id`；线上或完全未公布所在地时提交 `explicit_timezone_id`
+  - 后端从 Venue／城市或活动例外解析并保存 IANA `timezone_id` 与来源；`timezone` 仅为旧客户端兼容字段，不能作为新写入的时区依据
+  - `opening_time` / `start_time` 接受 `HH:mm` 或 `HH:mm:ss`；夏令时重复的钟点以 `opening_time_fold` / `start_time_fold` 的 `0|1` 指定首次或第二次出现，不存在的当地钟点返回 422
   - `live_type` 必填，只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
   - `default_band_ids` 可选，最多 100 项；后端要求每项为已存在的正数 `band_attrs.id`，并去重、升序后写入
   - `default_band_ids` 只在该 Live 尚无任何 setlist 行时作为列表 Band 使用
@@ -367,10 +368,10 @@
   - `has_setlist=true|false` 可按是否已有 Setlist 筛选，与其他条件按 AND 组合
   - `event_status` 可按人工状态精确筛选；候选同时返回 `event_status/date_phase`
 - `GET /api/console/lives/{live_id}`
-  - 返回完整可编辑字段、`timezone`、默认 Band 的 `band_lineup_contexts` 和正式改期 `schedule_history`；活动出演成员的 `mode` 仍为计算值
+  - 返回完整可编辑字段、兼容 `timezone`、`announced_locality_id`、IANA `timezone_id`／来源／来源修订号、重复时间选择、默认 Band 的 `band_lineup_contexts` 和正式改期 `schedule_history`；活动出演成员的 `mode` 仍为计算值
 - `PUT /api/console/lives/{live_id}`
   - 基本字段与新增 Live 共用契约，不接受出演成员 `mode`；排期变化时额外要求 `schedule_change_kind=correction|reschedule`
-  - `reschedule` 会保存更新前的日期、开场、开演和 Venue 快照，`correction` 不写公开排期历史
+  - `reschedule` 会保存更新前的日期、开场、开演、Venue、已公布城市、IANA 时区、来源、兼容偏移和重复时间选择快照，`correction` 不写公开排期历史
   - 正式改期可附 `schedule_change_note`；没有排期字段变化时不得提交改期类型
   - `status_note` 只在 `postponed/cancelled` 时保存，并显示在公开详情状态栏；`scheduled` 请求中的空白或遗留说明会归一化为 `null`
   - 使用行锁并在单一事务中校验、更新；无实际变化时不写审计日志
@@ -465,4 +466,4 @@
 - `PUT /venues/{id}/map-links`：确认 `provider`、地点 ID 或平台 HTTPS 详情链接，要求 `expected_revision`；Apple 必须提供详情 URL。
 - `DELETE /venues/{id}/map-links/{provider}?expected_revision=`：取消对应平台关联，保留场馆坐标并写审计。
 
-平台枚举为 `google`、`apple`、`amap`。关联前须有已确认坐标，位置修订后关联返回 `is_current=false`。本阶段不调用外部地图查询服务，也不改变 Live 的现有手工偏移请求契约。完整计划见 [地理资料设计](design/venue-location-and-timezone.md)。
+平台枚举为 `google`、`apple`、`amap`。关联前须有已确认坐标，位置修订后关联返回 `is_current=false`。本阶段不调用外部地图查询服务；Live 自动时区由已保存的 Venue／城市资料或明确的活动例外解析，不依赖地图在线调用。完整计划见 [地理资料设计](design/venue-location-and-timezone.md)。

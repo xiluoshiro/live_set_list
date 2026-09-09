@@ -80,6 +80,8 @@ vi.mock("../api", () => ({
   createConsoleBandLineupVersion: vi.fn(),
   getConsoleBandTransitionLiveCandidates: vi.fn(),
   getConsoleVenues: vi.fn().mockResolvedValue({ items: [] }),
+  getConsoleLocalities: vi.fn().mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0 }),
+  getConsoleTimezones: vi.fn().mockResolvedValue(["Asia/Tokyo"]),
   getConsoleLiveCandidates: vi.fn().mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 }),
   getConsoleLive: vi.fn(),
   updateConsoleLive: vi.fn(),

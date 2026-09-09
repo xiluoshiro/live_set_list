@@ -17,7 +17,9 @@ import {
   getConsoleLive,
   getConsoleLiveCandidates,
   getConsoleLiveSetlist,
+  getConsoleLocalities,
   getConsoleSongs,
+  getConsoleTimezones,
   getConsoleVenues,
   getLiveDetail,
   getLives,
@@ -39,6 +41,7 @@ import {
   type ConsoleSongItem,
   type ConsoleSongCreatePayload,
   type ConsoleVenueItem,
+  type GeoLocality,
   type LiveDetailResponse,
   type LiveItem,
 } from "../api";
@@ -60,8 +63,6 @@ import {
 import {
   INITIAL_SETLIST_ROWS,
   LIVE_TYPE_OPTIONS,
-  TIMEZONE_HOUR_OPTIONS,
-  TIMEZONE_MINUTE_SUFFIXES,
   formatLiveType,
 } from "./console/constants";
 import {
@@ -193,6 +194,7 @@ function toVenueOption(item: ConsoleVenueItem): VenueOption {
       ? `${item.matched_name}（现名：${item.venue_name}）`
       : item.venue_name,
     venue_name_version_id: item.matched_name_version_id ?? item.venue_name_version_id,
+    venue_kind: item.venue_kind,
   };
 }
 
@@ -265,16 +267,6 @@ function formatTimedLabel(value: string | null | undefined): string {
 const DEFAULT_LIVE_OPENING_TIME = "18:00";
 const DEFAULT_LIVE_START_TIME = "19:00";
 const DEFAULT_LIVE_TIMEZONE = "+09:00";
-
-function getTimezoneHourValue(timezone: string): string {
-  return `${timezone[0]}${Number(timezone.slice(1, 3))}`;
-}
-
-function buildTimezoneOffset(hourValue: string, minuteSuffix: string): string {
-  const hour = Number(hourValue);
-  const sign = hour < 0 ? "-" : "+";
-  return `${sign}${String(Math.abs(hour)).padStart(2, "0")}${minuteSuffix}`;
-}
 
 function getTodayDateInputValue(): string {
   const today = new Date();
@@ -415,7 +407,11 @@ function normalizeLivePayload(payload: ConsoleLiveUpsertPayload): ConsoleLiveUps
 }
 
 function livePayloadEquals(left: ConsoleLiveUpsertPayload | null, right: ConsoleLiveUpsertPayload): boolean {
-  return left !== null && JSON.stringify(normalizeLivePayload(left)) === JSON.stringify(normalizeLivePayload(right));
+  if (left === null) return false;
+  const canonicalize = (payload: ConsoleLiveUpsertPayload) => Object.fromEntries(
+    Object.entries(normalizeLivePayload(payload)).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey)),
+  );
+  return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
 }
 
 function formatLivePayloadValue(field: keyof ConsoleLiveUpsertPayload, value: ConsoleLiveUpsertPayload[keyof ConsoleLiveUpsertPayload]): string {
@@ -661,6 +657,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [openingTimeAnnounced, setOpeningTimeAnnounced] = useState(true);
   const [startTimeAnnounced, setStartTimeAnnounced] = useState(true);
   const [timezone, setTimezone] = useState(DEFAULT_LIVE_TIMEZONE);
+  const [announcedLocalityId, setAnnouncedLocalityId] = useState<number | null>(null);
+  const [explicitTimezoneId, setExplicitTimezoneId] = useState<string | null>(null);
+  const [openingTimeFold, setOpeningTimeFold] = useState<0 | 1 | null>(null);
+  const [startTimeFold, setStartTimeFold] = useState<0 | 1 | null>(null);
+  const [localities, setLocalities] = useState<GeoLocality[]>([]);
+  const [timezoneOptions, setTimezoneOptions] = useState<string[]>([]);
   const [selectedVenueId, setSelectedVenueId] = useState<number>(0);
   const [defaultBandIds, setDefaultBandIds] = useState<number[]>([]);
   const [defaultBandLineupContexts, setDefaultBandLineupContexts] = useState<
@@ -735,9 +737,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const otherMemberMenuRef = useRef<HTMLDivElement | null>(null);
   const didInitialVenueFocusRef = useRef(false);
 
-  const timezoneHour = getTimezoneHourValue(timezone);
-  const timezoneMinute = timezone.slice(3);
-  const timezoneMinuteDisabled = timezoneHour === "-12" || timezoneHour === "+14";
   const currentLivePayload = useMemo<ConsoleLiveUpsertPayload>(() => ({
     live_date: liveDate,
     live_title: liveTitle.trim(),
@@ -745,7 +744,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     url: liveUrl.trim(),
     opening_time: openingTimeAnnounced ? openingTime : null,
     start_time: startTimeAnnounced ? startTime : null,
-    timezone,
+    ...(originalLivePayload?.timezone_source === "legacy_offset" ? { timezone } : {}),
+    ...(originalLivePayload?.timezone_source ? { timezone_source: originalLivePayload.timezone_source } : {}),
+    announced_locality_id: venueAnnounced ? null : announcedLocalityId,
+    explicit_timezone_id: explicitTimezoneId,
+    opening_time_fold: openingTimeFold,
+    start_time_fold: startTimeFold,
     venue_id: venueAnnounced ? selectedVenueId : null,
     venue_name_version_id: venueAnnounced
       ? (venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_name_version_id ?? null)
@@ -784,6 +788,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     startTimeAnnounced,
     statusNote,
     timezone,
+    announcedLocalityId,
+    explicitTimezoneId,
+    openingTimeFold,
+    startTimeFold,
     venueAnnounced,
   ]);
   const isLiveDirty = editingLiveId !== null && !livePayloadEquals(originalLivePayload, currentLivePayload);
@@ -791,7 +799,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     "live_date",
     "opening_time",
     "start_time",
-    "timezone",
+    "announced_locality_id",
+    "explicit_timezone_id",
+    "opening_time_fold",
+    "start_time_fold",
     "venue_id",
     "venue_name_version_id",
   ]);
@@ -818,20 +829,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     if (scheduleChangeKind !== null) setScheduleChangeKind(null);
     if (scheduleChangeNote !== "") setScheduleChangeNote("");
   }, [requiresScheduleChangeKind, scheduleChangeKind, scheduleChangeNote]);
-
-  const changeTimezoneHour = (hourValue: string) => {
-    const minuteSuffix = hourValue === "-12" || hourValue === "+14" ? ":00" : timezoneMinute;
-    setTimezone(buildTimezoneOffset(hourValue, minuteSuffix));
-  };
-
-  const cycleTimezoneMinute = () => {
-    if (timezoneMinuteDisabled) return;
-    const currentIndex = TIMEZONE_MINUTE_SUFFIXES.indexOf(
-      timezoneMinute as (typeof TIMEZONE_MINUTE_SUFFIXES)[number],
-    );
-    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % TIMEZONE_MINUTE_SUFFIXES.length : 0;
-    setTimezone(buildTimezoneOffset(timezoneHour, TIMEZONE_MINUTE_SUFFIXES[nextIndex]));
-  };
 
   useEffect(() => {
     if (mode !== "live_create" || didInitialVenueFocusRef.current) return;
@@ -872,7 +869,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     liveUrl.trim() === "" ||
     (openingTimeAnnounced && openingTime.trim() === "") ||
     (startTimeAnnounced && startTime.trim() === "") ||
-    timezone.trim() === "" ||
+    (!venueAnnounced && announcedLocalityId === null && !explicitTimezoneId) ||
+    (venueAnnounced
+      && venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_kind === "online"
+      && !explicitTimezoneId) ||
     (mode === "live_edit" && (editingLiveId === null || !isLiveDirty));
   const isLiveSubmitBlocked = isLiveSubmitDisabled
     || (mode === "live_edit" && requiresScheduleChangeKind && scheduleChangeKind === null);
@@ -921,10 +921,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     let canceled = false;
 
     const loadConsoleLookups = async () => {
-      const [songResult, bandResult, venueResult] = await Promise.allSettled([
+      const [songResult, bandResult, venueResult, localityResult, timezoneResult] = await Promise.allSettled([
         getConsoleSongs(undefined, 100),
         getConsoleBands(undefined, 100),
         getConsoleVenues(undefined, 100),
+        getConsoleLocalities("", 1),
+        getConsoleTimezones(),
       ]);
       if (canceled) return;
 
@@ -950,10 +952,18 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           nextVenues.some((venue) => venue.venue_id === prev) ? prev : nextVenues[0]?.venue_id ?? 0,
         );
       }
+      if (localityResult.status === "fulfilled") {
+        setLocalities(localityResult.value.items);
+      }
+      if (timezoneResult.status === "fulfilled") {
+        setTimezoneOptions(timezoneResult.value);
+      }
       const failures = [
         songResult.status === "rejected" ? `songs: ${errorMessage(songResult.reason)}` : "",
         bandResult.status === "rejected" ? `bands: ${errorMessage(bandResult.reason)}` : "",
         venueResult.status === "rejected" ? `venues: ${errorMessage(venueResult.reason)}` : "",
+        localityResult.status === "rejected" ? `localities: ${errorMessage(localityResult.reason)}` : "",
+        timezoneResult.status === "rejected" ? `timezones: ${errorMessage(timezoneResult.reason)}` : "",
       ].filter(Boolean);
       if (failures.length > 0) {
         setMessage(`加载控制台候选失败：${failures.join("；")}`);
@@ -1162,6 +1172,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setOpeningTimeAnnounced(true);
     setStartTimeAnnounced(true);
     setTimezone(DEFAULT_LIVE_TIMEZONE);
+    setAnnouncedLocalityId(null);
+    setExplicitTimezoneId(null);
+    setOpeningTimeFold(null);
+    setStartTimeFold(null);
     setSelectedVenueId(0);
     setDefaultBandIds([]);
     setDefaultBandLineupContexts({});
@@ -1188,7 +1202,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setVenueAnnounced(payload.venue_id !== null);
     setOpeningTime(payload.opening_time ?? DEFAULT_LIVE_OPENING_TIME);
     setStartTime(payload.start_time ?? DEFAULT_LIVE_START_TIME);
-    setTimezone(payload.timezone);
+    setTimezone(payload.timezone ?? DEFAULT_LIVE_TIMEZONE);
+    setAnnouncedLocalityId(payload.announced_locality_id ?? null);
+    setExplicitTimezoneId(payload.explicit_timezone_id ?? null);
+    setOpeningTimeFold(payload.opening_time_fold ?? null);
+    setStartTimeFold(payload.start_time_fold ?? null);
     setSelectedVenueId(payload.venue_id ?? 0);
     setDefaultBandIds([...payload.default_band_ids]);
     setDefaultBandLineupContexts(Object.fromEntries(
@@ -1440,8 +1458,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         opening_time: getClockValue(item.opening_time),
         start_time: getClockValue(item.start_time),
         timezone: item.timezone,
+        timezone_source: item.timezone_source ?? "legacy_offset",
         venue_id: item.venue_id,
         venue_name_version_id: item.venue_name_version_id,
+        announced_locality_id: item.announced_locality_id ?? null,
+        explicit_timezone_id: item.timezone_source === "explicit" ? item.timezone_id ?? null : null,
+        opening_time_fold: item.opening_time_fold ?? null,
+        start_time_fold: item.start_time_fold ?? null,
         default_band_ids: item.default_band_ids,
         event_attendees: item.event_attendees.map((attendee) => ({
           band_id: attendee.band_id,
@@ -2577,7 +2600,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         url: response.item.url,
         opening_time: response.item.opening_time,
         start_time: response.item.start_time,
-        timezone: payload.timezone,
+        timezone: response.item.opening_time?.match(/[+-]\d{2}:\d{2}$/)?.[0] ?? payload.timezone ?? DEFAULT_LIVE_TIMEZONE,
         venue_id: response.item.venue_id,
         venue_name_version_id: response.item.venue_name_version_id,
         default_band_ids: response.item.default_band_ids ?? [],
@@ -2592,9 +2615,14 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         url: response.item.url,
         opening_time: getClockValue(response.item.opening_time),
         start_time: getClockValue(response.item.start_time),
-        timezone: response.item.opening_time?.match(/[+-]\d{2}:\d{2}$/)?.[0] ?? payload.timezone,
+        timezone: response.item.opening_time?.match(/[+-]\d{2}:\d{2}$/)?.[0] ?? payload.timezone ?? DEFAULT_LIVE_TIMEZONE,
         venue_id: response.item.venue_id,
         venue_name_version_id: response.item.venue_name_version_id,
+        announced_locality_id: response.item.announced_locality_id ?? null,
+        explicit_timezone_id: response.item.timezone_source === "explicit" ? response.item.timezone_id ?? null : null,
+        timezone_source: response.item.timezone_source ?? "legacy_offset",
+        opening_time_fold: response.item.opening_time_fold ?? null,
+        start_time_fold: response.item.start_time_fold ?? null,
         default_band_ids: response.item.default_band_ids ?? [],
         event_attendees: (response.item.event_attendees ?? []).map((attendee) => ({
           band_id: attendee.band_id,
@@ -3165,9 +3193,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           venueAnnounced={venueAnnounced}
           openingTimeAnnounced={openingTimeAnnounced}
           startTimeAnnounced={startTimeAnnounced}
-          timezoneHour={timezoneHour}
-          timezoneMinute={timezoneMinute}
-          timezoneMinuteDisabled={timezoneMinuteDisabled}
+          announcedLocalityId={announcedLocalityId}
+          explicitTimezoneId={explicitTimezoneId}
+          openingTimeFold={openingTimeFold}
+          startTimeFold={startTimeFold}
+          localities={localities}
+          timezoneOptions={timezoneOptions}
           selectedVenueId={selectedVenueId}
           defaultBandIds={defaultBandIds}
           defaultBandLineupContexts={defaultBandLineupContexts}
@@ -3187,7 +3218,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           isLiveDirty={isLiveDirty}
           clearAfterCreate={clearLiveAfterCreate}
           venues={venues}
-          timezoneHourOptions={TIMEZONE_HOUR_OPTIONS}
           liveTypeOptions={LIVE_TYPE_OPTIONS}
           venueOpen={venueOpen}
           venueMenuPos={venueMenuPos}
@@ -3219,11 +3249,20 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onLiveUrlChange={setLiveUrl}
           onOpeningTimeChange={setOpeningTime}
           onStartTimeChange={setStartTime}
-          onVenueAnnouncedChange={setVenueAnnounced}
+          onVenueAnnouncedChange={(announced) => {
+            setVenueAnnounced(announced);
+            if (announced) setAnnouncedLocalityId(null);
+            if (!announced) setExplicitTimezoneId(null);
+          }}
           onOpeningTimeAnnouncedChange={setOpeningTimeAnnounced}
           onStartTimeAnnouncedChange={setStartTimeAnnounced}
-          onTimezoneHourChange={changeTimezoneHour}
-          onCycleTimezoneMinute={cycleTimezoneMinute}
+          onAnnouncedLocalityChange={(value) => {
+            setAnnouncedLocalityId(value);
+            if (value !== null) setExplicitTimezoneId(null);
+          }}
+          onExplicitTimezoneChange={setExplicitTimezoneId}
+          onOpeningTimeFoldChange={setOpeningTimeFold}
+          onStartTimeFoldChange={setStartTimeFold}
           onVenueQueryTextChange={setVenueQueryText}
           onLiveCandidateQueryChange={setLiveCandidateQuery}
           onLiveCandidateTypeChange={changeLiveCandidateType}
@@ -3240,6 +3279,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onOpenDefaultBandMenu={openDefaultBandMenu}
           onSelectVenue={(venueId) => {
             setSelectedVenueId(venueId);
+            setAnnouncedLocalityId(null);
+            if (venues.find((venue) => venue.venue_id === venueId)?.venue_kind !== "online") {
+              setExplicitTimezoneId(null);
+            }
             setVenueOpen(false);
           }}
           onToggleDefaultBand={toggleDefaultBand}

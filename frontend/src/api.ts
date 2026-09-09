@@ -686,7 +686,14 @@ export type ConsoleLiveUpsertPayload = {
   url: string;
   opening_time: string | null;
   start_time: string | null;
-  timezone: string;
+  /** Deprecated fixed offset retained only when editing a legacy Live. */
+  timezone?: string;
+  announced_locality_id?: number | null;
+  explicit_timezone_id?: string | null;
+  opening_time_fold?: 0 | 1 | null;
+  start_time_fold?: 0 | 1 | null;
+  /** Read-only source returned by the edit endpoint; removed before writes. */
+  timezone_source?: "venue" | "locality" | "explicit" | "legacy_offset";
   venue_id: number | null;
   venue_name_version_id: number | null;
   default_band_ids: number[];
@@ -721,6 +728,12 @@ export type ConsoleLiveMutationItem = {
   start_time: string | null;
   venue_id: number | null;
   venue_name_version_id: number | null;
+  announced_locality_id?: number | null;
+  timezone_id?: string | null;
+  timezone_source?: "venue" | "locality" | "explicit" | "legacy_offset";
+  timezone_source_revision?: number | null;
+  opening_time_fold?: 0 | 1 | null;
+  start_time_fold?: 0 | 1 | null;
   default_band_ids: number[];
   event_attendees: ConsoleEventAttendee[];
   band_lineup_contexts?: ConsoleLiveBandLineupContext[];
@@ -1763,7 +1776,7 @@ export async function createConsoleLive(
       headers: jsonHeaders(csrfToken),
       body: JSON.stringify(
         Object.fromEntries(
-          Object.entries(payload).filter(([key]) => key !== "band_lineup_contexts"),
+          Object.entries(payload).filter(([key]) => !["band_lineup_contexts", "timezone_source"].includes(key)),
         ),
       ),
     },
@@ -1988,7 +2001,7 @@ export async function updateConsoleLive(
       headers: jsonHeaders(csrfToken),
       body: JSON.stringify(
         Object.fromEntries(
-          Object.entries(payload).filter(([key]) => key !== "band_lineup_contexts"),
+          Object.entries(payload).filter(([key]) => !["band_lineup_contexts", "timezone_source"].includes(key)),
         ),
       ),
     },
