@@ -3195,8 +3195,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           startTimeAnnounced={startTimeAnnounced}
           announcedLocalityId={announcedLocalityId}
           explicitTimezoneId={explicitTimezoneId}
-          openingTimeFold={openingTimeFold}
-          startTimeFold={startTimeFold}
           localities={localities}
           timezoneOptions={timezoneOptions}
           selectedVenueId={selectedVenueId}
@@ -3233,7 +3231,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           scheduleAttentionCounts={scheduleAttentionCounts}
           scheduleAttentionFilter={scheduleAttentionFilter}
           scheduleAttentionLoading={scheduleAttentionLoading}
-          onLiveDateChange={setLiveDate}
+          onLiveDateChange={(value) => {
+            setLiveDate(value);
+            setOpeningTimeFold(null);
+            setStartTimeFold(null);
+          }}
           onLiveTitleChange={setLiveTitle}
           onLiveTypeChange={(value) => {
             setLiveType(value);
@@ -3247,22 +3249,40 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onScheduleChangeKindChange={setScheduleChangeKind}
           onScheduleChangeNoteChange={setScheduleChangeNote}
           onLiveUrlChange={setLiveUrl}
-          onOpeningTimeChange={setOpeningTime}
-          onStartTimeChange={setStartTime}
+          onOpeningTimeChange={(value) => {
+            setOpeningTime(value);
+            setOpeningTimeFold(null);
+          }}
+          onStartTimeChange={(value) => {
+            setStartTime(value);
+            setStartTimeFold(null);
+          }}
           onVenueAnnouncedChange={(announced) => {
             setVenueAnnounced(announced);
+            setOpeningTimeFold(null);
+            setStartTimeFold(null);
             if (announced) setAnnouncedLocalityId(null);
             if (!announced) setExplicitTimezoneId(null);
           }}
-          onOpeningTimeAnnouncedChange={setOpeningTimeAnnounced}
-          onStartTimeAnnouncedChange={setStartTimeAnnounced}
+          onOpeningTimeAnnouncedChange={(announced) => {
+            setOpeningTimeAnnounced(announced);
+            if (!announced) setOpeningTimeFold(null);
+          }}
+          onStartTimeAnnouncedChange={(announced) => {
+            setStartTimeAnnounced(announced);
+            if (!announced) setStartTimeFold(null);
+          }}
           onAnnouncedLocalityChange={(value) => {
             setAnnouncedLocalityId(value);
+            setOpeningTimeFold(null);
+            setStartTimeFold(null);
             if (value !== null) setExplicitTimezoneId(null);
           }}
-          onExplicitTimezoneChange={setExplicitTimezoneId}
-          onOpeningTimeFoldChange={setOpeningTimeFold}
-          onStartTimeFoldChange={setStartTimeFold}
+          onExplicitTimezoneChange={(value) => {
+            setExplicitTimezoneId(value);
+            setOpeningTimeFold(null);
+            setStartTimeFold(null);
+          }}
           onVenueQueryTextChange={setVenueQueryText}
           onLiveCandidateQueryChange={setLiveCandidateQuery}
           onLiveCandidateTypeChange={changeLiveCandidateType}
@@ -3280,6 +3300,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onSelectVenue={(venueId) => {
             setSelectedVenueId(venueId);
             setAnnouncedLocalityId(null);
+            setOpeningTimeFold(null);
+            setStartTimeFold(null);
             if (venues.find((venue) => venue.venue_id === venueId)?.venue_kind !== "online") {
               setExplicitTimezoneId(null);
             }

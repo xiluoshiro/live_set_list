@@ -289,15 +289,14 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
-  // 测试点：重复的夏令时当地钟点可分别选择第一次或第二次，不再编辑固定 UTC 偏移。
-  test("重复时间选择会分别写入开场和开演控件", async () => {
-    const user = userEvent.setup();
+  // 测试点：低频夏令时重复钟点只由后端校验兜底，不在常规 Live 表单暴露 fold 控件。
+  test("Live 表单不显示夏令时重复时间控件", async () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
 
-    await user.selectOptions(screen.getByLabelText("opening time fold"), "0");
-    await user.selectOptions(screen.getByLabelText("start time fold"), "1");
-    expect(screen.getByLabelText("opening time fold")).toHaveValue("0");
-    expect(screen.getByLabelText("start time fold")).toHaveValue("1");
+    expect(screen.queryByLabelText("opening time fold")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("start time fold")).not.toBeInTheDocument();
+    expect(screen.queryByText("非重复时间")).not.toBeInTheDocument();
   });
 
   // 测试点：新增 Setlist 复用 Live 管理候选栏，并把活动 Live 后置且弱化显示。

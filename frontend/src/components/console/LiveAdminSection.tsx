@@ -31,8 +31,6 @@ type LiveAdminSectionProps = {
   startTimeAnnounced?: boolean;
   announcedLocalityId?: number | null;
   explicitTimezoneId?: string | null;
-  openingTimeFold?: 0 | 1 | null;
-  startTimeFold?: 0 | 1 | null;
   localities?: Array<{ id: number; country_code: string; admin_area: string | null; locality_name: string; timezone_id: string | null }>;
   timezoneOptions?: string[];
   selectedVenueId: number;
@@ -100,8 +98,6 @@ type LiveAdminSectionProps = {
   onStartTimeAnnouncedChange?: (announced: boolean) => void;
   onAnnouncedLocalityChange?: (value: number | null) => void;
   onExplicitTimezoneChange?: (value: string | null) => void;
-  onOpeningTimeFoldChange?: (value: 0 | 1 | null) => void;
-  onStartTimeFoldChange?: (value: 0 | 1 | null) => void;
   onVenueQueryTextChange: (value: string) => void;
   onLiveCandidateQueryChange: (value: string) => void;
   onLiveCandidateTypeChange: (value: string) => void;
@@ -143,8 +139,6 @@ export function LiveAdminSection({
   startTimeAnnounced = true,
   announcedLocalityId = null,
   explicitTimezoneId = null,
-  openingTimeFold = null,
-  startTimeFold = null,
   localities = [],
   timezoneOptions = [],
   selectedVenueId,
@@ -196,8 +190,6 @@ export function LiveAdminSection({
   onStartTimeAnnouncedChange = () => undefined,
   onAnnouncedLocalityChange = () => undefined,
   onExplicitTimezoneChange = () => undefined,
-  onOpeningTimeFoldChange = () => undefined,
-  onStartTimeFoldChange = () => undefined,
   onVenueQueryTextChange,
   onLiveCandidateQueryChange,
   onLiveCandidateTypeChange,
@@ -461,32 +453,12 @@ export function LiveAdminSection({
               </td>
               <td>
                 <input type="time" aria-label="opening_time" value={openingTime} disabled={!openingTimeAnnounced} onChange={(e) => onOpeningTimeChange(e.target.value)} />
-                <select
-                  aria-label="opening time fold"
-                  value={openingTimeFold ?? ""}
-                  disabled={!openingTimeAnnounced}
-                  onChange={(e) => onOpeningTimeFoldChange(e.target.value === "" ? null : Number(e.target.value) as 0 | 1)}
-                >
-                  <option value="">非重复时间</option>
-                  <option value="0">重复时间：第一次</option>
-                  <option value="1">重复时间：第二次</option>
-                </select>
               </td>
               <td>
                 <input type="time" aria-label="start_time" value={startTime} disabled={!startTimeAnnounced} onChange={(e) => onStartTimeChange(e.target.value)} />
-                <select
-                  aria-label="start time fold"
-                  value={startTimeFold ?? ""}
-                  disabled={!startTimeAnnounced}
-                  onChange={(e) => onStartTimeFoldChange(e.target.value === "" ? null : Number(e.target.value) as 0 | 1)}
-                >
-                  <option value="">非重复时间</option>
-                  <option value="0">重复时间：第一次</option>
-                  <option value="1">重复时间：第二次</option>
-                </select>
               </td>
               <td>
-                <div className="timezone-input-group">
+                <div className={`timezone-input-group${venueAnnounced ? " timezone-source-copy" : ""}`}>
                   {venueAnnounced ? (
                     <>
                       <strong>由场馆资料决定</strong>
