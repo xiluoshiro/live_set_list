@@ -11,7 +11,7 @@
 - 回填边界：表中“可回填”表示 venue_list.latitude / longitude 的 Venue 级定位可采用；地址、locality_id 和 IANA 时区按配套 SQL 一并维护，地图平台地点关联仍需另行维护。本台账本身不是远程执行授权。
 - 覆盖审计（2026-09-11，修订）：153/153 个实体 Venue 均有可回填的 WGS84 Venue 级坐标。除既有的駒場公園、Zepp Osaka Bayside 修正外，本轮又修正愛知県芸術劇場、飯田橋场地、NAGOYA CLUB QUATTRO、TSUTAYA IKEBUKURO AKビル店和 Zepp Tokyo 的明显错位点；园区／多厅／楼内场馆按上述定位语义采用设施点。
 - 回填准备（2026-09-11）：地址栏已补齐为 153/153；结构化回填将场馆映射到 43 个城市／地区和 8 个 IANA 时区。
-- 回填 SQL：[2026-09-11__backfill_verified_venue_locations.sql](../../backend/db/postgres/backfill/2026-09-11__backfill_verified_venue_locations.sql)。已于 2026-09-12 在本地主库执行并验证；远程尚未执行。SQL 不会修改既有 Live 时区快照。
+- 回填 SQL：[2026-09-11__backfill_verified_venue_locations.sql](../../backend/db/postgres/backfill/2026-09-11__backfill_verified_venue_locations.sql)。已于 2026-09-12 在本地主库执行并验证；随后由用户在远程执行并将远程备份恢复到本地。本轮只读复核恢复后的本地库：153/153 个实体 Venue 位置资料完整、43 个城市覆盖 8 个 IANA 时区、594 条既有 Live 仍为 `legacy_offset`、`venue_map_links` 为 0。SQL 不会修改既有 Live 时区快照。
 
 | Venue ID | 场馆 | 官方地址／实体核验 | Venue 级 WGS84 坐标 | 坐标来源 | 结论 | 定位说明 |
 | ---: | --- | --- | --- | --- | --- | --- |

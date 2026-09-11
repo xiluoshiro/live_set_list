@@ -4,14 +4,14 @@
 
 本文只定义 Venue 独立管理、历史名称、Live 场地名称固化、重复 Venue 合并，以及现有查询链路迁移的技术方案。
 
-后续地理信息扩展见 [Venue 所在地、多地图链接与 Live 自动时区设计](venue-location-and-timezone.md)。本文“明确不做”中的地址、坐标和地图属于原首期边界；新增方案尚未实现。
+后续地理信息扩展见 [Venue 所在地、多地图链接与 Live 自动时区设计](venue-location-and-timezone.md)。本文“明确不做”中的地址、坐标和地图属于原首期边界；其中地理资料框架、Live 自动时区及首批实体 Venue 回填现已实现，地图搜索和公共地图入口仍待后续。
 
 本文不承担产品需求清单；本期边界以本文“范围”和“明确不做”章节为准。当前代码、FastAPI schema、Flyway SQL 和运行数据始终优先于本文。
 
 ## 状态与已确认口径
 
-- 文档状态：V28、运行数据人工整理与应用层首期实现已完成；V29 约束收口已落地，待部署执行。
-- 当前仓库最新 migration 为 `V29__enforce_venue_name_version_pairs.sql`。
+- 文档状态：V28、V29、运行数据人工整理与应用层首期实现均已完成并部署；后续地理与时区扩展已推进至 V31。
+- 当前仓库最新 migration 为 `V31__add_live_timezone_snapshots.sql`。
 - `live_attrs.venue_id` 和 `live_schedule_history.previous_venue_id` 已允许 `NULL`，表示场地尚未公布；不得为此创建“未定”Venue。
 - V28 在兼容字段 `venue_list.venue` 之外增加 Venue 类型、合并指向和独立名称版本表。
 - 同一物理场地的正式更名保持同一个 `venue_id`；搬迁到不同地址或新建替代场馆时创建新的 `venue_id`。
@@ -640,7 +640,7 @@ python scripts/run_checks.py functional
 
 - 多语言名称及 locale 回退。
 - alias、简称、常见写法和罗马字搜索。
-- 地址、经纬度和地图。
+- 地图搜索／点选、公共页面地图入口和平台 POI 详情关联。
 - 父场馆、园区与子 Hall 层级。
 - 营业、停业和重建生命周期。
 - 按国家、城市或园区聚合统计。
