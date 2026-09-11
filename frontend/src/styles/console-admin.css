@@ -1144,6 +1144,15 @@
   border-radius: 7px;
 }
 
+.timezone-source-copy {
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timezone-source-copy small {
+  line-height: 1.4;
+}
+
 .timezone-input-group:focus-within {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
