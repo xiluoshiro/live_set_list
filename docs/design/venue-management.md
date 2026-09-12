@@ -4,7 +4,7 @@
 
 本文只定义 Venue 独立管理、历史名称、Live 场地名称固化、重复 Venue 合并，以及现有查询链路迁移的技术方案。
 
-后续地理信息扩展见 [Venue 所在地、多地图链接与 Live 自动时区设计](venue-location-and-timezone.md)。本文“明确不做”中的地址、坐标和地图属于原首期边界；其中地理资料框架、Live 自动时区及首批实体 Venue 回填现已实现，地图搜索和公共地图入口仍待后续。
+后续地理信息扩展见 [Venue 所在地、多地图链接与 Live 自动时区设计](venue-location-and-timezone.md)。本文“明确不做”中的地址、坐标和地图属于原首期边界；地理资料框架、Live 自动时区、首批实体 Venue 回填、公共 Venue 详情及 Live 地图入口现已实现，地图搜索／点选和平台 POI 批量关联仍待后续。
 
 本文不承担产品需求清单；本期边界以本文“范围”和“明确不做”章节为准。当前代码、FastAPI schema、Flyway SQL 和运行数据始终优先于本文。
 
@@ -636,7 +636,7 @@ python scripts/run_checks.py functional
 
 ## 低优先级后续
 
-以下能力等真正出现 i18n 或 Venue 公共资料页需求时再单独设计：
+以下能力在出现明确的 i18n、地图核验或 Venue 层级需求时再单独设计：
 
 - 多语言名称及 locale 回退。
 - alias、简称、常见写法和罗马字搜索。

@@ -94,7 +94,7 @@ function renderStage(detailData: LiveDetailResponse, extra: Partial<ComponentPro
 describe("StageLedgerContent", () => {
   beforeEach(() => {
     apiMocks.getVenueMaps.mockReset();
-    apiMocks.getVenueMaps.mockResolvedValue({ venue_id: 9, venue_name: "日本武道館", map_links: [] });
+    apiMocks.getVenueMaps.mockReturnValue(new Promise(() => undefined));
   });
 
   afterEach(() => {
