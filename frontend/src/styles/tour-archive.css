@@ -73,6 +73,13 @@
 .tour-stop-shortcut-item.is-cancelled .cancelled-static-title { cursor: default; }
 .tour-detail-state { text-align: center; color: var(--text-muted); padding: 28px; }
 .tour-inline-live-detail { margin: 18px 0 0; }
+.venue-detail-address { margin: 20px 0 0; color: var(--stage-muted); line-height: 1.6; }
+.venue-detail-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.venue-detail-page .stage-map-trigger { min-height: 36px; padding: 8px 13px; font-size: 13px; }
+.venue-detail-sections { display: grid; gap: 42px; padding-top: 34px; }
+.venue-detail-sections .stage-history-section { max-width: 760px; }
+.venue-name-history-list { margin-left: 1px; }
+.venue-live-section { min-width: 0; }
 .tour-statistics { display: flex; flex-direction: column; gap: 14px; }
 .tour-statistics-table th:nth-child(1), .tour-statistics-table td:nth-child(1) { width: auto; }
 .tour-statistics-table th:nth-child(2), .tour-statistics-table td:nth-child(2),
@@ -157,6 +164,8 @@
     clip: auto;
   }
   .tour-detail-page { margin: 12px; padding: 15px; }
+  .venue-detail-facts { grid-template-columns: 1fr; }
+  .venue-detail-sections { gap: 30px; padding-top: 26px; }
   .tour-stop-shortcut { font-size: 17px; }
   .tour-stop-shortcut-item { white-space: normal; }
   .tour-transition-detail-head { align-items: flex-start; flex-direction: column; }

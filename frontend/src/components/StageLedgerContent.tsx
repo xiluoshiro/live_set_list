@@ -13,6 +13,7 @@ import { Collapsible } from "./ui/Collapsible";
 import { formatLiveType } from "./console/constants";
 import { MastheadTitle } from "./MastheadTitle";
 import { getLiveStatusPresentation } from "../liveStatus";
+import { VenueMapMenu } from "./VenueMapMenu";
 
 export type LiveDetailFallback = {
   liveTitle: string;
@@ -32,6 +33,7 @@ export type StageLedgerContentProps = {
   onOpenTour?: (tour: TourRef) => void;
   onOpenPerformanceGroup?: (group: PerformanceGroupRef, sourceLiveId: number) => void;
   onOpenBand?: (bandId: number) => void;
+  onOpenVenue?: (venueId: number, venueName: string) => void;
   canFavorite?: boolean;
   isFavorite?: boolean;
   isFavoriteSyncing?: boolean;
@@ -640,6 +642,7 @@ export function StageLedgerContent({
   onOpenTour,
   onOpenPerformanceGroup,
   onOpenBand,
+  onOpenVenue,
   canFavorite = false,
   isFavorite = false,
   isFavoriteSyncing = false,
@@ -805,7 +808,27 @@ export function StageLedgerContent({
               <div className="stage-schedule-date"><dt>日期</dt><dd>{detailData.live_date}</dd></div>
               <div className="stage-schedule-opening"><dt>开场</dt><dd>{formatTimedLabel(detailData.opening_time)}</dd></div>
               <div className="stage-schedule-start"><dt>开演</dt><dd>{formatTimedLabel(detailData.start_time)}</dd></div>
-              <div className="stage-schedule-venue"><dt>场馆</dt><dd>{detailData.venue?.trim() || "未公布"}</dd></div>
+              <div className="stage-schedule-venue">
+                <dt>场馆</dt>
+                <dd>
+                  <span className="stage-venue-actions">
+                    {detailData.venue_id && detailData.venue?.trim() && onOpenVenue ? (
+                      <button
+                        type="button"
+                        className="stage-inline-link stage-venue-link"
+                        onClick={() => onOpenVenue(detailData.venue_id!, detailData.venue!)}
+                      >
+                        {detailData.venue}
+                      </button>
+                    ) : (
+                      <span>{detailData.venue?.trim() || "未公布"}</span>
+                    )}
+                    {detailData.venue_id && detailData.venue?.trim() && (
+                      <VenueMapMenu venueId={detailData.venue_id} venueName={detailData.venue} />
+                    )}
+                  </span>
+                </dd>
+              </div>
             </dl>
             {showStageActions && (
               <div className="stage-actions" aria-label="演出操作">

@@ -486,9 +486,9 @@ Venue管理
 
 ### 展示
 
-- Live 列表和详情：显示 Live 绑定的名称版本。
+- Live 列表和详情：显示 Live 绑定的名称版本。Live 详情中的场馆名称链接到稳定 `venue_id` 的公共 Venue 详情页；名称旁的独立地图按钮负责选择外部地图，两种交互不复用同一个点击区域。
 - 改期历史：显示 `previous_venue_name_version_id` 对应名称。
-- Venue 当前资料和 Catalog Venue 结果：显示当前开放名称。
+- Venue 当前资料和 Catalog Venue 结果：显示当前开放名称。公共 Venue 详情展示当前名称、历史名称、类型、完整所在地、地图入口和关联 Live；不公开审计及修订控制字段。
 - 巡演和活动组中的每场 Live：显示该 Live 的历史名称版本。
 
 ### 搜索
@@ -640,7 +640,7 @@ python scripts/run_checks.py functional
 
 - 多语言名称及 locale 回退。
 - alias、简称、常见写法和罗马字搜索。
-- 地图搜索／点选、公共页面地图入口和平台 POI 详情关联。
+- 地图搜索／点选和平台 POI 详情关联。
 - 父场馆、园区与子 Hall 层级。
 - 营业、停业和重建生命周期。
 - 按国家、城市或园区聚合统计。

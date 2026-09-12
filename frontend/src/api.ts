@@ -271,6 +271,52 @@ export type LiveDetailResponse = {
   detail_rows: LiveDetailRow[];
 };
 
+export type PublicVenueMapLink = {
+  provider: MapProvider;
+  url: string;
+  source: "place" | "coordinates";
+};
+
+export type PublicVenueMapsResponse = {
+  venue_id: number;
+  venue_name: string;
+  map_links: PublicVenueMapLink[];
+};
+
+export type PublicVenueLiveItem = {
+  live_id: number;
+  live_date: string;
+  live_title: string;
+  live_type: string;
+  bands: number[];
+  url: string | null;
+  event_status: EventStatus;
+  date_phase: DatePhase;
+  was_rescheduled: boolean;
+};
+
+export type PublicVenueDetailResponse = PublicVenueMapsResponse & {
+  venue_kind: "physical" | "online" | "undisclosed";
+  locality: {
+    country_code: string;
+    admin_area: string | null;
+    locality_name: string;
+  } | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  timezone_id: string | null;
+  timezone_source: "venue" | "locality" | null;
+  name_versions: Array<{
+    venue_name: string;
+    valid_from: string | null;
+    valid_to: string | null;
+    is_current: boolean;
+  }>;
+  lives: PublicVenueLiveItem[];
+  pagination: LivesResponse["pagination"];
+};
+
 export type TourBandItem = {
   band_id: number;
   band_name: string;
@@ -949,6 +995,8 @@ type RequestKind =
   | "favorite_lives_batch"
   | "live_detail"
   | "live_details_batch"
+  | "venue_detail"
+  | "venue_maps"
   | "auth_me"
   | "auth_login"
   | "auth_logout"
@@ -2151,6 +2199,25 @@ export async function getLiveDetail(liveId: number): Promise<LiveDetailResponse>
   detailRecentRequest.setRecent(liveId, requestPromise);
   detailCache.setInFlight(key, requestPromise);
   return requestPromise;
+}
+
+export async function getVenueMaps(venueId: number): Promise<PublicVenueMapsResponse> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/venues/${venueId}/maps`, undefined, {
+    requestKind: "venue_maps",
+  });
+  return expectJsonResponse<PublicVenueMapsResponse>(response);
+}
+
+export async function getVenueDetail(
+  venueId: number,
+  page = 1,
+  pageSize: 15 | 20 = 20,
+): Promise<PublicVenueDetailResponse> {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  const response = await fetchWithTimeout(`${BASE_URL}/api/venues/${venueId}?${params}`, undefined, {
+    requestKind: "venue_detail",
+  });
+  return expectJsonResponse<PublicVenueDetailResponse>(response);
 }
 
 function normalizeLiveIds(liveIds: number[]): number[] {

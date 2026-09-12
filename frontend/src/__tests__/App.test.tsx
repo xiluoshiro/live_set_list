@@ -27,6 +27,8 @@ import {
   getTourDetail,
   getTourStatistics,
   getTours,
+  getVenueDetail,
+  getVenueMaps,
   login,
   logout,
   peekMyFavoriteLives,
@@ -39,6 +41,7 @@ import {
   type LivesResponse,
   type PerformancesResponse,
   type PerformanceGroupDetailResponse,
+  type PublicVenueDetailResponse,
   type TourDetailResponse,
   type TourStatisticsResponse,
   type ToursResponse,
@@ -66,6 +69,8 @@ vi.mock("../api", () => ({
   getTours: vi.fn(),
   getTourDetail: vi.fn(),
   getTourStatistics: vi.fn(),
+  getVenueDetail: vi.fn(),
+  getVenueMaps: vi.fn(),
   peekMyFavoriteLives: vi.fn(),
   clearLiveDataCaches: vi.fn(),
   clearMyFavoriteLivesCache: vi.fn(),
@@ -121,6 +126,8 @@ const getMyFavoriteLivesMock = vi.mocked(getMyFavoriteLives);
 const getToursMock = vi.mocked(getTours);
 const getTourDetailMock = vi.mocked(getTourDetail);
 const getTourStatisticsMock = vi.mocked(getTourStatistics);
+const getVenueDetailMock = vi.mocked(getVenueDetail);
+const getVenueMapsMock = vi.mocked(getVenueMaps);
 const peekMyFavoriteLivesMock = vi.mocked(peekMyFavoriteLives);
 const clearLiveDataCachesMock = vi.mocked(clearLiveDataCaches);
 const clearMyFavoriteLivesCacheMock = vi.mocked(clearMyFavoriteLivesCache);
@@ -293,6 +300,24 @@ function makeDetailResponse(params: {
       other_members: [],
       comments: idx % 2 === 0 ? ["短版"] : [],
     })),
+  };
+}
+
+function makeVenueDetailResponse(): PublicVenueDetailResponse {
+  return {
+    venue_id: 7,
+    venue_name: "日本武道館",
+    venue_kind: "physical",
+    locality: { country_code: "JP", admin_area: "東京都", locality_name: "千代田区" },
+    address: "北の丸公園2-3",
+    latitude: 35.693317,
+    longitude: 139.749885,
+    timezone_id: "Asia/Tokyo",
+    timezone_source: "locality",
+    name_versions: [{ venue_name: "日本武道館", valid_from: "1964-10-03", valid_to: null, is_current: true }],
+    map_links: [{ provider: "google", url: "https://maps.example/google", source: "place" }],
+    lives: [],
+    pagination: { page: 1, page_size: 20, total: 0, total_pages: 1 },
   };
 }
 
@@ -494,6 +519,8 @@ describe("App", () => {
     getToursMock.mockReset();
     getTourDetailMock.mockReset();
     getTourStatisticsMock.mockReset();
+    getVenueDetailMock.mockReset();
+    getVenueMapsMock.mockReset();
     peekMyFavoriteLivesMock.mockReset();
     clearLiveDataCachesMock.mockReset();
     clearMyFavoriteLivesCacheMock.mockReset();
@@ -522,6 +549,8 @@ describe("App", () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makePerformanceGroupDetailResponse());
     getTourDetailMock.mockResolvedValue(makeTourDetailResponse());
     getTourStatisticsMock.mockResolvedValue(makeTourStatisticsResponse());
+    getVenueDetailMock.mockResolvedValue(makeVenueDetailResponse());
+    getVenueMapsMock.mockResolvedValue({ venue_id: 7, venue_name: "日本武道館", map_links: [] });
     peekMyFavoriteLivesMock.mockReturnValue(undefined);
     favoriteLiveMock.mockResolvedValue();
     favoriteLivesBatchMock.mockResolvedValue({
@@ -1784,6 +1813,36 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "示例 Live 名称 77" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/lives/77");
     expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "detail", detailLiveId: 77 });
+  });
+
+  // 测试点：Live 详情的场馆名应进入站内场馆详情，并写入可直接访问的永久 URL。
+  test("从 Live 详情进入场馆详情", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/lives/77");
+    getLiveDetailMock.mockResolvedValueOnce({
+      ...makeDetailResponse({ liveId: 77, rowCount: 1 }),
+      venue_id: 7,
+      venue: "日本武道館",
+    });
+
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "日本武道館" }));
+    expect(await screen.findByRole("heading", { name: "日本武道館" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/venues/7");
+    expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "venue_detail", detailVenueId: 7 });
+  });
+
+  // 测试点：/venues/{venue_id} 刷新后应直接恢复公开场馆资料。
+  test("直接访问永久 Venue URL 会恢复场馆详情", async () => {
+    window.history.replaceState(null, "", "/venues/7");
+
+    renderApp();
+
+    expect(await screen.findByRole("heading", { name: "日本武道館" })).toBeInTheDocument();
+    expect(screen.getByText("北の丸公園2-3")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/venues/7");
+    expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "venue_detail", detailVenueId: 7 });
   });
 
   test("详情页呈现 Stage Ledger 结构与连续歌单", async () => {

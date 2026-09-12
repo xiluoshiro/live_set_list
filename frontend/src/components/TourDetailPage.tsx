@@ -28,6 +28,7 @@ type TourDetailPageProps = {
   isSyncing?: (liveId: number) => boolean;
   onToggleFavorite?: (liveId: number) => void;
   onOpenBand?: (bandId: number) => void;
+  onOpenVenue?: (venueId: number, venueName: string) => void;
 };
 
 function formatDateRange(detail: TourDetailResponse): string {
@@ -47,6 +48,7 @@ export function TourDetailPage({
   isSyncing = () => false,
   onToggleFavorite,
   onOpenBand,
+  onOpenVenue,
 }: TourDetailPageProps) {
   const [detail, setDetail] = useState<TourDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -208,7 +210,8 @@ export function TourDetailPage({
                     displayTitle={getTourStopShortTitle(selectedStop.live_title, detail.tour_title)}
                     showTourReference={false}
                     embedded
-                    onOpenBand={onOpenBand}
+                onOpenBand={onOpenBand}
+                onOpenVenue={onOpenVenue}
                     canFavorite={canFavorite}
                     isFavorite={selectedLiveId !== null && isFavorite(selectedLiveId)}
                     isFavoriteSyncing={selectedLiveId !== null && isSyncing(selectedLiveId)}
