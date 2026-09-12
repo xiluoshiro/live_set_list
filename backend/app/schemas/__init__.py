@@ -86,6 +86,15 @@ from app.schemas.performance_groups import (
     CatalogPerformancesPagination,
     CatalogPerformancesResponse,
 )
+from app.schemas.venues import (
+    PublicVenueDetailResponse,
+    PublicVenueLiveItem,
+    PublicVenueLocality,
+    PublicVenueMapLink,
+    PublicVenueMapsResponse,
+    PublicVenueNameVersion,
+    PublicVenuePagination,
+)
 
 __all__ = [
     'ErrorResponse',
@@ -168,4 +177,11 @@ __all__ = [
     'LiveDetailResponse',
     'LiveDetailBatchRequest',
     'LiveDetailsBatchResponse',
+    'PublicVenueDetailResponse',
+    'PublicVenueLiveItem',
+    'PublicVenueLocality',
+    'PublicVenueMapLink',
+    'PublicVenueMapsResponse',
+    'PublicVenueNameVersion',
+    'PublicVenuePagination',
 ]

@@ -21,6 +21,7 @@ import {
   type PerformanceGroupRef,
   type PerformanceGroupSummary,
   type PerformanceItem,
+  type PublicVenueLiveItem,
   type TourRef,
   type TourSummary,
   type DatePhase,
@@ -50,6 +51,7 @@ import { TourDetailPage, type TourDetailFallback } from "./components/TourDetail
 import { PerformanceGroupDetailPage } from "./components/PerformanceGroupDetailPage";
 import { DEFAULT_TOUR_FILTERS, type TourFilters } from "./components/TourListFilters";
 import { ViewModeToggle } from "./components/ViewModeToggle";
+import { VenueDetailPage } from "./components/VenueDetailPage";
 import { formatLiveType } from "./components/console/constants";
 import { useFavorites } from "./favorites/FavoriteProvider";
 import {
@@ -105,13 +107,13 @@ type LiveDetailFallback = {
   url: string | null;
 };
 
-type TabKey = "home" | "favorites" | "all" | "tours" | "tour_detail" | "performance_group_detail" | "statistics" | "console" | "search" | "browse" | "about" | "detail";
+type TabKey = "home" | "favorites" | "all" | "tours" | "tour_detail" | "performance_group_detail" | "venue_detail" | "statistics" | "console" | "search" | "browse" | "about" | "detail";
 type ListTabKey = "favorites" | "all";
-type MainTabKey = Exclude<TabKey, "detail" | "tour_detail" | "performance_group_detail">;
+type MainTabKey = Exclude<TabKey, "detail" | "tour_detail" | "performance_group_detail" | "venue_detail">;
 type AppHistoryState = {
   app: "live-set-list";
   tab: TabKey;
-  previousTab?: Exclude<TabKey, "detail">;
+  previousTab?: TabKey;
   detailLiveId?: number;
   detailFallback?: LiveDetailFallback;
   detailTourId?: number;
@@ -119,6 +121,8 @@ type AppHistoryState = {
   detailGroupId?: number;
   detailGroupLiveId?: number;
   groupFallback?: { groupTitle: string };
+  detailVenueId?: number;
+  venueFallbackName?: string;
   searchQuery?: string;
   catalogBandId?: number | null;
   listState?: {
@@ -197,6 +201,13 @@ function getLiveIdFromPath(pathname: string): number | null {
   return Number.isInteger(liveId) && liveId > 0 ? liveId : null;
 }
 
+function getVenueIdFromPath(pathname: string): number | null {
+  const match = pathname.match(/^\/venues\/(\d+)\/?$/);
+  if (!match) return null;
+  const venueId = Number(match[1]);
+  return Number.isInteger(venueId) && venueId > 0 ? venueId : null;
+}
+
 const ROLE_PRIORITY: Record<string, number> = { viewer: 10, editor: 20, admin: 30 };
 
 function canAccessConsole(role: string | null | undefined): boolean {
@@ -243,6 +254,7 @@ function App() {
   const favorites = useFavorites();
   const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
   const initialLiveId = getLiveIdFromPath(window.location.pathname);
+  const initialVenueId = getVenueIdFromPath(window.location.pathname);
   const [pageSize, setPageSize] = useState<15 | 20>(20);
   const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
     const stored = localStorage.getItem("live-view-mode");
@@ -256,19 +268,21 @@ function App() {
   const [listFilters, setListFilters] = useState<LiveListFilters>({ ...DEFAULT_LIVE_LIST_FILTERS });
   const [listFilterBands, setListFilterBands] = useState<CatalogBandItem[]>([]);
   const [jumpPageInput, setJumpPageInput] = useState("1");
-  const [tab, setTab] = useState<TabKey>(initialLiveId === null ? "home" : "detail");
+  const [tab, setTab] = useState<TabKey>(initialLiveId !== null ? "detail" : initialVenueId !== null ? "venue_detail" : "home");
   const [detailLiveId, setDetailLiveId] = useState<number | null>(initialLiveId);
   const [detailFallback, setDetailFallback] = useState<LiveDetailFallback | null>(
     initialLiveId === null
       ? null
       : { liveTitle: `Live #${initialLiveId}`, liveDate: "", url: null },
   );
-  const [previousTab, setPreviousTab] = useState<Exclude<TabKey, "detail">>("home");
+  const [previousTab, setPreviousTab] = useState<TabKey>("home");
   const [detailTourId, setDetailTourId] = useState<number | null>(null);
   const [tourFallback, setTourFallback] = useState<TourDetailFallback | null>(null);
   const [detailGroupId, setDetailGroupId] = useState<number | null>(null);
   const [detailGroupLiveId, setDetailGroupLiveId] = useState<number | null>(null);
   const [groupFallback, setGroupFallback] = useState<{ groupTitle: string } | null>(null);
+  const [detailVenueId, setDetailVenueId] = useState<number | null>(initialVenueId);
+  const [venueFallbackName, setVenueFallbackName] = useState(initialVenueId === null ? "" : `Venue #${initialVenueId}`);
   const [tourFilters, setTourFilters] = useState<TourFilters>({ ...DEFAULT_TOUR_FILTERS });
   const [items, setItems] = useState<DisplayRow[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
@@ -385,6 +399,21 @@ function App() {
       setTab("performance_group_detail");
       return;
     }
+    if (allowedTab === "venue_detail" && state.detailVenueId && state.venueFallbackName) {
+      resetPageScroll();
+      setDetailVenueId(state.detailVenueId);
+      setVenueFallbackName(state.venueFallbackName);
+      setPreviousTab(state.previousTab ?? "home");
+      setDetailLiveId(null);
+      setDetailFallback(null);
+      setDetailTourId(null);
+      setTourFallback(null);
+      setDetailGroupId(null);
+      setDetailGroupLiveId(null);
+      setGroupFallback(null);
+      setTab("venue_detail");
+      return;
+    }
     setDetailLiveId(null);
     setDetailFallback(null);
     setDetailTourId(null);
@@ -392,7 +421,9 @@ function App() {
     setDetailGroupId(null);
     setDetailGroupLiveId(null);
     setGroupFallback(null);
-    const nextTab = allowedTab === "detail" || allowedTab === "tour_detail" || allowedTab === "performance_group_detail" ? "home" : allowedTab;
+    setDetailVenueId(null);
+    setVenueFallbackName("");
+    const nextTab = allowedTab === "detail" || allowedTab === "tour_detail" || allowedTab === "performance_group_detail" || allowedTab === "venue_detail" ? "home" : allowedTab;
     if (nextTab === "all" || nextTab === "favorites") {
       const restoredPage = state.listState?.page ?? 1;
       const restoredCardPage = state.listState?.cardPage ?? 1;
@@ -414,6 +445,8 @@ function App() {
     }
     const nextPath = state.tab === "detail" && state.detailLiveId
       ? `/lives/${state.detailLiveId}`
+      : state.tab === "venue_detail" && state.detailVenueId
+        ? `/venues/${state.detailVenueId}`
       : "/";
     window.history.pushState(state, "", nextPath);
     applyHistoryState(state);
@@ -423,7 +456,7 @@ function App() {
     pushHistoryState({ app: "live-set-list", tab: nextTab, ...extras });
   };
 
-  const openLiveDetail = (row: DisplayRow | CatalogLiveRow | HomeLiveRow, sourceTab: Exclude<TabKey, "detail"> = tab as Exclude<TabKey, "detail">) => {
+  const openLiveDetail = (row: DisplayRow | CatalogLiveRow | HomeLiveRow, sourceTab: TabKey = tab) => {
     const fallback = { liveTitle: row.liveTitle, liveDate: row.liveDate, url: "url" in row ? row.url : null };
     pushHistoryState({
       app: "live-set-list",
@@ -468,6 +501,16 @@ function App() {
         } satisfies AppHistoryState;
         window.history.replaceState(directState, "", window.location.href);
         applyHistoryState(directState);
+      } else if (initialVenueId !== null) {
+        const directState = {
+          app: "live-set-list",
+          tab: "venue_detail",
+          previousTab: "home",
+          detailVenueId: initialVenueId,
+          venueFallbackName: `Venue #${initialVenueId}`,
+        } satisfies AppHistoryState;
+        window.history.replaceState(directState, "", window.location.href);
+        applyHistoryState(directState);
       } else {
         window.history.replaceState({ app: "live-set-list", tab: "home" } satisfies AppHistoryState, "", window.location.href);
       }
@@ -479,7 +522,7 @@ function App() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [canUseConsoleFeatures, canUseFavoriteFeatures, initialLiveId]);
+  }, [canUseConsoleFeatures, canUseFavoriteFeatures, initialLiveId, initialVenueId]);
 
   const performancesToDisplayRows = (pageItems: PerformanceItem[]): DisplayRow[] =>
     pageItems.map((item): DisplayRow => {
@@ -901,6 +944,7 @@ function App() {
   const showTourListPanel = tab === "tours";
   const showTourDetailPanel = tab === "tour_detail";
   const showPerformanceGroupDetailPanel = tab === "performance_group_detail";
+  const showVenueDetailPanel = tab === "venue_detail";
   const showSearchPanel = tab === "search";
   const showBrowsePanel = tab === "browse";
   const showStatisticsPanel = tab === "statistics";
@@ -1013,6 +1057,39 @@ function App() {
     setSearchError(null);
   };
 
+  const openVenueDetail = (venueId: number, venueName: string) => {
+    pushHistoryState({
+      app: "live-set-list",
+      tab: "venue_detail",
+      previousTab: tab,
+      detailVenueId: venueId,
+      venueFallbackName: venueName,
+    });
+  };
+
+  const openVenueLiveDetail = (live: PublicVenueLiveItem) => {
+    pushHistoryState({
+      app: "live-set-list",
+      tab: "detail",
+      previousTab: "venue_detail",
+      detailLiveId: live.live_id,
+      detailFallback: { liveTitle: live.live_title, liveDate: live.live_date, url: live.url },
+    });
+  };
+
+  const canonicalizeVenue = useCallback((venueId: number, venueName: string) => {
+    setDetailVenueId(venueId);
+    setVenueFallbackName(venueName);
+    const current = isAppHistoryState(window.history.state) ? window.history.state : null;
+    if (current?.tab === "venue_detail") {
+      window.history.replaceState(
+        { ...current, detailVenueId: venueId, venueFallbackName: venueName },
+        "",
+        `/venues/${venueId}`,
+      );
+    }
+  }, []);
+
   const handleShowAllLiveSearchResults = (query: string) => {
     handleListFiltersChange({ ...DEFAULT_LIVE_LIST_FILTERS, q: query });
     navigateToTab("all");
@@ -1039,7 +1116,7 @@ function App() {
   // 页签切换统一做权限闸门，防止未登录或低权限用户进入受限页。
   const handleTabChange = (nextTab: TabKey) => {
     setNavDrawerOpen(false);
-    if (nextTab === "detail" || nextTab === "tour_detail" || nextTab === "performance_group_detail") return;
+    if (nextTab === "detail" || nextTab === "tour_detail" || nextTab === "performance_group_detail" || nextTab === "venue_detail") return;
     if (nextTab === "favorites" && !canUseFavoriteFeatures) {
       setLoginError(null);
       setLoginDialogOpen(true);
@@ -1253,6 +1330,10 @@ function App() {
   };
 
   const handleBackFromDetail = () => {
+    if (previousTab === "venue_detail") {
+      window.history.back();
+      return;
+    }
     const backTab = previousTab;
     const archiveState: AppHistoryState = {
       app: "live-set-list",
@@ -1265,6 +1346,15 @@ function App() {
     };
     window.history.replaceState(archiveState, "", "/");
     applyHistoryState(archiveState);
+  };
+  const handleBackFromVenue = () => {
+    if (previousTab === "detail" || previousTab === "tour_detail" || previousTab === "performance_group_detail") {
+      window.history.back();
+      return;
+    }
+    const homeState = { app: "live-set-list", tab: "home" } satisfies AppHistoryState;
+    window.history.replaceState(homeState, "", "/");
+    applyHistoryState(homeState);
   };
   const toggleTheme = () => {
     setThemeMode(getNextThemeMode(themeMode));
@@ -1450,6 +1540,7 @@ function App() {
             onBack={handleBackFromDetail}
             onOpenTour={openTourDetail}
             onOpenPerformanceGroup={openPerformanceGroupDetail}
+            onOpenVenue={openVenueDetail}
             onOpenBand={(bandId) => {
               setCatalogBandPage(1);
               navigateToTab("browse", { catalogBandId: bandId });
@@ -1476,6 +1567,7 @@ function App() {
               setCatalogBandPage(1);
               navigateToTab("browse", { catalogBandId: bandId });
             }}
+            onOpenVenue={openVenueDetail}
           />
         ) : showPerformanceGroupDetailPanel && detailGroupId !== null && groupFallback !== null ? (
           <PerformanceGroupDetailPage
@@ -1491,6 +1583,16 @@ function App() {
               setCatalogBandPage(1);
               navigateToTab("browse", { catalogBandId: bandId });
             }}
+            onOpenVenue={openVenueDetail}
+          />
+        ) : showVenueDetailPanel && detailVenueId !== null ? (
+          <VenueDetailPage
+            key={`venue-${detailVenueId}`}
+            venueId={detailVenueId}
+            fallbackName={venueFallbackName}
+            onBack={handleBackFromVenue}
+            onCanonicalVenue={canonicalizeVenue}
+            onOpenLive={openVenueLiveDetail}
           />
         ) : showHomePanel ? (
           <HomeDashboard

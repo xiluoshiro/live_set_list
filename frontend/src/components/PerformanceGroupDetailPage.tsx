@@ -24,6 +24,7 @@ type PerformanceGroupDetailPageProps = {
   isSyncing?: (liveId: number) => boolean;
   onToggleFavorite?: (liveId: number) => void;
   onOpenBand?: (bandId: number) => void;
+  onOpenVenue?: (venueId: number, venueName: string) => void;
 };
 
 function getDisplayTypeLabel(
@@ -56,6 +57,7 @@ export function PerformanceGroupDetailPage({
   isSyncing = () => false,
   onToggleFavorite,
   onOpenBand,
+  onOpenVenue,
 }: PerformanceGroupDetailPageProps) {
   const [detail, setDetail] = useState<PerformanceGroupDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -215,6 +217,7 @@ export function PerformanceGroupDetailPage({
                 onOpenTour={onOpenTour}
                 embedded
                 onOpenBand={onOpenBand}
+                onOpenVenue={onOpenVenue}
                 canFavorite={canFavorite}
                 isFavorite={selectedLiveId !== null && isFavorite(selectedLiveId)}
                 isFavoriteSyncing={selectedLiveId !== null && isSyncing(selectedLiveId)}

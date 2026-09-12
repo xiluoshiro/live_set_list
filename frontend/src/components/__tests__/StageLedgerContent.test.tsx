@@ -1,10 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 
 import type { LiveDetailResponse } from "../../api";
 import { StageLedgerContent } from "../StageLedgerContent";
+
+const apiMocks = vi.hoisted(() => ({ getVenueMaps: vi.fn() }));
+
+vi.mock("../../api", () => ({ getVenueMaps: apiMocks.getVenueMaps }));
 
 function makeDetail(overrides: Partial<LiveDetailResponse> = {}): LiveDetailResponse {
   return {
@@ -88,6 +92,11 @@ function renderStage(detailData: LiveDetailResponse, extra: Partial<ComponentPro
 }
 
 describe("StageLedgerContent", () => {
+  beforeEach(() => {
+    apiMocks.getVenueMaps.mockReset();
+    apiMocks.getVenueMaps.mockResolvedValue({ venue_id: 9, venue_name: "日本武道館", map_links: [] });
+  });
+
   afterEach(() => {
     window.history.replaceState(null, "", "/");
   });
@@ -97,6 +106,23 @@ describe("StageLedgerContent", () => {
     renderStage(makeDetail({ venue_id: null, venue: null, opening_time: null, start_time: null }));
 
     expect(screen.getAllByText("未公布")).toHaveLength(3);
+  });
+
+  // 测试点：场馆名进入站内详情，地图按钮是独立入口，不能把两种行为混成一个链接。
+  test("场馆名和地图使用两个独立入口", async () => {
+    const user = userEvent.setup();
+    const onOpenVenue = vi.fn();
+    apiMocks.getVenueMaps.mockResolvedValue({
+      venue_id: 9,
+      venue_name: "日本武道館",
+      map_links: [{ provider: "google", url: "https://maps.example/venue", source: "place" }],
+    });
+
+    renderStage(makeDetail(), { onOpenVenue });
+
+    await user.click(screen.getByRole("button", { name: "日本武道館" }));
+    expect(onOpenVenue).toHaveBeenCalledWith(9, "日本武道館");
+    expect(await screen.findByRole("button", { name: "选择日本武道館的地图" })).toBeInTheDocument();
   });
 
   test("按结构化位置渲染连续流程，并展示曲目细节", async () => {
