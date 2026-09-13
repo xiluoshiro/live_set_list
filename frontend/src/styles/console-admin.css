@@ -473,6 +473,21 @@
   min-width: min(360px, 100%);
 }
 
+.venue-admin-toolbar select {
+  min-width: min(360px, 100%);
+}
+
+.venue-admin-toolbar > .live-management-label {
+  color: var(--text-table-head);
+  font-weight: 600;
+}
+
+.venue-admin-toolbar .tour-candidate-pager {
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0 0 0 auto;
+}
+
 .live-admin-toolbar .live-type-filter {
   flex: 0 0 var(--console-live-type-control-width);
   width: var(--console-live-type-control-width);
