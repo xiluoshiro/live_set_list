@@ -31,7 +31,7 @@ type LiveAdminSectionProps = {
   startTimeAnnounced?: boolean;
   announcedLocalityId?: number | null;
   explicitTimezoneId?: string | null;
-  localities?: Array<{ id: number; country_code: string; admin_area: string | null; locality_name: string; timezone_id: string | null }>;
+  localities?: Array<{ id: number; country_code: string; admin_area: string | null; locality_name: string | null; timezone_id: string | null }>;
   timezoneOptions?: string[];
   selectedVenueId: number;
   defaultBandIds: number[];
@@ -475,7 +475,7 @@ export function LiveAdminSection({
                         <option value="">未公布城市</option>
                         {localities.map((locality) => (
                           <option key={locality.id} value={locality.id} disabled={locality.timezone_id === null}>
-                            {locality.country_code} {locality.admin_area ? `${locality.admin_area} ` : ""}{locality.locality_name}
+                            {[locality.country_code, locality.admin_area, locality.locality_name].filter(Boolean).join(" ")}
                             {locality.timezone_id ? ` · ${locality.timezone_id}` : " · 待核验时区"}
                           </option>
                         ))}

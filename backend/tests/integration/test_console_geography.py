@@ -22,6 +22,47 @@ def point(locality_id=None, revision=1):
             "latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo", "coordinate_system": "WGS84"}
 
 
+# 测试点：国家和行政区级所在地缺少城市名时，默认列表、场馆位置与公开详情仍能返回。
+def test_region_only_localities_remain_readable(integration_test_client, integration_admin_connection):
+    client = integration_test_client
+    headers = login(client)
+    entries = [
+        ("JP", "東京都", "Asia/Tokyo", "admin_area"),
+        ("HK", None, "Asia/Hong_Kong", "country"),
+        ("SG", None, "Asia/Singapore", "country"),
+    ]
+    locality_ids = {}
+    with integration_admin_connection.cursor() as cur:
+        for country_code, admin_area, timezone_id, area_level in entries:
+            cur.execute(
+                """INSERT INTO geo_localities (country_code, admin_area, locality_name, timezone_id, area_level)
+                   VALUES (%s, %s, NULL, %s, %s) RETURNING id""",
+                (country_code, admin_area, timezone_id, area_level),
+            )
+            locality_ids[country_code] = cur.fetchone()[0]
+
+    page = client.get("/api/console/localities")
+    assert page.status_code == 200, page.text
+    assert {(item["country_code"], item["area_level"], item["locality_name"])
+            for item in page.json()["items"]} == {
+                ("JP", "admin_area", None), ("HK", "country", None), ("SG", "country", None),
+            }
+    for venue_id, country_code in ((1, "JP"), (2, "HK")):
+        saved = client.put(
+            f"/api/console/venues/{venue_id}/location",
+            headers=headers,
+            json={"expected_revision": 1, "locality_id": locality_ids[country_code]},
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["locality"]["locality_name"] is None
+        location = client.get(f"/api/console/venues/{venue_id}/location")
+        assert location.status_code == 200, location.text
+        assert location.json()["locality"]["area_level"] == ("admin_area" if country_code == "JP" else "country")
+        public = client.get(f"/api/venues/{venue_id}")
+        assert public.status_code == 200, public.text
+        assert public.json()["locality"]["locality_name"] is None
+
+
 # 测试点：V32 默认城市层级可返回，位置保存不改变旧 Live 排期或名称引用并记录审计。
 def test_location_preview_save_and_live_isolation(integration_test_client, integration_admin_connection):
     client = integration_test_client
