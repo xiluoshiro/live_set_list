@@ -16,6 +16,7 @@ import { ConsoleDateInput, isIsoCalendarDate } from "./ConsoleDateInput";
 import { VenueLocationPanel } from "./VenueLocationPanel";
 
 type VenueAdminSectionProps = {
+  variant: "create" | "edit";
   onMessage: (message: string) => void;
   onVenuesChanged: () => Promise<void>;
 };
@@ -30,7 +31,7 @@ type VenueConfirmation = {
   submit: () => Promise<void>;
 };
 
-const VENUE_PAGE_SIZE = 100;
+const VENUE_PAGE_SIZE = 20;
 
 const KIND_LABELS: Record<ConsoleVenueDetail["venue_kind"], string> = {
   physical: "实体场馆",
@@ -46,7 +47,7 @@ function dateText(value: string | null, emptyText: string): string {
   return value ?? emptyText;
 }
 
-export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSectionProps) {
+export function VenueAdminSection({ variant, onMessage, onVenuesChanged }: VenueAdminSectionProps) {
   const auth = useAuth();
   const [venues, setVenues] = useState<ConsoleVenueItem[]>([]);
   const [selectedVenueId, setSelectedVenueId] = useState<number | null>(null);
@@ -54,7 +55,11 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
   const [loading, setLoading] = useState(false);
   const [detailLoadFailed, setDetailLoadFailed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [venueQuery, setVenueQuery] = useState("");
+  const [searchedVenueQuery, setSearchedVenueQuery] = useState("");
+  const [venuePage, setVenuePage] = useState(1);
+  const [venueTotal, setVenueTotal] = useState(0);
+  const [venueTotalPages, setVenueTotalPages] = useState(1);
   const [confirmationKind, setConfirmationKind] = useState<ConfirmationKind | null>(null);
 
   const [createName, setCreateName] = useState("");
@@ -92,28 +97,22 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
     }
   };
 
-  const loadAllVenues = async (preferredVenueId?: number) => {
+  const loadVenuePage = async (query: string, page: number, preferredVenueId?: number) => {
     setLoading(true);
     try {
-      const allItems: ConsoleVenueItem[] = [];
-      let nextPage = 1;
-      let totalPages = 1;
-      do {
-        const response = await getConsoleVenuePage("", nextPage, VENUE_PAGE_SIZE);
-        allItems.push(...response.items);
-        totalPages = response.total_pages ?? 1;
-        nextPage += 1;
-      } while (nextPage <= totalPages);
+      const response = await getConsoleVenuePage(query, page, VENUE_PAGE_SIZE);
+      const items = response.items;
+      setVenues(items);
+      setSearchedVenueQuery(query);
+      setVenuePage(response.page ?? page);
+      setVenueTotal(response.total ?? items.length);
+      setVenueTotalPages(response.total_pages ?? 1);
 
-      const uniqueItems = [...new Map(allItems.map((item) => [item.venue_id, item])).values()]
-        .sort((left, right) => left.venue_id - right.venue_id);
-      setVenues(uniqueItems);
-
-      const nextVenueId = preferredVenueId && uniqueItems.some((item) => item.venue_id === preferredVenueId)
+      const nextVenueId = preferredVenueId && items.some((item) => item.venue_id === preferredVenueId)
         ? preferredVenueId
-        : selectedVenueId && uniqueItems.some((item) => item.venue_id === selectedVenueId)
+        : selectedVenueId && items.some((item) => item.venue_id === selectedVenueId)
           ? selectedVenueId
-          : uniqueItems[0]?.venue_id ?? null;
+          : items[0]?.venue_id ?? null;
       setSelectedVenueId(nextVenueId);
       if (nextVenueId === null) {
         setDetail(null);
@@ -136,11 +135,11 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
   };
 
   useEffect(() => {
-    void loadAllVenues();
-  }, []);
+    if (variant === "edit") void loadVenuePage("", 1);
+  }, [variant]);
 
   const refreshAfterMutation = async (venueId: number) => {
-    await loadAllVenues(venueId);
+    await loadVenuePage(searchedVenueQuery, venuePage, venueId);
     await onVenuesChanged();
   };
 
@@ -149,10 +148,9 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
     try {
       const response = await createConsoleVenue(createName.trim(), auth.csrfToken ?? "", createKind);
       setConfirmationKind(null);
-      setCreating(false);
       setCreateName("");
       setCreateKind("physical");
-      await refreshAfterMutation(response.item.venue_id);
+      await onVenuesChanged();
       onMessage(`已新增 Venue #${response.item.venue_id} 并建立首个名称版本`);
     } catch (error) {
       onMessage(`新增 Venue 失败：${errorMessage(error)}`);
@@ -228,7 +226,7 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
         title: "确认新增 Venue",
         ariaLabel: "新增 Venue 确认",
         rows: [["名称", createName.trim()], ["类型", KIND_LABELS[createKind]]],
-        confirmLabel: "确认新增",
+        confirmLabel: "提交插入",
         submit: submitCreate,
       }
     : confirmationKind === "kind" && detail
@@ -236,7 +234,7 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
           title: "确认修改场地类型",
           ariaLabel: "场地类型变化确认",
           rows: [["Venue", `#${detail.venue_id} ${detail.venue_name}`], ["原类型", KIND_LABELS[detail.venue_kind]], ["新类型", KIND_LABELS[kindDraft]]],
-          confirmLabel: "确认修改",
+          confirmLabel: "保存修改",
           submit: submitKind,
         }
       : confirmationKind === "rename" && detail && currentVersion
@@ -250,7 +248,7 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
               ["新名称", renameName.trim()],
               ["新版本有效期", `${renameDate} → 开放`],
             ],
-            confirmLabel: "确认追加",
+            confirmLabel: "保存修改",
             submit: submitRename,
           }
         : confirmationKind === "correction" && detail && correctionVersion
@@ -264,13 +262,19 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
                 ["影响 Live", String(correctionVersion.live_count)],
                 ["影响改期历史", String(correctionVersion.schedule_history_count)],
               ],
-              confirmLabel: "确认修正",
+              confirmLabel: "保存修改",
               submit: submitCorrection,
             }
           : null;
 
   return (
-    <section className="tour-admin-section" aria-label="Venue 管理">
+    <section className="tour-admin-section" aria-label={variant === "create" ? "新增场地" : "场地管理"}>
+      {variant === "edit" && <>
+      <div className="tour-candidate-search">
+        <label htmlFor="venue-admin-query">搜索场地</label>
+        <input id="venue-admin-query" value={venueQuery} onChange={(event) => setVenueQuery(event.target.value)} />
+        <button type="button" className="console-ghost-btn" disabled={loading} onClick={() => void loadVenuePage(venueQuery.trim(), 1)}>查询</button>
+      </div>
       <div className="tour-admin-toolbar">
         <label htmlFor="venue-admin-select">已有 Venue</label>
         <select
@@ -285,14 +289,16 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
             <option key={venue.venue_id} value={venue.venue_id}>#{venue.venue_id} {venue.venue_name}</option>
           ))}
         </select>
-        <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setCreating((value) => !value)}>
-          {creating ? "收起新增" : "新增 Venue"}
-        </button>
+      </div>
+      <div className="tour-candidate-pager">
+        <span>共 {venueTotal} 个场地 · 第 {venuePage} / {Math.max(1, venueTotalPages)} 页</span>
+        <button type="button" className="console-ghost-btn" disabled={loading || venuePage <= 1} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage - 1)}>上一页</button>
+        <button type="button" className="console-ghost-btn" disabled={loading || venuePage >= venueTotalPages} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage + 1)}>下一页</button>
       </div>
 
       {venues.length === 0 && !loading && (
         <p className="console-admin-hint">
-          暂无可管理的 Venue。<button type="button" className="console-ghost-btn" onClick={() => void loadAllVenues()}>重新加载</button>
+          暂无可管理的 Venue。<button type="button" className="console-ghost-btn" onClick={() => void loadVenuePage(searchedVenueQuery, venuePage)}>重新加载</button>
         </p>
       )}
 
@@ -302,7 +308,9 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
         </p>
       )}
 
-      {creating && (
+      </>}
+
+      {variant === "create" && (
         <div className="tour-admin-block">
           <h3>新增 Venue</h3>
           <div className="tour-admin-fields">
@@ -313,12 +321,12 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
           </div>
           <p className="console-admin-hint">服务端将在一个事务中建立稳定 Venue 和首个开放名称版本。</p>
           <div className="console-submit-row">
-            <button type="button" className="console-submit-btn" disabled={submitting || !createName.trim()} onClick={() => setConfirmationKind("create")}>检查新增资料</button>
+            <button type="button" className="console-submit-btn" disabled={submitting || !createName.trim()} onClick={() => setConfirmationKind("create")}>提交插入</button>
           </div>
         </div>
       )}
 
-      {detail && (
+      {variant === "edit" && detail && (
         <>
           <VenueLocationPanel key={`${detail.venue_id}:${detail.venue_kind}`} venueId={detail.venue_id} venueKind={detail.venue_kind} />
           <div className="tour-admin-block">
@@ -348,7 +356,7 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
               </select></label>
             </div>
             <div className="console-submit-row">
-              <button type="button" className="console-submit-btn" disabled={submitting || kindDraft === detail.venue_kind} onClick={() => setConfirmationKind("kind")}>检查场地类型变化</button>
+              <button type="button" className="console-submit-btn" disabled={submitting || kindDraft === detail.venue_kind} onClick={() => setConfirmationKind("kind")}>保存修改</button>
             </div>
           </div>
 
@@ -360,7 +368,7 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
               <label>生效日期<ConsoleDateInput value={renameDate} onChange={(event) => setRenameDate(event.target.value)} /></label>
             </div>
             <div className="console-submit-row">
-              <button type="button" className="console-submit-btn" disabled={submitting || !renameName.trim() || !isIsoCalendarDate(renameDate) || currentVersion === null} onClick={() => setConfirmationKind("rename")}>检查名称版本变化</button>
+              <button type="button" className="console-submit-btn" disabled={submitting || !renameName.trim() || !isIsoCalendarDate(renameDate) || currentVersion === null} onClick={() => setConfirmationKind("rename")}>保存修改</button>
             </div>
           </div>
 
@@ -381,7 +389,7 @@ export function VenueAdminSection({ onMessage, onVenuesChanged }: VenueAdminSect
               <label>正确名称<input value={correctionName} onChange={(event) => setCorrectionName(event.target.value)} /></label>
             </div>
             <div className="console-submit-row">
-              <button type="button" className="console-submit-btn" disabled={submitting || correctionVersion === null || !correctionName.trim() || correctionName.trim() === correctionVersion.venue_name} onClick={() => setConfirmationKind("correction")}>检查资料修正</button>
+              <button type="button" className="console-submit-btn" disabled={submitting || correctionVersion === null || !correctionName.trim() || correctionName.trim() === correctionVersion.venue_name} onClick={() => setConfirmationKind("correction")}>保存修改</button>
             </div>
           </div>
         </>

@@ -309,6 +309,14 @@ def test_get_live_detail_success_maps_rows_and_rules():
         None,
         7,
         "Group 7",
+        [],
+        "scheduled",
+        None,
+        [],
+        9,
+        540,
+        "Asia/Tokyo",
+        "physical",
     )
     detail_rows = [
         (
@@ -352,6 +360,8 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert payload["live_id"] == 40
     assert payload["live_title"] == "Live 40"
     assert payload["venue"] == "武道馆"
+    assert payload["venue_id"] == 9
+    assert payload["venue_kind"] == "physical"
     assert payload["opening_time"] == "17:00"
     assert payload["start_time"] == "18:00"
     assert payload["bands"] == [1, 2]

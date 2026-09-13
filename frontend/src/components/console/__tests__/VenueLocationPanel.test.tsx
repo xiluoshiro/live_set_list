@@ -33,21 +33,19 @@ beforeEach(() => {
 async function openPanel() {
   const user = userEvent.setup();
   render(<VenueLocationPanel venueId={1} venueKind="physical" />);
-  expect(api.getConsoleVenueLocation).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "所在地与地图" }));
   await screen.findByLabelText("纬度（WGS84）");
   return user;
 }
 
-// 测试点：折叠区按需读取，城市时区与缺失坐标如实展示，单个坐标不能提交。
-test("loads on demand and validates paired coordinates", async () => {
+// 测试点：所在地与地图直接加载且不再折叠，城市时区与缺失坐标如实展示，单个坐标不能提交。
+test("loads directly and validates paired coordinates", async () => {
   const user = await openPanel();
   expect(screen.getByText(/来自城市/)).toHaveTextContent("Asia/Tokyo");
   expect(screen.getAllByText("暂无坐标")).toHaveLength(3);
   await user.type(screen.getByLabelText("纬度（WGS84）"), "0");
-  expect(screen.getByRole("button", { name: "检查所在地修改" })).toBeDisabled();
+  expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
   await user.type(screen.getByLabelText("经度（WGS84）"), "0");
-  expect(screen.getByRole("button", { name: "检查所在地修改" })).toBeEnabled();
+  expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeEnabled();
 });
 
 // 测试点：保存前必须预览，使用预览快照和修订号提交；失败保留确认框及编辑内容。
@@ -59,15 +57,15 @@ test("previews and confirms a revision-bound change, retaining failed input", as
   api.saveConsoleVenueLocation.mockRejectedValueOnce(new Error("资料已更新"))
     .mockResolvedValueOnce({ ...location, address: "New address", location_revision: 3 });
   await user.type(screen.getByLabelText("详细地址"), "New address");
-  await user.click(screen.getByRole("button", { name: "检查所在地修改" }));
+  await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
   let dialog = await screen.findByRole("dialog", { name: "确认所在地修改" });
   expect(dialog).toHaveTextContent("本次不修改排期");
   expect(api.saveConsoleVenueLocation).not.toHaveBeenCalled();
-  await user.click(within(dialog).getByRole("button", { name: "确认保存" }));
+  await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
   await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent("资料已更新"));
   expect(screen.getByLabelText("详细地址")).toHaveValue("New address");
   dialog = screen.getByRole("dialog", { name: "确认所在地修改" });
-  await user.click(within(dialog).getByRole("button", { name: "确认保存" }));
+  await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(api.saveConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({ expected_revision: 2, address: "New address" }), "csrf");
 });
@@ -100,12 +98,9 @@ test("keeps coordinate fallback when a place match is stale", async () => {
 test("ignores an old venue response after unmount", async () => {
   let resolveOld!: (value: typeof location) => void;
   api.getConsoleVenueLocation.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }));
-  const user = userEvent.setup();
   const rendered = render(<VenueLocationPanel key={1} venueId={1} venueKind="physical" />);
-  await user.click(screen.getByRole("button", { name: "所在地与地图" }));
-  rendered.rerender(<VenueLocationPanel key={2} venueId={2} venueKind="physical" />);
   api.getConsoleVenueLocation.mockResolvedValue({ ...location, venue_id: 2, address: "Second" });
-  await user.click(screen.getByRole("button", { name: "所在地与地图" }));
+  rendered.rerender(<VenueLocationPanel key={2} venueId={2} venueKind="physical" />);
   await waitFor(() => expect(screen.getByLabelText("详细地址")).toHaveValue("Second"));
   resolveOld({ ...location, address: "Old response" });
   await waitFor(() => expect(screen.getByLabelText("详细地址")).toHaveValue("Second"));

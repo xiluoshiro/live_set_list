@@ -809,10 +809,19 @@ export function StageLedgerContent({
               <div className="stage-schedule-opening"><dt>开场</dt><dd>{formatTimedLabel(detailData.opening_time)}</dd></div>
               <div className="stage-schedule-start"><dt>开演</dt><dd>{formatTimedLabel(detailData.start_time)}</dd></div>
               <div className="stage-schedule-venue">
-                <dt>场馆</dt>
+                <dt>
+                  {detailData.venue_kind === "physical" && detailData.venue_id && detailData.venue?.trim() ? (
+                    <VenueMapMenu
+                      venueId={detailData.venue_id}
+                      venueName={detailData.venue}
+                      triggerLabel="场馆"
+                      triggerClassName="stage-schedule-label-trigger"
+                    />
+                  ) : "场馆"}
+                </dt>
                 <dd>
                   <span className="stage-venue-actions">
-                    {detailData.venue_id && detailData.venue?.trim() && onOpenVenue ? (
+                    {detailData.venue_kind === "physical" && detailData.venue_id && detailData.venue?.trim() && onOpenVenue ? (
                       <button
                         type="button"
                         className="stage-inline-link stage-venue-link"
@@ -822,9 +831,6 @@ export function StageLedgerContent({
                       </button>
                     ) : (
                       <span>{detailData.venue?.trim() || "未公布"}</span>
-                    )}
-                    {detailData.venue_id && detailData.venue?.trim() && (
-                      <VenueMapMenu venueId={detailData.venue_id} venueName={detailData.venue} />
                     )}
                   </span>
                 </dd>

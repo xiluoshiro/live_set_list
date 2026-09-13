@@ -21,7 +21,6 @@ import {
   type PerformanceGroupRef,
   type PerformanceGroupSummary,
   type PerformanceItem,
-  type PublicVenueLiveItem,
   type TourRef,
   type TourSummary,
   type DatePhase,
@@ -1067,7 +1066,7 @@ function App() {
     });
   };
 
-  const openVenueLiveDetail = (live: PublicVenueLiveItem) => {
+  const openVenueLiveDetail = (live: { live_id: number; live_date: string; live_title: string; url: string | null }) => {
     pushHistoryState({
       app: "live-set-list",
       tab: "detail",
@@ -1593,6 +1592,10 @@ function App() {
             onBack={handleBackFromVenue}
             onCanonicalVenue={canonicalizeVenue}
             onOpenLive={openVenueLiveDetail}
+            onOpenGroup={(groupId, groupTitle) => openPerformanceGroupDetail({
+              group_id: groupId,
+              group_title: groupTitle,
+            })}
           />
         ) : showHomePanel ? (
           <HomeDashboard

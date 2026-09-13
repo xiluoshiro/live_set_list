@@ -318,9 +318,24 @@
   color: var(--stage-accent);
 }
 
+.stage-schedule-label-trigger {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.stage-schedule-label-trigger:hover,
+.stage-schedule-label-trigger:focus-visible,
+.stage-schedule-label-trigger[data-state="open"] {
+  color: var(--stage-accent);
+}
+
 .stage-map-menu {
   z-index: var(--z-dropdown);
-  min-width: 190px;
+  min-width: 140px;
   padding: 6px;
   border: 1px solid var(--border-normal);
   border-radius: var(--radius-control);
@@ -341,11 +356,6 @@
   font-size: 13px;
   text-decoration: none;
   outline: none;
-}
-
-.stage-map-menu-item small {
-  color: var(--text-muted);
-  white-space: nowrap;
 }
 
 .stage-map-menu-item[data-highlighted] {

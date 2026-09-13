@@ -3168,6 +3168,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           { value: "setlist_edit", label: "Setlist管理" },
           { value: "song", label: "歌曲管理" },
           { value: "band", label: "乐队管理" },
+          { value: "venue_create", label: "新增场地" },
           { value: "venue", label: "场地管理" },
           { value: "tour", label: "巡演管理" },
           { value: "performance_group", label: "活动组管理" },
@@ -3412,8 +3413,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         />
       )}
 
-      {mode === "venue" && (
+      {(mode === "venue_create" || mode === "venue") && (
         <VenueAdminSection
+          variant={mode === "venue_create" ? "create" : "edit"}
           onMessage={setMessage}
           onVenuesChanged={async () => {
             const response = await getConsoleVenues(undefined, 100);

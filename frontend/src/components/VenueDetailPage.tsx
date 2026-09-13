@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, getVenueDetail, type PublicVenueDetailResponse, type PublicVenueLiveItem } from "../api";
+import {
+  ApiError,
+  getPerformances,
+  getVenueDetail,
+  type PerformanceItem,
+  type PublicVenueDetailResponse,
+} from "../api";
 import { logError } from "../logger";
 import { ContentState } from "./ContentState";
 import { LiveCardGrid, type LiveRow } from "./LiveCardGrid";
@@ -11,15 +17,16 @@ type VenueDetailPageProps = {
   venueId: number;
   fallbackName: string;
   onBack: () => void;
-  onOpenLive: (live: PublicVenueLiveItem) => void;
+  onOpenLive: (live: { live_id: number; live_date: string; live_title: string; url: string | null }) => void;
+  onOpenGroup: (groupId: number, groupTitle: string) => void;
   onCanonicalVenue: (venueId: number, venueName: string) => void;
 };
 
-const VENUE_KIND_LABELS = { physical: "实体场馆", online: "线上场馆", undisclosed: "未公开场地" } as const;
-
 function formatLocality(detail: PublicVenueDetailResponse): string {
   if (!detail.locality) return "未登记";
-  return [detail.locality.country_code, detail.locality.admin_area, detail.locality.locality_name]
+  const country = new Intl.DisplayNames(["zh-CN"], { type: "region" }).of(detail.locality.country_code)
+    ?? detail.locality.country_code;
+  return [country, detail.locality.admin_area, detail.locality.locality_name]
     .filter(Boolean)
     .join(" · ");
 }
@@ -31,7 +38,31 @@ function formatNamePeriod(version: PublicVenueDetailResponse["name_versions"][nu
   return "历史名称";
 }
 
-function toLiveRow(live: PublicVenueLiveItem): LiveRow {
+function toPerformanceRow(item: PerformanceItem): LiveRow {
+  if (item.kind === "performance_group") {
+    const group = item.performance_group;
+    return {
+      kind: "performance_group",
+      liveId: group.group_id,
+      liveDate: group.start_date,
+      liveTitle: group.group_title,
+      liveType: group.display_type === "single_day_multi_show" ? "单日多场" : "多日活动",
+      icons: [],
+      url: null,
+      groupId: group.group_id,
+      groupTitle: group.group_title,
+      groupStartDate: group.start_date,
+      groupEndDate: group.end_date,
+      groupDayCount: group.day_count,
+      groupLiveCount: group.live_count,
+      groupCancelledLiveCount: group.cancelled_live_count ?? 0,
+      groupIcons: group.bands.map((band) => band.band_id),
+      eventStatus: null,
+      datePhase: null,
+      wasRescheduled: false,
+    };
+  }
+  const live = item.live;
   return {
     kind: "live",
     liveId: live.live_id,
@@ -40,22 +71,31 @@ function toLiveRow(live: PublicVenueLiveItem): LiveRow {
     liveType: live.live_type,
     icons: live.bands,
     url: live.url,
-    groupId: null,
-    groupTitle: null,
+    groupId: live.performance_group?.group_id ?? null,
+    groupTitle: live.performance_group?.group_title ?? null,
     groupStartDate: null,
     groupEndDate: null,
     groupDayCount: null,
     groupLiveCount: null,
     groupCancelledLiveCount: null,
     groupIcons: [],
-    eventStatus: live.event_status,
-    datePhase: live.date_phase,
-    wasRescheduled: live.was_rescheduled,
+    eventStatus: live.event_status ?? null,
+    datePhase: live.date_phase ?? null,
+    wasRescheduled: live.was_rescheduled ?? false,
   };
 }
 
-export function VenueDetailPage({ venueId, fallbackName, onBack, onOpenLive, onCanonicalVenue }: VenueDetailPageProps) {
+export function VenueDetailPage({
+  venueId,
+  fallbackName,
+  onBack,
+  onOpenLive,
+  onOpenGroup,
+  onCanonicalVenue,
+}: VenueDetailPageProps) {
   const [detail, setDetail] = useState<PublicVenueDetailResponse | null>(null);
+  const [performances, setPerformances] = useState<PerformanceItem[]>([]);
+  const [performancePagination, setPerformancePagination] = useState({ page: 1, page_size: 20, total: 0, total_pages: 1 });
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +109,25 @@ export function VenueDetailPage({ venueId, fallbackName, onBack, onOpenLive, onC
     setError(null);
     setNotFound(false);
     setDetail(null);
+    setPerformances([]);
     getVenueDetail(venueId)
-      .then((response) => {
+      .then(async (response) => {
         if (canceled) return;
         setDetail(response);
         if (response.venue_id !== venueId) onCanonicalVenue(response.venue_id, response.venue_name);
+        try {
+          const performanceResponse = await getPerformances(1, 20, "all", { venue_id: response.venue_id });
+          if (!canceled) {
+            setPerformances(performanceResponse.items);
+            setPerformancePagination(performanceResponse.pagination);
+          }
+        } catch (caught) {
+          if (!canceled) {
+            const message = caught instanceof Error ? caught.message : String(caught);
+            setError(message);
+            logError("load_venue_performances_failed", { venueId: response.venue_id, message });
+          }
+        }
       })
       .catch((caught) => {
         if (canceled) return;
@@ -94,14 +148,13 @@ export function VenueDetailPage({ venueId, fallbackName, onBack, onOpenLive, onC
   }, [detail]);
 
   const loadMore = useCallback(async () => {
-    if (!detail || loadingMore || loadMoreInFlightRef.current || detail.pagination.page >= detail.pagination.total_pages) return;
+    if (!detail || loadingMore || loadMoreInFlightRef.current || performancePagination.page >= performancePagination.total_pages) return;
     loadMoreInFlightRef.current = true;
     setLoadingMore(true);
     try {
-      const response = await getVenueDetail(detail.venue_id, detail.pagination.page + 1, 20);
-      setDetail((current) => current && current.venue_id === response.venue_id
-        ? { ...response, lives: [...current.lives, ...response.lives] }
-        : response);
+      const response = await getPerformances(performancePagination.page + 1, 20, "all", { venue_id: detail.venue_id });
+      setPerformances((current) => [...current, ...response.items]);
+      setPerformancePagination(response.pagination);
     } catch (caught) {
       logError("load_more_venue_lives_failed", {
         venueId: detail.venue_id,
@@ -111,7 +164,7 @@ export function VenueDetailPage({ venueId, fallbackName, onBack, onOpenLive, onC
       loadMoreInFlightRef.current = false;
       setLoadingMore(false);
     }
-  }, [detail, loadingMore]);
+  }, [detail, loadingMore, performancePagination]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -139,15 +192,16 @@ export function VenueDetailPage({ venueId, fallbackName, onBack, onOpenLive, onC
   if (loading && !detail) return <ContentState kind="loading" title={`加载${fallbackName || "场馆"}资料...`} layout="detail" />;
   if (!detail) return <ContentState kind="error" title="场馆资料加载失败" description={error ?? "请稍后重试"} layout="detail" />;
 
-  const rows = detail.lives.map(toLiveRow);
-  const liveById = new Map(detail.lives.map((live) => [live.live_id, live]));
+  const rows = performances.map(toPerformanceRow);
+  const liveById = new Map(
+    performances.flatMap((item) => item.kind === "live" ? [[item.live.live_id, item.live] as const] : []),
+  );
   return (
     <div className="tour-detail-page venue-detail-page" data-stage-ledger>
       <header className="stage-masthead">
         <div className="stage-masthead-main">
           <div className="stage-title-meta">
             <span>场馆资料</span>
-            <span className="stage-type-label">{VENUE_KIND_LABELS[detail.venue_kind]}</span>
           </div>
           <MastheadTitle as="h1" title={detail.venue_name} />
           {detail.address && <p className="venue-detail-address">{detail.address}</p>}
@@ -155,9 +209,6 @@ export function VenueDetailPage({ venueId, fallbackName, onBack, onOpenLive, onC
         <div className="stage-masthead-side">
           <dl className="stage-schedule-list venue-detail-facts">
             <div><dt>所在地</dt><dd>{formatLocality(detail)}</dd></div>
-            <div><dt>时区</dt><dd>{detail.timezone_id ?? "未登记"}</dd></div>
-            <div><dt>纬度</dt><dd>{detail.latitude ?? "未登记"}</dd></div>
-            <div><dt>经度</dt><dd>{detail.longitude ?? "未登记"}</dd></div>
           </dl>
           <div className="stage-actions">
             {detail.map_links.length > 0 && (
@@ -172,13 +223,12 @@ export function VenueDetailPage({ venueId, fallbackName, onBack, onOpenLive, onC
         <section className="stage-history-section" aria-labelledby="venue-name-history-title">
           <div className="stage-section-heading">
             <h2 id="venue-name-history-title">名称记录</h2>
-            <span>{detail.name_versions.length} 条</span>
           </div>
           <ol className="stage-history-list venue-name-history-list">
             {detail.name_versions.map((version, index) => (
               <li key={`${version.venue_name}-${version.valid_from ?? "start"}-${index}`}>
                 <time>{formatNamePeriod(version)}</time>
-                <span>{version.venue_name}{version.is_current ? "（当前）" : ""}</span>
+                <span>{version.venue_name}</span>
               </li>
             ))}
           </ol>
@@ -199,12 +249,14 @@ export function VenueDetailPage({ venueId, fallbackName, onBack, onOpenLive, onC
               const live = liveById.get(row.liveId);
               if (live) onOpenLive(live);
             }}
+            onOpenGroup={onOpenGroup}
             loading={false}
-            loadError={null}
+            loadError={error}
             sentinelRef={sentinelRef}
             loadingMore={loadingMore}
-            hasMore={detail.pagination.page < detail.pagination.total_pages}
-            total={detail.pagination.total}
+            hasMore={performancePagination.page < performancePagination.total_pages}
+            total={performancePagination.total}
+            showCompletionMessage={false}
           />
         </section>
       </div>
