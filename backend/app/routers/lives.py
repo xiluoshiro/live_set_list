@@ -244,7 +244,8 @@ SELECT
     ) AS schedule_history,
     NULLIF(to_jsonb(l) ->> 'venue_id', '')::int AS venue_id,
     l.timezone_offset_minutes,
-    l.timezone_id
+    l.timezone_id,
+    v.venue_kind
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -345,7 +346,8 @@ SELECT
     ) AS schedule_history,
     NULLIF(to_jsonb(l) ->> 'venue_id', '')::int AS venue_id,
     l.timezone_offset_minutes,
-    l.timezone_id
+    l.timezone_id,
+    v.venue_kind
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -873,6 +875,7 @@ def _build_live_detail_payload(
         "live_title": str(header_row[2]),
         "live_type": live_type,
         "venue_id": header_row[18] if len(header_row) > 18 else None,
+        "venue_kind": header_row[21] if len(header_row) > 21 else None,
         "venue": header_row[3],
         "opening_time": header_row[4],
         "start_time": header_row[5],

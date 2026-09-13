@@ -8,6 +8,7 @@ import { VenueMapMenu } from "../VenueMapMenu";
 const apiMocks = vi.hoisted(() => ({
   getVenueDetail: vi.fn(),
   getVenueMaps: vi.fn(),
+  getPerformances: vi.fn(),
 }));
 
 vi.mock("../../api", () => ({
@@ -20,6 +21,7 @@ vi.mock("../../api", () => ({
   },
   getVenueDetail: apiMocks.getVenueDetail,
   getVenueMaps: apiMocks.getVenueMaps,
+  getPerformances: apiMocks.getPerformances,
 }));
 vi.mock("../../logger", () => ({ logError: vi.fn() }));
 
@@ -62,6 +64,11 @@ describe("Venue public pages", () => {
   beforeEach(() => {
     apiMocks.getVenueDetail.mockReset();
     apiMocks.getVenueMaps.mockReset();
+    apiMocks.getPerformances.mockReset();
+    apiMocks.getPerformances.mockResolvedValue({
+      items: [{ kind: "live", live: makeVenueDetail().lives[0] }],
+      pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+    });
   });
 
   // 测试点：场馆详情应展示公开地点资料和名称记录，并允许从相关 Live 卡片继续浏览。
@@ -76,14 +83,18 @@ describe("Venue public pages", () => {
         fallbackName="日本武道館"
         onBack={vi.fn()}
         onOpenLive={onOpenLive}
+        onOpenGroup={vi.fn()}
         onCanonicalVenue={vi.fn()}
       />,
     );
 
     expect(await screen.findByRole("heading", { name: "日本武道館" })).toBeInTheDocument();
     expect(screen.getByText("北の丸公園2-3")).toBeInTheDocument();
-    expect(screen.getByText("JP · 東京都 · 千代田区")).toBeInTheDocument();
-    expect(screen.getByText("日本武道館（当前）")).toBeInTheDocument();
+    expect(screen.getByText("日本 · 東京都 · 千代田区")).toBeInTheDocument();
+    expect(screen.getAllByText("日本武道館").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("实体场馆")).not.toBeInTheDocument();
+    expect(screen.queryByText("Asia/Tokyo")).not.toBeInTheDocument();
+    expect(screen.queryByText(/已加载全部/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /查看《Test Live》详情/ }));
     expect(onOpenLive).toHaveBeenCalledWith(expect.objectContaining({ live_id: 51 }));
   });
@@ -99,6 +110,7 @@ describe("Venue public pages", () => {
         fallbackName="旧场馆名"
         onBack={vi.fn()}
         onOpenLive={vi.fn()}
+        onOpenGroup={vi.fn()}
         onCanonicalVenue={onCanonicalVenue}
       />,
     );

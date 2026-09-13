@@ -27,6 +27,7 @@ class LiveListFilters:
     year: int | None = None
     live_type: LiveType | None = None
     band_id: int | None = None
+    venue_id: int | None = None
     sort: LiveListSort = "date_desc"
     without_setlist: bool = False
 
@@ -37,6 +38,7 @@ class LiveListFilters:
             and self.year is None
             and self.live_type is None
             and self.band_id is None
+            and self.venue_id is None
             and self.sort == "date_desc"
             and not self.without_setlist
         )
@@ -116,6 +118,10 @@ def build_live_where(filters: LiveListFilters) -> tuple[str, list[object]]:
             """
         )
         params.append(filters.band_id)
+
+    if filters.venue_id is not None:
+        conditions.append("l.venue_id = %s")
+        params.append(filters.venue_id)
 
     if filters.without_setlist:
         conditions.append(

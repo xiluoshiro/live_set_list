@@ -1823,6 +1823,7 @@ describe("App", () => {
       ...makeDetailResponse({ liveId: 77, rowCount: 1 }),
       venue_id: 7,
       venue: "日本武道館",
+      venue_kind: "physical",
     });
 
     renderApp();

@@ -136,6 +136,9 @@ class LiveDetailResponse(BaseModel):
     live_title: str = Field(..., description='Live title')
     live_type: str = Field(..., description='Stable live type code')
     venue_id: int | None = Field(default=None, description='Stable venue entity ID when available')
+    venue_kind: Literal["physical", "online", "undisclosed"] | None = Field(
+        default=None, description="Venue type when a Venue is selected"
+    )
     venue: str | None = Field(default=None, description='Venue name')
     opening_time: str | None = Field(default=None, description='Opening time')
     start_time: str | None = Field(default=None, description='Start time')

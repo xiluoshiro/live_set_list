@@ -14,9 +14,17 @@ type VenueMapMenuProps = {
   venueId: number;
   venueName: string;
   links?: PublicVenueMapLink[];
+  triggerLabel?: string;
+  triggerClassName?: string;
 };
 
-export function VenueMapMenu({ venueId, venueName, links: initialLinks }: VenueMapMenuProps) {
+export function VenueMapMenu({
+  venueId,
+  venueName,
+  links: initialLinks,
+  triggerLabel = "地图",
+  triggerClassName = "stage-map-trigger",
+}: VenueMapMenuProps) {
   const [links, setLinks] = useState<PublicVenueMapLink[] | null>(initialLinks ?? null);
 
   useEffect(() => {
@@ -36,13 +44,13 @@ export function VenueMapMenu({ venueId, venueName, links: initialLinks }: VenueM
     return () => { canceled = true; };
   }, [initialLinks, venueId]);
 
-  if (!links?.length) return null;
+  if (!links?.length) return triggerLabel === "地图" ? null : <span>{triggerLabel}</span>;
 
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
-        <button type="button" className="stage-map-trigger" aria-label={`选择${venueName}的地图`}>
-          地图
+        <button type="button" className={triggerClassName} aria-label={`选择${venueName}的地图`}>
+          {triggerLabel}
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -51,7 +59,6 @@ export function VenueMapMenu({ venueId, venueName, links: initialLinks }: VenueM
             <DropdownMenu.Item key={link.provider} asChild>
               <a className="stage-map-menu-item" href={link.url} target="_blank" rel="noreferrer">
                 <span>{PROVIDER_LABELS[link.provider]}</span>
-                <small>{link.source === "place" ? "场馆地点" : "坐标定位"}</small>
               </a>
             </DropdownMenu.Item>
           ))}

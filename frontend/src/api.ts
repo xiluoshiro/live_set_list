@@ -253,6 +253,7 @@ export type LiveDetailResponse = {
   live_title: string;
   live_type: string;
   venue_id?: number | null;
+  venue_kind?: "physical" | "online" | "undisclosed" | null;
   venue: string | null;
   opening_time: string | null;
   start_time: string | null;

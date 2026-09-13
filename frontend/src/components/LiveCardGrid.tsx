@@ -48,6 +48,7 @@ interface LiveCardGridProps {
   loadingMore: boolean;
   hasMore: boolean;
   total: number;
+  showCompletionMessage?: boolean;
 }
 
 export function formatPerformanceDate(
@@ -106,6 +107,7 @@ export function LiveCardGrid({
   loadingMore,
   hasMore,
   total,
+  showCompletionMessage = true,
 }: LiveCardGridProps) {
   if (loadError && rows.length === 0) {
     return (
@@ -220,7 +222,7 @@ export function LiveCardGrid({
         })}
       </div>
       <div ref={sentinelRef} className="live-card-sentinel">
-        {loadingMore ? "加载中..." : hasMore ? "" : `已加载全部 ${total} 条`}
+        {loadingMore ? "加载中..." : hasMore || !showCompletionMessage ? "" : `已加载全部 ${total} 条`}
       </div>
     </>
   );

@@ -235,6 +235,24 @@ def test_filters_band_id_filter_standalone_lives():
     assert response.status_code == 200
 
 
+# 测试点：venue_id 应同时约束活动组完整匹配和独立 Live，供场馆详情复用统一聚合规则。
+def test_filters_venue_id_across_group_and_live_queries():
+    conn, cursor = _build_connection_mock()
+    cursor.fetchone.return_value = (0,)
+    cursor.fetchall.return_value = []
+
+    with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
+        response = TestClient(app).get(
+            "/api/catalog/performances?scope=all&venue_id=7&page=1&page_size=20"
+        )
+
+    assert response.status_code == 200
+    executed_sql = "\n".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+    executed_params = [call.args[1] for call in cursor.execute.call_args_list]
+    assert "l.venue_id = %s" in executed_sql
+    assert all(7 in params for params in executed_params)
+
+
 # 测试点：活动组仅部分命中筛选时，接口应返回带活动组引用的单场 Live。
 def test_filters_expand_partially_matching_group_into_lives():
     conn, cursor = _build_connection_mock()

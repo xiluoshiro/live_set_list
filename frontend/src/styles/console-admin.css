@@ -535,6 +535,11 @@
   gap: 12px;
 }
 
+.venue-map-link-editor {
+  grid-template-columns: minmax(160px, 240px) minmax(0, 1fr);
+  margin-top: 18px;
+}
+
 .tour-admin-fields label {
   display: grid;
   gap: 6px;

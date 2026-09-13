@@ -219,9 +219,10 @@ def _build_live_filter_conditions(
     year: int | None,
     live_type: LiveType | None,
     band_id: int | None,
+    venue_id: int | None = None,
 ) -> tuple[str, tuple[object, ...]]:
     where_sql, params = build_live_where(
-        LiveListFilters(q=q, year=year, live_type=live_type, band_id=band_id)
+        LiveListFilters(q=q, year=year, live_type=live_type, band_id=band_id, venue_id=venue_id)
     )
     return where_sql, tuple(params)
 
@@ -235,12 +236,13 @@ def _build_catalog_performances_queries(
     sort: Literal["date_desc", "date_asc"],
     scope: Literal["all", "favorites"],
     user_id: int | None,
+    venue_id: int | None = None,
 ) -> tuple[str, tuple[object, ...], str, tuple[object, ...]]:
     live_where, live_params = _build_live_filter_conditions(
-        q=q, year=year, live_type=live_type, band_id=band_id,
+        q=q, year=year, live_type=live_type, band_id=band_id, venue_id=venue_id,
     )
     secondary_where, secondary_params = _build_live_filter_conditions(
-        q=None, year=year, live_type=live_type, band_id=band_id,
+        q=None, year=year, live_type=live_type, band_id=band_id, venue_id=venue_id,
     )
 
     sort_group_date = "end_date" if sort == "date_desc" else "start_date"
@@ -730,6 +732,7 @@ def get_catalog_performances(
     year: int | None = Query(default=None, ge=1900, le=2100),
     live_type: Literal["oneman", "taiban", "multi_act", "festival", "event", "other"] | None = Query(default=None),
     band_id: int | None = Query(default=None, ge=1),
+    venue_id: int | None = Query(default=None, ge=1),
     sort: Literal["date_desc", "date_asc"] = Query(default="date_desc"),
     current_user: AuthUser | None = Depends(get_current_user_optional),
 ):
@@ -751,6 +754,7 @@ def get_catalog_performances(
         sort=sort,
         scope=scope,
         user_id=user_id,
+        venue_id=venue_id,
     )
 
     try:

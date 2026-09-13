@@ -18,6 +18,7 @@ function makeDetail(overrides: Partial<LiveDetailResponse> = {}): LiveDetailResp
     live_type: "oneman",
     venue_id: 9,
     venue: "日本武道館",
+    venue_kind: "physical",
     opening_time: "17:00:00+09:00",
     start_time: "18:00:00+09:00",
     bands: [1],
@@ -108,8 +109,8 @@ describe("StageLedgerContent", () => {
     expect(screen.getAllByText("未公布")).toHaveLength(3);
   });
 
-  // 测试点：场馆名进入站内详情，地图按钮是独立入口，不能把两种行为混成一个链接。
-  test("场馆名和地图使用两个独立入口", async () => {
+  // 测试点：实体场馆名进入站内详情，场馆标题本身承载地图菜单，避免独立按钮换行。
+  test("实体场馆名和场馆标题提供两个入口", async () => {
     const user = userEvent.setup();
     const onOpenVenue = vi.fn();
     apiMocks.getVenueMaps.mockResolvedValue({
@@ -123,6 +124,15 @@ describe("StageLedgerContent", () => {
     await user.click(screen.getByRole("button", { name: "日本武道館" }));
     expect(onOpenVenue).toHaveBeenCalledWith(9, "日本武道館");
     expect(await screen.findByRole("button", { name: "选择日本武道館的地图" })).toBeInTheDocument();
+  });
+
+  // 测试点：线上和未公开场地只显示文本，不提供无意义的详情或地图入口。
+  test("非实体场地不提供详情和地图入口", () => {
+    renderStage(makeDetail({ venue_kind: "online", venue: "Online Streaming" }), { onOpenVenue: vi.fn() });
+
+    expect(screen.getByText("Online Streaming")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Online Streaming" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /选择.*的地图/ })).not.toBeInTheDocument();
   });
 
   test("按结构化位置渲染连续流程，并展示曲目细节", async () => {
