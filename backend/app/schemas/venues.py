@@ -12,7 +12,7 @@ MapProvider = Literal["google", "apple", "amap"]
 class PublicVenueLocality(BaseModel):
     country_code: str = Field(..., description="ISO 3166-1 alpha-2 country or region code")
     admin_area: str | None = Field(default=None, description="First-level administrative area")
-    locality_name: str = Field(..., description="Locality display name")
+    locality_name: str | None = Field(..., description="Locality name, absent for country or administrative-area records")
 
 
 class PublicVenueNameVersion(BaseModel):

@@ -120,6 +120,30 @@ describe("Venue public pages", () => {
     expect(await screen.findByText("中国台湾 · 桃園市")).toBeInTheDocument();
   });
 
+  // 测试点：行政区和单一地区场馆缺少城市名时，公开详情只展示有意义的所在地层级。
+  test.each([
+    ["JP", "東京都", "日本 · 東京都"],
+    ["HK", null, "中国香港特别行政区"],
+    ["SG", null, "新加坡"],
+  ])("formats a region-only locality for %s", async (countryCode, adminArea, expected) => {
+    const detail = makeVenueDetail();
+    detail.locality = { country_code: countryCode, admin_area: adminArea, locality_name: null };
+    apiMocks.getVenueDetail.mockResolvedValue(detail);
+
+    render(
+      <VenueDetailPage
+        venueId={7}
+        fallbackName={detail.venue_name}
+        onBack={vi.fn()}
+        onOpenLive={vi.fn()}
+        onOpenGroup={vi.fn()}
+        onCanonicalVenue={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+  });
+
   // 测试点：请求合并来源 ID 时，页面应把站内地址替换成主 Venue ID。
   test("reports the canonical Venue returned by the API", async () => {
     const onCanonicalVenue = vi.fn();

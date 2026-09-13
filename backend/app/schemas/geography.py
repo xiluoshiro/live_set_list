@@ -26,9 +26,13 @@ class LocalityCreate(BaseModel):
         return validate_timezone(value) if value is not None else None
 
 
-class Locality(LocalityCreate):
+class Locality(BaseModel):
     id: int
-    area_level: Literal["country", "admin_area", "locality"] = "locality"
+    country_code: str
+    admin_area: str | None
+    locality_name: str | None
+    timezone_id: str | None
+    area_level: Literal["country", "admin_area", "locality"]
     revision: int
 
 

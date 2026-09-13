@@ -12,7 +12,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../../../api", () => api);
 vi.mock("../../../auth/AuthProvider", () => ({ useAuth: () => ({ csrfToken: "csrf" }) }));
 
-const city = { id: 5, country_code: "JP", admin_area: "東京都", locality_name: "検証市", timezone_id: "Asia/Tokyo", revision: 1 };
+const city = { id: 5, country_code: "JP", admin_area: "東京都", locality_name: "検証市", timezone_id: "Asia/Tokyo", area_level: "locality" as const, revision: 1 };
 const location: VenueLocation = {
   venue_id: 1, locality: city, address: null, latitude: null, longitude: null,
   coordinate_system: "WGS84", timezone_id: null, effective_timezone_id: "Asia/Tokyo", timezone_source: "locality",
@@ -46,6 +46,20 @@ test("loads directly and validates paired coordinates", async () => {
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
   await user.type(screen.getByLabelText("经度（WGS84）"), "0");
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeEnabled();
+});
+
+// 测试点：国家和行政区级所在地没有城市名时，场馆位置与选择列表不显示空值或加载错误。
+test("loads region-only localities without a city name", async () => {
+  const tokyo = { ...city, locality_name: null, area_level: "admin_area" as const };
+  const hongKong = { ...city, id: 6, country_code: "HK", admin_area: null, locality_name: null, area_level: "country" as const };
+  api.getConsoleVenueLocation.mockResolvedValue({ ...location, locality: tokyo });
+  api.getConsoleLocalities.mockResolvedValue({ items: [tokyo, hongKong], total: 2, page: 1, page_size: 20 });
+
+  await openPanel();
+
+  expect(screen.getByRole("option", { name: "JP / 東京都" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "HK" })).toBeInTheDocument();
+  expect(screen.queryByText(/Request failed: 500/)).not.toBeInTheDocument();
 });
 
 // 测试点：保存前必须预览，使用预览快照和修订号提交；失败保留确认框及编辑内容。

@@ -301,7 +301,7 @@ export type PublicVenueDetailResponse = PublicVenueMapsResponse & {
   locality: {
     country_code: string;
     admin_area: string | null;
-    locality_name: string;
+    locality_name: string | null;
   } | null;
   address: string | null;
   latitude: number | null;
@@ -617,11 +617,17 @@ export type GeoLocality = {
   id: number;
   country_code: string;
   admin_area: string | null;
-  locality_name: string;
+  locality_name: string | null;
   timezone_id: string | null;
+  area_level: "country" | "admin_area" | "locality";
   revision: number;
 };
-export type GeoLocalityCreate = Omit<GeoLocality, "id" | "revision">;
+export type GeoLocalityCreate = {
+  country_code: string;
+  admin_area: string | null;
+  locality_name: string;
+  timezone_id: string | null;
+};
 export type GeoLocalityPage = { items: GeoLocality[]; total: number; page: number; page_size: number };
 export type MapProvider = "google" | "apple" | "amap";
 export type VenueLocationWrite = {
