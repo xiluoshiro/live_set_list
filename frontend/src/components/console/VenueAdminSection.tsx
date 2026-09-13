@@ -270,16 +270,20 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged }: Venue
   return (
     <section className="tour-admin-section" aria-label={variant === "create" ? "新增场地" : "场地管理"}>
       {variant === "edit" && <>
-      <div className="tour-candidate-search">
-        <label htmlFor="venue-admin-query">搜索场地</label>
-        <input id="venue-admin-query" value={venueQuery} onChange={(event) => setVenueQuery(event.target.value)} />
+      <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar">
+        <span className="live-management-label">已有 Venue</span>
+        <input
+          id="venue-admin-query"
+          className="venue-query-input live-management-primary-control"
+          aria-label="搜索场地"
+          value={venueQuery}
+          onChange={(event) => setVenueQuery(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Enter") void loadVenuePage(venueQuery.trim(), 1); }}
+        />
         <button type="button" className="console-ghost-btn" disabled={loading} onClick={() => void loadVenuePage(venueQuery.trim(), 1)}>查询</button>
-      </div>
-      <div className="tour-admin-toolbar">
-        <label htmlFor="venue-admin-select">已有 Venue</label>
         <select
           id="venue-admin-select"
-          className="console-entity-select"
+          aria-label="已有 Venue"
           value={selectedVenueId ?? ""}
           disabled={loading || venues.length === 0}
           onChange={(event) => void loadDetail(Number(event.target.value))}
@@ -289,11 +293,11 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged }: Venue
             <option key={venue.venue_id} value={venue.venue_id}>#{venue.venue_id} {venue.venue_name}</option>
           ))}
         </select>
-      </div>
-      <div className="tour-candidate-pager">
-        <span>共 {venueTotal} 个场地 · 第 {venuePage} / {Math.max(1, venueTotalPages)} 页</span>
-        <button type="button" className="console-ghost-btn" disabled={loading || venuePage <= 1} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage - 1)}>上一页</button>
-        <button type="button" className="console-ghost-btn" disabled={loading || venuePage >= venueTotalPages} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage + 1)}>下一页</button>
+        <div className="tour-candidate-pager">
+          <button type="button" className="console-ghost-btn" disabled={loading || venuePage <= 1} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage - 1)}>上一页</button>
+          <span>第 {venuePage} / {Math.max(1, venueTotalPages)} 页，共 {venueTotal} 个场地</span>
+          <button type="button" className="console-ghost-btn" disabled={loading || venuePage >= venueTotalPages} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage + 1)}>下一页</button>
+        </div>
       </div>
 
       {venues.length === 0 && !loading && (
