@@ -22,9 +22,14 @@ type VenueDetailPageProps = {
   onCanonicalVenue: (venueId: number, venueName: string) => void;
 };
 
+const COUNTRY_DISPLAY_NAMES: Record<string, string> = {
+  TW: "中国台湾",
+};
+
 function formatLocality(detail: PublicVenueDetailResponse): string {
   if (!detail.locality) return "未登记";
-  const country = new Intl.DisplayNames(["zh-CN"], { type: "region" }).of(detail.locality.country_code)
+  const country = COUNTRY_DISPLAY_NAMES[detail.locality.country_code]
+    ?? new Intl.DisplayNames(["zh-CN"], { type: "region" }).of(detail.locality.country_code)
     ?? detail.locality.country_code;
   return [country, detail.locality.admin_area, detail.locality.locality_name]
     .filter(Boolean)

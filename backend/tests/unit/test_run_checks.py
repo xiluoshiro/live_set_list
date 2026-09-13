@@ -11,6 +11,21 @@ run_checks = importlib.util.module_from_spec(run_checks_spec)
 run_checks_spec.loader.exec_module(run_checks)
 
 
+# 测试点：仅有 npm.exe 时，前端检查应使用系统找到的可执行文件，不依赖 npm.cmd。
+def test_frontend_steps_use_discovered_npm_executable(monkeypatch, tmp_path):
+    npm_executable = tmp_path / "npm.exe"
+    npm_executable.write_bytes(b"")
+    monkeypatch.setattr(run_checks.shutil, "which", lambda name: str(npm_executable) if name == "npm" else None)
+    monkeypatch.setattr(run_checks, "FRONTEND_DIR", tmp_path)
+
+    steps, failures = run_checks.build_frontend_steps()
+
+    assert failures == []
+    assert [command[0] for _label, _step_name, command, _cwd, _retries in steps] == [
+        str(npm_executable), str(npm_executable),
+    ]
+
+
 # 测试点：functional 门禁必须执行轻量 recovery-unit，避免恢复权限契约脱离发布检查。
 def test_functional_checks_include_recovery_unit(monkeypatch):
     recovery_modes: list[str] = []

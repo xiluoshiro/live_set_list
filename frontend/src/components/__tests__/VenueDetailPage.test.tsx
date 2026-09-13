@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import type { PublicVenueDetailResponse } from "../../api";
 import { VenueDetailPage } from "../VenueDetailPage";
 import { VenueMapMenu } from "../VenueMapMenu";
 
@@ -25,7 +26,7 @@ vi.mock("../../api", () => ({
 }));
 vi.mock("../../logger", () => ({ logError: vi.fn() }));
 
-function makeVenueDetail() {
+function makeVenueDetail(): PublicVenueDetailResponse {
   return {
     venue_id: 7,
     venue_name: "日本武道館",
@@ -97,6 +98,26 @@ describe("Venue public pages", () => {
     expect(screen.queryByText(/已加载全部/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /查看《Test Live》详情/ }));
     expect(onOpenLive).toHaveBeenCalledWith(expect.objectContaining({ live_id: 51 }));
+  });
+
+  // 测试点：台湾场馆所在地的展示名称保持为中国台湾。
+  test("labels Taiwan venues as 中国台湾", async () => {
+    const detail = makeVenueDetail();
+    detail.locality = { country_code: "TW", admin_area: null, locality_name: "桃園市" };
+    apiMocks.getVenueDetail.mockResolvedValue(detail);
+
+    render(
+      <VenueDetailPage
+        venueId={7}
+        fallbackName="桃園会展中心"
+        onBack={vi.fn()}
+        onOpenLive={vi.fn()}
+        onOpenGroup={vi.fn()}
+        onCanonicalVenue={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("中国台湾 · 桃園市")).toBeInTheDocument();
   });
 
   // 测试点：请求合并来源 ID 时，页面应把站内地址替换成主 Venue ID。
