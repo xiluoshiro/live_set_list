@@ -1,6 +1,7 @@
 import argparse
 import ast
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Protocol
@@ -28,7 +29,7 @@ class CompletedProcessLike(Protocol):
 
 
 def npm_command() -> str:
-    return "npm.cmd" if os.name == "nt" else "npm"
+    return shutil.which("npm") or ("npm.cmd" if os.name == "nt" else "npm")
 
 
 def backend_python() -> Path:

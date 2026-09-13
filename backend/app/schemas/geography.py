@@ -28,6 +28,7 @@ class LocalityCreate(BaseModel):
 
 class Locality(LocalityCreate):
     id: int
+    area_level: Literal["country", "admin_area", "locality"] = "locality"
     revision: int
 
 

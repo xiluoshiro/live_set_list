@@ -22,11 +22,12 @@ def point(locality_id=None, revision=1):
             "latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo", "coordinate_system": "WGS84"}
 
 
-# 测试点：预览不写入，位置保存可读回且不改变旧 Live 的排期或名称引用，并记录审计。
+# 测试点：V32 默认城市层级可返回，位置保存不改变旧 Live 排期或名称引用并记录审计。
 def test_location_preview_save_and_live_isolation(integration_test_client, integration_admin_connection):
     client = integration_test_client
     headers = login(client)
     locality = city(client, headers)
+    assert locality["area_level"] == "locality"
     with integration_admin_connection.cursor() as cur:
         cur.execute("SELECT row_to_json(l) FROM live_attrs l WHERE venue_id=1 ORDER BY id")
         before_lives = cur.fetchall()
