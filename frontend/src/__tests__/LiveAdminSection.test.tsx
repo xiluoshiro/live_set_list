@@ -24,6 +24,7 @@ function renderSection(
     defaultBandIds?: number[];
     defaultBandLineupContexts?: ComponentProps<typeof LiveAdminSection>["defaultBandLineupContexts"];
     bandHistories?: ComponentProps<typeof LiveAdminSection>["bandHistories"];
+    liveCandidates?: ComponentProps<typeof LiveAdminSection>["liveCandidates"];
   } = {},
 ) {
   const onToggleEventAttendee = options.onToggleEventAttendee ?? vi.fn();
@@ -53,7 +54,7 @@ function renderSection(
       venueQueryText=""
       liveCandidateQuery=""
       liveCandidateType=""
-      liveCandidates={[{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "Test Venue" }]}
+      liveCandidates={options.liveCandidates ?? [{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "Test Venue" }]}
       liveCandidatePage={1}
       liveCandidateTotal={1}
       liveCandidateTotalPages={1}
@@ -195,6 +196,23 @@ describe("LiveAdminSection", () => {
     expect(screen.getByRole("button", { name: "恢复原值" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存修改" })).toBeInTheDocument();
     expect(screen.getByText("Live #55 有未保存修改")).toBeInTheDocument();
+  });
+
+  // 测试点：翻页后保留的已选 Live 与普通候选使用相同的日期、类型和标题格式。
+  test("keeps the full selected Live label when it is absent from the current page", () => {
+    renderSection(vi.fn(), {
+      variant: "edit",
+      editingLiveId: 55,
+      liveType: "event",
+      liveCandidates: [{ live_id: 56, live_date: "2026-07-18", live_title: "Next Live", live_type: "other", venue_name: "Test Venue" }],
+    });
+
+    const selector = screen.getByRole("combobox", { name: "选择要编辑的 Live" });
+    expect(selector).toHaveValue("55");
+    expect(within(selector).getByRole("option", { name: "#55 2026-07-17 活动 Draft Live" })).toBeInTheDocument();
+    expect(within(selector).getByRole("option", { name: "#56 2026-07-18 其他 Next Live" })).toBeInTheDocument();
+    expect(within(screen.getByRole("combobox", { name: "按 Live 类型筛选" })).getByRole("option", { name: "类型" })).toHaveValue("");
+    expect(within(screen.getByRole("combobox", { name: "按演出状态筛选" })).getByRole("option", { name: "状态" })).toHaveValue("");
   });
 
   // 测试点：日期阶段保持只读；排期变化控件仅在改期后出现，并复用现有输入框样式。

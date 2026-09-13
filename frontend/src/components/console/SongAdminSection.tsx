@@ -13,6 +13,7 @@ type SongAdminSectionProps = {
   songTotalPages: number;
   songLoading: boolean;
   editingSongId: number | null;
+  selectedSong: SongInsertRow | null;
   songName: string;
   songBandId: number | null;
   songCover: boolean;
@@ -46,6 +47,7 @@ export function SongAdminSection({
   songTotalPages,
   songLoading,
   editingSongId,
+  selectedSong,
   songName,
   songBandId,
   songCover,
@@ -85,6 +87,11 @@ export function SongAdminSection({
           onChange={(event) => onSelectSong(Number(event.target.value))}
         >
           <option value="">选择要编辑的歌曲</option>
+          {selectedSong && !songCandidates.some((song) => song.song_id === selectedSong.song_id) && (
+            <option value={selectedSong.song_id}>
+              #{selectedSong.song_id} {selectedSong.song_name} / {selectedSong.band_name ?? selectedSong.band_id}
+            </option>
+          )}
           {songCandidates.map((song) => (
             <option key={song.song_id} value={song.song_id}>
               #{song.song_id} {song.song_name} / {song.band_name ?? song.band_id}

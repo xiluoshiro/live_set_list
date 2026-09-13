@@ -118,7 +118,7 @@ export function LiveListFiltersToolbar({
               value={filters.liveType ?? ""}
               onChange={(event) => replaceFilters({ liveType: event.target.value || null })}
             >
-              <option value="">全部类型</option>
+              <option value="">类型</option>
               {LIVE_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}

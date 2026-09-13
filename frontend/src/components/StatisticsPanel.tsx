@@ -61,7 +61,7 @@ export function StatisticsPanel(props: StatisticsPanelProps) {
             <option value="">全部乐队</option>{props.bands.map((band) => <option key={band.band_id} value={band.band_id}>{band.band_name}</option>)}
           </select></label>
           <label className="list-filter-field">Live 类型<select value={filters.liveType ?? ""} onChange={(event) => props.onFiltersChange({ ...filters, liveType: event.target.value || undefined })}>
-            <option value="">全部类型</option>{LIVE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            <option value="">类型</option>{LIVE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select></label>
           <button type="button" className="secondary-btn" onClick={() => props.onFiltersChange({})}>重置</button>
         </div>

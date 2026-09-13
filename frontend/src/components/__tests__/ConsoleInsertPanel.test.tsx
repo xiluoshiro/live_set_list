@@ -1862,7 +1862,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("已更新歌曲 #901")).toBeInTheDocument();
   });
 
-  // 测试点：歌曲搜索可组合归属 Band，固定每页 20 首，并在翻页时保留全部查询条件。
+  // 测试点：歌曲搜索翻页保留筛选条件和已选歌曲的完整候选标签。
   test("歌曲管理按名称和乐队搜索、分页并从结果表加载歌曲", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -1918,6 +1918,9 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("搜索命中", 20, 2, 2));
     expect(within(resultTable).getByText("搜索命中曲 第二页")).toBeInTheDocument();
     expect(screen.getByText("第 2 / 2 页 · 每页 20 首 · 共 21 首")).toBeInTheDocument();
+    const selector = screen.getByRole("combobox", { name: "选择要编辑的歌曲" });
+    expect(selector).toHaveValue("902");
+    expect(within(selector).getByRole("option", { name: "#902 搜索命中曲 / Roselia" })).toBeInTheDocument();
   });
 
   // 测试点：Setlist 管理只查已有数据、复用 Live 管理候选栏，更新时仍提交完整目标集合。
