@@ -322,7 +322,7 @@ export function LiveAdminSection({
             value={liveCandidateType}
             onChange={(event) => onLiveCandidateTypeChange(event.target.value)}
           >
-            <option value="">全部类型</option>
+            <option value="">类型</option>
             {liveTypeOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
@@ -333,7 +333,7 @@ export function LiveAdminSection({
             value={liveCandidateEventStatus}
             onChange={(event) => onLiveCandidateEventStatusChange(event.target.value)}
           >
-            <option value="">全部状态</option>
+            <option value="">状态</option>
             <option value="scheduled">按计划</option>
             <option value="postponed">延期</option>
             <option value="cancelled">已取消</option>
@@ -348,7 +348,11 @@ export function LiveAdminSection({
             }}
           >
             <option value="">选择要编辑的 Live</option>
-            {selectedCandidateMissing && <option value={editingLiveId ?? ""}>#{editingLiveId} {liveTitle}</option>}
+            {selectedCandidateMissing && (
+              <option value={editingLiveId ?? ""}>
+                #{editingLiveId} {liveDate} {formatLiveType(liveType)} {liveTitle}
+              </option>
+            )}
             {liveCandidates.map((live) => (
               <option key={live.live_id} value={live.live_id}>
                 #{live.live_id} {live.live_date} {formatLiveType(live.live_type)} {live.live_title}

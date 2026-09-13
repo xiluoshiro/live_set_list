@@ -3121,6 +3121,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       songTotalPages={songPagination.total_pages}
       songLoading={songLoading}
       editingSongId={editingSongId}
+      selectedSong={editingSongId !== null && originalSongPayload !== null ? {
+        song_id: editingSongId,
+        song_name: originalSongPayload.song_name,
+        band_id: originalSongPayload.band_id,
+        cover: originalSongPayload.cover,
+        band_name: bands.find((band) => band.band_id === originalSongPayload.band_id)?.band_name,
+      } : null}
       songName={songName}
       songBandId={songBandId}
       songCover={songCover}
