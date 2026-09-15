@@ -92,6 +92,62 @@ def test_location_preview_save_and_live_isolation(integration_test_client, integ
     assert stale.status_code == 409
 
 
+# 测试点：所在地预览只把有效时区真正变化的 Venue 快照列入人工复核，地址变化不会误报。
+def test_location_preview_classifies_live_timezone_impact(integration_test_client, integration_admin_connection):
+    client = integration_test_client
+    headers = login(client)
+    tokyo = city(client, headers)
+    saved = client.put(
+        "/api/console/venues/1/location",
+        headers=headers,
+        json={"expected_revision": 1, "locality_id": tokyo["id"]},
+    )
+    assert saved.status_code == 200, saved.text
+    with integration_admin_connection.cursor() as cur:
+        cur.execute(
+            """UPDATE live_attrs
+               SET timezone_id='Asia/Tokyo', timezone_source='venue', timezone_source_revision=2
+               WHERE id=1"""
+        )
+        cur.execute(
+            """UPDATE live_attrs
+               SET timezone_id='Asia/Tokyo', timezone_source='explicit', timezone_source_revision=NULL
+               WHERE id=41"""
+        )
+
+    address_only = client.post("/api/console/venues/1/location-preview", json={
+        "expected_revision": 2, "locality_id": tokyo["id"], "address": "Updated address",
+    })
+    assert address_only.status_code == 200, address_only.text
+    assert address_only.json()["timezone_unchanged_live_count"] == 1
+    assert address_only.json()["timezone_review_live_count"] == 0
+    assert address_only.json()["timezone_unaffected_live_count"] == 1
+    assert address_only.json()["timezone_review_lives"] == []
+
+    new_york_response = client.post("/api/console/localities", headers=headers, json={
+        "country_code": "US", "admin_area": "New York", "locality_name": "New York",
+        "timezone_id": "America/New_York",
+    })
+    assert new_york_response.status_code == 201, new_york_response.text
+    changed = client.post("/api/console/venues/1/location-preview", json={
+        "expected_revision": 2, "locality_id": new_york_response.json()["id"],
+    })
+    assert changed.status_code == 200, changed.text
+    body = changed.json()
+    assert body["live_count"] == 2
+    assert body["timezone_unchanged_live_count"] == 0
+    assert body["timezone_review_live_count"] == 1
+    assert body["timezone_unaffected_live_count"] == 1
+    assert body["timezone_review_lives_truncated"] is False
+    assert body["timezone_review_lives"] == [{
+        "live_id": 1,
+        "live_date": "2026-03-28",
+        "live_title": "BanG Dream! Unit Live",
+        "timezone_id": "Asia/Tokyo",
+        "timezone_source_revision": 2,
+    }]
+
+
 # 测试点：已确认 POI 优先，改坐标后关联失效并回退坐标，过期关联请求不能写入。
 def test_map_matching_invalidation_and_removal(integration_test_client):
     client = integration_test_client

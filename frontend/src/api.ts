@@ -667,6 +667,17 @@ export type VenueLocationPreview = {
   after: VenueLocationWrite;
   effective_timezone_id: string | null;
   live_count: number;
+  timezone_unchanged_live_count: number;
+  timezone_review_live_count: number;
+  timezone_unaffected_live_count: number;
+  timezone_review_lives: Array<{
+    live_id: number;
+    live_date: string;
+    live_title: string;
+    timezone_id: string | null;
+    timezone_source_revision: number | null;
+  }>;
+  timezone_review_lives_truncated: boolean;
   invalidated_map_links: number;
 };
 

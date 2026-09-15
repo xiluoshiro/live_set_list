@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -123,9 +123,22 @@ class VenueLocation(BaseModel):
     map_links: list[MapLink]
 
 
+class LocationPreviewLive(BaseModel):
+    live_id: int
+    live_date: date
+    live_title: str
+    timezone_id: str | None
+    timezone_source_revision: int | None
+
+
 class LocationPreview(BaseModel):
     before: VenueLocation
     after: LocationWrite
     effective_timezone_id: str | None
     live_count: int
+    timezone_unchanged_live_count: int
+    timezone_review_live_count: int
+    timezone_unaffected_live_count: int
+    timezone_review_lives: list[LocationPreviewLive]
+    timezone_review_lives_truncated: bool
     invalidated_map_links: int

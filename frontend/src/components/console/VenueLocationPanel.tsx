@@ -88,6 +88,13 @@ export function VenueLocationPanel({ venueId, venueKind }: { venueId: number; ve
   const preview = () => perform(async () => {
     const result = await previewConsoleVenueLocation(venueId, draft);
     if (!alive.current) return;
+    const timezoneReview = result.timezone_review_live_count === 0
+      ? "0 场"
+      : <span role="alert">
+          {result.timezone_review_live_count} 场：{result.timezone_review_lives.map(item =>
+            `#${item.live_id} ${item.live_date} ${item.live_title}（${item.timezone_id ?? "未记录"} → ${result.effective_timezone_id ?? "待核验"}）`,
+          ).join("；")}{result.timezone_review_lives_truncated ? "；仅显示前 20 场" : ""}。保存场馆不会改写这些历史快照。
+        </span>;
     setConfirmation({
       title: "确认所在地修改",
       rows: [
@@ -97,11 +104,19 @@ export function VenueLocationPanel({ venueId, venueKind }: { venueId: number; ve
         ["原坐标", pointLabel(result.before)], ["新坐标", pointLabel(result.after)],
         ["原时区", result.before.effective_timezone_id ?? "待核验"], ["新时区", result.effective_timezone_id ?? "待核验"],
         ["关联 Live", `${result.live_count} 场（本次不修改排期）`],
+        ["时区保持一致", `${result.timezone_unchanged_live_count} 场`],
+        ["时区需人工复核", timezoneReview],
+        ["其他时区来源", `${result.timezone_unaffected_live_count} 场（不受本次修改影响）`],
         ["需重新核对的地图关联", result.invalidated_map_links],
       ],
       run: async () => {
         const saved = await saveConsoleVenueLocation(venueId, result.after, auth.csrfToken ?? "");
-        if (alive.current) { apply(saved); setMessage("所在地已保存；已有 Live 排期保持原值。"); }
+        if (alive.current) {
+          apply(saved);
+          setMessage(result.timezone_review_live_count > 0
+            ? `所在地已保存；${result.timezone_review_live_count} 场 Live 的历史时区快照未改写，仍需逐场复核。`
+            : "所在地已保存；已有 Live 排期和时区快照保持原值。");
+        }
       },
     });
   });
