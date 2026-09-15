@@ -117,6 +117,8 @@ sudo docker pull redgate/flyway:12.11.0
 
 The exact sudoers rules, GitHub repository secrets/variables, activation order, and optional verification commands are in [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md). Normal releases do not require an operator to SSH into the VM. The installed `/usr/local/sbin` files are intentionally outside release directories and must be updated by an administrator before a workflow that depends on a new entrypoint is enabled.
 
+For reviewed one-off SQL outside Flyway, use the separate `livesetlist-sql` SSH account and the root-owned `livesetlist_sql_exec.py` entrypoint. Do not add that account to the Docker group or reuse the backup/deploy accounts. The permission model, sudoers rules, bootstrap commands, audit log, and revocation steps are documented in [remote-sql-operator.md](../../docs/design/remote-sql-operator.md).
+
 ## Admin Bootstrap
 
 For first deploy only, set these in `/etc/livesetlist/backend.env`:

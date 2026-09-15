@@ -136,6 +136,24 @@ python scripts/sync_production_db.py --ssh-host <SSH-配置别名> --precheck
 
 前提是 SSH 别名指向专用的 `livesetlist-sync` 账户并配置好密钥和主机指纹；该账户只能通过 sudoers 免密执行 root-owned 的 `/usr/local/sbin/livesetlist-sync-export check|dump`，不能获得通用 root shell。导出入口负责启动备份 service，并读取 `/var/backups/livesetlist/app/auto` 下的最新 dump。该流程会复制完整生产数据（包括用户、会话和审计记录）；本地写入不会回传 VM，但下次同步会覆盖本地改动。
 
+## 在远端数据库执行本地 SQL 文件
+
+先检查本地 SQL 文件是否存在，并预检远端 SSH、SCP、Docker 与目标数据库连接：
+
+```powershell
+python scripts/apply_remote_sql.py path/to/change.sql --ssh-host livesetlist-sql --precheck
+```
+
+预检必须提供本地 SQL 文件路径，并在连接远端前检查文件存在；之后只上传一个临时探针，并通过 root-owned 受限入口运行 `SELECT 1`，不上传或执行传入的业务 SQL，也不需要 `--force`。
+
+仅在已审查 SQL、确认远端目标与备份/回滚方案后使用：
+
+```powershell
+python scripts/apply_remote_sql.py path/to/change.sql --ssh-host livesetlist-sql --force
+```
+
+不带 `--force` 只显示目标，不会连接远端。脚本在 `/home/livesetlist-sql/uploads` 下创建权限为 `0700` 的随机临时目录，用 `scp` 上传并校验 SHA-256，然后以 `sudo -n /usr/local/sbin/livesetlist-sql-exec apply ...` 执行，最后尝试删除临时文件和目录。服务端入口固定读取生产 PostgreSQL 配置，执行前必须成功生成备份，并以 `psql -X -v ON_ERROR_STOP=1` 运行 SQL；执行失败不会自动回滚 SQL 已提交的语句。`livesetlist-sql` 不加入 Docker 组，也没有通用 sudo。完整账户边界、VM 初始化与撤销步骤见 [远端 SQL 运维账户设计](../docs/design/remote-sql-operator.md)。
+
 ## Windows 定时任务
 
 可直接挂 `scripts/backup_app_auto.ps1` 到 Windows Task Scheduler。
