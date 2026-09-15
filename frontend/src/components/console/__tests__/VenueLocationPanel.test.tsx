@@ -67,6 +67,8 @@ test("previews and confirms a revision-bound change, retaining failed input", as
   const user = await openPanel();
   api.previewConsoleVenueLocation.mockImplementation((_id, after) => Promise.resolve({
     before: location, after, effective_timezone_id: "Asia/Tokyo", live_count: 4, invalidated_map_links: 1,
+    timezone_unchanged_live_count: 3, timezone_review_live_count: 0, timezone_unaffected_live_count: 1,
+    timezone_review_lives: [], timezone_review_lives_truncated: false,
   }));
   api.saveConsoleVenueLocation.mockRejectedValueOnce(new Error("资料已更新"))
     .mockResolvedValueOnce({ ...location, address: "New address", location_revision: 3 });
@@ -82,6 +84,41 @@ test("previews and confirms a revision-bound change, retaining failed input", as
   await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(api.saveConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({ expected_revision: 2, address: "New address" }), "csrf");
+});
+
+// 测试点：有效时区变化时，确认框与保存结果都明确需人工复核的 Live，不静默改写历史快照。
+test("warns about live snapshots whose timezone would differ", async () => {
+  const noLocalityLocation = {
+    ...location, locality: null, effective_timezone_id: null, timezone_source: null,
+  } satisfies VenueLocation;
+  api.getConsoleVenueLocation.mockResolvedValue(noLocalityLocation);
+  const user = await openPanel();
+  api.previewConsoleVenueLocation.mockImplementation((_id, after) => Promise.resolve({
+    before: noLocalityLocation, after, effective_timezone_id: "America/New_York", live_count: 4, invalidated_map_links: 0,
+    timezone_unchanged_live_count: 2, timezone_review_live_count: 1, timezone_unaffected_live_count: 1,
+    timezone_review_lives: [{
+      live_id: 38, live_date: "2026-01-03", live_title: "New Year Live",
+      timezone_id: "Asia/Tokyo", timezone_source_revision: 2,
+    }],
+    timezone_review_lives_truncated: false,
+  }));
+  api.saveConsoleVenueLocation.mockResolvedValue({
+    ...noLocalityLocation, latitude: 40.7, longitude: -74,
+    timezone_id: "America/New_York", effective_timezone_id: "America/New_York",
+    timezone_source: "venue", location_revision: 3,
+  });
+  await user.selectOptions(screen.getByLabelText("场馆精确时区"), "America/New_York");
+  await user.type(screen.getByLabelText("纬度（WGS84）"), "40.7");
+  await user.type(screen.getByLabelText("经度（WGS84）"), "-74");
+  await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
+
+  const dialog = await screen.findByRole("dialog", { name: "确认所在地修改" });
+  expect(within(dialog).getByRole("alert")).toHaveTextContent("#38 2026-01-03 New Year Live");
+  expect(dialog).toHaveTextContent("Asia/Tokyo → America/New_York");
+  expect(dialog).toHaveTextContent("保存场馆不会改写这些历史快照");
+  expect(api.saveConsoleVenueLocation).not.toHaveBeenCalled();
+  await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 场 Live 的历史时区快照未改写，仍需逐场复核"));
 });
 
 // 测试点：城市分页提供总数和后续结果入口，不把首批城市当作完整列表。

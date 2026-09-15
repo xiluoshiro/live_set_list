@@ -16,6 +16,7 @@ from app.schemas.geography import (
 )
 
 router = APIRouter(dependencies=[Depends(require_role("editor"))])
+LOCATION_PREVIEW_LIVE_LIMIT = 20
 
 
 def _audit(cur: Any, context: AuthSessionContext, action: str, resource: str, identifier: int, payload: Any) -> None:
@@ -151,9 +152,45 @@ def preview_location(venue_id: int, payload: LocationWrite):
             row = _venue(cur, venue_id)
             effective = _validate(cur, row, payload)
             before = _read(cur, row)
-            cur.execute("SELECT COUNT(*) AS total FROM live_attrs WHERE venue_id = %s", (venue_id,))
-            total = cur.fetchone()["total"]
-            return {"before": before, "after": payload, "effective_timezone_id": effective, "live_count": total,
+            cur.execute(
+                """
+                SELECT COUNT(*) AS total,
+                       COUNT(*) FILTER (
+                           WHERE timezone_source = 'venue'
+                             AND timezone_id IS NOT DISTINCT FROM %s
+                       ) AS timezone_unchanged,
+                       COUNT(*) FILTER (
+                           WHERE timezone_source = 'venue'
+                             AND timezone_id IS DISTINCT FROM %s
+                       ) AS timezone_review,
+                       COUNT(*) FILTER (WHERE timezone_source <> 'venue') AS timezone_unaffected
+                FROM live_attrs
+                WHERE venue_id = %s
+                """,
+                (effective, effective, venue_id),
+            )
+            impact = cur.fetchone()
+            cur.execute(
+                """
+                SELECT id AS live_id, live_date, live_title, timezone_id, timezone_source_revision
+                FROM live_attrs
+                WHERE venue_id = %s
+                  AND timezone_source = 'venue'
+                  AND timezone_id IS DISTINCT FROM %s
+                ORDER BY live_date DESC, id DESC
+                LIMIT %s
+                """,
+                (venue_id, effective, LOCATION_PREVIEW_LIVE_LIMIT + 1),
+            )
+            review_lives = [dict(item) for item in cur.fetchall()]
+            truncated = len(review_lives) > LOCATION_PREVIEW_LIVE_LIMIT
+            return {"before": before, "after": payload, "effective_timezone_id": effective,
+                    "live_count": impact["total"],
+                    "timezone_unchanged_live_count": impact["timezone_unchanged"],
+                    "timezone_review_live_count": impact["timezone_review"],
+                    "timezone_unaffected_live_count": impact["timezone_unaffected"],
+                    "timezone_review_lives": review_lives[:LOCATION_PREVIEW_LIVE_LIMIT],
+                    "timezone_review_lives_truncated": truncated,
                     "invalidated_map_links": sum(item["is_current"] for item in before["map_links"]) if _changed(row, payload) else 0}
     except Error as exc:
         _raise_database_error("preview_venue_location", exc)
