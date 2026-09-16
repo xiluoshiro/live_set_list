@@ -6,16 +6,22 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.geography import validate_map_url, validate_timezone
 
 MapProvider = Literal["google", "apple", "amap"]
+AreaLevel = Literal["country", "admin_area", "locality"]
+CoordinateBasis = Literal["building", "entrance", "center"]
+VerificationSource = Literal["official", "venue_publication", "map_verified", "other"]
+MapProviderStatus = Literal["ready", "not_configured", "unavailable"]
+ProviderCoordinateSystem = Literal["WGS84", "GCJ02"]
 
 
-class LocalityCreate(BaseModel):
+class LocalityFields(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     country_code: str = Field(pattern=r"^[A-Z]{2}$")
     admin_area: str | None = Field(default=None, max_length=120)
-    locality_name: str = Field(min_length=1, max_length=120)
+    locality_name: str | None = Field(default=None, max_length=120)
     timezone_id: str | None = Field(default=None, max_length=100)
+    area_level: AreaLevel = "locality"
 
-    @field_validator("admin_area", "timezone_id", mode="before")
+    @field_validator("admin_area", "locality_name", "timezone_id", mode="before")
     @classmethod
     def empty_to_none(cls, value: str | None) -> str | None:
         return (value.strip() or None) if isinstance(value, str) else value
@@ -25,6 +31,24 @@ class LocalityCreate(BaseModel):
     def valid_timezone(cls, value: str | None) -> str | None:
         return validate_timezone(value) if value is not None else None
 
+    @model_validator(mode="after")
+    def valid_area_shape(self) -> Self:
+        if self.area_level == "country" and (self.admin_area is not None or self.locality_name is not None):
+            raise ValueError("国家／地区层级不能填写行政区或城市")
+        if self.area_level == "admin_area" and (self.admin_area is None or self.locality_name is not None):
+            raise ValueError("一级行政区必须填写行政区且不能填写城市")
+        if self.area_level == "locality" and self.locality_name is None:
+            raise ValueError("城市层级必须填写城市名称")
+        return self
+
+
+class LocalityCreate(LocalityFields):
+    pass
+
+
+class LocalityUpdate(LocalityFields):
+    expected_revision: int = Field(ge=1)
+
 
 class Locality(BaseModel):
     id: int
@@ -32,7 +56,7 @@ class Locality(BaseModel):
     admin_area: str | None
     locality_name: str | None
     timezone_id: str | None
-    area_level: Literal["country", "admin_area", "locality"]
+    area_level: AreaLevel
     revision: int
 
 
@@ -51,9 +75,12 @@ class LocationWrite(BaseModel):
     latitude: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
     longitude: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
     coordinate_system: Literal["WGS84"] = "WGS84"
+    coordinate_basis: CoordinateBasis | None = None
     timezone_id: str | None = Field(default=None, max_length=100)
+    verification_source: VerificationSource | None = None
+    verification_note: str | None = Field(default=None, max_length=2000)
 
-    @field_validator("address", "timezone_id", mode="before")
+    @field_validator("address", "timezone_id", "verification_note", mode="before")
     @classmethod
     def empty_to_none(cls, value: str | None) -> str | None:
         return (value.strip() or None) if isinstance(value, str) else value
@@ -69,10 +96,26 @@ class LocationWrite(BaseModel):
             raise ValueError("经纬度必须同时填写或同时清空")
         if self.timezone_id and self.latitude is None:
             raise ValueError("场馆精确时区需要坐标；仅公布城市时请使用城市时区")
+        if self.latitude is not None and self.coordinate_basis is None:
+            raise ValueError("填写坐标时必须说明核验点是建筑、入口还是园区中心")
+        if self.latitude is None and self.coordinate_basis is not None:
+            raise ValueError("没有坐标时不能填写坐标核验口径")
         if self.latitude is not None and self.longitude is not None:
             self.latitude = round(self.latitude, 6)
             self.longitude = round(self.longitude, 6)
         return self
+
+
+class MapCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    provider_place_id: str = Field(min_length=1, max_length=255)
+    provider_url: str = Field(min_length=1, max_length=2048)
+    name: str = Field(min_length=1, max_length=500)
+    address: str = Field(max_length=1000)
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    source_coordinate_system: ProviderCoordinateSystem
+    distance_m: int = Field(ge=0)
 
 
 class MapLinkWrite(BaseModel):
@@ -98,6 +141,13 @@ class MapLinkWrite(BaseModel):
         return self
 
 
+class MapCandidateSearch(BaseModel):
+    provider: MapProvider
+    status: MapProviderStatus
+    message: str | None
+    candidates: list[MapCandidate]
+
+
 class MapLink(BaseModel):
     provider: MapProvider
     provider_place_id: str | None
@@ -115,6 +165,7 @@ class VenueLocation(BaseModel):
     latitude: float | None
     longitude: float | None
     coordinate_system: Literal["WGS84"] = "WGS84"
+    coordinate_basis: CoordinateBasis | None
     timezone_id: str | None
     effective_timezone_id: str | None
     timezone_source: Literal["venue", "locality"] | None
@@ -131,6 +182,20 @@ class LocationPreviewLive(BaseModel):
     timezone_source_revision: int | None
 
 
+class LocalityPreview(BaseModel):
+    before: Locality
+    after: LocalityUpdate
+    venue_count: int
+    inherited_timezone_venue_count: int
+    live_count: int
+    timezone_unchanged_live_count: int
+    timezone_review_live_count: int
+    timezone_unaffected_live_count: int
+    timezone_review_lives: list[LocationPreviewLive]
+    timezone_review_lives_truncated: bool
+    invalidated_map_links: int
+
+
 class LocationPreview(BaseModel):
     before: VenueLocation
     after: LocationWrite
@@ -142,3 +207,5 @@ class LocationPreview(BaseModel):
     timezone_review_lives: list[LocationPreviewLive]
     timezone_review_lives_truncated: bool
     invalidated_map_links: int
+    invalidated_map_providers: list[MapProvider]
+    changed_fields: list[str]

@@ -29,12 +29,13 @@ def test_normal_clock_and_timezone_validation():
             validate_timezone(invalid)
 
 
-# 测试点：坐标成对、范围、源坐标系均被校验，零坐标不会被当作空值。
+# 测试点：坐标成对、范围、点位口径和源坐标系均被校验，零坐标不会被当作空值。
 def test_location_schema_validates_coordinate_contract():
-    point = LocationWrite(expected_revision=1, latitude=0, longitude=0)
+    point = LocationWrite(expected_revision=1, latitude=0, longitude=0, coordinate_basis="building")
     assert point.latitude == 0 and point.longitude == 0
     for fields in ({"latitude": 10}, {"latitude": 91, "longitude": 0},
                    {"latitude": float("nan"), "longitude": 0}, {"coordinate_system": "GCJ02"},
+                   {"latitude": 0, "longitude": 0}, {"coordinate_basis": "center"},
                    {"timezone_id": "Asia/Tokyo"}, {"address": 123}, {"timezone_id": 123}):
         with pytest.raises(ValidationError):
             LocationWrite.model_validate({"expected_revision": 1, **fields})
@@ -59,3 +60,13 @@ def test_provider_links_keep_coordinate_and_place_identity_separate():
     assert amap["name"] == ["A & B"]
     assert apple["ll"] == ["0.000000,0.000000"]
     assert parse_qs(urlsplit(place_url("google", "POI & ID", "Venue")).query)["query_place_id"] == ["POI & ID"]
+
+
+# 测试点：关联写入拒绝客户端提供的候选资料，避免供应商内容进入永久审计。
+def test_map_link_rejects_candidate_snapshot():
+    with pytest.raises(ValidationError):
+        MapLinkWrite(
+            expected_revision=1, provider="google", provider_place_id="candidate",
+            provider_url="https://www.google.com/maps/place/candidate",
+            candidate={"name": "Candidate Hall"},
+        )

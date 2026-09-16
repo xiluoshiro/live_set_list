@@ -55,6 +55,8 @@ import { BandAdminSection } from "./console/BandAdminSection";
 import { CompactConfirmationTable } from "./console/CompactConfirmationTable";
 import { PerformanceGroupAdminSection } from "./console/PerformanceGroupAdminSection";
 import { TourAdminSection } from "./console/TourAdminSection";
+import { TimezoneReviewSection } from "./console/TimezoneReviewSection";
+import { GeographyQualitySection } from "./console/GeographyQualitySection";
 import { VenueAdminSection } from "./console/VenueAdminSection";
 import {
   UpdateDiffTable,
@@ -613,6 +615,7 @@ function persistedSetlistMatchesPayload(
 export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" }: ConsoleInsertPanelProps = {}) {
   const auth = useAuth();
   const [mode, setMode] = useState<ConsoleMode>(initialMode);
+  const [qualityTargetVenueId, setQualityTargetVenueId] = useState<number | null>(null);
   const [lives, setLives] = useState<LiveInsertRow[]>([]);
   const [songs, setSongs] = useState<SongInsertRow[]>([]);
   const [bands, setBands] = useState<BandOption[]>([]);
@@ -1536,6 +1539,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     } else if (nextMode === "setlist_edit" && mode !== "setlist_edit") {
       setSelectedLiveId(0);
     }
+    if (nextMode === "venue") setQualityTargetVenueId(null);
     setMode(nextMode);
   };
 
@@ -3171,6 +3175,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         options={[
           { value: "live_create", label: "新增Live" },
           { value: "live_edit", label: "Live管理" },
+          { value: "timezone_review", label: "时区复核" },
+          { value: "geography_quality", label: "地理质量" },
           { value: "setlist", label: "新增Setlist" },
           { value: "setlist_edit", label: "Setlist管理" },
           { value: "song", label: "歌曲管理" },
@@ -3326,6 +3332,22 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         />
       )}
 
+      {mode === "timezone_review" && (
+        <TimezoneReviewSection
+          onMessage={setMessage}
+          onOpenLive={(liveId) => {
+            setMode("live_edit");
+            void loadLiveForEdit(liveId);
+          }}
+        />
+      )}
+
+      {mode === "geography_quality" && <GeographyQualitySection
+        onMessage={setMessage}
+        onOpenVenue={(venueId) => { setQualityTargetVenueId(venueId); setMode("venue"); }}
+        onOpenLive={(liveId) => { setMode("live_edit"); void loadLiveForEdit(liveId); }}
+      />}
+
       {(mode === "setlist" || mode === "setlist_edit") && (
         <LiveInsertTab
           variant={mode === "setlist_edit" ? "edit" : "create"}
@@ -3428,6 +3450,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
             const response = await getConsoleVenues(undefined, 100);
             setVenues(sortById(response.items.map(toVenueOption), (venue) => venue.venue_id));
           }}
+          onOpenLive={(liveId) => {
+            setMode("live_edit");
+            void loadLiveForEdit(liveId);
+          }}
+          initialVenueId={mode === "venue" ? qualityTargetVenueId : null}
         />
       )}
 
