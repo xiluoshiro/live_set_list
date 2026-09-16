@@ -19,6 +19,8 @@ type VenueAdminSectionProps = {
   variant: "create" | "edit";
   onMessage: (message: string) => void;
   onVenuesChanged: () => Promise<void>;
+  onOpenLive?: (liveId: number) => void;
+  initialVenueId?: number | null;
 };
 
 type ConfirmationKind = "create" | "kind" | "rename" | "correction";
@@ -47,7 +49,7 @@ function dateText(value: string | null, emptyText: string): string {
   return value ?? emptyText;
 }
 
-export function VenueAdminSection({ variant, onMessage, onVenuesChanged }: VenueAdminSectionProps) {
+export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenLive, initialVenueId }: VenueAdminSectionProps) {
   const auth = useAuth();
   const [venues, setVenues] = useState<ConsoleVenueItem[]>([]);
   const [selectedVenueId, setSelectedVenueId] = useState<number | null>(null);
@@ -135,8 +137,16 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged }: Venue
   };
 
   useEffect(() => {
-    if (variant === "edit") void loadVenuePage("", 1);
-  }, [variant]);
+    if (variant !== "edit") return;
+    if (initialVenueId) {
+      void getConsoleVenue(initialVenueId).then((target) => {
+        setVenueQuery(target.venue_name);
+        return loadVenuePage(target.venue_name, 1, initialVenueId);
+      }).catch((error) => onMessage(`加载 Venue 详情失败：${errorMessage(error)}`));
+      return;
+    }
+    void loadVenuePage("", 1);
+  }, [variant, initialVenueId]);
 
   const refreshAfterMutation = async (venueId: number) => {
     await loadVenuePage(searchedVenueQuery, venuePage, venueId);
@@ -332,7 +342,13 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged }: Venue
 
       {variant === "edit" && detail && (
         <>
-          <VenueLocationPanel key={`${detail.venue_id}:${detail.venue_kind}`} venueId={detail.venue_id} venueKind={detail.venue_kind} />
+          <VenueLocationPanel
+            key={`${detail.venue_id}:${detail.venue_kind}`}
+            venueId={detail.venue_id}
+            venueName={detail.venue_name}
+            venueKind={detail.venue_kind}
+            onOpenLive={onOpenLive}
+          />
           <div className="tour-admin-block">
             <h3>历史名称（只读）</h3>
             <div className="console-table-wrap">

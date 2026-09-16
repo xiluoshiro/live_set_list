@@ -38,6 +38,9 @@ def test_public_venue_detail_reads_location_maps_and_lives(integration_test_clie
             "latitude": 35.693317,
             "longitude": 139.749885,
             "coordinate_system": "WGS84",
+            "coordinate_basis": "entrance",
+            "verification_source": "official",
+            "verification_note": "日本武道館公开入口",
         },
     )
     assert location.status_code == 200, location.text
