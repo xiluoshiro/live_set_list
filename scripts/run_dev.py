@@ -41,8 +41,10 @@ def build_backend_command() -> list[str]:
     return [sys.executable, "-m", "uvicorn", "app.main:app", "--reload", "--host", BACKEND_HOST, "--port", str(BACKEND_PORT)]
 
 
-def build_frontend_command() -> list[str]:
-    npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
+def build_frontend_command() -> list[str] | None:
+    npm_cmd = shutil.which("npm")
+    if not npm_cmd:
+        return None
     return [npm_cmd, "run", "dev"]
 
 
@@ -319,6 +321,10 @@ def main(argv: list[str] | None = None) -> int:
     if not BACKEND_DIR.exists() or not FRONTEND_DIR.exists():
         print("backend 或 frontend 目录不存在，请先生成项目骨架。")
         return 1
+    frontend_cmd = build_frontend_command()
+    if frontend_cmd is None:
+        print("未找到 npm 可执行文件。请先确认 Node.js/npm 已安装且当前终端 PATH 可以访问 npm。")
+        return 1
     if not ensure_postgres_container_running():
         return 1
 
@@ -326,7 +332,6 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     backend_cmd = build_backend_command()
-    frontend_cmd = build_frontend_command()
     backend_env = build_backend_env(use_test_db=args.test_db)
     frontend_env = build_frontend_env()
 
@@ -344,18 +349,27 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[frontend] {' '.join(frontend_cmd)} VITE_DEV_API_PROXY_TARGET={DEV_API_PROXY_TARGET}")
     print("启动中... 按 Ctrl+C 可一起关闭前后端。")
 
-    backend_proc = subprocess.Popen(
-        backend_cmd,
-        cwd=BACKEND_DIR,
-        env=backend_env,
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
-    )
-    frontend_proc = subprocess.Popen(
-        frontend_cmd,
-        cwd=FRONTEND_DIR,
-        env=frontend_env,
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
-    )
+    try:
+        backend_proc = subprocess.Popen(
+            backend_cmd,
+            cwd=BACKEND_DIR,
+            env=backend_env,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
+        )
+    except OSError as exc:
+        print(f"启动后端失败：{exc}")
+        return 1
+    try:
+        frontend_proc = subprocess.Popen(
+            frontend_cmd,
+            cwd=FRONTEND_DIR,
+            env=frontend_env,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
+        )
+    except OSError as exc:
+        print(f"启动前端失败：{exc}；正在关闭已启动的后端。")
+        terminate_process(backend_proc)
+        return 1
 
     try:
         while True:
