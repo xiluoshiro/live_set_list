@@ -212,7 +212,7 @@ def list_editable_lives(
         params.append(event_status)
     complete_sql = "l.venue_id IS NOT NULL AND l.opening_time IS NOT NULL AND l.start_time IS NOT NULL"
     incomplete_sql = f"NOT ({complete_sql})"
-    local_today_sql = "COALESCE((CURRENT_TIMESTAMP AT TIME ZONE l.timezone_id)::date, (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' + make_interval(mins => l.timezone_offset_minutes))::date)"
+    local_today_sql = "(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' + make_interval(mins => l.timezone_offset_minutes))::date"
     if schedule_complete is True:
         conditions.append(complete_sql)
     elif schedule_complete is False:

@@ -38,9 +38,7 @@ def test_public_venue_detail_reads_location_maps_and_lives(integration_test_clie
             "latitude": 35.693317,
             "longitude": 139.749885,
             "coordinate_system": "WGS84",
-            "coordinate_basis": "entrance",
-            "verification_source": "official",
-            "verification_note": "日本武道館公开入口",
+            "timezone_id": "Asia/Tokyo",
         },
     )
     assert location.status_code == 200, location.text
@@ -59,7 +57,7 @@ def test_public_venue_detail_reads_location_maps_and_lives(integration_test_clie
     assert payload["address"] == "北の丸公園2-3"
     assert payload["locality"] == {"country_code": "JP", "admin_area": "東京都", "locality_name": "千代田区"}
     assert payload["timezone_id"] == "Asia/Tokyo"
-    assert payload["timezone_source"] == "locality"
+    assert payload["timezone_source"] == "venue"
     assert payload["map_links"][0]["provider"] == "google"
     assert payload["map_links"][0]["source"] == "place"
     assert "query_place_id=verified-place" in payload["map_links"][0]["url"]

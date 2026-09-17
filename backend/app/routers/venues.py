@@ -194,7 +194,7 @@ def get_venue_detail(
     locality = None
     if header[5] is not None:
         locality = {"country_code": header[5], "admin_area": header[6], "locality_name": header[7]}
-    effective_timezone = header[11] or header[12]
+    effective_timezone = header[11]
     return {
         "venue_id": int(header[2]),
         "venue_name": str(header[3]),
@@ -204,7 +204,7 @@ def get_venue_detail(
         "latitude": header[9],
         "longitude": header[10],
         "timezone_id": effective_timezone,
-        "timezone_source": "venue" if header[11] else "locality" if header[12] else None,
+        "timezone_source": "venue" if header[11] else None,
         "name_versions": [
             {"venue_name": row[0], "valid_from": row[1], "valid_to": row[2], "is_current": bool(row[3])}
             for row in name_rows

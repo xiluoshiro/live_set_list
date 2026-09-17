@@ -9,10 +9,8 @@ GeographyQualityCategory = Literal[
     "missing_address",
     "missing_coordinates",
     "missing_timezone",
-    "missing_coordinate_basis",
     "zero_coordinates",
     "stale_map_link",
-    "timezone_review",
 ]
 
 
@@ -36,4 +34,3 @@ class GeographyQualityPage(BaseModel):
     page: int
     page_size: int
     total_pages: int
-

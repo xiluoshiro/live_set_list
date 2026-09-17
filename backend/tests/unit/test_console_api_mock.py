@@ -66,7 +66,14 @@ def _build_connection_mock(
     cursor = MagicMock()
     conn.__enter__.return_value = conn
     conn.cursor.return_value.__enter__.return_value = cursor
-    cursor.fetchone.side_effect = fetchone_side_effect or []
+    rows = iter(fetchone_side_effect or [])
+
+    def fetchone():
+        if cursor.execute.call_args and "SELECT venue.venue_kind" in cursor.execute.call_args.args[0]:
+            return ("physical", None, 1)
+        return next(rows)
+
+    cursor.fetchone.side_effect = fetchone
     cursor.fetchall.side_effect = fetchall_side_effect or []
     return conn, cursor
 
@@ -598,7 +605,7 @@ def test_console_create_venue_mock_success_persists_and_audits():
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[4].args[0]
 
 
-# 测试点：新增 Live 成功时应补齐时间秒数和时区，并返回规范化的空默认 Band。
+# 测试点：无场地 IANA 时区的 Live 使用默认 +09:00，写入与审计仍规范化钟点。
 def test_console_create_live_mock_success_normalizes_times_and_audits():
     _set_authenticated_role("admin")
     conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (77,)])
@@ -635,8 +642,8 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         "status_note": None,
         "date_phase": "past",
     }
-    assert "INSERT INTO live_attrs" in cursor.execute.call_args_list[1].args[0]
-    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
+    assert any("INSERT INTO live_attrs" in item.args[0] for item in cursor.execute.call_args_list)
+    assert any("INSERT INTO audit_logs" in item.args[0] for item in cursor.execute.call_args_list)
 
 
 # 测试点：场馆、开场与开演全部未公布时应以 null 创建，且仍由独立时区计算日期阶段。
@@ -702,7 +709,8 @@ def test_console_create_live_mock_validates_and_persists_default_bands():
     assert response.status_code == 201
     assert response.json()["item"]["default_band_ids"] == [1, 3]
     assert cursor.execute.call_args_list[0].args[1] == ([1, 3],)
-    assert cursor.execute.call_args_list[2].args[1][-5] == [1, 3]
+    insert_call = next(item for item in cursor.execute.call_args_list if "INSERT INTO live_attrs" in item.args[0])
+    assert insert_call.args[1][-5] == [1, 3]
 
 
 # 测试点：活动出席成员应按 Band 目录顺序持久化完整名单，并仅在响应中计算 partial/full。
@@ -738,7 +746,8 @@ def test_console_create_event_persists_members_and_computes_modes():
         {"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]},
         {"band_id": 8, "mode": "partial", "members": ["若葉睦"]},
     ]
-    persisted_json = cursor.execute.call_args_list[2].args[1][-4]
+    insert_call = next(item for item in cursor.execute.call_args_list if "INSERT INTO live_attrs" in item.args[0])
+    persisted_json = insert_call.args[1][-4]
     assert persisted_json.adapted == {"3": ["高松燈", "千早愛音"], "8": ["若葉睦"]}
 
 
@@ -815,7 +824,7 @@ def test_console_update_live_mock_noop_skips_update_and_audit():
         )
 
     assert response.status_code == 200
-    assert cursor.execute.call_count == 4
+    assert cursor.execute.call_count == 5
     assert all("UPDATE live_attrs" not in call.args[0] for call in cursor.execute.call_args_list)
     assert all("INSERT INTO audit_logs" not in call.args[0] for call in cursor.execute.call_args_list)
 
@@ -858,8 +867,8 @@ def test_console_create_live_mock_rejects_missing_default_band():
     assert response.json()["detail"] == "Band ids not found: 999"
 
 
-# 测试点：新增 Live 允许当天结束时刻 24:00，并接受四十五分钟 UTC 偏移。
-def test_console_create_live_mock_accepts_24_00_and_quarter_hour_timezone():
+# 测试点：当天结束时刻 24:00 仍可保存，但不能通过旧字段覆盖默认 +09:00。
+def test_console_create_live_mock_accepts_24_00_only_with_default_offset():
     _set_authenticated_role("editor")
     conn, _ = _build_connection_mock(fetchone_side_effect=[(1,), (78,)])
 
@@ -867,12 +876,12 @@ def test_console_create_live_mock_accepts_24_00_and_quarter_hour_timezone():
         client = TestClient(app)
         response = client.post(
             "/api/console/lives",
-            json=_valid_live_payload(opening_time="24:00", start_time="24:00", timezone="+05:45"),
+            json=_valid_live_payload(opening_time="24:00", start_time="24:00", timezone="+09:00"),
             headers={"X-CSRF-Token": CSRF_TOKEN},
         )
 
     assert response.status_code == 201
-    assert response.json()["item"]["opening_time"] == "24:00:00+05:45"
+    assert response.json()["item"]["opening_time"] == "24:00:00+09:00"
 
 
 # 测试点：新增 Live 应拒绝非法时间、非法时区和无效的 Venue/名称版本配对。

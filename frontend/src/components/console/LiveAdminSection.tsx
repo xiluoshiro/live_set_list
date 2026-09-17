@@ -465,8 +465,8 @@ export function LiveAdminSection({
                 <div className={`timezone-input-group${venueAnnounced ? " timezone-source-copy" : ""}`}>
                   {venueAnnounced ? (
                     <>
-                      <strong>由场馆资料决定</strong>
-                      <small>请先在场馆管理中核验城市或精确位置</small>
+                      <strong>{venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_kind === "online" ? "线上 Live" : "由场馆时区决定"}</strong>
+                      <small>{venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_kind === "online" ? "请选择活动时区" : "场馆未设置 IANA 时区时使用默认 UTC+09:00"}</small>
                     </>
                   ) : (
                     <label>
@@ -478,23 +478,22 @@ export function LiveAdminSection({
                       >
                         <option value="">未公布城市</option>
                         {localities.map((locality) => (
-                          <option key={locality.id} value={locality.id} disabled={locality.timezone_id === null}>
+                          <option key={locality.id} value={locality.id}>
                             {[locality.country_code, locality.admin_area, locality.locality_name].filter(Boolean).join(" ")}
-                            {locality.timezone_id ? ` · ${locality.timezone_id}` : " · 待核验时区"}
                           </option>
                         ))}
                       </select>
                     </label>
                   )}
-                  {(!venueAnnounced || venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_kind === "online") && announcedLocalityId === null && (
+                  {venueAnnounced && venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_kind === "online" && (
                     <label>
-                      <span>活动时区例外</span>
+                      <span>线上活动时区</span>
                       <select
                         aria-label="explicit timezone"
                         value={explicitTimezoneId ?? ""}
                         onChange={(e) => onExplicitTimezoneChange(e.target.value || null)}
                       >
-                        <option value="">仅线上或完全未公布所在地时选择</option>
+                        <option value="">请选择线上活动时区</option>
                         {timezoneOptions.map((timezoneId) => <option key={timezoneId} value={timezoneId}>{timezoneId}</option>)}
                       </select>
                     </label>

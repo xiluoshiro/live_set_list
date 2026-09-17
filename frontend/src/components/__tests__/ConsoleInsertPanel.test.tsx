@@ -284,7 +284,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("opening_time")).toHaveAttribute("type", "time");
     expect(screen.getByLabelText("start_time")).toHaveValue("19:00");
     expect(screen.getByLabelText("start_time")).toHaveAttribute("type", "time");
-    expect(screen.getByText("由场馆资料决定")).toBeInTheDocument();
+    expect(screen.getByText("由场馆时区决定")).toBeInTheDocument();
     expect(screen.queryByLabelText("timezone")).not.toBeInTheDocument();
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
@@ -439,7 +439,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(resultTable).queryByRole("columnheader", { name: "song_id" })).not.toBeInTheDocument();
   });
 
-  // 测试点：三项排期可独立标记暂未公布，提交 null，并在切回已确定时恢复原输入。
+  // 测试点：未公布场馆与时间可提交 null，非 online 模式不暴露时区输入并使用默认偏移。
   test("新增Live可提交未公布排期并保留暂存值", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel initialMode="live_create" />);
@@ -460,7 +460,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("opening_time")).toHaveValue("18:00");
     await user.click(screen.getByLabelText("开场公布状态"));
     await user.click(screen.getByLabelText("开演公布状态"));
-    await user.selectOptions(screen.getByLabelText("explicit timezone"), "Asia/Tokyo");
+    expect(screen.queryByLabelText("explicit timezone")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
@@ -469,7 +469,7 @@ describe("ConsoleInsertPanel", () => {
         venue_id: null,
         opening_time: null,
         start_time: null,
-        explicit_timezone_id: "Asia/Tokyo",
+        explicit_timezone_id: null,
       }),
       "csrf-token",
     ));
@@ -1122,7 +1122,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("dialog", { name: "确认新增 Live" })).toBeInTheDocument();
     expect(screen.getByText("Inserted Live")).toBeInTheDocument();
     expect(screen.getByText("New Venue")).toBeInTheDocument();
-    expect(screen.getByText("由场馆资料决定")).toBeInTheDocument();
+    expect(screen.getByText("由场馆时区决定")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(

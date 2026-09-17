@@ -18,10 +18,8 @@ const CATEGORIES: Array<{ value: GeographyQualityCategory | "all"; label: string
   { value: "missing_address", label: "缺门牌地址" },
   { value: "missing_coordinates", label: "缺坐标" },
   { value: "missing_timezone", label: "缺有效时区" },
-  { value: "missing_coordinate_basis", label: "坐标缺口径" },
   { value: "zero_coordinates", label: "零坐标" },
   { value: "stale_map_link", label: "过期地图关联" },
-  { value: "timezone_review", label: "Live 时区待复核" },
 ];
 
 const categoryLabel = (value: GeographyQualityCategory) =>
@@ -65,7 +63,7 @@ export function GeographyQualitySection({ onMessage, onOpenVenue, onOpenLive }: 
   return <section className="tour-admin-section" aria-label="Venue 地理数据质量中心">
     <div className="tour-admin-block">
       <h3>Venue 地理数据质量中心</h3>
-      <p className="console-admin-hint">统计与明细使用同一只读口径；打开对应 Venue 或 Live 后由既有受审计流程修复，本页不批量改写资料。</p>
+      <p className="console-admin-hint">统计与明细使用同一只读口径；打开对应 Venue 后修改资料，本页不批量改写。</p>
       <div className="tour-admin-toolbar live-admin-toolbar">
         <label>问题类型<select aria-label="地理质量问题类型" value={category} disabled={loading} onChange={(event) => chooseCategory(event.target.value as GeographyQualityCategory | "all")}>
           {CATEGORIES.map((option) => <option key={option.value} value={option.value}>

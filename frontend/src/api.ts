@@ -632,8 +632,6 @@ export type GeoLocalityCreate = {
 export type GeoLocalityUpdate = GeoLocalityCreate & { expected_revision: number };
 export type GeoLocalityPage = { items: GeoLocality[]; total: number; page: number; page_size: number };
 export type MapProvider = "google" | "apple" | "amap";
-export type CoordinateBasis = "building" | "entrance" | "center";
-export type VenueLocationVerificationSource = "official" | "venue_publication" | "map_verified" | "other";
 export type VenueLocationWrite = {
   expected_revision: number;
   locality_id: number | null;
@@ -641,10 +639,7 @@ export type VenueLocationWrite = {
   latitude: number | null;
   longitude: number | null;
   coordinate_system: "WGS84";
-  coordinate_basis: CoordinateBasis | null;
   timezone_id: string | null;
-  verification_source: VenueLocationVerificationSource | null;
-  verification_note: string | null;
 };
 export type VenueMapLink = {
   provider: MapProvider;
@@ -678,7 +673,6 @@ export type VenueLocation = {
   latitude: number | null;
   longitude: number | null;
   coordinate_system: "WGS84";
-  coordinate_basis: CoordinateBasis | null;
   timezone_id: string | null;
   effective_timezone_id: string | null;
   timezone_source: "venue" | "locality" | null;
@@ -691,17 +685,6 @@ export type VenueLocationPreview = {
   after: VenueLocationWrite;
   effective_timezone_id: string | null;
   live_count: number;
-  timezone_unchanged_live_count: number;
-  timezone_review_live_count: number;
-  timezone_unaffected_live_count: number;
-  timezone_review_lives: Array<{
-    live_id: number;
-    live_date: string;
-    live_title: string;
-    timezone_id: string | null;
-    timezone_source_revision: number | null;
-  }>;
-  timezone_review_lives_truncated: boolean;
   invalidated_map_links: number;
   invalidated_map_providers: MapProvider[];
   changed_fields: string[];
@@ -710,13 +693,7 @@ export type LocalityPreview = {
   before: GeoLocality;
   after: GeoLocalityUpdate;
   venue_count: number;
-  inherited_timezone_venue_count: number;
   live_count: number;
-  timezone_unchanged_live_count: number;
-  timezone_review_live_count: number;
-  timezone_unaffected_live_count: number;
-  timezone_review_lives: VenueLocationPreview["timezone_review_lives"];
-  timezone_review_lives_truncated: boolean;
   invalidated_map_links: number;
 };
 
@@ -760,7 +737,7 @@ export const deleteConsoleVenueMapLink = (id: number, provider: MapProvider, rev
   geographyRequest<VenueLocation>(`/venues/${id}/map-links/${provider}?expected_revision=${revision}`, "DELETE", undefined, csrf);
 
 export type GeographyQualityCategory = "missing_locality" | "missing_address" | "missing_coordinates"
-  | "missing_timezone" | "missing_coordinate_basis" | "zero_coordinates" | "stale_map_link" | "timezone_review";
+  | "missing_timezone" | "zero_coordinates" | "stale_map_link";
 export type GeographyQualityItem = {
   category: GeographyQualityCategory;
   subject_type: "venue" | "live";
@@ -783,53 +760,6 @@ export type GeographyQualityPage = {
 };
 export const getConsoleGeographyQuality = (category: GeographyQualityCategory | "all", q = "", page = 1) =>
   geographyRequest<GeographyQualityPage>(`/geography-quality?${new URLSearchParams({ category, q, page: String(page), limit: "20" })}`);
-
-export type TimezoneReviewStatus = "needs_review" | "retained" | "revision_only" | "current" | "unaffected" | "legacy_exception";
-export type TimezoneReviewItem = {
-  live_id: number;
-  live_date: string;
-  live_title: string;
-  venue_id: number | null;
-  venue_name: string | null;
-  timezone_source: "venue" | "locality" | "explicit" | "legacy_offset";
-  snapshot_timezone_id: string | null;
-  snapshot_source_revision: number | null;
-  current_timezone_id: string | null;
-  current_source_revision: number | null;
-  status: TimezoneReviewStatus;
-  opening_time: string | null;
-  start_time: string | null;
-  current_opening_time: string | null;
-  current_start_time: string | null;
-  snapshot_offset_minutes: number;
-  current_offset_minutes: number | null;
-  preview_error: string | null;
-  retained_reason: string | null;
-  retained_at: string | null;
-};
-export type TimezoneReviewPage = {
-  items: TimezoneReviewItem[];
-  page: number;
-  page_size: number;
-  total: number;
-  total_pages: number;
-  counts: Record<string, number>;
-};
-export type TimezoneReviewExpected = {
-  expected_snapshot_timezone_id: string;
-  expected_snapshot_source_revision: number | null;
-  expected_current_timezone_id: string;
-  expected_current_source_revision: number;
-};
-
-export const getConsoleTimezoneReviews = (status: TimezoneReviewStatus | "all", q = "", page = 1) =>
-  geographyRequest<TimezoneReviewPage>(`/timezone-reviews?${new URLSearchParams({ status, q, page: String(page), limit: "20" })}`);
-export const retainConsoleTimezoneSnapshot = (id: number, payload: TimezoneReviewExpected & { reason: string }, csrf: string) =>
-  geographyRequest<{ item: TimezoneReviewItem }>(`/timezone-reviews/${id}/retain`, "POST", payload, csrf);
-export const applyConsoleCurrentTimezone = (id: number, payload: TimezoneReviewExpected & {
-  opening_time_fold?: 0 | 1 | null;
-  start_time_fold?: 0 | 1 | null;
-}, csrf: string) => geographyRequest<{ item: TimezoneReviewItem }>(`/timezone-reviews/${id}/apply-current`, "POST", payload, csrf);
 
 export type ConsoleVenueListResponse = {
   items: ConsoleVenueItem[];

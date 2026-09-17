@@ -17,8 +17,8 @@ vi.mock("../../../auth/AuthProvider", () => ({ useAuth: () => ({ csrfToken: "csr
 const city = { id: 5, country_code: "JP", admin_area: "東京都", locality_name: "検証市", timezone_id: "Asia/Tokyo", area_level: "locality" as const, revision: 1 };
 const location: VenueLocation = {
   venue_id: 1, locality: city, address: null, latitude: null, longitude: null,
-  coordinate_system: "WGS84", coordinate_basis: null, timezone_id: null,
-  effective_timezone_id: "Asia/Tokyo", timezone_source: "locality",
+  coordinate_system: "WGS84", timezone_id: null,
+  effective_timezone_id: null, timezone_source: null,
   location_revision: 2, location_verified_at: null,
   map_links: (["google", "apple", "amap"] as const).map(provider => ({
     provider, provider_place_id: null, provider_url: null, verified_at: null,
@@ -43,69 +43,33 @@ async function openPanel(onOpenLive?: (liveId: number) => void) {
 // 测试点：所在地与地图直接加载且不再折叠，地区时区与缺失坐标如实展示，单个坐标不能提交。
 test("loads directly and validates paired coordinates", async () => {
   const user = await openPanel();
-  expect(screen.getByText(/来自地区/)).toHaveTextContent("Asia/Tokyo");
+  expect(screen.getByText(/场地 IANA 时区：未设置/)).toBeInTheDocument();
   expect(screen.getAllByText("暂无坐标")).toHaveLength(3);
   await user.type(screen.getByLabelText("纬度（WGS84）"), "0");
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
   await user.type(screen.getByLabelText("经度（WGS84）"), "0");
-  await user.selectOptions(screen.getByLabelText("坐标核验口径"), "building");
-  await user.selectOptions(screen.getByLabelText("核验来源（内部审计）"), "map_verified");
-  await user.type(screen.getByLabelText("核验说明（内部审计）"), "地图人工核验");
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeEnabled();
 });
 
-// 测试点：清空成对坐标会同时清空禁用的旧点位口径，避免提交不可见的残留值。
-test("clears the coordinate basis when removing a saved point", async () => {
+// 测试点：清空已保存的成对坐标可直接预览，不再要求填写坐标口径或核验说明。
+test("removes a saved point without verification fields", async () => {
   api.getConsoleVenueLocation.mockResolvedValue({
-    ...location, latitude: 35, longitude: 139, coordinate_basis: "center",
+    ...location, latitude: 35, longitude: 139,
   });
   api.previewConsoleVenueLocation.mockImplementation((_id, after) => Promise.resolve({
-    before: { ...location, latitude: 35, longitude: 139, coordinate_basis: "center" },
-    after, effective_timezone_id: "Asia/Tokyo", live_count: 0,
-    timezone_unchanged_live_count: 0, timezone_review_live_count: 0, timezone_unaffected_live_count: 0,
-    timezone_review_lives: [], timezone_review_lives_truncated: false, invalidated_map_links: 0,
-    invalidated_map_providers: [], changed_fields: ["coordinates", "coordinate_basis"],
+    before: { ...location, latitude: 35, longitude: 139 },
+    after, effective_timezone_id: null, live_count: 0,
+    invalidated_map_links: 0, invalidated_map_providers: [], changed_fields: ["coordinates"],
   }));
   const user = await openPanel();
   await user.clear(screen.getByLabelText("纬度（WGS84）"));
   await user.clear(screen.getByLabelText("经度（WGS84）"));
-  await user.selectOptions(screen.getByLabelText("核验来源（内部审计）"), "map_verified");
-  await user.type(screen.getByLabelText("核验说明（内部审计）"), "撤销错误坐标");
   await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
 
   await screen.findByRole("dialog", { name: "确认所在地修改" });
   expect(api.previewConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({
-    latitude: null, longitude: null, coordinate_basis: null,
+    latitude: null, longitude: null,
   }));
-});
-
-// 测试点：Venue 影响预览中的待复核 Live 可直接进入对应单场管理，不只是静态文本。
-test("opens an affected live directly from the venue preview", async () => {
-  const onOpenLive = vi.fn();
-  const user = await openPanel(onOpenLive);
-  api.previewConsoleVenueLocation.mockImplementation((_id, after) => Promise.resolve({
-    before: location, after, effective_timezone_id: "America/New_York", live_count: 1,
-    timezone_unchanged_live_count: 0, timezone_review_live_count: 1, timezone_unaffected_live_count: 0,
-    timezone_review_lives: [{
-      live_id: 38, live_date: "2026-01-03", live_title: "New Year Live",
-      timezone_id: "Asia/Tokyo", timezone_source_revision: 2,
-    }],
-    timezone_review_lives_truncated: false, invalidated_map_links: 0,
-    invalidated_map_providers: [], changed_fields: ["coordinates", "timezone_id", "effective_timezone_id"],
-  }));
-
-  await user.selectOptions(screen.getByLabelText("场馆精确时区"), "America/New_York");
-  await user.type(screen.getByLabelText("纬度（WGS84）"), "35");
-  await user.type(screen.getByLabelText("经度（WGS84）"), "139");
-  await user.selectOptions(screen.getByLabelText("坐标核验口径"), "building");
-  await user.selectOptions(screen.getByLabelText("核验来源（内部审计）"), "official");
-  await user.type(screen.getByLabelText("核验说明（内部审计）"), "官方页面核验");
-  await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
-  const dialog = await screen.findByRole("dialog", { name: "确认所在地修改" });
-  await user.click(within(dialog).getByRole("button", { name: /#38 2026-01-03 New Year Live/ }));
-
-  expect(onOpenLive).toHaveBeenCalledWith(38);
-  expect(screen.queryByRole("dialog", { name: "确认所在地修改" })).not.toBeInTheDocument();
 });
 
 // 测试点：国家和行政区级所在地没有城市名时，场馆位置与选择列表不显示空值或加载错误。
@@ -130,8 +94,7 @@ test("keeps an empty location pristine until the editor changes a field", async 
   await openPanel();
 
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
-  expect(screen.getByLabelText("核验来源（内部审计）")).toBeDisabled();
-  expect(screen.queryByText(/保存前请填写核验来源和核验说明/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("核验来源（内部审计）")).not.toBeInTheDocument();
 });
 
 // 测试点：未公开具体场馆只开放地区选择，不向编辑者暴露门牌、精确点位和地图关联操作。
@@ -151,13 +114,8 @@ test("limits undisclosed venues to the published locality", async () => {
 test("previews and saves the selected locality", async () => {
   const user = await openPanel();
   api.previewConsoleLocality.mockImplementation((_id, after) => Promise.resolve({
-    before: city, after, venue_count: 2, inherited_timezone_venue_count: 1, live_count: 4,
-    timezone_unchanged_live_count: 2, timezone_review_live_count: 1, timezone_unaffected_live_count: 1,
-    timezone_review_lives: [{
-      live_id: 38, live_date: "2026-01-03", live_title: "New Year Live",
-      timezone_id: "Asia/Tokyo", timezone_source_revision: 2,
-    }],
-    timezone_review_lives_truncated: false, invalidated_map_links: 1,
+    before: city, after, venue_count: 2, live_count: 4,
+    invalidated_map_links: 1,
   }));
   api.saveConsoleLocality.mockResolvedValue({ ...city, timezone_id: "America/New_York", revision: 2 });
 
@@ -168,29 +126,25 @@ test("previews and saves the selected locality", async () => {
   const dialog = await screen.findByRole("dialog", { name: "确认地区资料修改" });
   expect(dialog).toHaveTextContent("引用 Venue2");
   expect(dialog).toHaveTextContent("需重新核对的地图关联1");
-  expect(within(dialog).getByRole("alert")).toHaveTextContent("#38 2026-01-03 New Year Live");
+  expect(dialog).toHaveTextContent("关联 Live4");
   expect(api.saveConsoleLocality).not.toHaveBeenCalled();
   await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
   await waitFor(() => expect(api.saveConsoleLocality).toHaveBeenCalledWith(
     5, expect.objectContaining({ expected_revision: 1, timezone_id: "America/New_York" }), "csrf",
   ));
-  expect(screen.getByRole("status")).toHaveTextContent("1 场 Live 的历史时区快照未改写");
+  expect(screen.getByRole("status")).toHaveTextContent("已存时间偏移不随本次资料修改而变动");
 });
 
 // 测试点：保存前必须预览，使用预览快照和修订号提交；失败保留确认框及编辑内容。
 test("previews and confirms a revision-bound change, retaining failed input", async () => {
   const user = await openPanel();
   api.previewConsoleVenueLocation.mockImplementation((_id, after) => Promise.resolve({
-    before: location, after, effective_timezone_id: "Asia/Tokyo", live_count: 4, invalidated_map_links: 1,
-    timezone_unchanged_live_count: 3, timezone_review_live_count: 0, timezone_unaffected_live_count: 1,
-    timezone_review_lives: [], timezone_review_lives_truncated: false,
+    before: location, after, effective_timezone_id: null, live_count: 4, invalidated_map_links: 1,
     invalidated_map_providers: ["google"], changed_fields: ["address"],
   }));
   api.saveConsoleVenueLocation.mockRejectedValueOnce(new Error("资料已更新"))
     .mockResolvedValueOnce({ ...location, address: "New address", location_revision: 3 });
   await user.type(screen.getByLabelText("公开门牌地址"), "New address");
-  await user.selectOptions(screen.getByLabelText("核验来源（内部审计）"), "official");
-  await user.type(screen.getByLabelText("核验说明（内部审计）"), "场馆官网门牌");
   await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
   let dialog = await screen.findByRole("dialog", { name: "确认所在地修改" });
   expect(dialog).toHaveTextContent("本次不修改排期");
@@ -204,8 +158,8 @@ test("previews and confirms a revision-bound change, retaining failed input", as
   expect(api.saveConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({ expected_revision: 2, address: "New address" }), "csrf");
 });
 
-// 测试点：有效时区变化时，确认框与保存结果都明确需人工复核的 Live，不静默改写历史快照。
-test("warns about live snapshots whose timezone would differ", async () => {
+// 测试点：场地 IANA 时区变更只更新场地位置，确认框不再创建 Live 时区复核任务。
+test("updates venue timezone without a live review workflow", async () => {
   const noLocalityLocation = {
     ...location, locality: null, effective_timezone_id: null, timezone_source: null,
   } satisfies VenueLocation;
@@ -213,34 +167,25 @@ test("warns about live snapshots whose timezone would differ", async () => {
   const user = await openPanel();
   api.previewConsoleVenueLocation.mockImplementation((_id, after) => Promise.resolve({
     before: noLocalityLocation, after, effective_timezone_id: "America/New_York", live_count: 4, invalidated_map_links: 0,
-    timezone_unchanged_live_count: 2, timezone_review_live_count: 1, timezone_unaffected_live_count: 1,
-    timezone_review_lives: [{
-      live_id: 38, live_date: "2026-01-03", live_title: "New Year Live",
-      timezone_id: "Asia/Tokyo", timezone_source_revision: 2,
-    }],
-    timezone_review_lives_truncated: false, invalidated_map_providers: [],
-    changed_fields: ["coordinates", "coordinate_basis", "timezone_id", "effective_timezone_id"],
+    invalidated_map_providers: [],
+    changed_fields: ["coordinates", "timezone_id", "effective_timezone_id"],
   }));
   api.saveConsoleVenueLocation.mockResolvedValue({
-    ...noLocalityLocation, latitude: 40.7, longitude: -74, coordinate_basis: "center",
+    ...noLocalityLocation, latitude: 40.7, longitude: -74,
     timezone_id: "America/New_York", effective_timezone_id: "America/New_York",
     timezone_source: "venue", location_revision: 3,
   });
   await user.selectOptions(screen.getByLabelText("场馆精确时区"), "America/New_York");
   await user.type(screen.getByLabelText("纬度（WGS84）"), "40.7");
   await user.type(screen.getByLabelText("经度（WGS84）"), "-74");
-  await user.selectOptions(screen.getByLabelText("坐标核验口径"), "center");
-  await user.selectOptions(screen.getByLabelText("核验来源（内部审计）"), "map_verified");
-  await user.type(screen.getByLabelText("核验说明（内部审计）"), "园区中心点");
   await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
 
   const dialog = await screen.findByRole("dialog", { name: "确认所在地修改" });
-  expect(within(dialog).getByRole("alert")).toHaveTextContent("#38 2026-01-03 New Year Live");
-  expect(dialog).toHaveTextContent("Asia/Tokyo → America/New_York");
-  expect(dialog).toHaveTextContent("保存场馆不会改写这些历史快照");
+  expect(dialog).toHaveTextContent("新时区America/New_York");
+  expect(dialog).not.toHaveTextContent("人工复核");
   expect(api.saveConsoleVenueLocation).not.toHaveBeenCalled();
   await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
-  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 场 Live 时区待逐场复核"));
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("所在地已保存"));
 });
 
 // 测试点：地区分页提供总数和后续结果入口，不把首批地区当作完整列表。
@@ -269,7 +214,7 @@ test("keeps coordinate fallback when a place match is stale", async () => {
 
 // 测试点：地图搜索不会默认采用第一项，确认后只提交目标 ID 和链接，不持久化候选资料。
 test("requires an explicit candidate selection before linking a map place", async () => {
-  const located = { ...location, latitude: 35, longitude: 139, coordinate_basis: "building" as const };
+  const located = { ...location, latitude: 35, longitude: 139 };
   api.getConsoleVenueLocation.mockResolvedValue(located);
   api.searchConsoleVenueMapCandidates.mockResolvedValue({
     provider: "google", status: "ready", message: null, candidates: [
