@@ -55,7 +55,6 @@ import { BandAdminSection } from "./console/BandAdminSection";
 import { CompactConfirmationTable } from "./console/CompactConfirmationTable";
 import { PerformanceGroupAdminSection } from "./console/PerformanceGroupAdminSection";
 import { TourAdminSection } from "./console/TourAdminSection";
-import { TimezoneReviewSection } from "./console/TimezoneReviewSection";
 import { GeographyQualitySection } from "./console/GeographyQualitySection";
 import { VenueAdminSection } from "./console/VenueAdminSection";
 import {
@@ -411,7 +410,9 @@ function normalizeLivePayload(payload: ConsoleLiveUpsertPayload): ConsoleLiveUps
 function livePayloadEquals(left: ConsoleLiveUpsertPayload | null, right: ConsoleLiveUpsertPayload): boolean {
   if (left === null) return false;
   const canonicalize = (payload: ConsoleLiveUpsertPayload) => Object.fromEntries(
-    Object.entries(normalizeLivePayload(payload)).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey)),
+    Object.entries(normalizeLivePayload(payload))
+      .filter(([key]) => key !== "timezone")
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey)),
   );
   return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
 }
@@ -747,7 +748,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     url: liveUrl.trim(),
     opening_time: openingTimeAnnounced ? openingTime : null,
     start_time: startTimeAnnounced ? startTime : null,
-    ...(originalLivePayload?.timezone_source === "legacy_offset" ? { timezone } : {}),
     ...(originalLivePayload?.timezone_source ? { timezone_source: originalLivePayload.timezone_source } : {}),
     announced_locality_id: venueAnnounced ? null : announcedLocalityId,
     explicit_timezone_id: explicitTimezoneId,
@@ -872,7 +872,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     liveUrl.trim() === "" ||
     (openingTimeAnnounced && openingTime.trim() === "") ||
     (startTimeAnnounced && startTime.trim() === "") ||
-    (!venueAnnounced && announcedLocalityId === null && !explicitTimezoneId) ||
     (venueAnnounced
       && venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_kind === "online"
       && !explicitTimezoneId) ||
@@ -3175,7 +3174,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         options={[
           { value: "live_create", label: "新增Live" },
           { value: "live_edit", label: "Live管理" },
-          { value: "timezone_review", label: "时区复核" },
           { value: "geography_quality", label: "地理质量" },
           { value: "setlist", label: "新增Setlist" },
           { value: "setlist_edit", label: "Setlist管理" },
@@ -3329,16 +3327,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onSubmitInsertLive={submitInsertLive}
           queryInsertDisabled={isVenueQuickInsertDisabled}
           submitInsertDisabled={isLiveSubmitBlocked}
-        />
-      )}
-
-      {mode === "timezone_review" && (
-        <TimezoneReviewSection
-          onMessage={setMessage}
-          onOpenLive={(liveId) => {
-            setMode("live_edit");
-            void loadLiveForEdit(liveId);
-          }}
         />
       )}
 

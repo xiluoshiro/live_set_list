@@ -34,16 +34,16 @@ def derive_date_phase(
     timezone_offset_minutes: int | None = None,
     timezone_id: str | None = None,
 ) -> DatePhase:
-    """Compare a Live date with today in its IANA zone, falling back to legacy offsets."""
+    """Compare a Live date with today using its persisted offset."""
     normalized_live_date = date.fromisoformat(live_date) if isinstance(live_date, str) else live_date
     current = now_utc or datetime.now(timezone.utc)
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
-    if timezone_id is not None:
-        local_today = current.astimezone(ZoneInfo(timezone_id)).date()
-    elif timezone_offset_minutes is not None:
+    if timezone_offset_minutes is not None:
         offset = timedelta(minutes=timezone_offset_minutes)
         local_today = (current.astimezone(timezone.utc) + offset).date()
+    elif timezone_id is not None:
+        local_today = current.astimezone(ZoneInfo(timezone_id)).date()
     elif start_time is not None:
         offset = _offset_from_start_time(start_time)
         local_today = (current.astimezone(timezone.utc) + offset).date()

@@ -7,8 +7,6 @@ from app.geography import validate_map_url, validate_timezone
 
 MapProvider = Literal["google", "apple", "amap"]
 AreaLevel = Literal["country", "admin_area", "locality"]
-CoordinateBasis = Literal["building", "entrance", "center"]
-VerificationSource = Literal["official", "venue_publication", "map_verified", "other"]
 MapProviderStatus = Literal["ready", "not_configured", "unavailable"]
 ProviderCoordinateSystem = Literal["WGS84", "GCJ02"]
 
@@ -75,12 +73,9 @@ class LocationWrite(BaseModel):
     latitude: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
     longitude: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
     coordinate_system: Literal["WGS84"] = "WGS84"
-    coordinate_basis: CoordinateBasis | None = None
     timezone_id: str | None = Field(default=None, max_length=100)
-    verification_source: VerificationSource | None = None
-    verification_note: str | None = Field(default=None, max_length=2000)
 
-    @field_validator("address", "timezone_id", "verification_note", mode="before")
+    @field_validator("address", "timezone_id", mode="before")
     @classmethod
     def empty_to_none(cls, value: str | None) -> str | None:
         return (value.strip() or None) if isinstance(value, str) else value
@@ -96,10 +91,6 @@ class LocationWrite(BaseModel):
             raise ValueError("经纬度必须同时填写或同时清空")
         if self.timezone_id and self.latitude is None:
             raise ValueError("场馆精确时区需要坐标；仅公布城市时请使用城市时区")
-        if self.latitude is not None and self.coordinate_basis is None:
-            raise ValueError("填写坐标时必须说明核验点是建筑、入口还是园区中心")
-        if self.latitude is None and self.coordinate_basis is not None:
-            raise ValueError("没有坐标时不能填写坐标核验口径")
         if self.latitude is not None and self.longitude is not None:
             self.latitude = round(self.latitude, 6)
             self.longitude = round(self.longitude, 6)
@@ -165,7 +156,6 @@ class VenueLocation(BaseModel):
     latitude: float | None
     longitude: float | None
     coordinate_system: Literal["WGS84"] = "WGS84"
-    coordinate_basis: CoordinateBasis | None
     timezone_id: str | None
     effective_timezone_id: str | None
     timezone_source: Literal["venue", "locality"] | None
@@ -174,25 +164,11 @@ class VenueLocation(BaseModel):
     map_links: list[MapLink]
 
 
-class LocationPreviewLive(BaseModel):
-    live_id: int
-    live_date: date
-    live_title: str
-    timezone_id: str | None
-    timezone_source_revision: int | None
-
-
 class LocalityPreview(BaseModel):
     before: Locality
     after: LocalityUpdate
     venue_count: int
-    inherited_timezone_venue_count: int
     live_count: int
-    timezone_unchanged_live_count: int
-    timezone_review_live_count: int
-    timezone_unaffected_live_count: int
-    timezone_review_lives: list[LocationPreviewLive]
-    timezone_review_lives_truncated: bool
     invalidated_map_links: int
 
 
@@ -201,11 +177,6 @@ class LocationPreview(BaseModel):
     after: LocationWrite
     effective_timezone_id: str | None
     live_count: int
-    timezone_unchanged_live_count: int
-    timezone_review_live_count: int
-    timezone_unaffected_live_count: int
-    timezone_review_lives: list[LocationPreviewLive]
-    timezone_review_lives_truncated: bool
     invalidated_map_links: int
     invalidated_map_providers: list[MapProvider]
     changed_fields: list[str]

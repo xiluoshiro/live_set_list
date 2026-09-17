@@ -2,20 +2,18 @@ import { afterEach, expect, test, vi } from "vitest";
 
 afterEach(() => vi.unstubAllGlobals());
 
-// 测试点：Venue、地区、地图候选和 Live 时区复核写入携带 CSRF 与并发快照，影响预览保持只读请求。
+// 测试点：Venue、地区和地图关联写入携带 CSRF 与并发修订号，影响预览保持只读请求。
 test("geography requests preserve write and concurrency contracts", async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
   vi.stubGlobal("fetch", fetchMock);
   const {
     saveConsoleVenueLocation, deleteConsoleVenueMapLink, getConsoleLocalities,
-    previewConsoleLocality, saveConsoleLocality, getConsoleTimezoneReviews,
-    retainConsoleTimezoneSnapshot, applyConsoleCurrentTimezone, getConsoleGeographyQuality,
+    previewConsoleLocality, saveConsoleLocality, getConsoleGeographyQuality,
     searchConsoleVenueMapCandidates, saveConsoleVenueMapLink,
   } = await import("../api");
   const payload = {
     expected_revision: 3, locality_id: null, address: null, latitude: 0, longitude: 0,
-    coordinate_system: "WGS84" as const, coordinate_basis: "building" as const, timezone_id: null,
-    verification_source: "map_verified" as const, verification_note: "人工核验",
+    coordinate_system: "WGS84" as const, timezone_id: null,
   };
   await saveConsoleVenueLocation(7, payload, "csrf-token");
   expect(fetchMock.mock.calls[0][0]).toBe("/api/console/venues/7/location");
@@ -42,29 +40,14 @@ test("geography requests preserve write and concurrency contracts", async () => 
   expect(fetchMock.mock.calls[4][1]).toEqual(expect.objectContaining({
     method: "PUT", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-token" }),
   }));
-  await getConsoleTimezoneReviews("needs_review", "A & B", 2);
-  const reviewUrl = new URL(fetchMock.mock.calls[5][0], "http://localhost");
-  expect(reviewUrl.searchParams.get("status")).toBe("needs_review");
-  expect(reviewUrl.searchParams.get("q")).toBe("A & B");
-  const reviewExpected = {
-    expected_snapshot_timezone_id: "Asia/Tokyo", expected_snapshot_source_revision: 2,
-    expected_current_timezone_id: "America/New_York", expected_current_source_revision: 3,
-  };
-  await retainConsoleTimezoneSnapshot(38, { ...reviewExpected, reason: "保留历史资料" }, "csrf-token");
-  expect(fetchMock.mock.calls[6][0]).toBe("/api/console/timezone-reviews/38/retain");
-  expect(fetchMock.mock.calls[6][1]).toEqual(expect.objectContaining({
-    method: "POST", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-token" }),
-  }));
-  await applyConsoleCurrentTimezone(38, reviewExpected, "csrf-token");
-  expect(fetchMock.mock.calls[7][0]).toBe("/api/console/timezone-reviews/38/apply-current");
   await getConsoleGeographyQuality("stale_map_link", "A & B", 3);
-  const qualityUrl = new URL(fetchMock.mock.calls[8][0], "http://localhost");
+  const qualityUrl = new URL(fetchMock.mock.calls[5][0], "http://localhost");
   expect(qualityUrl.pathname).toBe("/api/console/geography-quality");
   expect(qualityUrl.searchParams.get("category")).toBe("stale_map_link");
   expect(qualityUrl.searchParams.get("q")).toBe("A & B");
   expect(qualityUrl.searchParams.get("page")).toBe("3");
   await searchConsoleVenueMapCandidates(7, "google", "A & B");
-  const mapSearchUrl = new URL(fetchMock.mock.calls[9][0], "http://localhost");
+  const mapSearchUrl = new URL(fetchMock.mock.calls[6][0], "http://localhost");
   expect(mapSearchUrl.pathname).toBe("/api/console/venues/7/map-candidates");
   expect(mapSearchUrl.searchParams.get("provider")).toBe("google");
   expect(mapSearchUrl.searchParams.get("q")).toBe("A & B");
@@ -76,8 +59,8 @@ test("geography requests preserve write and concurrency contracts", async () => 
   await saveConsoleVenueMapLink(7, "google", {
     provider_place_id: candidate.provider_place_id, provider_url: candidate.provider_url,
   }, 3, "csrf-token");
-  expect(fetchMock.mock.calls[10][0]).toBe("/api/console/venues/7/map-links");
-  expect(fetchMock.mock.calls[10][1]).toEqual(expect.objectContaining({
+  expect(fetchMock.mock.calls[7][0]).toBe("/api/console/venues/7/map-links");
+  expect(fetchMock.mock.calls[7][1]).toEqual(expect.objectContaining({
     method: "PUT", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-token" }),
   }));
 });

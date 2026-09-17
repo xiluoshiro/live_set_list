@@ -29,13 +29,13 @@ def test_normal_clock_and_timezone_validation():
             validate_timezone(invalid)
 
 
-# 测试点：坐标成对、范围、点位口径和源坐标系均被校验，零坐标不会被当作空值。
+# 测试点：坐标成对、范围和源坐标系均被校验，零坐标可保存且无需附加口径。
 def test_location_schema_validates_coordinate_contract():
-    point = LocationWrite(expected_revision=1, latitude=0, longitude=0, coordinate_basis="building")
+    point = LocationWrite(expected_revision=1, latitude=0, longitude=0)
     assert point.latitude == 0 and point.longitude == 0
     for fields in ({"latitude": 10}, {"latitude": 91, "longitude": 0},
                    {"latitude": float("nan"), "longitude": 0}, {"coordinate_system": "GCJ02"},
-                   {"latitude": 0, "longitude": 0}, {"coordinate_basis": "center"},
+                   {"coordinate_basis": "center"}, {"verification_source": "official"},
                    {"timezone_id": "Asia/Tokyo"}, {"address": 123}, {"timezone_id": 123}):
         with pytest.raises(ValidationError):
             LocationWrite.model_validate({"expected_revision": 1, **fields})

@@ -25,6 +25,8 @@ function renderSection(
     defaultBandLineupContexts?: ComponentProps<typeof LiveAdminSection>["defaultBandLineupContexts"];
     bandHistories?: ComponentProps<typeof LiveAdminSection>["bandHistories"];
     liveCandidates?: ComponentProps<typeof LiveAdminSection>["liveCandidates"];
+    venueKind?: "physical" | "online";
+    venueAnnounced?: boolean;
   } = {},
 ) {
   const onToggleEventAttendee = options.onToggleEventAttendee ?? vi.fn();
@@ -41,6 +43,8 @@ function renderSection(
       liveUrl="https://example.com/live"
       openingTime="18:00"
       startTime="19:00"
+      venueAnnounced={options.venueAnnounced ?? true}
+      timezoneOptions={["Asia/Tokyo"]}
       selectedVenueId={1}
       defaultBandIds={options.defaultBandIds ?? [3]}
       defaultBandLineupContexts={options.defaultBandLineupContexts ?? {}}
@@ -62,7 +66,7 @@ function renderSection(
       editingLiveId={options.editingLiveId ?? null}
       isLiveDirty={options.isLiveDirty ?? (options.editingLiveId != null)}
       clearAfterCreate
-      venues={[{ venue_id: 1, venue_name: "Test Venue", venue_name_version_id: 11 }]}
+      venues={[{ venue_id: 1, venue_name: "Test Venue", venue_name_version_id: 11, venue_kind: options.venueKind ?? "physical" }]}
       liveTypeOptions={[{ value: "other", label: "其他" }, { value: "event", label: "活动" }]}
       venueOpen={false}
       venueMenuPos={null}
@@ -106,6 +110,19 @@ function renderSection(
 
 
 describe("LiveAdminSection", () => {
+  // 测试点：实体场地时区由后台决定，不能在 Live 表单选择显式时区。
+  test("keeps the timezone selector hidden for physical venues", () => {
+    renderSection();
+    expect(screen.queryByLabelText("explicit timezone")).not.toBeInTheDocument();
+    expect(screen.getByText(/场馆未设置 IANA 时区时使用默认 UTC\+09:00/)).toBeInTheDocument();
+  });
+
+  // 测试点：只有 online 场地可从 Live 表单选择主办方公布的活动时区。
+  test("shows the timezone selector for online venues", () => {
+    renderSection(vi.fn(), { venueKind: "online" });
+    expect(screen.getByLabelText("explicit timezone")).toBeInTheDocument();
+  });
+
   // 测试点：默认 Band 下拉应允许多选正数 Band，并排除 band_id=0 占位项。
   test("renders and toggles default Band choices", () => {
     const { onToggleDefaultBand } = renderSection();

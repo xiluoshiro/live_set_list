@@ -6,7 +6,6 @@ from psycopg2.extras import RealDictCursor
 
 from app.auth import require_role
 from app.db import get_db_connection
-from app.routers.console_timezone_reviews import REVIEW_SELECT
 from app.routers.console_venues import _raise_database_error
 from app.schemas.geography_quality import GeographyQualityPage
 
@@ -18,10 +17,8 @@ QUALITY_CATEGORIES = (
     "missing_address",
     "missing_coordinates",
     "missing_timezone",
-    "missing_coordinate_basis",
     "zero_coordinates",
     "stale_map_link",
-    "timezone_review",
 )
 
 QUALITY_CTE = f"""
@@ -33,8 +30,7 @@ QUALITY_CTE = f"""
                venue.address,
                venue.latitude,
                venue.longitude,
-               venue.coordinate_basis,
-               COALESCE(venue.timezone_id, locality.timezone_id) AS effective_timezone_id,
+               venue.timezone_id AS effective_timezone_id,
                NULLIF(concat_ws(' / ', locality.country_code, locality.admin_area, locality.locality_name), '')
                    AS locality_label,
                (
@@ -58,29 +54,14 @@ QUALITY_CTE = f"""
                 ('missing_locality', base.locality_id IS NULL, '实体 Venue 尚未登记所在地'),
                 ('missing_address', base.address IS NULL OR btrim(base.address) = '', '实体 Venue 尚未登记公开门牌地址'),
                 ('missing_coordinates', base.latitude IS NULL, '实体 Venue 尚未登记 WGS84 坐标'),
-                ('missing_timezone', base.effective_timezone_id IS NULL, 'Venue 与所在地均没有有效 IANA 时区'),
-                ('missing_coordinate_basis', base.latitude IS NOT NULL AND base.coordinate_basis IS NULL,
-                    '已有坐标但尚未核验建筑、入口或园区中心口径'),
+                ('missing_timezone', base.effective_timezone_id IS NULL, 'Venue 未登记 IANA 时区；关联 Live 使用默认 +09:00'),
                 ('zero_coordinates', base.latitude = 0 AND base.longitude = 0, '坐标为 (0, 0)，需要人工核对'),
                 ('stale_map_link', base.stale_providers IS NOT NULL,
                     '过期地图关联：' || COALESCE(base.stale_providers, ''))
         ) AS issue(category, matches, detail)
         WHERE issue.matches
-    ), review_base AS ({REVIEW_SELECT}), quality AS (
+    ), quality AS (
         SELECT * FROM venue_quality
-        UNION ALL
-        SELECT 'timezone_review'::text AS category, 'live'::text AS subject_type,
-               review.live_id AS subject_id, review.venue_id, review.venue_name,
-               venue.venue_kind,
-               NULLIF(concat_ws(' / ', locality.country_code, locality.admin_area, locality.locality_name), '')
-                   AS locality_label,
-               review.live_date, review.live_title,
-               '历史快照 ' || COALESCE(review.snapshot_timezone_id, '未记录') ||
-                   ' 与当前资料 ' || COALESCE(review.current_timezone_id, '待核验') || ' 不一致' AS detail
-        FROM review_base review
-        LEFT JOIN venue_list venue ON venue.id = review.venue_id
-        LEFT JOIN geo_localities locality ON locality.id = venue.locality_id
-        WHERE review.status = 'needs_review'
     )
 """
 
@@ -89,7 +70,7 @@ QUALITY_CTE = f"""
 def list_geography_quality(
     category: Literal[
         "all", "missing_locality", "missing_address", "missing_coordinates", "missing_timezone",
-        "missing_coordinate_basis", "zero_coordinates", "stale_map_link", "timezone_review",
+        "zero_coordinates", "stale_map_link",
     ] = Query(default="all"),
     q: str = Query(default="", max_length=255),
     page: int = Query(default=1, ge=1),
@@ -124,4 +105,3 @@ def list_geography_quality(
             }
     except Error as exc:
         _raise_database_error("list_geography_quality", exc)
-

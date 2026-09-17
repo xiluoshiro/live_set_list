@@ -3,7 +3,7 @@ import {
   createConsoleLocality, deleteConsoleVenueMapLink, getConsoleLocalities,
   getConsoleTimezones, getConsoleVenueLocation, previewConsoleLocality, previewConsoleVenueLocation,
   saveConsoleLocality, saveConsoleVenueLocation, saveConsoleVenueMapLink, searchConsoleVenueMapCandidates,
-  type CoordinateBasis, type GeoLocality, type GeoLocalityCreate, type GeoLocalityPage, type MapCandidate,
+  type GeoLocality, type GeoLocalityCreate, type GeoLocalityPage, type MapCandidate,
   type MapCandidateSearch, type MapProvider,
   type VenueLocation, type VenueLocationWrite,
 } from "../../api";
@@ -14,15 +14,9 @@ const PROVIDERS: Record<MapProvider, string> = { google: "Google Maps", apple: "
 const AREA_LEVELS: Record<GeoLocality["area_level"], string> = {
   country: "国家／地区", admin_area: "一级行政区", locality: "城市",
 };
-const COORDINATE_BASES: Record<CoordinateBasis, string> = {
-  building: "场馆建筑", entrance: "主要入口", center: "园区中心",
-};
-const VERIFICATION_SOURCES: Record<NonNullable<VenueLocationWrite["verification_source"]>, string> = {
-  official: "官方资料", venue_publication: "场馆公开资料", map_verified: "地图人工核对", other: "其他来源",
-};
 const FIELD_LABELS: Record<string, string> = {
   locality_id: "已公布地区", address: "公开门牌地址", coordinates: "WGS84 坐标",
-  coordinate_basis: "坐标核验口径", timezone_id: "场馆精确时区", effective_timezone_id: "实际采用时区",
+  timezone_id: "场馆精确时区", effective_timezone_id: "实际采用时区",
 };
 const cityLabel = (city: GeoLocality) => [city.country_code, city.admin_area, city.locality_name].filter(Boolean).join(" / ");
 const pointLabel = (point: { latitude: number | null; longitude: number | null }) =>
@@ -34,7 +28,7 @@ type Confirmation = {
   run: () => Promise<void>;
 };
 
-export function VenueLocationPanel({ venueId, venueName, venueKind, onOpenLive }: {
+export function VenueLocationPanel({ venueId, venueName, venueKind }: {
   venueId: number;
   venueName: string;
   venueKind: string;
@@ -50,10 +44,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind, onOpenLive }
   const [address, setAddress] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
-  const [coordinateBasis, setCoordinateBasis] = useState<CoordinateBasis | "">("");
   const [timezone, setTimezone] = useState("");
-  const [verificationSource, setVerificationSource] = useState<VenueLocationWrite["verification_source"]>(null);
-  const [verificationNote, setVerificationNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -77,10 +68,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind, onOpenLive }
     setAddress(next.address ?? "");
     setLatitude(next.latitude === null ? "" : String(next.latitude));
     setLongitude(next.longitude === null ? "" : String(next.longitude));
-    setCoordinateBasis(next.coordinate_basis ?? "");
     setTimezone(next.timezone_id ?? "");
-    setVerificationSource(null);
-    setVerificationNote("");
   };
   const perform = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -137,41 +125,15 @@ export function VenueLocationPanel({ venueId, venueName, venueKind, onOpenLive }
     latitude: physical ? nullableNumber(latitude) : null,
     longitude: physical ? nullableNumber(longitude) : null,
     coordinate_system: "WGS84",
-    coordinate_basis: physical && !!latitude.trim() && !!longitude.trim() ? coordinateBasis || null : null,
     timezone_id: physical ? timezone || null : null,
-    verification_source: verificationSource,
-    verification_note: verificationNote.trim() || null,
   };
   const dirty = !!data && ((data.locality?.id ?? null) !== draft.locality_id || data.address !== draft.address
     || data.latitude !== draft.latitude || data.longitude !== draft.longitude
-    || data.coordinate_basis !== draft.coordinate_basis || data.timezone_id !== draft.timezone_id);
-  const missingCoordinateBasis = physical && !!latitude.trim() && !coordinateBasis;
-  const missingVerification = dirty && (!verificationSource || !verificationNote.trim());
-  const reviewList = (
-    items: Array<{ live_id: number; live_date: string; live_title: string; timezone_id: string | null }>,
-    targetTimezone: string | null,
-    truncated: boolean,
-    subject: "场馆" | "地区",
-  ) => <span role="alert">
-    {items.map((item, index) => <span key={item.live_id}>
-      {index > 0 ? "；" : ""}
-      <button type="button" className="console-ghost-btn" onClick={() => {
-        setConfirmation(null);
-        onOpenLive?.(item.live_id);
-      }}>#{item.live_id} {item.live_date} {item.live_title}</button>
-      {`（${item.timezone_id ?? "未记录"} → ${targetTimezone ?? "待核验"}）`}
-    </span>)}
-    {truncated ? "；仅显示前 20 场" : ""}。保存{subject}不会改写这些历史快照。
-  </span>;
+    || data.timezone_id !== draft.timezone_id);
 
   const preview = () => perform(async () => {
     const result = await previewConsoleVenueLocation(venueId, draft);
     if (!alive.current) return;
-    const timezoneReview = result.timezone_review_live_count === 0
-      ? "0 场"
-      : <span>{result.timezone_review_live_count} 场：{reviewList(
-          result.timezone_review_lives, result.effective_timezone_id, result.timezone_review_lives_truncated, "场馆",
-        )}</span>;
     setConfirmation({
       title: "确认所在地修改",
       rows: [
@@ -179,16 +141,9 @@ export function VenueLocationPanel({ venueId, venueName, venueKind, onOpenLive }
         ["新城市", selectedCity ? cityLabel(selectedCity) : "未填写"],
         ["原地址", result.before.address ?? "未填写"], ["新地址", result.after.address ?? "未填写"],
         ["原坐标", pointLabel(result.before)], ["新坐标", pointLabel(result.after)],
-        ["原坐标口径", result.before.coordinate_basis ? COORDINATE_BASES[result.before.coordinate_basis] : "未填写"],
-        ["新坐标口径", result.after.coordinate_basis ? COORDINATE_BASES[result.after.coordinate_basis] : "未填写"],
         ["原时区", result.before.effective_timezone_id ?? "待核验"], ["新时区", result.effective_timezone_id ?? "待核验"],
         ["本次变更字段", result.changed_fields.map(field => FIELD_LABELS[field] ?? field).join("、") || "无"],
-        ["核验来源", result.after.verification_source ? VERIFICATION_SOURCES[result.after.verification_source] : "未填写"],
-        ["核验说明", result.after.verification_note ?? "未填写"],
         ["关联 Live", `${result.live_count} 场（本次不修改排期）`],
-        ["时区保持一致", `${result.timezone_unchanged_live_count} 场`],
-        ["时区需人工复核", timezoneReview],
-        ["其他时区来源", `${result.timezone_unaffected_live_count} 场（不受本次修改影响）`],
         ["需重新核对的地图关联", result.invalidated_map_providers.length > 0
           ? result.invalidated_map_providers.map(item => PROVIDERS[item]).join("、")
           : "0 个"],
@@ -200,9 +155,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind, onOpenLive }
           const fields = result.changed_fields.map(field => FIELD_LABELS[field] ?? field).join("、");
           const invalidated = result.invalidated_map_providers.length > 0
             ? `；地图关联待复核：${result.invalidated_map_providers.map(item => PROVIDERS[item]).join("、")}` : "";
-          const reviews = result.timezone_review_live_count > 0
-            ? `；${result.timezone_review_live_count} 场 Live 时区待逐场复核` : "；无新增 Live 时区复核项";
-          setMessage(`所在地已保存；已更新：${fields}${invalidated}${reviews}。`);
+          setMessage(`所在地已保存；已更新：${fields}${invalidated}。`);
         }
       },
     });
@@ -215,7 +168,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind, onOpenLive }
       {busy && <p className="console-admin-hint">正在处理…</p>}
       {!data && !busy && <button type="button" className="console-ghost-btn" onClick={() => void load()}>重新加载</button>}
       {data && <>
-        <p className="console-admin-hint">当前时区：{data.effective_timezone_id ?? "待核验"}{data.timezone_source === "locality" ? "（来自地区）" : data.timezone_source === "venue" ? "（来自场馆）" : ""}。</p>
+        <p className="console-admin-hint">场地 IANA 时区：{data.timezone_id ?? "未设置（关联 Live 使用默认 UTC+09:00）"}。</p>
         <p className="console-admin-hint">先按场馆名称核对所在地。地图候选由可选供应商适配器返回，候选坐标统一转换为 WGS84；服务未配置或不可用时仍可手工关联。</p>
         {venueKind === "online" && <p className="console-admin-hint">线上场馆不登记实体位置；活动时间基准由每场 Live 单独维护。</p>}
         {venueKind === "undisclosed" && <p className="console-admin-hint">未公开具体场馆只登记主办方已公布的地区；不填写门牌、坐标、场馆精确时区或地图关联。</p>}
@@ -264,26 +217,18 @@ export function VenueLocationPanel({ venueId, venueName, venueKind, onOpenLive }
               const update = { ...localityPayload, expected_revision: selectedCity.revision };
               const result = await previewConsoleLocality(selectedCity.id, update);
               if (!alive.current) return;
-              const review = result.timezone_review_live_count === 0 ? "0 场" : <span>
-                {result.timezone_review_live_count} 场：{reviewList(
-                  result.timezone_review_lives, result.after.timezone_id, result.timezone_review_lives_truncated, "地区",
-                )}
-              </span>;
               setConfirmation({ title: "确认地区资料修改", rows: [
                 ["原地区", cityLabel(result.before)], ["新地区", cityLabel({ ...result.before, ...result.after })],
                 ["原时区", result.before.timezone_id ?? "待核验"], ["新时区", result.after.timezone_id ?? "待核验"],
-                ["引用 Venue", result.venue_count], ["继承地区时区的 Venue", result.inherited_timezone_venue_count],
-                ["关联 Live", result.live_count], ["时区保持一致", result.timezone_unchanged_live_count],
-                ["时区需人工复核", review], ["其他时区来源", `${result.timezone_unaffected_live_count} 场（不受影响）`],
+                ["引用 Venue", result.venue_count],
+                ["关联 Live", result.live_count],
                 ["需重新核对的地图关联", result.invalidated_map_links],
               ], run: async () => {
                 await saveConsoleLocality(selectedCity.id, result.after, auth.csrfToken ?? "");
                 const refreshed = await getConsoleVenueLocation(venueId);
                 if (alive.current) {
                   apply(refreshed); setLocalityEditorMode(null);
-                  setMessage(result.timezone_review_live_count > 0
-                    ? `地区已保存；${result.timezone_review_live_count} 场 Live 的历史时区快照未改写，仍需逐场复核。`
-                    : "地区已保存；关联 Live 的历史时区快照保持原值。");
+                  setMessage("地区已保存；关联 Live 的已存时间偏移不随本次资料修改而变动。");
                 }
               } });
             });
@@ -294,19 +239,10 @@ export function VenueLocationPanel({ venueId, venueName, venueKind, onOpenLive }
           <label>场馆精确时区<select aria-label="场馆精确时区" value={timezone} disabled={busy || !physical} onChange={e => setTimezone(e.target.value)}>{zoneOptions}</select></label>
           <label>纬度（WGS84）<input inputMode="decimal" value={latitude} disabled={busy || !physical} onChange={e => setLatitude(e.target.value)} /></label>
           <label>经度（WGS84）<input inputMode="decimal" value={longitude} disabled={busy || !physical} onChange={e => setLongitude(e.target.value)} /></label>
-          <label>坐标核验口径<select aria-label="坐标核验口径" value={coordinateBasis} disabled={busy || !physical || !latitude.trim()} onChange={e => setCoordinateBasis(e.target.value as CoordinateBasis | "")}>
-            <option value="">未填写</option>{Object.entries(COORDINATE_BASES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select></label>
-          <label>核验来源（内部审计）<select aria-label="核验来源（内部审计）" value={verificationSource ?? ""} disabled={busy || !dirty} onChange={e => setVerificationSource((e.target.value || null) as VenueLocationWrite["verification_source"])}>
-            <option value="">请选择</option>{Object.entries(VERIFICATION_SOURCES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select></label>
-          <label>核验说明（内部审计）<input value={verificationNote} disabled={busy || !dirty} onChange={e => setVerificationNote(e.target.value)} /></label>
         </div>
         {invalidCoordinates && <p role="alert">请同时填写有效经纬度，或同时清空。</p>}
-        {missingCoordinateBasis && <p role="alert">请说明坐标对应场馆建筑、主要入口还是园区中心。</p>}
-        {missingVerification && <p role="alert">保存前请填写核验来源和核验说明；这些内容只进入内部审计。</p>}
         <div className="console-submit-row">
-          <button className="console-submit-btn" type="button" disabled={busy || !dirty || invalidCoordinates || missingCoordinateBasis || missingVerification || (!!timezone && !latitude.trim())} onClick={() => void preview()}>保存修改</button>
+          <button className="console-submit-btn" type="button" disabled={busy || !dirty || invalidCoordinates || (!!timezone && !latitude.trim())} onClick={() => void preview()}>保存修改</button>
           <button className="console-ghost-btn" type="button" disabled={busy} onClick={() => void load()}>重新加载</button>
         </div>
         {physical && <><h3>已保存位置的地图链接</h3>

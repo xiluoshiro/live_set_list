@@ -55,8 +55,8 @@ def test_get_venue_detail_resolves_canonical_venue_and_map_sources():
     assert payload["venue_id"] == 7
     assert payload["venue_name"] == "日本武道館"
     assert payload["address"] == "北の丸公園2-3"
-    assert payload["timezone_id"] == "Asia/Tokyo"
-    assert payload["timezone_source"] == "locality"
+    assert payload["timezone_id"] is None
+    assert payload["timezone_source"] is None
     assert payload["map_links"] == [
         {"provider": "google", "url": place_url("google", "ChIJ-current", "日本武道館"), "source": "place"},
         {"provider": "apple", "url": coordinate_url("apple", 35.693317, 139.749885, "日本武道館"), "source": "coordinates"},

@@ -18,7 +18,6 @@ from app.schemas.geography import (
 )
 
 router = APIRouter(dependencies=[Depends(require_role("editor"))])
-LOCATION_PREVIEW_LIVE_LIMIT = 20
 
 
 def _audit(cur: Any, context: AuthSessionContext, action: str, resource: str, identifier: int, payload: Any) -> None:
@@ -73,11 +72,10 @@ def _locality_changed(row: dict[str, Any], payload: LocalityUpdate) -> bool:
     return any(row[key] != value for key, value in payload.model_dump(exclude={"expected_revision"}).items())
 
 
-def _locality_impact(cur: Any, locality_id: int, timezone_id: str | None) -> dict[str, Any]:
+def _locality_impact(cur: Any, locality_id: int) -> dict[str, Any]:
     cur.execute(
         """
-        SELECT COUNT(*) AS venue_count,
-               COUNT(*) FILTER (WHERE timezone_id IS NULL) AS inherited_timezone_venue_count
+        SELECT COUNT(*) AS venue_count
         FROM venue_list
         WHERE locality_id = %s
         """,
@@ -95,62 +93,23 @@ def _locality_impact(cur: Any, locality_id: int, timezone_id: str | None) -> dic
         (locality_id,),
     )
     invalidated_map_links = cur.fetchone()["count"]
-    reference_sql = """
-        WITH referenced AS (
-            SELECT live.id AS live_id, live.live_date, live.live_title, live.timezone_id,
-                   live.timezone_source_revision,
-                   CASE
-                       WHEN live.announced_locality_id = %(locality_id)s
-                            AND live.timezone_source = 'locality' THEN true
-                       WHEN venue.locality_id = %(locality_id)s
-                            AND venue.timezone_id IS NULL
-                            AND live.timezone_source = 'venue' THEN true
-                       ELSE false
-                   END AS follows_locality
-            FROM live_attrs live
-            LEFT JOIN venue_list venue ON venue.id = live.venue_id
-            WHERE live.announced_locality_id = %(locality_id)s
-               OR venue.locality_id = %(locality_id)s
-        )
-    """
     cur.execute(
-        reference_sql + """
-        SELECT COUNT(*) AS total,
-               COUNT(*) FILTER (WHERE follows_locality AND timezone_id IS NOT DISTINCT FROM %(timezone_id)s) AS timezone_unchanged,
-               COUNT(*) FILTER (WHERE follows_locality AND timezone_id IS DISTINCT FROM %(timezone_id)s) AS timezone_review,
-               COUNT(*) FILTER (WHERE NOT follows_locality) AS timezone_unaffected
-        FROM referenced
-        """,
-        {"locality_id": locality_id, "timezone_id": timezone_id},
+        """SELECT COUNT(*) FROM live_attrs live
+           LEFT JOIN venue_list venue ON venue.id = live.venue_id
+           WHERE live.announced_locality_id = %s OR venue.locality_id = %s""",
+        (locality_id, locality_id),
     )
-    live_impact = cur.fetchone()
-    cur.execute(
-        reference_sql + """
-        SELECT live_id, live_date, live_title, timezone_id, timezone_source_revision
-        FROM referenced
-        WHERE follows_locality AND timezone_id IS DISTINCT FROM %(timezone_id)s
-        ORDER BY live_date DESC, live_id DESC
-        LIMIT %(limit)s
-        """,
-        {"locality_id": locality_id, "timezone_id": timezone_id, "limit": LOCATION_PREVIEW_LIVE_LIMIT + 1},
-    )
-    review_lives = [dict(item) for item in cur.fetchall()]
+    live_count = cur.fetchone()["count"]
     return {
         "venue_count": venue_impact["venue_count"],
-        "inherited_timezone_venue_count": venue_impact["inherited_timezone_venue_count"],
-        "live_count": live_impact["total"],
-        "timezone_unchanged_live_count": live_impact["timezone_unchanged"],
-        "timezone_review_live_count": live_impact["timezone_review"],
-        "timezone_unaffected_live_count": live_impact["timezone_unaffected"],
-        "timezone_review_lives": review_lives[:LOCATION_PREVIEW_LIVE_LIMIT],
-        "timezone_review_lives_truncated": len(review_lives) > LOCATION_PREVIEW_LIVE_LIMIT,
+        "live_count": live_count,
         "invalidated_map_links": invalidated_map_links,
     }
 
 
 def _read(cur: Any, row: dict[str, Any]) -> dict[str, Any]:
     locality = _locality(cur, row["locality_id"])
-    effective = row["timezone_id"] or (locality["timezone_id"] if locality else None)
+    effective = row["timezone_id"]
     cur.execute("SELECT * FROM venue_map_links WHERE venue_id = %s ORDER BY provider", (row["id"],))
     stored = {item["provider"]: item for item in cur.fetchall()}
     links = []
@@ -172,9 +131,9 @@ def _read(cur: Any, row: dict[str, Any]) -> dict[str, Any]:
     return {
         "venue_id": row["id"], "locality": locality, "address": row["address"],
         "latitude": row["latitude"], "longitude": row["longitude"],
-        "coordinate_basis": row["coordinate_basis"], "timezone_id": row["timezone_id"],
+        "timezone_id": row["timezone_id"],
         "effective_timezone_id": effective,
-        "timezone_source": ("venue" if row["timezone_id"] else "locality") if effective else None,
+        "timezone_source": "venue" if effective else None,
         "location_revision": row["location_revision"], "location_verified_at": row["location_verified_at"],
         "map_links": links,
     }
@@ -185,18 +144,18 @@ def _validate(cur: Any, row: dict[str, Any], payload: LocationWrite) -> str | No
         raise HTTPException(409, "场馆资料已更新，请重新加载并检查修改")
     if row["venue_kind"] == "online" and any(value is not None for value in (
         payload.locality_id, payload.address, payload.latitude, payload.longitude,
-        payload.coordinate_basis, payload.timezone_id,
+        payload.timezone_id,
     )):
         raise HTTPException(422, "线上场馆不保存实体位置，请在活动中指定时间基准")
     if row["venue_kind"] == "undisclosed" and any(value is not None for value in (
-        payload.address, payload.latitude, payload.longitude, payload.coordinate_basis, payload.timezone_id,
+        payload.address, payload.latitude, payload.longitude, payload.timezone_id,
     )):
         raise HTTPException(422, "未公开具体场馆只保存已公布地区，不保存门牌、坐标、精确时区或地图关联")
     locality = _locality(cur, payload.locality_id)
     city_zone = locality["timezone_id"] if locality else None
     if payload.timezone_id and city_zone and payload.timezone_id != city_zone:
         raise HTTPException(422, "场馆时区与城市时区不一致，请先核对所在地资料")
-    return payload.timezone_id or city_zone
+    return payload.timezone_id
 
 
 def _changed_fields(row: dict[str, Any], payload: LocationWrite) -> list[str]:
@@ -210,8 +169,6 @@ def _changed_fields(row: dict[str, Any], payload: LocationWrite) -> list[str]:
         for key, value in (("latitude", payload.latitude), ("longitude", payload.longitude))
     ):
         changed.append("coordinates")
-    if row["coordinate_basis"] != payload.coordinate_basis:
-        changed.append("coordinate_basis")
     if row["timezone_id"] != payload.timezone_id:
         changed.append("timezone_id")
     return changed
@@ -275,7 +232,7 @@ def preview_locality(locality_id: int, payload: LocalityUpdate):
             return {
                 "before": row,
                 "after": payload,
-                **_locality_impact(cur, locality_id, payload.timezone_id),
+                **_locality_impact(cur, locality_id),
             }
     except Error as exc:
         _raise_database_error("preview_locality", exc)
@@ -294,7 +251,7 @@ def save_locality(locality_id: int, payload: LocalityUpdate, request: Request,
             _ensure_unique_locality(cur, payload, exclude_id=locality_id)
             if not _locality_changed(row, payload):
                 return row
-            impact = _locality_impact(cur, locality_id, payload.timezone_id)
+            impact = _locality_impact(cur, locality_id)
             before = Locality.model_validate(row).model_dump(mode="json")
             cur.execute(
                 """UPDATE geo_localities
@@ -314,8 +271,7 @@ def save_locality(locality_id: int, payload: LocalityUpdate, request: Request,
             _audit(cur, context, "locality_update", "locality", locality_id, {
                 "before": before,
                 "after": Locality.model_validate(updated).model_dump(mode="json"),
-                "impact": {key: value for key, value in impact.items() if key != "timezone_review_lives"},
-                "timezone_review_live_ids": [item["live_id"] for item in impact["timezone_review_lives"]],
+                "impact": impact,
             })
             return updated
     except UniqueViolation as exc:
@@ -340,38 +296,8 @@ def preview_location(venue_id: int, payload: LocationWrite):
             row = _venue(cur, venue_id)
             effective = _validate(cur, row, payload)
             before = _read(cur, row)
-            cur.execute(
-                """
-                SELECT COUNT(*) AS total,
-                       COUNT(*) FILTER (
-                           WHERE timezone_source = 'venue'
-                             AND timezone_id IS NOT DISTINCT FROM %s
-                       ) AS timezone_unchanged,
-                       COUNT(*) FILTER (
-                           WHERE timezone_source = 'venue'
-                             AND timezone_id IS DISTINCT FROM %s
-                       ) AS timezone_review,
-                       COUNT(*) FILTER (WHERE timezone_source <> 'venue') AS timezone_unaffected
-                FROM live_attrs
-                WHERE venue_id = %s
-                """,
-                (effective, effective, venue_id),
-            )
-            impact = cur.fetchone()
-            cur.execute(
-                """
-                SELECT id AS live_id, live_date, live_title, timezone_id, timezone_source_revision
-                FROM live_attrs
-                WHERE venue_id = %s
-                  AND timezone_source = 'venue'
-                  AND timezone_id IS DISTINCT FROM %s
-                ORDER BY live_date DESC, id DESC
-                LIMIT %s
-                """,
-                (venue_id, effective, LOCATION_PREVIEW_LIVE_LIMIT + 1),
-            )
-            review_lives = [dict(item) for item in cur.fetchall()]
-            truncated = len(review_lives) > LOCATION_PREVIEW_LIVE_LIMIT
+            cur.execute("SELECT COUNT(*) FROM live_attrs WHERE venue_id = %s", (venue_id,))
+            live_count = cur.fetchone()["count"]
             changed_fields = _changed_fields(row, payload)
             if before["effective_timezone_id"] != effective:
                 changed_fields.append("effective_timezone_id")
@@ -379,12 +305,7 @@ def preview_location(venue_id: int, payload: LocationWrite):
                 item["provider"] for item in before["map_links"] if item["is_current"]
             ] if _changed(row, payload) else []
             return {"before": before, "after": payload, "effective_timezone_id": effective,
-                    "live_count": impact["total"],
-                    "timezone_unchanged_live_count": impact["timezone_unchanged"],
-                    "timezone_review_live_count": impact["timezone_review"],
-                    "timezone_unaffected_live_count": impact["timezone_unaffected"],
-                    "timezone_review_lives": review_lives[:LOCATION_PREVIEW_LIVE_LIMIT],
-                    "timezone_review_lives_truncated": truncated,
+                    "live_count": live_count,
                     "invalidated_map_links": len(invalidated_providers),
                     "invalidated_map_providers": invalidated_providers,
                     "changed_fields": changed_fields}
@@ -402,24 +323,18 @@ def save_location(venue_id: int, payload: LocationWrite, request: Request,
             _validate(cur, row, payload)
             before = VenueLocation.model_validate(_read(cur, row)).model_dump(mode="json")
             if _changed(row, payload):
-                if payload.verification_source is None or payload.verification_note is None:
-                    raise HTTPException(422, "保存所在地修改时必须填写核验来源和核验说明")
                 cur.execute(
                     """UPDATE venue_list SET locality_id=%s, address=%s, latitude=%s, longitude=%s,
-                       coordinate_basis=%s, timezone_id=%s,
+                       timezone_id=%s,
                        location_revision=location_revision+1, location_verified_at=CURRENT_TIMESTAMP WHERE id=%s RETURNING *""",
                     (payload.locality_id, payload.address, payload.latitude, payload.longitude,
-                     payload.coordinate_basis, payload.timezone_id, venue_id),
+                     payload.timezone_id, venue_id),
                 )
                 row = dict(cur.fetchone())
                 after = VenueLocation.model_validate(_read(cur, row)).model_dump(mode="json")
                 _audit(cur, context, "venue_location_update", "venue", venue_id, {
                     "before": before,
                     "after": after,
-                    "verification": {
-                        "source": payload.verification_source,
-                        "note": payload.verification_note,
-                    },
                 })
             return _read(cur, row)
     except Error as exc:

@@ -38,8 +38,8 @@ def test_derive_date_phase_uses_independent_offset_when_start_time_is_unannounce
     ) == "today"
 
 
-# 测试点：IANA 时区按当前日期套用夏令时规则，不复用演出日期保存的固定偏移。
-def test_derive_date_phase_uses_iana_timezone_current_rule():
+# 测试点：Live 已存偏移优先于场地 IANA，日期阶段不随场地时区规则变化。
+def test_derive_date_phase_prefers_persisted_offset_over_iana():
     now_utc = datetime(2026, 7, 22, 4, 30, tzinfo=UTC)
 
     assert derive_date_phase(
@@ -48,7 +48,7 @@ def test_derive_date_phase_uses_iana_timezone_current_rule():
         now_utc,
         timezone_offset_minutes=-300,
         timezone_id="America/New_York",
-    ) == "today"
+    ) == "upcoming"
 
 
 # 测试点：公开状态应保留人工状态与正式改期标记，并拒绝数据库中的未知状态值。

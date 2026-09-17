@@ -158,7 +158,7 @@ def _timezone_offset_for_live(
     resolved: ResolvedLiveTimezone,
     legacy_offset_minutes: int,
 ) -> int:
-    """Keep the old scalar offset for compatibility while IANA timezone_id is authoritative."""
+    """Persist the Live's offset, deriving it from the Venue IANA zone when available."""
     for value in (start_time, opening_time):
         if value is not None:
             return _timezone_offset_minutes(value[-6:])
@@ -738,19 +738,20 @@ def create_live(
                     cur,
                     payload,
                 )
-                # Keep legacy clients' fixed-offset validation order stable before DB-backed Venue checks.
+                # Deprecated clients may send the fixed default, but cannot override Venue-derived offsets.
                 if payload.timezone is not None:
                     _normalize_optional_time_with_timezone(payload.opening_time, payload.timezone)
                     _normalize_optional_time_with_timezone(payload.start_time, payload.timezone)
+                    if payload.timezone != "+09:00":
+                        raise HTTPException(422, "只有线上 Live 可以指定活动时区；默认偏移为 +09:00")
                 venue_name_version_id = _resolve_venue_name_version(cur, payload)
                 resolved_timezone = resolve_live_timezone(
                     cur,
                     venue_id=payload.venue_id,
                     announced_locality_id=payload.announced_locality_id,
                     explicit_timezone_id=payload.explicit_timezone_id,
-                    allow_legacy=payload.timezone is not None,
                 )
-                legacy_offset_minutes = _timezone_offset_minutes(payload.timezone) if payload.timezone is not None else 540
+                legacy_offset_minutes = 540
                 opening_time = _normalize_optional_time_for_timezone(
                     payload.opening_time, live_date=payload.live_date, resolved=resolved_timezone,
                     fold=payload.opening_time_fold, legacy_offset_minutes=legacy_offset_minutes,
@@ -951,13 +952,10 @@ def update_live(
                     announced_locality_id=payload.announced_locality_id,
                     explicit_timezone_id=payload.explicit_timezone_id,
                     existing=existing,
-                    allow_legacy=payload.timezone is not None,
                 )
-                legacy_offset_minutes = (
-                    _timezone_offset_minutes(payload.timezone)
-                    if payload.timezone is not None
-                    else int(existing["timezone_offset_minutes"])
-                )
+                if payload.timezone is not None and payload.timezone != "+09:00":
+                    raise HTTPException(422, "只有线上 Live 可以指定活动时区；默认偏移为 +09:00")
+                legacy_offset_minutes = 540
                 opening_time = _normalize_optional_time_for_timezone(
                     payload.opening_time, live_date=payload.live_date, resolved=resolved_timezone,
                     fold=payload.opening_time_fold, legacy_offset_minutes=legacy_offset_minutes,
