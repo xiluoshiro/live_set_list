@@ -289,6 +289,26 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
+  // 测试点：控制台入口按资料类型分列，不再为地理质量增加独立工具区。
+  test("控制台导航按资料类型分列", async () => {
+    const user = userEvent.setup();
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+
+    const content = screen.getByRole("navigation", { name: "控制台录入类型" });
+    expect(within(content).getByRole("tablist", { name: "内容管理" })).toBeInTheDocument();
+    expect(Array.from(content.querySelectorAll(".console-mode-heading")).map((cell) => cell.textContent)).toEqual([
+      "操作", "Live", "Setlist", "歌曲", "乐队", "场地", "巡演", "活动组",
+    ]);
+    expect(within(content).getAllByRole("tab")).toHaveLength(10);
+    expect(within(content).queryByRole("tab", { name: "新增歌曲" })).not.toBeInTheDocument();
+
+    await user.click(within(content).getByRole("tab", { name: "场地管理" }));
+    expect(within(content).getByRole("tab", { name: "场地管理" })).toHaveAttribute("aria-selected", "true");
+
+    expect(screen.queryByRole("navigation", { name: "控制台工具" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "地理质量" })).not.toBeInTheDocument();
+  });
+
   // 测试点：低频夏令时重复钟点只由后端校验兜底，不在常规 Live 表单暴露 fold 控件。
   test("Live 表单不显示夏令时重复时间控件", async () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);

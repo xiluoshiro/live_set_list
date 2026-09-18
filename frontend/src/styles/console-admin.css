@@ -10,14 +10,83 @@
   margin-bottom: 12px;
 }
 
-.console-admin > .section-tabs {
+.console-mode-card {
+  margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-1);
+}
+
+.console-mode-card h2 {
+  margin: 0 0 14px;
+  color: var(--text-heading);
+  font-size: 18px;
+}
+
+.console-mode-card h2::before {
+  display: inline-block;
+  width: 4px;
+  height: 20px;
+  margin-right: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-primary);
+  content: "";
+  vertical-align: -4px;
+}
+
+.console-mode-scroll {
   max-width: 100%;
   overflow-x: auto;
 }
 
-.console-admin > .section-tabs .section-tab-btn {
-  flex: 0 0 auto;
+.console-mode-grid {
+  display: grid;
+  grid-template-columns: 76px repeat(7, 150px);
+  width: max-content;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+}
+
+.console-mode-heading,
+.console-mode-axis,
+.console-mode-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 10px 8px;
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.console-mode-grid > :nth-child(8n) {
+  border-right: 0;
+}
+
+.console-mode-grid > :nth-last-child(-n + 8) {
+  border-bottom: 0;
+}
+
+.console-mode-heading {
+  background: var(--surface-head);
+  color: var(--text-heading);
+  font-weight: 700;
+}
+
+.console-mode-axis {
+  background: var(--surface-chip-soft);
+  color: var(--text-heading);
+  font-weight: 600;
+}
+
+.console-mode-button {
+  min-width: 112px;
+  max-width: 100%;
+  min-height: 40px;
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .console-admin-hint {
@@ -1569,6 +1638,10 @@
 
 @media (max-width: 620px) {
   .console-admin {
+    padding: 12px;
+  }
+
+  .console-mode-card {
     padding: 12px;
   }
 }

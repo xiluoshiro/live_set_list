@@ -48,7 +48,6 @@ import {
 import { MemberStatusTable } from "./DetailMemberTable";
 import { LiveAdminSection } from "./console/LiveAdminSection";
 import { PageTitle } from "./PageTitle";
-import { SectionTabs } from "./SectionTabs";
 import { LiveInsertTab } from "./console/LiveInsertTab";
 import { SongAdminSection } from "./console/SongAdminSection";
 import { BandAdminSection } from "./console/BandAdminSection";
@@ -109,6 +108,16 @@ type ConsoleInsertPanelProps = {
   onLiveDataChanged?: () => void;
   initialMode?: ConsoleMode;
 };
+
+const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; label: string }; manage: { value: ConsoleMode; label: string } }[] = [
+  { title: "Live", create: { value: "live_create", label: "新增Live" }, manage: { value: "live_edit", label: "Live管理" } },
+  { title: "Setlist", create: { value: "setlist", label: "新增Setlist" }, manage: { value: "setlist_edit", label: "Setlist管理" } },
+  { title: "歌曲", manage: { value: "song", label: "歌曲管理" } },
+  { title: "乐队", manage: { value: "band", label: "乐队管理" } },
+  { title: "场地", create: { value: "venue_create", label: "新增场地" }, manage: { value: "venue", label: "场地管理" } },
+  { title: "巡演", manage: { value: "tour", label: "巡演管理" } },
+  { title: "活动组", manage: { value: "performance_group", label: "活动组管理" } },
+];
 
 type SetlistConfirmRow = ConsoleLiveSetlistRowPayload & {
   song_name: string;
@@ -3168,25 +3177,27 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       <PageTitle kicker="Console" title="控制台" description="录入和维护 Live、Setlist、歌曲、乐队、场地与巡演资料。" />
       {message && <p className="console-admin-hint" role="status" aria-live="polite">{message}</p>}
 
-      <SectionTabs
-        label="控制台录入类型"
-        value={mode}
-        options={[
-          { value: "live_create", label: "新增Live" },
-          { value: "live_edit", label: "Live管理" },
-          { value: "geography_quality", label: "地理质量" },
-          { value: "setlist", label: "新增Setlist" },
-          { value: "setlist_edit", label: "Setlist管理" },
-          { value: "song", label: "歌曲管理" },
-          { value: "band", label: "乐队管理" },
-          { value: "venue_create", label: "新增场地" },
-          { value: "venue", label: "场地管理" },
-          { value: "tour", label: "巡演管理" },
-          { value: "performance_group", label: "活动组管理" },
-        ]}
-        onChange={changeConsoleMode}
-      />
-
+      <nav className="console-mode-card" aria-label="控制台录入类型">
+        <h2>内容管理</h2>
+        <div className="console-mode-scroll">
+          <div className="console-mode-grid" role="tablist" aria-label="内容管理">
+            <div className="console-mode-axis console-mode-heading">操作</div>
+            {CONSOLE_MODE_COLUMNS.map(({ title }) => <div className="console-mode-heading" key={title}>{title}</div>)}
+            <div className="console-mode-axis">新增</div>
+            {CONSOLE_MODE_COLUMNS.map(({ title, create }) => (
+              <div className="console-mode-cell" key={`${title}-create`}>
+                {create && <button type="button" role="tab" aria-selected={mode === create.value} className={`section-tab-btn console-mode-button${mode === create.value ? " active" : ""}`} onClick={() => changeConsoleMode(create.value)}>{create.label}</button>}
+              </div>
+            ))}
+            <div className="console-mode-axis">管理</div>
+            {CONSOLE_MODE_COLUMNS.map(({ title, manage }) => (
+              <div className="console-mode-cell" key={`${title}-manage`}>
+                <button type="button" role="tab" aria-selected={mode === manage.value} className={`section-tab-btn console-mode-button${mode === manage.value ? " active" : ""}`} onClick={() => changeConsoleMode(manage.value)}>{manage.label}</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </nav>
       {(mode === "live_create" || mode === "live_edit") && (
         <LiveAdminSection
           variant={mode === "live_create" ? "create" : "edit"}
