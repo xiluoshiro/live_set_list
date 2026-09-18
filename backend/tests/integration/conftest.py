@@ -7,6 +7,7 @@ import psycopg2
 import pytest
 from dotenv import dotenv_values
 from fastapi.testclient import TestClient
+from psycopg2.extras import execute_values
 
 os.environ.setdefault("APP_LOG_LEVEL", "CRITICAL")
 
@@ -108,18 +109,24 @@ def integration_admin_connection(integration_db_config: dict[str, str]):
             conn.close()
 
 
+@pytest.fixture(scope="session")
+def integration_seed_sql() -> str:
+    # 只复用不可变 SQL 文本；每个用例仍重新执行清表和插入。
+    return SEED_SQL_PATH.read_text(encoding="utf-8")
+
+
 @pytest.fixture(autouse=True)
-def seed_test_database(integration_admin_connection):
-    sql_text = SEED_SQL_PATH.read_text(encoding="utf-8")
+def seed_test_database(integration_admin_connection, integration_seed_sql: str):
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
-        cursor.execute(sql_text)
+        cursor.execute(integration_seed_sql)
 
 
 @pytest.fixture
-def integration_test_client(
+def integration_app_client(
     monkeypatch: pytest.MonkeyPatch,
     integration_db_config: dict[str, str],
+    seed_test_database,
 ) -> Generator[TestClient, None, None]:
     monkeypatch.setenv("DB_HOST", integration_db_config["host"])
     monkeypatch.setenv("DB_PORT", integration_db_config["port"])
@@ -141,22 +148,37 @@ def integration_test_client(
         yield client
 
 
-@pytest.fixture(autouse=True)
-def seed_test_users(integration_test_client, integration_admin_connection):
-    """Insert pre-seeded test users after admin is created by lifespan."""
-    now_utc = datetime.now(UTC)
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cursor:
-        for username, password, display_name, role in [
+@pytest.fixture(scope="session")
+def integration_user_rows() -> tuple[tuple[str, str, str, str], ...]:
+    # 固定 fixture 密码按进程计算一次，不替换应用的哈希或登录校验。
+    return tuple(
+        (normalize_username(username), hash_password(password), display_name, role)
+        for username, password, display_name, role in (
             ("editor_tester", "editor-test-pass", "Editor Tester", "editor"),
             ("viewer_tester", "viewer-test-pass", "Viewer Tester", "viewer"),
             ("viewer_a_tester", "viewer-a-test-pass", "Viewer A Tester", "viewer"),
-        ]:
-            cursor.execute(
-                """
-                INSERT INTO app_users (username, password_hash, display_name, role, is_active, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, true, %s, %s)
-                ON CONFLICT (username) DO NOTHING
-                """,
-                (normalize_username(username), hash_password(password), display_name, role, now_utc, now_utc),
-            )
+        )
+    )
+
+
+@pytest.fixture
+def seed_test_users(integration_app_client, integration_admin_connection, integration_user_rows):
+    """Reinsert users per API test, after lifespan creates the default admin."""
+    now_utc = datetime.now(UTC)
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        execute_values(
+            cursor,
+            """
+            INSERT INTO app_users (username, password_hash, display_name, role, is_active, created_at, updated_at)
+            VALUES %s
+            ON CONFLICT (username) DO NOTHING
+            """,
+            [(*row, True, now_utc, now_utc) for row in integration_user_rows],
+        )
+
+
+@pytest.fixture
+def integration_test_client(integration_app_client: TestClient, seed_test_users) -> TestClient:
+    # API 用例按需初始化用户；纯 SQL 用例不会创建客户端或用户。
+    return integration_app_client
