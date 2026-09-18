@@ -1,5 +1,7 @@
 """Location maintenance is additive: it never updates a Live schedule."""
 
+import hashlib
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -18,6 +20,16 @@ from app.schemas.geography import (
 )
 
 router = APIRouter(dependencies=[Depends(require_role("editor"))])
+
+
+def _state_token(value: Any) -> str:
+    # Content comparison protects stale forms without creating a business revision.
+    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _locality_view(row: dict[str, Any]) -> dict[str, Any]:
+    data = {key: value for key, value in row.items() if key != "revision"}
+    return {**data, "state_token": _state_token(data)}
 
 
 def _audit(cur: Any, context: AuthSessionContext, action: str, resource: str, identifier: int, payload: Any) -> None:
@@ -44,7 +56,7 @@ def _locality(cur: Any, locality_id: int | None, *, lock: bool = False) -> dict[
     row = cur.fetchone()
     if row is None:
         raise HTTPException(422, "城市不存在，请重新选择")
-    return dict(row)
+    return _locality_view(dict(row))
 
 
 def _ensure_unique_locality(cur: Any, payload: LocalityCreate | LocalityUpdate, *, exclude_id: int | None = None) -> None:
@@ -69,7 +81,7 @@ def _ensure_unique_locality(cur: Any, payload: LocalityCreate | LocalityUpdate, 
 
 
 def _locality_changed(row: dict[str, Any], payload: LocalityUpdate) -> bool:
-    return any(row[key] != value for key, value in payload.model_dump(exclude={"expected_revision"}).items())
+    return any(row[key] != value for key, value in payload.model_dump(exclude={"expected_state_token"}).items())
 
 
 def _locality_impact(cur: Any, locality_id: int) -> dict[str, Any]:
@@ -83,17 +95,6 @@ def _locality_impact(cur: Any, locality_id: int) -> dict[str, Any]:
     )
     venue_impact = cur.fetchone()
     cur.execute(
-        """
-        SELECT COUNT(*)
-        FROM venue_map_links map_link
-        JOIN venue_list venue ON venue.id = map_link.venue_id
-        WHERE venue.locality_id = %s
-          AND map_link.location_revision = venue.location_revision
-        """,
-        (locality_id,),
-    )
-    invalidated_map_links = cur.fetchone()["count"]
-    cur.execute(
         """SELECT COUNT(*) FROM live_attrs live
            LEFT JOIN venue_list venue ON venue.id = live.venue_id
            WHERE live.announced_locality_id = %s OR venue.locality_id = %s""",
@@ -103,7 +104,6 @@ def _locality_impact(cur: Any, locality_id: int) -> dict[str, Any]:
     return {
         "venue_count": venue_impact["venue_count"],
         "live_count": live_count,
-        "invalidated_map_links": invalidated_map_links,
     }
 
 
@@ -118,7 +118,7 @@ def _read(cur: Any, row: dict[str, Any]) -> dict[str, Any]:
         point_url = None
         if row["latitude"] is not None:
             point_url = coordinate_url(provider, float(row["latitude"]), float(row["longitude"]), row["venue"])
-        current = bool(item and item["location_revision"] == row["location_revision"])
+        current = bool(item)
         target = point_url
         if item and current:
             target = item["provider_url"] or place_url(provider, item["provider_place_id"], row["venue"])
@@ -134,13 +134,15 @@ def _read(cur: Any, row: dict[str, Any]) -> dict[str, Any]:
         "timezone_id": row["timezone_id"],
         "effective_timezone_id": effective,
         "timezone_source": "venue" if effective else None,
-        "location_revision": row["location_revision"], "location_verified_at": row["location_verified_at"],
+        "state_token": _state_token({"venue": {key: value for key, value in row.items() if key != "location_revision"},
+                                    "locality": locality, "maps": stored}),
+        "location_verified_at": row["location_verified_at"],
         "map_links": links,
     }
 
 
 def _validate(cur: Any, row: dict[str, Any], payload: LocationWrite) -> str | None:
-    if row["location_revision"] != payload.expected_revision:
+    if _read(cur, row)["state_token"] != payload.expected_state_token:
         raise HTTPException(409, "场馆资料已更新，请重新加载并检查修改")
     if row["venue_kind"] == "online" and any(value is not None for value in (
         payload.locality_id, payload.address, payload.latitude, payload.longitude,
@@ -194,7 +196,7 @@ def list_localities(q: str = Query(default="", max_length=120), page: int = Quer
             total = cur.fetchone()["total"]
             cur.execute(f"SELECT * FROM geo_localities WHERE {where} ORDER BY country_code, locality_name, id LIMIT %s OFFSET %s",
                         (pattern, limit, (page - 1) * limit))
-            return {"items": cur.fetchall(), "total": total, "page": page, "page_size": limit}
+            return {"items": [_locality_view(dict(item)) for item in cur.fetchall()], "total": total, "page": page, "page_size": limit}
     except Error as exc:
         _raise_database_error("list_localities", exc)
 
@@ -211,7 +213,7 @@ def create_locality(payload: LocalityCreate, request: Request,
                    VALUES (%s,%s,%s,%s,%s) RETURNING *""",
                 (payload.country_code, payload.admin_area, payload.locality_name, payload.timezone_id, payload.area_level),
             )
-            row = dict(cur.fetchone())
+            row = _locality_view(dict(cur.fetchone()))
             _audit(cur, context, "locality_create", "locality", row["id"], payload.model_dump())
             return row
     except UniqueViolation as exc:
@@ -226,7 +228,7 @@ def preview_locality(locality_id: int, payload: LocalityUpdate):
         with get_db_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             row = _locality(cur, locality_id)
             assert row is not None
-            if row["revision"] != payload.expected_revision:
+            if row["state_token"] != payload.expected_state_token:
                 raise HTTPException(409, "地区资料已更新，请重新加载并检查修改")
             _ensure_unique_locality(cur, payload, exclude_id=locality_id)
             return {
@@ -246,7 +248,7 @@ def save_locality(locality_id: int, payload: LocalityUpdate, request: Request,
         with get_write_db_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             row = _locality(cur, locality_id, lock=True)
             assert row is not None
-            if row["revision"] != payload.expected_revision:
+            if row["state_token"] != payload.expected_state_token:
                 raise HTTPException(409, "地区资料已更新，请重新加载并检查修改")
             _ensure_unique_locality(cur, payload, exclude_id=locality_id)
             if not _locality_changed(row, payload):
@@ -255,19 +257,12 @@ def save_locality(locality_id: int, payload: LocalityUpdate, request: Request,
             before = Locality.model_validate(row).model_dump(mode="json")
             cur.execute(
                 """UPDATE geo_localities
-                   SET country_code=%s, admin_area=%s, locality_name=%s, timezone_id=%s, area_level=%s,
-                       revision=revision+1
+                   SET country_code=%s, admin_area=%s, locality_name=%s, timezone_id=%s, area_level=%s
                    WHERE id=%s RETURNING *""",
                 (payload.country_code, payload.admin_area, payload.locality_name, payload.timezone_id,
                  payload.area_level, locality_id),
             )
-            updated = dict(cur.fetchone())
-            cur.execute(
-                """UPDATE venue_list
-                   SET location_revision=location_revision+1, location_verified_at=CURRENT_TIMESTAMP
-                   WHERE locality_id=%s""",
-                (locality_id,),
-            )
+            updated = _locality_view(dict(cur.fetchone()))
             _audit(cur, context, "locality_update", "locality", locality_id, {
                 "before": before,
                 "after": Locality.model_validate(updated).model_dump(mode="json"),
@@ -301,13 +296,8 @@ def preview_location(venue_id: int, payload: LocationWrite):
             changed_fields = _changed_fields(row, payload)
             if before["effective_timezone_id"] != effective:
                 changed_fields.append("effective_timezone_id")
-            invalidated_providers = [
-                item["provider"] for item in before["map_links"] if item["is_current"]
-            ] if _changed(row, payload) else []
             return {"before": before, "after": payload, "effective_timezone_id": effective,
                     "live_count": live_count,
-                    "invalidated_map_links": len(invalidated_providers),
-                    "invalidated_map_providers": invalidated_providers,
                     "changed_fields": changed_fields}
     except Error as exc:
         _raise_database_error("preview_venue_location", exc)
@@ -326,7 +316,7 @@ def save_location(venue_id: int, payload: LocationWrite, request: Request,
                 cur.execute(
                     """UPDATE venue_list SET locality_id=%s, address=%s, latitude=%s, longitude=%s,
                        timezone_id=%s,
-                       location_revision=location_revision+1, location_verified_at=CURRENT_TIMESTAMP WHERE id=%s RETURNING *""",
+                       location_verified_at=CURRENT_TIMESTAMP WHERE id=%s RETURNING *""",
                     (payload.locality_id, payload.address, payload.latitude, payload.longitude,
                      payload.timezone_id, venue_id),
                 )
@@ -378,7 +368,7 @@ def save_map_link(venue_id: int, payload: MapLinkWrite, request: Request,
     try:
         with get_write_db_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             row = _venue(cur, venue_id, lock=True)
-            if row["location_revision"] != payload.expected_revision:
+            if _read(cur, row)["state_token"] != payload.expected_state_token:
                 raise HTTPException(409, "场馆资料已更新，请重新核对地图匹配")
             if row["latitude"] is None or row["venue_kind"] != "physical":
                 raise HTTPException(422, "请先确认场馆坐标，再关联地图场馆")
@@ -386,10 +376,10 @@ def save_map_link(venue_id: int, payload: MapLinkWrite, request: Request,
             old = cur.fetchone()
             cur.execute(
                 """INSERT INTO venue_map_links (venue_id, provider, provider_place_id, provider_url, location_revision)
-                   VALUES (%s,%s,%s,%s,%s) ON CONFLICT (venue_id,provider) DO UPDATE SET
+                   VALUES (%s,%s,%s,%s,1) ON CONFLICT (venue_id,provider) DO UPDATE SET
                    provider_place_id=EXCLUDED.provider_place_id, provider_url=EXCLUDED.provider_url,
-                   location_revision=EXCLUDED.location_revision, verified_at=CURRENT_TIMESTAMP""",
-                (venue_id, payload.provider, payload.provider_place_id, payload.provider_url, payload.expected_revision),
+                   verified_at=CURRENT_TIMESTAMP""",
+                (venue_id, payload.provider, payload.provider_place_id, payload.provider_url),
             )
             _audit(cur, context, "venue_map_link_update", "venue", venue_id,
                    {"before": {key: old[key] for key in ("provider_place_id", "provider_url")} if old else None,
@@ -401,13 +391,13 @@ def save_map_link(venue_id: int, payload: MapLinkWrite, request: Request,
 
 @router.delete("/venues/{venue_id}/map-links/{provider}", response_model=VenueLocation, summary="取消平台场馆匹配")
 def delete_map_link(venue_id: int, provider: MapProvider, request: Request,
-                    expected_revision: int = Query(ge=1),
+                    expected_state_token: str = Query(pattern=r"^[0-9a-f]{64}$"),
                     context: AuthSessionContext = Depends(get_current_auth_context)):
     assert_valid_csrf(request, context)
     try:
         with get_write_db_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             row = _venue(cur, venue_id, lock=True)
-            if row["location_revision"] != expected_revision:
+            if _read(cur, row)["state_token"] != expected_state_token:
                 raise HTTPException(409, "场馆资料已更新，请重新加载")
             cur.execute("DELETE FROM venue_map_links WHERE venue_id=%s AND provider=%s RETURNING provider_place_id, provider_url",
                         (venue_id, provider))

@@ -10,7 +10,6 @@ GeographyQualityCategory = Literal[
     "missing_coordinates",
     "missing_timezone",
     "zero_coordinates",
-    "stale_map_link",
 ]
 
 

@@ -43,7 +43,7 @@ def test_get_venue_detail_resolves_canonical_venue_and_map_sources():
     cursor.fetchone.side_effect = [header, (1,)]
     cursor.fetchall.side_effect = [
         [("日本武道館", "1964-10-03", None, True)],
-        [("google", "ChIJ-current", None, 3), ("apple", "stale", None, 2)],
+        [("google", "ChIJ-current", None)],
         [(51, "2026-08-01", "Test Live", "oneman", [1, 2], None, "scheduled", False, "18:00:00+09:00", 540, "Asia/Tokyo")],
     ]
 

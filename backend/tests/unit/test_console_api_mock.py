@@ -70,7 +70,8 @@ def _build_connection_mock(
 
     def fetchone():
         if cursor.execute.call_args and "SELECT venue.venue_kind" in cursor.execute.call_args.args[0]:
-            return ("physical", None, 1)
+            # 测试点：时区查询只读取场地类型与 IANA，不再读取地理来源修订。
+            return ("physical", None)
         return next(rows)
 
     cursor.fetchone.side_effect = fetchone

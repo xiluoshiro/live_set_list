@@ -10,7 +10,7 @@ def login(client):
     return {"X-CSRF-Token": response.json()["csrf_token"]}
 
 
-# 测试点：质量中心只统计 Venue 地理缺陷与过期地图关联，不产生时区复核任务。
+# 测试点：质量中心只统计资料缺陷，不把遗留修订号差异当作地图失效。
 def test_geography_quality_counts_and_actionable_items(integration_test_client, integration_admin_connection):
     client = integration_test_client
     login(client)
@@ -45,7 +45,8 @@ def test_geography_quality_counts_and_actionable_items(integration_test_client, 
     body = response.json()
     assert "missing_coordinate_basis" not in body["counts"]
     assert body["counts"]["zero_coordinates"] >= 1
-    assert body["counts"]["stale_map_link"] >= 1
+    assert "stale_map_link" not in body["counts"]
+    assert client.get("/api/venues/2/maps").json()["map_links"][0]["source"] == "place"
     assert "timezone_review" not in body["counts"]
 
     zero = client.get("/api/console/geography-quality?category=zero_coordinates")

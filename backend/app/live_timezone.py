@@ -36,7 +36,7 @@ def resolve_live_timezone(
     if venue_id is not None:
         cur.execute(
             """
-            SELECT venue.venue_kind, venue.timezone_id, venue.location_revision
+            SELECT venue.venue_kind, venue.timezone_id
             FROM venue_list venue
             WHERE venue.id = %s AND venue.merged_into_venue_id IS NULL
             """,
@@ -45,7 +45,7 @@ def resolve_live_timezone(
         row = cur.fetchone()
         if row is None:
             raise HTTPException(422, "场馆不存在或已合并，请重新选择")
-        venue_kind, venue_timezone, location_revision = row
+        venue_kind, venue_timezone = row
         if venue_kind == "online":
             if explicit is None:
                 if existing is not None and existing.get("venue_id") == venue_id and existing.get("timezone_source") == "explicit" and existing.get("timezone_id"):
@@ -55,7 +55,7 @@ def resolve_live_timezone(
         if explicit is not None:
             raise HTTPException(422, "只有线上 Live 可以手工指定时区")
         if venue_timezone:
-            return ResolvedLiveTimezone(str(venue_timezone), "venue", int(location_revision))
+            return ResolvedLiveTimezone(str(venue_timezone), "venue", None)
         return ResolvedLiveTimezone(None, "legacy_offset", None)
 
     if announced_locality_id is not None:

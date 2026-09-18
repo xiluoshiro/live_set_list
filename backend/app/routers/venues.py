@@ -31,8 +31,7 @@ SELECT
     venue.latitude,
     venue.longitude,
     venue.timezone_id,
-    locality.timezone_id,
-    venue.location_revision
+    locality.timezone_id
 FROM venue_list requested
 JOIN venue_list venue
   ON venue.id = COALESCE(requested.merged_into_venue_id, requested.id)
@@ -49,7 +48,7 @@ ORDER BY valid_from ASC NULLS FIRST, id ASC
 """
 
 VENUE_MAP_LINKS_QUERY = """
-SELECT provider, provider_place_id, provider_url, location_revision
+SELECT provider, provider_place_id, provider_url
 FROM venue_map_links
 WHERE venue_id = %s
 ORDER BY provider
@@ -95,7 +94,6 @@ def _public_map_links(cur: Any, header: tuple[Any, ...]) -> list[dict[str, str]]
     venue_kind = str(header[4])
     latitude = header[9]
     longitude = header[10]
-    location_revision = int(header[13])
     if venue_kind != "physical" or latitude is None or longitude is None:
         return []
 
@@ -104,7 +102,7 @@ def _public_map_links(cur: Any, header: tuple[Any, ...]) -> list[dict[str, str]]
     links: list[dict[str, str]] = []
     for provider in MAP_PROVIDERS:
         item = stored.get(provider)
-        if item is not None and int(item[3]) == location_revision:
+        if item is not None:
             target = item[2] or place_url(provider, str(item[1]), venue_name)
             source = "place"
         else:

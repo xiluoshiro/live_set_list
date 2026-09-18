@@ -45,7 +45,7 @@ class LocalityCreate(LocalityFields):
 
 
 class LocalityUpdate(LocalityFields):
-    expected_revision: int = Field(ge=1)
+    expected_state_token: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class Locality(BaseModel):
@@ -55,7 +55,7 @@ class Locality(BaseModel):
     locality_name: str | None
     timezone_id: str | None
     area_level: AreaLevel
-    revision: int
+    state_token: str
 
 
 class LocalityPage(BaseModel):
@@ -67,7 +67,7 @@ class LocalityPage(BaseModel):
 
 class LocationWrite(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    expected_revision: int = Field(ge=1)
+    expected_state_token: str = Field(pattern=r"^[0-9a-f]{64}$")
     locality_id: int | None = Field(default=None, ge=1)
     address: str | None = Field(default=None, max_length=500)
     latitude: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
@@ -111,7 +111,7 @@ class MapCandidate(BaseModel):
 
 class MapLinkWrite(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    expected_revision: int = Field(ge=1)
+    expected_state_token: str = Field(pattern=r"^[0-9a-f]{64}$")
     provider: MapProvider
     provider_place_id: str | None = Field(default=None, max_length=255)
     provider_url: str | None = Field(default=None, max_length=2048)
@@ -159,7 +159,7 @@ class VenueLocation(BaseModel):
     timezone_id: str | None
     effective_timezone_id: str | None
     timezone_source: Literal["venue", "locality"] | None
-    location_revision: int
+    state_token: str
     location_verified_at: datetime | None
     map_links: list[MapLink]
 
@@ -169,7 +169,6 @@ class LocalityPreview(BaseModel):
     after: LocalityUpdate
     venue_count: int
     live_count: int
-    invalidated_map_links: int
 
 
 class LocationPreview(BaseModel):
@@ -177,6 +176,4 @@ class LocationPreview(BaseModel):
     after: LocationWrite
     effective_timezone_id: str | None
     live_count: int
-    invalidated_map_links: int
-    invalidated_map_providers: list[MapProvider]
     changed_fields: list[str]

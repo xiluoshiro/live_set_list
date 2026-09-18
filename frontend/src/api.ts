@@ -620,7 +620,7 @@ export type GeoLocality = {
   locality_name: string | null;
   timezone_id: string | null;
   area_level: "country" | "admin_area" | "locality";
-  revision: number;
+  state_token: string;
 };
 export type GeoLocalityCreate = {
   country_code: string;
@@ -629,11 +629,11 @@ export type GeoLocalityCreate = {
   timezone_id: string | null;
   area_level: "country" | "admin_area" | "locality";
 };
-export type GeoLocalityUpdate = GeoLocalityCreate & { expected_revision: number };
+export type GeoLocalityUpdate = GeoLocalityCreate & { expected_state_token: string };
 export type GeoLocalityPage = { items: GeoLocality[]; total: number; page: number; page_size: number };
 export type MapProvider = "google" | "apple" | "amap";
 export type VenueLocationWrite = {
-  expected_revision: number;
+  expected_state_token: string;
   locality_id: number | null;
   address: string | null;
   latitude: number | null;
@@ -676,7 +676,7 @@ export type VenueLocation = {
   timezone_id: string | null;
   effective_timezone_id: string | null;
   timezone_source: "venue" | "locality" | null;
-  location_revision: number;
+  state_token: string;
   location_verified_at: string | null;
   map_links: VenueMapLink[];
 };
@@ -685,8 +685,6 @@ export type VenueLocationPreview = {
   after: VenueLocationWrite;
   effective_timezone_id: string | null;
   live_count: number;
-  invalidated_map_links: number;
-  invalidated_map_providers: MapProvider[];
   changed_fields: string[];
 };
 export type LocalityPreview = {
@@ -694,7 +692,6 @@ export type LocalityPreview = {
   after: GeoLocalityUpdate;
   venue_count: number;
   live_count: number;
-  invalidated_map_links: number;
 };
 
 async function geographyRequest<T>(path: string, method = "GET", payload?: unknown, csrfToken?: string): Promise<T> {
@@ -727,17 +724,17 @@ export const saveConsoleVenueMapLink = (
   id: number,
   provider: MapProvider,
   target: { provider_place_id?: string; provider_url?: string },
-  revision: number,
+  state_token: string,
   csrf: string,
 ) =>
   geographyRequest<VenueLocation>(`/venues/${id}/map-links`, "PUT", {
-    provider, ...target, expected_revision: revision,
+    provider, ...target, expected_state_token: state_token,
   }, csrf);
-export const deleteConsoleVenueMapLink = (id: number, provider: MapProvider, revision: number, csrf: string) =>
-  geographyRequest<VenueLocation>(`/venues/${id}/map-links/${provider}?expected_revision=${revision}`, "DELETE", undefined, csrf);
+export const deleteConsoleVenueMapLink = (id: number, provider: MapProvider, state_token: string, csrf: string) =>
+  geographyRequest<VenueLocation>(`/venues/${id}/map-links/${provider}?expected_state_token=${encodeURIComponent(state_token)}`, "DELETE", undefined, csrf);
 
 export type GeographyQualityCategory = "missing_locality" | "missing_address" | "missing_coordinates"
-  | "missing_timezone" | "zero_coordinates" | "stale_map_link";
+  | "missing_timezone" | "zero_coordinates";
 export type GeographyQualityItem = {
   category: GeographyQualityCategory;
   subject_type: "venue" | "live";

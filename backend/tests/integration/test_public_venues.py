@@ -32,7 +32,7 @@ def test_public_venue_detail_reads_location_maps_and_lives(integration_test_clie
         "/api/console/venues/1/location",
         headers=headers,
         json={
-            "expected_revision": 1,
+            "expected_state_token": client.get("/api/console/venues/1/location").json()["state_token"],
             "locality_id": locality.json()["id"],
             "address": "北の丸公園2-3",
             "latitude": 35.693317,
@@ -45,7 +45,7 @@ def test_public_venue_detail_reads_location_maps_and_lives(integration_test_clie
     linked = client.put(
         "/api/console/venues/1/map-links",
         headers=headers,
-        json={"expected_revision": 2, "provider": "google", "provider_place_id": "verified-place"},
+        json={"expected_state_token": location.json()["state_token"], "provider": "google", "provider_place_id": "verified-place"},
     )
     assert linked.status_code == 200, linked.text
 

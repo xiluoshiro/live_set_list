@@ -1,0 +1,154 @@
+venue_id,venue,country,admin_area,locality,locality_id,address,latitude,longitude,old_timezone,candidate_timezone,live_count,original_coordinate_and_zone_match,live_check
+1,さいたまスーパーアリーナ,JP,埼玉県,さいたま市,1,埼玉県さいたま市中央区新都心8,35.894889,139.630831,,Asia/Tokyo,16,True,consistent
+2,愛知県芸術劇場 大ホール,JP,愛知県,名古屋市,2,愛知県名古屋市東区東桜1-13-2,35.170862,136.911267,,Asia/Tokyo,3,True,consistent
+3,有明アリーナ,JP,東京都,,3,東京都江東区有明1-11-1,35.64343,139.7944,,Asia/Tokyo,13,True,consistent
+4,河口湖ステラシアター,JP,山梨県,富士河口湖町,4,山梨県南都留郡富士河口湖町船津5577,35.48026,138.75971,,Asia/Tokyo,3,True,consistent
+5,上海宛平剧院 大剧场,CN,,上海市,5,上海市徐汇区中山南二路857-859号,31.186911,121.447017,,Asia/Shanghai,1,True,consistent
+6,京王アリーナTOKYO,JP,東京都,調布市,6,東京都調布市西町290-11,35.66514,139.5244,,Asia/Tokyo,10,True,consistent
+7,上海静安体育中心,CN,,上海市,5,上海市静安区汶水路116号,31.29325,121.44874,,Asia/Shanghai,1,True,consistent
+8,神奈川県民ホール 大ホール,JP,神奈川県,横浜市,8,神奈川県横浜市中区山下町3-1,35.445975,139.647154,,Asia/Tokyo,1,True,consistent
+9,Zepp Osaka Bayside,JP,大阪府,大阪市,9,大阪府大阪市此花区桜島1-1-61,34.66201,135.43486,,Asia/Tokyo,11,True,consistent
+10,国家会展中心（上海）虹馆EH,CN,,上海市,5,上海市青浦区崧泽大道333号，国家会展中心（上海）虹馆EH,31.192892,121.300132,,Asia/Shanghai,6,True,consistent
+11,千葉市蘇我スポーツ公園,JP,千葉県,千葉市,7,千葉県千葉市中央区川崎町1-20,35.57479,140.124264,,Asia/Tokyo,10,True,consistent
+12,日本武道館,JP,東京都,,3,東京都千代田区北の丸公園2-3,35.69336,139.74987,,Asia/Tokyo,8,True,consistent
+13,横浜アリーナ,JP,神奈川県,横浜市,8,神奈川県横浜市港北区新横浜3-10,35.51227,139.62019,,Asia/Tokyo,8,True,consistent
+14,Kアリーナ横浜,JP,神奈川県,横浜市,8,神奈川県横浜市西区みなとみらい6-2-14,35.46471,139.63072,,Asia/Tokyo,5,True,consistent
+15,Zepp DiverCity (TOKYO),JP,東京都,,3,東京都江東区青海1-1-10、ダイバーシティ東京 プラザ,35.6254,139.7756,,Asia/Tokyo,6,True,consistent
+16,グランキューブ大阪 メインホール,JP,大阪府,大阪市,9,大阪府大阪市北区中之島5-3-51、大阪府立国際会議場5F,34.68939,135.48627,,Asia/Tokyo,1,True,consistent
+17,東京国際フォーラム ホールA,JP,東京都,,3,東京都千代田区丸の内3-5-1、Aブロック1-7F,35.67667,139.76444,,Asia/Tokyo,1,True,consistent
+18,KT Zepp Yokohama,JP,神奈川県,横浜市,8,神奈川県横浜市西区みなとみらい4-3-6,35.45975,139.62591,,Asia/Tokyo,8,True,consistent
+19,浦发银行东方体育中心,CN,,上海市,5,上海市浦东新区泳耀路300号,31.159567,121.472869,,Asia/Shanghai,2,True,consistent
+20,国家会展中心（上海）,CN,,上海市,5,上海市青浦区崧泽大道333号,31.19168,121.29752,,Asia/Shanghai,5,True,consistent
+21,TACHIKAWA STAGE GARDEN,JP,東京都,立川市,11,東京都立川市緑町3-3 N1,35.704805,139.411841,,Asia/Tokyo,7,True,consistent
+22,LaLa arena TOKYO-BAY,JP,千葉県,船橋市,12,千葉県船橋市浜町2-5-15,35.68384,139.9897,,Asia/Tokyo,2,True,consistent
+23,神戸ワールド記念ホール,JP,兵庫県,神戸市,10,兵庫県神戸市中央区港島中町6-12-2,34.66395,135.21015,,Asia/Tokyo,12,True,consistent
+24,東京ガーデンシアター,JP,東京都,,3,東京都江東区有明2-1-6,35.63773,139.79204,,Asia/Tokyo,17,True,consistent
+25,梅赛德斯-奔驰文化中心,CN,,上海市,5,上海市浦东新区世博大道1200号,31.191291,121.489391,,Asia/Shanghai,6,True,consistent
+26,Zepp Fukuoka,JP,福岡県,福岡市,13,福岡県福岡市中央区地行浜2-2-1,33.6007,130.3786,,Asia/Tokyo,5,True,consistent
+27,Zepp Namba,JP,大阪府,大阪市,9,大阪府大阪市浪速区敷津東2-1-39,34.6559,135.505,,Asia/Tokyo,4,True,consistent
+28,Zepp Nagoya,JP,愛知県,名古屋市,2,愛知県名古屋市中村区平池町4-60-7,35.163362,136.884742,,Asia/Tokyo,11,True,consistent
+29,Zepp Haneda (TOKYO),JP,東京都,,3,東京都大田区羽田空港1-1-4、HANEDA INNOVATION CITY ZONE H,35.5494,139.7798,,Asia/Tokyo,9,True,consistent
+30,下北沢GARDEN,JP,東京都,,3,東京都世田谷区北沢2-4-5、mosia B1F,35.659268,139.671558,,Asia/Tokyo,2,True,consistent
+31,SGC HALL ARIAKE,JP,東京都,,3,東京都江東区有明3-3-8、TOKYO DREAM PARK 1F,35.634,139.788,,Asia/Tokyo,6,True,consistent
+33,TOYOTA ARENA TOKYO,JP,東京都,,3,東京都江東区青海1-3-1,35.62656,139.78265,,Asia/Tokyo,2,True,consistent
+34,ぴあアリーナMM,JP,神奈川県,横浜市,8,神奈川県横浜市西区みなとみらい3-2-2,35.45582,139.62843,,Asia/Tokyo,6,True,consistent
+35,幕張メッセ 国際展示場ホール,JP,千葉県,千葉市,7,千葉県千葉市美浜区中瀬2-1,35.648333,140.034722,,Asia/Tokyo,26,True,consistent
+36,Kanadevia Hall,JP,東京都,,3,東京都文京区後楽1-3-61、MEETS PORT 1F,35.7033,139.7546,,Asia/Tokyo,12,True,consistent
+37,COOL JAPAN PARK OSAKA WWホール,JP,大阪府,大阪市,9,大阪府大阪市中央区大阪城3-6,34.6847,135.5337,,Asia/Tokyo,3,True,consistent
+38,神戸国際会館こくさいホール,JP,兵庫県,神戸市,10,兵庫県神戸市中央区御幸通8-1-6、神戸国際会館,34.69226,135.19584,,Asia/Tokyo,1,True,consistent
+39,Crypto.com Arena,US,CA,Los Angeles,35,"1111 S Figueroa St, Los Angeles, CA 90015",34.04302,-118.26687,,America/Los_Angeles,1,True,consistent
+40,LOFT/PLUSONE,JP,東京都,,3,東京都新宿区歌舞伎町1-14-7、林ビルB2F,35.694596,139.702177,,Asia/Tokyo,2,True,consistent
+41,大佳河濱公園,TW,,臺北市,25,臺北市中山區濱江街5號,25.076,121.535,,Asia/Taipei,2,True,consistent
+42,東京ビッグサイト,JP,東京都,,3,東京都江東区有明3-11-1,35.630161,139.793739,,Asia/Tokyo,32,True,consistent
+43,松下IMPホール,JP,大阪府,大阪市,9,大阪府大阪市中央区城見1-3-7、松下IMPビル2F,34.69172,135.53069,,Asia/Tokyo,4,True,consistent
+44,Zepp New Taipei,TW,,新北市,19,新北市新莊區新北大道四段3號8樓,25.05968,121.44957,,Asia/Taipei,3,True,consistent
+45,KOREA UNIV. TIGER DOME,KR,,Seoul,20,"145 Anam-ro, Seongbuk-gu, Seoul 02841",37.59255,127.0249,,Asia/Seoul,1,True,consistent
+46,The Star Theatre,SG,,,21,"The Star, 1 Vista Exchange Green, Singapore 138617",1.30692,103.788394,,Asia/Singapore,1,True,consistent
+47,おおきにアリーナ舞洲,JP,大阪府,大阪市,9,大阪府大阪市此花区北港緑地2-2-15,34.665566,135.39762,,Asia/Tokyo,1,True,consistent
+48,幕張メッセ イベントホール,JP,千葉県,千葉市,7,千葉県千葉市美浜区中瀬2-1,35.64823,140.0347,,Asia/Tokyo,5,True,consistent
+49,朝日生命ホール,JP,大阪府,大阪市,9,大阪府大阪市中央区高麗橋4-2-16,34.6898,135.50031,,Asia/Tokyo,2,True,consistent
+50,Lives NAGOYA,JP,愛知県,名古屋市,2,愛知県名古屋市港区金城ふ頭2-7-1、Maker's Pier,35.05,136.846916,,Asia/Tokyo,2,True,consistent
+51,日経ホール,JP,東京都,,3,東京都千代田区大手町1-3-7、日経ビル3F,35.688741,139.76233,,Asia/Tokyo,4,True,consistent
+52,飛行船シアター,JP,東京都,,3,東京都台東区東上野4-24-11,35.715561,139.782013,,Asia/Tokyo,13,True,consistent
+53,大宮ソニックシティ 大ホール,JP,埼玉県,さいたま市,1,埼玉県さいたま市大宮区桜木町1-7-5,35.9069,139.6237,,Asia/Tokyo,1,True,consistent
+54,代官山UNIT,JP,東京都,,3,東京都渋谷区恵比寿西1-34-17、ZaHOUSEビルB2F,35.647112,139.702325,,Asia/Tokyo,2,True,consistent
+55,アニメイトシアター,JP,東京都,,3,東京都豊島区東池袋1-20-7、アニメイト池袋本店 北館B2F,35.73131,139.71554,,Asia/Tokyo,1,True,consistent
+56,学校跡地の飯田橋でっかいレンタルスペース,JP,東京都,,3,東京都新宿区揚場町2-28,35.702144,139.740455,,Asia/Tokyo,2,True,consistent
+57,イイノホール,JP,東京都,,3,東京都千代田区内幸町2-1-1,35.67098,139.750627,,Asia/Tokyo,2,True,consistent
+58,駒場公園,JP,長野県,佐久市,22,長野県佐久市猿久保字丸山55,36.254864,138.485756,,Asia/Tokyo,3,True,consistent
+59,duo MUSIC EXCHANGE,JP,東京都,,3,東京都渋谷区道玄坂2-14-8、O-EASTビル1F,35.658715,139.695526,,Asia/Tokyo,5,True,consistent
+60,国営ひたち海浜公園,JP,茨城県,ひたちなか市,14,茨城県ひたちなか市馬渡字大沼605-4,36.4025,140.5943,,Asia/Tokyo,6,True,consistent
+61,GARDEN 新木場 FACTORY,JP,東京都,,3,東京都江東区新木場2-8-2,35.638599,139.827756,,Asia/Tokyo,6,True,consistent
+62,Zepp Sapporo,JP,北海道,札幌市,15,北海道札幌市中央区南9条西4-4,43.04935,141.35317,,Asia/Tokyo,4,True,consistent
+63,Smart Araneta Coliseum,PH,Metro Manila,Quezon City,16,"General Araneta Ave, Quezon City 1109, Philippines",14.62071,121.0534,,Asia/Manila,1,True,consistent
+64,桃園会展中心,TW,,桃園市,17,桃園市中壢區領航北路一段99號,25.0032,121.2004,,Asia/Taipei,1,True,consistent
+65,UMEDA CLUB QUATTRO,JP,大阪府,大阪市,9,大阪府大阪市北区太融寺町8-17、プラザ梅田10F,34.701767,135.502308,,Asia/Tokyo,1,True,consistent
+66,NAGOYA CLUB QUATTRO,JP,愛知県,名古屋市,2,愛知県名古屋市中区栄3-29-1、名古屋パルコ東館8F,35.16371,136.908338,,Asia/Tokyo,1,True,consistent
+67,Spotify O-EAST,JP,東京都,,3,東京都渋谷区道玄坂2-14-8、O-EASTビル2F,35.658715,139.695526,,Asia/Tokyo,1,True,consistent
+68,豊洲PIT,JP,東京都,,3,東京都江東区豊洲6-1-23,35.64968,139.78831,,Asia/Tokyo,2,True,consistent
+69,ところざわサクラタウン ジャパンパビリオン ホールA,JP,埼玉県,所沢市,18,埼玉県所沢市東所沢和田3-31-3、ところざわサクラタウン,35.797194,139.506833,,Asia/Tokyo,4,True,consistent
+70,LINE CUBE SHIBUYA,JP,東京都,,3,東京都渋谷区宇田川町1-1,35.6641,139.69853,,Asia/Tokyo,5,True,consistent
+71,新都市ホール,JP,神奈川県,横浜市,8,神奈川県横浜市西区高島2-18-1、横浜新都市ビル9F,35.465421,139.625109,,Asia/Tokyo,2,True,consistent
+72,心斎橋BIGCAT,JP,大阪府,大阪市,9,大阪府大阪市中央区西心斎橋1-6-14、BIGSTEP 4F,34.6725,135.4987,,Asia/Tokyo,1,True,consistent
+73,Zepp Shinjuku (TOKYO),JP,東京都,,3,東京都新宿区歌舞伎町1-29-1、東急歌舞伎町タワーB1-B4F,35.69558,139.70077,,Asia/Tokyo,3,True,consistent
+74,Veats Shibuya,JP,東京都,,3,東京都渋谷区宇田川町33-1、グランド東京渋谷ビルB1-B2F,35.660766,139.697432,,Asia/Tokyo,1,True,consistent
+75,秋葉原エンタス,JP,東京都,,3,東京都千代田区外神田1-2-7、オノデン本館5F,35.69829,139.77101,,Asia/Tokyo,1,True,consistent
+76,六本木BIGHOUSE,JP,東京都,,3,東京都港区六本木5-18-2、大昌第二ビルB1F,35.661249,139.737251,,Asia/Tokyo,4,True,consistent
+77,1000 CLUB,JP,神奈川県,横浜市,8,神奈川県横浜市西区南幸2-1-5,35.463221,139.618737,,Asia/Tokyo,1,True,consistent
+78,日比谷公園大音楽堂,JP,東京都,,3,東京都千代田区日比谷公園1-5,35.672361,139.754028,,Asia/Tokyo,1,True,consistent
+79,中池袋公園,JP,東京都,,3,東京都豊島区東池袋1-16-1,35.7315,139.715,,Asia/Tokyo,2,True,consistent
+80,大阪城ホール,JP,大阪府,大阪市,9,大阪府大阪市中央区大阪城3-1,34.689681,135.530106,,Asia/Tokyo,4,True,consistent
+81,カナモトホール(札幌市民ホール),JP,北海道,札幌市,15,北海道札幌市中央区北1条西1丁目,43.06218,141.35554,,Asia/Tokyo,2,True,consistent
+82,福岡サンパレス,JP,福岡県,福岡市,13,福岡県福岡市博多区築港本町2-1,33.60387,130.40232,,Asia/Tokyo,2,True,consistent
+83,TFTホール 1000,JP,東京都,,3,東京都江東区有明3-6-11、TFTビル西館2F,35.6303,139.7894,,Asia/Tokyo,2,True,consistent
+84,横須賀芸術劇場,JP,神奈川県,横須賀市,23,神奈川県横須賀市本町3-27、ベイスクエアよこすか一番館4F,35.281363,139.662998,,Asia/Tokyo,1,True,consistent
+85,大阪市中央公会堂「大集会室」,JP,大阪府,大阪市,9,大阪府大阪市北区中之島1-1-27,34.69353,135.50401,,Asia/Tokyo,1,True,consistent
+86,山野ホール,JP,東京都,,3,東京都渋谷区代々木1-53-1,35.684194,139.699406,,Asia/Tokyo,2,True,consistent
+87,中野サンプラザホール,JP,東京都,,3,東京都中野区中野4-1-1,35.70757,139.66469,,Asia/Tokyo,1,True,consistent
+88,富士急ハイランド・コニファーフォレスト,JP,山梨県,富士吉田市,43,山梨県富士吉田市新西原5-6-1,35.48165,138.77538,,Asia/Tokyo,15,True,consistent
+89,ベルサール秋葉原,JP,東京都,,3,東京都千代田区外神田3-12-8,35.69992,139.77096,,Asia/Tokyo,20,True,consistent
+90,ベルーナドーム,JP,埼玉県,所沢市,18,埼玉県所沢市上山口2135,35.7685,139.4205,,Asia/Tokyo,4,True,consistent
+91,コカ・コーラ SUMMER STATION LIVEアリーナ（六本木ヒルズアリーナ）,JP,東京都,,3,東京都港区六本木6-10-1、六本木ヒルズ,35.65968,139.73011,,Asia/Tokyo,2,True,consistent
+92,サイエンスホール（科学技術館）,JP,東京都,,3,東京都千代田区北の丸公園2-1、科学技術館B2F,35.69144,139.752799,,Asia/Tokyo,2,True,consistent
+93,名古屋国際会議場センチュリーホール,JP,愛知県,名古屋市,2,愛知県名古屋市熱田区熱田西町1-1,35.132081,136.89805,,Asia/Tokyo,2,True,consistent
+94,新宿LOFT,JP,東京都,,3,東京都新宿区歌舞伎町1-12-9、タテハナビルB2F,35.695366,139.702633,,Asia/Tokyo,1,True,consistent
+95,パシフィコ横浜 展示ホール,JP,神奈川県,横浜市,8,神奈川県横浜市西区みなとみらい1-1-1,35.4599,139.63538,,Asia/Tokyo,3,True,consistent
+96,神戸上屋劇場,JP,兵庫県,神戸市,10,兵庫県神戸市中央区波止場町6-3、甲陽運輸内1F,34.683692,135.185164,,Asia/Tokyo,1,True,consistent
+97,ディファ有明,JP,東京都,,3,東京都江東区有明1-3-25,35.638722,139.789222,,Asia/Tokyo,1,True,consistent
+98,有明コロシアム,JP,東京都,,3,東京都江東区有明2-2-22、有明テニスの森公園,35.63646,139.7901,,Asia/Tokyo,2,True,consistent
+99,アニメイト新宿,JP,東京都,,3,東京都新宿区新宿3-17-17,35.692472,139.703329,,Asia/Tokyo,1,True,consistent
+100,AKIHABARAゲーマーズ本店,JP,東京都,,3,東京都千代田区外神田1-14-7,35.69833,139.771651,,Asia/Tokyo,4,True,consistent
+101,品川ステラボール,JP,東京都,,3,東京都港区高輪4-10-30、品川プリンスホテル,35.627775,139.735481,,Asia/Tokyo,2,True,consistent
+102,Singapore Expo,SG,,,21,"1 Expo Dr, Singapore 486150",1.334033,103.958931,,Asia/Singapore,1,True,consistent
+103,名古屋城二之丸広場,JP,愛知県,名古屋市,2,愛知県名古屋市中区本丸1-1、名古屋城二之丸広場,35.184437,136.901332,,Asia/Tokyo,1,True,consistent
+104,池袋サンシャインシティ噴水広場,JP,東京都,,3,東京都豊島区東池袋3-1-1、サンシャインシティ アルパB1,35.729097,139.719089,,Asia/Tokyo,1,True,consistent
+105,EXシアター六本木,JP,東京都,,3,東京都港区西麻布1-2-9,35.66121,139.72727,,Asia/Tokyo,1,True,consistent
+106,Long Beach Convention and Entertainment Center,US,CA,Long Beach,26,"300 E Ocean Blvd, Long Beach, CA 90802",33.76474,-118.18923,,America/Los_Angeles,2,True,consistent
+107,Suntec Convention & Exhibition Centre,SG,,,21,"1 Raffles Boulevard, Singapore 039593",1.2936,103.855,,Asia/Singapore,5,True,consistent
+108,インテックス大阪,JP,大阪府,大阪市,9,大阪府大阪市住之江区南港北1-5-102,34.63725,135.41993,,Asia/Tokyo,4,True,consistent
+109,台北世界貿易中心南港展覽館,TW,,臺北市,25,臺北市南港區經貿二路1號（1館）,25.0565,121.61809,,Asia/Taipei,1,True,consistent
+110,詩涼子街頭實況攝影棚,TW,,臺北市,25,臺北市萬華區成都路6號,25.041991,121.507583,,Asia/Taipei,1,True,consistent
+111,ハウステンボス,JP,長崎県,佐世保市,36,長崎県佐世保市ハウステンボス町1-1,33.085936,129.789883,,Asia/Tokyo,1,True,consistent
+112,MEGABOX DONGDAEMUN,KR,,Seoul,20,"Good Morning City 9F, 247 Jangchungdan-ro, Jung-gu, Seoul 04564",37.56638,127.00739,,Asia/Seoul,1,True,consistent
+113,タワーレコード渋谷店,JP,東京都,,3,東京都渋谷区神南1-22-14,35.66189,139.701095,,Asia/Tokyo,6,True,consistent
+114,マイナビBLITZ赤坂,JP,東京都,,3,東京都港区赤坂5-3-2,35.67252,139.735274,,Asia/Tokyo,1,True,consistent
+115,TSUTAYA IKEBUKURO AKビル店,JP,東京都,,3,東京都豊島区東池袋1-2-9、池袋AKビル,35.72975,139.7138,,Asia/Tokyo,1,True,consistent
+116,上海世博展览馆,CN,,上海市,5,上海市浦东新区国展路1099号,31.181207,121.490475,,Asia/Shanghai,1,True,consistent
+117,ベルーナドーム前広場,JP,埼玉県,所沢市,18,埼玉県所沢市上山口2135、ベルーナドーム,35.7685,139.4205,,Asia/Tokyo,1,True,consistent
+118,東京ドーム,JP,東京都,,3,東京都文京区後楽1-3-61,35.70551,139.75197,,Asia/Tokyo,2,True,consistent
+119,ZOZOマリンスタジアム,JP,千葉県,千葉市,7,千葉県千葉市美浜区美浜1,35.645239,140.030922,,Asia/Tokyo,1,True,consistent
+120,カルッツかわさき,JP,神奈川県,川崎市,28,神奈川県川崎市川崎区富士見1-1-4,35.52962,139.70893,,Asia/Tokyo,2,True,consistent
+121,台北世貿中心展覽一館,TW,,臺北市,25,臺北市信義區信義路五段5號,25.033765,121.56238,,Asia/Taipei,1,True,consistent
+122,刈谷市総合文化センター アイリス 大ホール,JP,愛知県,刈谷市,39,愛知県刈谷市若松町2-104,34.989255,137.006893,,Asia/Tokyo,1,True,consistent
+123,富士急ハイランド 園内ステージ,JP,山梨県,富士吉田市,43,山梨県富士吉田市新西原5-6-1、富士急ハイランド,35.48507,138.77862,,Asia/Tokyo,13,True,consistent
+125,Anaheim Convention Center,US,CA,Anaheim,24,"800 W Katella Ave, Anaheim, CA 92802",33.80057,-117.92072,,America/Los_Angeles,3,True,consistent
+126,両国国技館,JP,東京都,,3,東京都墨田区横網1-3-28,35.69703,139.793457,,Asia/Tokyo,2,True,consistent
+127,イオンシネマ板橋,JP,東京都,,3,東京都板橋区徳丸2-6-1、イオン板橋ショッピングセンター5F,35.770033,139.660993,,Asia/Tokyo,1,True,consistent
+128,スペースFS汐留,JP,東京都,,3,東京都港区東新橋1-1-16、汐留FSビル,35.665668,139.760057,,Asia/Tokyo,1,True,consistent
+129,パシフィコ横浜 国立大ホール,JP,神奈川県,横浜市,8,神奈川県横浜市西区みなとみらい1-1-1,35.457833,139.636667,,Asia/Tokyo,1,True,consistent
+130,舞浜アンフィシアター,JP,千葉県,浦安市,42,千葉県浦安市舞浜2-50,35.632606,139.889169,,Asia/Tokyo,7,True,consistent
+131,池袋サンシャインシティ,JP,東京都,,3,東京都豊島区東池袋3-1-1,35.72912,139.71914,,Asia/Tokyo,6,True,consistent
+132,ゲーマーズ新宿店,JP,東京都,,3,東京都渋谷区代々木2-10-1、新宿サンセイビル4F,35.688077,139.6984,,Asia/Tokyo,1,True,consistent
+133,ミクニワールドスタジアム北九州,JP,福岡県,北九州市,27,福岡県北九州市小倉北区浅野3-9-33,33.89112,130.88873,,Asia/Tokyo,2,True,consistent
+134,清水マリンパーク,JP,静岡県,静岡市,37,静岡県静岡市清水区日の出町,35.01003,138.494747,,Asia/Tokyo,1,True,consistent
+135,Zepp Tokyo,JP,東京都,,3,東京都江東区青海1-3-11,35.625831,139.782219,,Asia/Tokyo,2,True,consistent
+136,静岡エコパアリーナ,JP,静岡県,袋井市,38,静岡県袋井市愛野2300-1、エコパ,34.74552,137.96841,,Asia/Tokyo,1,True,consistent
+137,天王洲銀河劇場,JP,東京都,,3,東京都品川区東品川2-3-16、シーフォートスクエア2F,35.6235,139.751267,,Asia/Tokyo,9,True,consistent
+139,神戸芸術センター 芸術劇場,JP,兵庫県,神戸市,10,兵庫県神戸市中央区熊内橋通7-1-13,34.70405,135.19833,,Asia/Tokyo,2,True,consistent
+140,広島国際会議場（フェニックスホール）,JP,広島県,広島市,29,広島県広島市中区中島町1-5,34.392083,132.451028,,Asia/Tokyo,2,True,consistent
+141,熊本城ホール シビックホール,JP,熊本県,熊本市,30,熊本県熊本市中央区桜町3-40,32.800961,130.704458,,Asia/Tokyo,2,True,consistent
+142,ナディアパークデザインホール,JP,愛知県,名古屋市,2,愛知県名古屋市中区栄3-18-1、ナディアパーク,35.165558,136.905747,,Asia/Tokyo,2,True,consistent
+143,道新ホール,JP,北海道,札幌市,15,北海道札幌市中央区大通西3丁目6、道新ビル大通館8F,43.061413,141.353256,,Asia/Tokyo,2,True,consistent
+144,鴻巣市文化センター(クレアこうのす) 大ホール,JP,埼玉県,鴻巣市,31,埼玉県鴻巣市中央29-1,36.067576,139.522618,,Asia/Tokyo,2,True,consistent
+145,Grand Peace Palace,KR,,Seoul,20,"26 Kyungheedae-ro, Dongdaemun-gu, Seoul 02447",37.598611,127.052732,,Asia/Seoul,1,True,consistent
+146,國立體育大學綜合體育館（林口體育館）,TW,,桃園市,17,桃園市龜山區文化一路250號,25.03458,121.3835,,Asia/Taipei,2,True,consistent
+147,"AsiaWorld-Expo, Hall 10",HK,,,32,亞洲國際博覽館10號館，香港新界大嶼山香港國際機場航展道1號,22.32144,113.94325,,Asia/Hong_Kong,2,True,consistent
+148,万博記念公園,JP,大阪府,吹田市,33,大阪府吹田市千里万博公園1-1,34.810122,135.5276,,Asia/Tokyo,1,True,consistent
+149,東急歌舞伎町タワーステージ,JP,東京都,,3,東京都新宿区歌舞伎町1-29-1、東急歌舞伎町タワー,35.695889,139.700389,,Asia/Tokyo,1,True,consistent
+150,烏丸半島芝生広場,JP,滋賀県,草津市,34,滋賀県草津市下物町1091,35.07425,135.93502,,Asia/Tokyo,1,True,consistent
+151,パシフィコ横浜 会議センターメインホール,JP,神奈川県,横浜市,8,神奈川県横浜市西区みなとみらい1-1-1、会議センター,35.45833,139.63639,,Asia/Tokyo,2,True,consistent
+152,Shibuya Hikarie,JP,東京都,,3,東京都渋谷区渋谷2-21-1,35.65915,139.70397,,Asia/Tokyo,1,True,consistent
+153,Spotify O-WEST,JP,東京都,,3,東京都渋谷区円山町2-3、2F,35.65848,139.69532,,Asia/Tokyo,1,True,consistent
+154,大手町三井ホール,JP,東京都,,3,東京都千代田区大手町1-2-1、Otemachi One 3F,35.687847,139.762453,,Asia/Tokyo,2,True,consistent
+155,KINTEX HALL,KR,Gyeonggi-do,Goyang-si,40,"KINTEX 2, 217-59 Kintex-ro, Ilsanseo-gu, Goyang-si, Gyeonggi-do 10390",37.66606,126.741905,,Asia/Seoul,1,True,consistent
+156,仙台サンプラザホール,JP,宮城県,仙台市,41,宮城県仙台市宮城野区榴岡5-11-1,38.25772,140.89407,,Asia/Tokyo,1,True,consistent
