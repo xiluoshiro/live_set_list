@@ -306,7 +306,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("tab", { name: "歌曲管理" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "新增乐队" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "新增演出" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByLabelText("查询 venue")).toHaveFocus();
+    expect(screen.getByLabelText("查询场地")).toHaveFocus();
     expect(screen.getAllByRole("columnheader", { name: "live_date" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("columnheader", { name: "live_title" }).length).toBeGreaterThan(0);
     expect(screen.getByLabelText("opening_time")).toHaveValue("18:00");
@@ -1061,7 +1061,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText(/1 - /)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("tab", { name: "新增演出" }));
-    expect(screen.getByRole("button", { name: "请选择 venue" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "请选择场地" })).toBeInTheDocument();
     expect(screen.queryByText(/301 - /)).not.toBeInTheDocument();
   });
 
@@ -1117,23 +1117,22 @@ describe("ConsoleInsertPanel", () => {
     expect(bandOptions).toEqual(["2 - Early Band", "9 - Later Band"]);
 
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
-    await user.click(screen.getByRole("button", { name: "请选择 venue" }));
+    await user.click(screen.getByRole("button", { name: "请选择场地" }));
     const venueMenu = screen.getByText("301 - Later Venue").closest(".bands-floating-menu") as HTMLElement;
     const venueOptions = within(venueMenu).getAllByText(/Venue$/).map((node) => node.textContent);
     expect(venueOptions).toEqual(["101 - Early Venue", "301 - Later Venue"]);
   });
 
-  // 测试点：快捷插入携带名称打开完整场地录入，不能绕过实体场馆必填时区规则。
-  test("查询venue旁的插入按钮打开完整新增场地表单", async () => {
+  // 测试点：新增演出查询栏不再提供场地插入入口，使用中文场地和乐队标签。
+  test("新增演出只查询选择场地，不提供快捷插入", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel />);
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
-    await user.type(screen.getByLabelText("查询 venue"), "New Venue");
-    await user.click(screen.getByRole("button", { name: "插入" }));
+    await user.type(screen.getByLabelText("查询场地"), "New Venue");
+    expect(screen.queryByRole("button", { name: "插入" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "请选择场地" })).toBeInTheDocument();
+    expect(screen.getByText("默认乐队")).toBeInTheDocument();
     expect(apiMocks.createConsoleVenue).not.toHaveBeenCalled();
-    expect(screen.getByRole("tab", { name: "新增场地" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByLabelText("名称")).toHaveValue("New Venue");
-    expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
   });
 
   // 测试点：新增 Live 成功后应重置表单，并让共享日志在切换标签页后继续显示最新结果。
@@ -1159,11 +1158,11 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel onLiveDataChanged={onLiveDataChanged} />);
 
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
-    await user.click(screen.getByRole("button", { name: "请选择 venue" }));
+    await user.click(screen.getByRole("button", { name: "请选择场地" }));
     await user.click(await screen.findByRole("radio", { name: "88 - New Venue" }));
     expect(screen.getByRole("checkbox", { name: "新增后清空录入数据" })).toBeChecked();
-    await user.type(screen.getByLabelText("查询 venue"), "New");
-    await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
+    await user.type(screen.getByLabelText("查询场地"), "New");
+    await user.click(screen.getByRole("button", { name: "请选择默认乐队" }));
     await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
     expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
@@ -1207,11 +1206,11 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("");
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
-    expect(screen.getByLabelText("查询 venue")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "请选择 venue" })).toBeInTheDocument();
+    expect(screen.getByLabelText("查询场地")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "请选择场地" })).toBeInTheDocument();
     expect(screen.queryByLabelText("timezone")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "请选择默认 Band" })).toHaveAttribute("aria-expanded", "false");
-    await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
+    expect(screen.getByRole("button", { name: "请选择默认乐队" })).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: "请选择默认乐队" }));
     expect(screen.getByRole("checkbox", { name: /MyGO/ })).not.toBeChecked();
     expect(onLiveDataChanged).toHaveBeenCalledTimes(1);
 
@@ -1277,7 +1276,7 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await screen.findByRole("button", { name: "88 - New Venue" });
     await user.click(screen.getByRole("checkbox", { name: "新增后清空录入数据" }));
-    await user.type(screen.getByLabelText("查询 venue"), "Keep Venue");
+    await user.type(screen.getByLabelText("查询场地"), "Keep Venue");
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Keep Draft Live");
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/keep-draft");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
@@ -1286,7 +1285,7 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalled());
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Keep Draft Live");
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("https://example.com/keep-draft");
-    expect(screen.getByLabelText("查询 venue")).toHaveValue("Keep Venue");
+    expect(screen.getByLabelText("查询场地")).toHaveValue("Keep Venue");
     expect(screen.getByRole("button", { name: "88 - New Venue" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "新增后清空录入数据" })).not.toBeChecked();
   });
@@ -1626,7 +1625,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live");
   });
 
-  // 测试点：活动 Live 应把默认 Band 下勾选的完整成员名单提交给后端，不在前端写入 mode。
+  // 测试点：活动 Live 应把默认乐队 下勾选的完整成员名单提交给后端，不在前端写入 mode。
   test("活动Live会提交完整出演成员名单", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }] });
@@ -1660,7 +1659,7 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await screen.findByRole("button", { name: "88 - New Venue" });
     await user.selectOptions(screen.getByDisplayValue("专场"), "event");
-    await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
+    await user.click(screen.getByRole("button", { name: "请选择默认乐队" }));
     await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
     const memberGroup = screen.getByRole("group", { name: "MyGO!!!!! 出演成员" });
     await user.click(within(memberGroup).getByRole("checkbox", { name: "高松燈" }));
@@ -1756,7 +1755,7 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await screen.findByRole("button", { name: "88 - New Venue" });
     await user.selectOptions(screen.getByDisplayValue("专场"), "event");
-    await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
+    await user.click(screen.getByRole("button", { name: "请选择默认乐队" }));
     await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
     expect(screen.queryByLabelText("MyGO!!!!! 默认历史名称")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("MyGO!!!!! 默认基础阵容")).not.toBeInTheDocument();
@@ -1782,7 +1781,7 @@ describe("ConsoleInsertPanel", () => {
     ));
   });
 
-  // 测试点：关闭临时开关后隐藏旧版本选择器，但新默认 Band 仍固化当前名称和当前阵容。
+  // 测试点：关闭临时开关后隐藏旧版本选择器，但新默认乐队 仍固化当前名称和当前阵容。
   test("关闭临时入口后默认Band只提交当前版本", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }] });
@@ -1822,7 +1821,7 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await screen.findByRole("button", { name: "88 - New Venue" });
-    await user.click(screen.getByRole("button", { name: "请选择默认 Band" }));
+    await user.click(screen.getByRole("button", { name: "请选择默认乐队" }));
     await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
     await waitFor(() => expect(apiMocks.getConsoleBandHistory).toHaveBeenCalledWith(3));
 
@@ -1830,7 +1829,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByLabelText("MyGO!!!!! 默认基础阵容")).not.toBeInTheDocument();
   });
 
-  // 测试点：活动类型未选择默认 Band 时，新增 Live 确认框应显示非阻断提醒。
+  // 测试点：活动类型未选择默认乐队 时，新增 Live 确认框应显示非阻断提醒。
   test("活动未选择默认Band时在新增Live确认框显示提示", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleVenues.mockResolvedValue({
@@ -1840,7 +1839,7 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel />);
 
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
-    await user.click(screen.getByRole("button", { name: "请选择 venue" }));
+    await user.click(screen.getByRole("button", { name: "请选择场地" }));
     await user.click(await screen.findByRole("radio", { name: "88 - New Venue" }));
     await user.selectOptions(screen.getByDisplayValue("专场"), "event");
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "No Band Event");
@@ -1848,7 +1847,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
     const dialog = screen.getByRole("dialog", { name: "确认新增 Live" });
-    expect(within(dialog).getByText("提示：当前 Live 类型为活动，且未选择默认 Band，请确认是否需要补充。")).toBeInTheDocument();
+    expect(within(dialog).getByText("提示：当前 Live 类型为活动，且未选择默认乐队，请确认是否需要补充。")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "确认提交" })).not.toBeDisabled();
   });
 

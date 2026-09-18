@@ -99,10 +99,8 @@ function renderSection(
       onToggleDefaultBand={onToggleDefaultBand}
       onToggleEventAttendee={onToggleEventAttendee}
       onQueryVid={vi.fn()}
-      onInsertVenue={vi.fn()}
       onClearInsertLive={vi.fn()}
       onSubmitInsertLive={vi.fn()}
-      queryInsertDisabled
       submitInsertDisabled={false}
     />,
   );
@@ -277,7 +275,7 @@ describe("LiveAdminSection", () => {
     renderSection();
 
     expect(screen.getByDisplayValue("其他")).toHaveClass("live-type-input");
-    expect(screen.getByLabelText("查询 venue")).toHaveClass("live-management-primary-control");
+    expect(screen.getByLabelText("查询场地")).toHaveClass("live-management-primary-control");
     expect(screen.getByRole("button", { name: /Test Venue/ })).toHaveClass("live-management-primary-control");
     expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toHaveClass("live-management-primary-control");
     expect(screen.queryByRole("combobox", { name: "按 Live 类型筛选" })).not.toBeInTheDocument();

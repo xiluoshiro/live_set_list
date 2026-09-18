@@ -634,7 +634,7 @@ def test_console_create_venue_rejects_invalid_locality(locality):
     with patch("app.routers.console_venues.get_write_db_connection", return_value=conn):
         with TestClient(app) as client:
             response = client.post("/api/console/venues", headers={"X-CSRF-Token": CSRF_TOKEN}, json={
-                "venue_name": "Bad Hall", "location": {"locality_id": 99, "latitude": 35,
+                "venue_name": "Bad Hall", "location": {"address": "Tokyo address", "locality_id": 99, "latitude": 35,
                 "longitude": 139, "timezone_id": "Asia/Tokyo"},
             })
     assert response.status_code == 422
@@ -656,6 +656,22 @@ def test_console_create_venue_rejects_invalid_location_shape(kind, location):
             response = client.post("/api/console/venues", headers={"X-CSRF-Token": CSRF_TOKEN},
                                    json={"venue_name": "Bad Hall", "venue_kind": kind, "location": location})
     assert response.status_code == 422
+    connection.assert_not_called()
+
+
+# 测试点：实体场馆缺失、空值和空白地址均在连接数据库前拒绝，不能绕过表单必填。
+@pytest.mark.parametrize("address", [None, "", "   "])
+def test_console_create_physical_venue_requires_address(address):
+    _set_authenticated_role("editor")
+    with patch("app.routers.console_venues.get_write_db_connection") as connection:
+        with TestClient(app) as client:
+            response = client.post("/api/console/venues", headers={"X-CSRF-Token": CSRF_TOKEN}, json={
+                "venue_name": "Missing address", "location": {
+                    "address": address, "latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo",
+                },
+            })
+    assert response.status_code == 422
+    assert "公开门牌地址" in response.text
     connection.assert_not_called()
 
 

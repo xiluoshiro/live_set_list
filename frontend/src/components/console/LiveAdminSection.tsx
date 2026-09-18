@@ -8,6 +8,7 @@ import type {
   EventStatus,
 } from "../../api";
 import { DATE_PHASE_LABELS } from "../../liveStatus";
+import { ChoiceMenu } from "./ChoiceMenu";
 import { Collapsible } from "../ui/Collapsible";
 import { formatLiveType } from "./constants";
 import type { BandOption, Position, VenueOption } from "./types";
@@ -113,10 +114,8 @@ type LiveAdminSectionProps = {
   onToggleDefaultBand: (bandId: number) => void;
   onToggleEventAttendee: (bandId: number, memberName: string) => void;
   onQueryVid: () => void;
-  onInsertVenue: () => void;
   onClearInsertLive: () => void;
   onSubmitInsertLive: () => void;
-  queryInsertDisabled: boolean;
   submitInsertDisabled: boolean;
 };
 
@@ -205,10 +204,8 @@ export function LiveAdminSection({
   onToggleDefaultBand,
   onToggleEventAttendee,
   onQueryVid,
-  onInsertVenue,
   onClearInsertLive,
   onSubmitInsertLive,
-  queryInsertDisabled,
   submitInsertDisabled,
 }: LiveAdminSectionProps) {
   const [scheduleAttentionOpen, setScheduleAttentionOpen] = useState(false);
@@ -216,13 +213,13 @@ export function LiveAdminSection({
   const selectedVenueText = (() => {
     if (!venueAnnounced) return "未公布";
     const selected = venues.find((venue) => venue.venue_id === selectedVenueId);
-    if (!selected) return "请选择 venue";
+    if (!selected) return "请选择场地";
     return `${selected.venue_id} - ${selected.venue_name}`;
   })();
   const selectableBands = bandOptions.filter((band) => band.band_id > 0);
   const selectedDefaultBandText = (() => {
     const selected = selectableBands.filter((band) => defaultBandIds.includes(band.band_id));
-    if (selected.length === 0) return "请选择默认 Band";
+    if (selected.length === 0) return "请选择默认乐队";
     return selected.map((band) => {
       const context = defaultBandLineupContexts[band.band_id];
       const history = bandHistories[band.band_id];
@@ -371,25 +368,23 @@ export function LiveAdminSection({
         <>
 
       <div className="live-id-selector live-create-query-row">
-        <label className="live-management-label" htmlFor="venue-query-input">查询 venue</label>
+        <label className="live-management-label" htmlFor="venue-query-input">查询场地</label>
         <input
           id="venue-query-input"
           ref={venueQueryInputRef}
           className="venue-query-input live-management-primary-control"
           value={venueQueryText}
           onChange={(e) => onVenueQueryTextChange(e.target.value)}
-          placeholder="输入 venue 关键词"
+          placeholder="输入场地关键词"
           disabled={!venueAnnounced}
         />
         <button type="button" className="console-ghost-btn" onClick={onQueryVid} disabled={!venueAnnounced}>
           查询
         </button>
-        <button type="button" className="console-submit-btn" onClick={onInsertVenue} disabled={!venueAnnounced || queryInsertDisabled}>
-          插入
-        </button>
+
       </div>
       <div className="live-id-selector live-create-tools">
-        <label className="live-management-label">选择 venue</label>
+        <label className="live-management-label">选择场地</label>
         <button
           ref={venueTriggerRef}
           type="button"
@@ -403,7 +398,7 @@ export function LiveAdminSection({
       </div>
 
       <div className="live-id-selector live-create-tools live-default-bands-row">
-        <span className="live-default-bands-label live-management-label">默认 Band</span>
+        <span className="live-default-bands-label live-management-label">默认乐队</span>
         <button
           ref={defaultBandTriggerRef}
           type="button"
@@ -413,7 +408,7 @@ export function LiveAdminSection({
           aria-expanded={defaultBandOpen}
           disabled={selectableBands.length === 0}
         >
-          {selectableBands.length === 0 ? "暂无可选 Band" : selectedDefaultBandText}
+          {selectableBands.length === 0 ? "暂无可选乐队" : selectedDefaultBandText}
         </button>
       </div>
 
@@ -661,29 +656,9 @@ export function LiveAdminSection({
         </p>
       )}
 
-      {venueOpen && venueMenuPos && (
-        <div
-          className="bands-floating-menu"
-          ref={venueMenuRef}
-          onMouseDown={(event) => event.stopPropagation()}
-          onWheel={(event) => event.stopPropagation()}
-          style={{ top: venueMenuPos.top, left: venueMenuPos.left, width: venueMenuPos.width }}
-        >
-          {venues.map((venue) => (
-            <label key={venue.venue_id}>
-              <input
-                type="radio"
-                name="live-venue-picker"
-                checked={selectedVenueId === venue.venue_id}
-                onChange={() => onSelectVenue(venue.venue_id)}
-              />
-              <span>
-                {venue.venue_id} - {venue.venue_name}
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
+      {venueOpen && venueMenuPos && <ChoiceMenu position={venueMenuPos} menuRef={venueMenuRef}
+        name="live-venue-picker" options={venues.map(venue => ({ id: venue.venue_id, label: `${venue.venue_id} - ${venue.venue_name}` }))}
+        selectedId={selectedVenueId} onSelect={onSelectVenue} />}
 
       {defaultBandOpen && defaultBandMenuPos && (
         <div
