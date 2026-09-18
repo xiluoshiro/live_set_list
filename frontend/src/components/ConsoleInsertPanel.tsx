@@ -867,8 +867,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const usesVersionedLineups =
     activeSetlistBands.length > 0
     && activeSetlistBands.every((band) => lineupContexts[band.band_id] !== undefined);
-  // 校验规则 1：查询 venue 行若当前查询输入为空，禁用该行“插入”。
-  const isVenueQuickInsertDisabled = venueQueryText.trim() === "";
   // 校验规则 2：已确定的排期字段必须有值；暂未公布的排期字段允许为空。
   const isLiveSubmitDisabled =
     (venueAnnounced && selectedVenueId <= 0) ||
@@ -2476,21 +2474,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }
   };
 
-  const requestVenueConfirmation = () => {
-    const venueName = venueQueryText.trim();
-    if (venueName === "") {
-      setMessage("新增venue失败：venue 名称不能为空。");
-      return;
-    }
-    if (!auth.isAuthenticated || !auth.csrfToken) {
-      setMessage("新增venue失败：登录态已失效，请重新登录。");
-      return;
-    }
-
-    setMode("venue_create");
-    setMessage("请补全场地资料；实体场馆必须填写坐标和已核验时区。");
-  };
-
   const requestLiveConfirmation = () => {
     const action = mode === "live_edit" ? "update" : "create";
     if (liveDate.trim() === "" || liveTitle.trim() === "") {
@@ -2498,7 +2481,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       return;
     }
     if (venueAnnounced && selectedVenueId <= 0) {
-      setMessage(`${action === "create" ? "新增" : "更新"}Live失败：请先选择 venue。`);
+      setMessage(`${action === "create" ? "新增" : "更新"}Live失败：请先选择场地。`);
       return;
     }
     if (venueAnnounced && currentLivePayload.venue_name_version_id === null) {
@@ -2952,7 +2935,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           )}
           {shouldWarnMissingEventBands && (
             <p className="console-admin-hint" role="status">
-              提示：当前 Live 类型为活动，且未选择默认 Band，请确认是否需要补充。
+              提示：当前 Live 类型为活动，且未选择默认乐队，请确认是否需要补充。
             </p>
           )}
           {pendingConfirmation.scheduleChangeKind && (
@@ -3306,10 +3289,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onToggleDefaultBand={toggleDefaultBand}
           onToggleEventAttendee={toggleEventAttendee}
           onQueryVid={queryVid}
-          onInsertVenue={requestVenueConfirmation}
           onClearInsertLive={clearLiveForm}
           onSubmitInsertLive={submitInsertLive}
-          queryInsertDisabled={isVenueQuickInsertDisabled}
           submitInsertDisabled={isLiveSubmitBlocked}
         />
       )}

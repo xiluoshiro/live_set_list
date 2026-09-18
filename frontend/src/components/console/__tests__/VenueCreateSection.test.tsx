@@ -10,7 +10,7 @@ vi.mock("../VenueLocationPicker", () => ({ VenueLocationPicker: () => <p>地图�
 const city = { id: 1, country_code: "JP", admin_area: "東京都", locality_name: null, timezone_id: "Asia/Tokyo", area_level: "admin_area", state_token: "a".repeat(64) };
 beforeEach(() => {
   vi.resetAllMocks();
-  api.getConsoleLocalities.mockResolvedValue({ items: [city], total: 21, page: 1, page_size: 20 });
+  api.getConsoleLocalities.mockResolvedValue({ items: [city], total: 1, page: 1, page_size: 20 });
   api.getConsoleTimezones.mockResolvedValue(["Asia/Tokyo", "Asia/Shanghai"]);
   api.createConsoleVenue.mockResolvedValue({ ok: true, item: { venue_id: 88, venue_name: "New Hall", venue_kind: "physical" } });
   api.getConsoleVenuePage.mockResolvedValue({ items: [{ venue_id: 1, venue_name: "Hall", matched_name: "Old Hall", venue_kind: "physical" }], total: 1, page: 1, total_pages: 1 });
@@ -18,8 +18,9 @@ beforeEach(() => {
 async function setup(onVenuesChanged = vi.fn().mockResolvedValue(undefined)) {
   const user = userEvent.setup();
   render(<VenueCreateSection onMessage={vi.fn()} onVenuesChanged={onVenuesChanged} />);
-  await screen.findByRole("option", { name: "JP / 東京都" });
+  await waitFor(() => expect(screen.getByLabelText("已公布地区")).toHaveTextContent("JP / 東京都"));
   await user.type(screen.getByLabelText("名称"), "New Hall");
+  await user.type(screen.getByLabelText("公开门牌地址"), "Tokyo address");
   return user;
 }
 async function confirm(user: ReturnType<typeof userEvent.setup>) {
@@ -27,16 +28,17 @@ async function confirm(user: ReturnType<typeof userEvent.setup>) {
   return within(screen.getByRole("dialog", { name: "确认新增场地" }));
 }
 
-// 测试点：完整位置在确认后一次提交，地区翻页保留完整标签，成功后清空且不嵌入管理界面。
-test("creates complete location after preview and retains selection across pages", async () => {
+// 测试点：完整位置在确认后一次提交，地区搜索保留完整标签，成功后恢复默认值且不嵌入管理界面。
+test("creates complete location after preview and retains selection across searches", async () => {
   const user = await setup();
-  await user.selectOptions(screen.getByLabelText("已公布地区"), "1");
-  api.getConsoleLocalities.mockResolvedValueOnce({ items: [], total: 21, page: 2, page_size: 20 });
-  await user.click(screen.getByRole("button", { name: "下一页地区" }));
-  await waitFor(() => expect(api.getConsoleLocalities).toHaveBeenLastCalledWith("", 2));
-  expect(screen.getByLabelText("已公布地区")).toHaveValue("1");
-  expect(screen.getByRole("option", { name: "JP / 東京都" })).toBeInTheDocument();
-  await user.type(screen.getByLabelText("公开门牌地址"), "Tokyo address");
+  api.getConsoleLocalities.mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 20 });
+  await user.type(screen.getByLabelText("搜索地区"), "missing");
+  await user.click(screen.getByRole("button", { name: "查询" }));
+  await waitFor(() => expect(api.getConsoleLocalities).toHaveBeenLastCalledWith("missing", 1));
+  expect(screen.getByLabelText("已公布地区")).toHaveTextContent("JP / 東京都");
+  await user.click(screen.getByLabelText("已公布地区"));
+  expect(screen.getByRole("radio", { name: "JP / 東京都" })).toBeChecked();
+  await user.click(screen.getByRole("radio", { name: "JP / 東京都" }));
   await user.type(screen.getByLabelText("纬度（WGS84）"), "35.6");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
   await user.type(screen.getByLabelText("经度（WGS84）"), "139.7");
@@ -56,12 +58,11 @@ test("creates complete location after preview and retains selection across pages
 // 测试点：切换未公开会丢弃不允许的位置字段且新增类型不提供线上，不能把隐藏草稿提交到服务器。
 test("clears fields forbidden by venue kind", async () => {
   const user = await setup();
-  await user.selectOptions(screen.getByLabelText("已公布地区"), "1");
   await user.type(screen.getByLabelText("公开门牌地址"), "Secret address");
   await user.selectOptions(screen.getByLabelText("类型"), "undisclosed");
   expect(screen.getByLabelText("公开门牌地址")).toBeDisabled();
   expect(screen.getByLabelText("公开门牌地址")).toHaveValue("");
-  expect(screen.getByLabelText("已公布地区")).toHaveValue("1");
+  expect(screen.getByLabelText("已公布地区")).toHaveTextContent("JP / 東京都");
   expect(within(screen.getByLabelText("类型")).getAllByRole("option").map(option => option.textContent)).toEqual(["实体场馆", "未公开"]);
   const dialog = await confirm(user);
   await user.click(dialog.getByRole("button", { name: "提交插入" }));
@@ -113,7 +114,6 @@ test("uses a single input row without venue management controls", async () => {
 // 测试点：地区与场馆时区冲突必须阻止创建，修正后允许确认。
 test("blocks mismatched locality timezone", async () => {
   const user = await setup();
-  await user.selectOptions(screen.getByLabelText("已公布地区"), "1");
   await user.type(screen.getByLabelText("纬度（WGS84）"), "0");
   await user.type(screen.getByLabelText("经度（WGS84）"), "0");
   await user.selectOptions(screen.getByLabelText("场馆精确时区"), "Asia/Shanghai");
@@ -122,15 +122,39 @@ test("blocks mismatched locality timezone", async () => {
   expect(screen.getByRole("button", { name: "提交插入" })).toBeEnabled();
 });
 
-// 测试点：实体场馆不能将空时区或旧的暂未核验选项作为有效值提交。
-test("requires a verified timezone for physical venue creation", async () => {
+// 测试点：默认东京地区和时区；实体地址空白不能提交，切回实体与清空均恢复默认时区。
+test("defaults to Tokyo and requires a nonblank physical address", async () => {
   const user = await setup();
+  expect(screen.getByLabelText("场馆精确时区")).toHaveValue("Asia/Tokyo");
+  expect(screen.getByLabelText("公开门牌地址")).toBeRequired();
   await user.type(screen.getByLabelText("纬度（WGS84）"), "35.6");
   await user.type(screen.getByLabelText("经度（WGS84）"), "139.7");
-  expect(screen.queryByRole("option", { name: "暂未核验" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
-  await user.selectOptions(screen.getByLabelText("场馆精确时区"), "Asia/Tokyo");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeEnabled();
+  await user.clear(screen.getByLabelText("公开门牌地址"));
+  await user.type(screen.getByLabelText("公开门牌地址"), "   ");
+  expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
+  await user.selectOptions(screen.getByLabelText("类型"), "undisclosed");
+  expect(screen.getByLabelText("公开门牌地址")).not.toBeRequired();
+  await user.selectOptions(screen.getByLabelText("类型"), "physical");
+  expect(screen.getByLabelText("场馆精确时区")).toHaveValue("Asia/Tokyo");
+  await user.click(screen.getByRole("button", { name: "清空" }));
+  expect(screen.getByLabelText("已公布地区")).toHaveTextContent("JP / 東京都");
+  expect(screen.getByLabelText("场馆精确时区")).toHaveValue("Asia/Tokyo");
+});
+
+// 测试点：默认东京不依赖地区第一页，全部分页候选在同款单选菜单内可选。
+test("finds default Tokyo on a later page without external pagination", async () => {
+  const other = { ...city, id: 2, admin_area: "大阪府" };
+  api.getConsoleLocalities.mockImplementation(async (_q: string, page: number) => ({
+    items: page === 1 ? [other] : [city], total: 2, page, page_size: 1,
+  }));
+  const user = await setup();
+  expect(api.getConsoleLocalities).toHaveBeenCalledWith("", 2);
+  expect(screen.queryByRole("button", { name: /上一页|下一页/ })).not.toBeInTheDocument();
+  await user.click(screen.getByLabelText("已公布地区"));
+  await user.click(screen.getByRole("radio", { name: "JP / 大阪府" }));
+  expect(screen.getByLabelText("已公布地区")).toHaveTextContent("JP / 大阪府");
+  expect(screen.getByLabelText("已公布地区")).toHaveAttribute("aria-expanded", "false");
 });
 
 // 测试点：加载失败保留错误文案，不增加专用重新加载按钮。

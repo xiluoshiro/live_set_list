@@ -503,7 +503,7 @@ def test_corrections_keep_identity_and_only_rename_creates_version(integration_t
     assert len(correction.json()["name_versions"]) == version_count + 1
     moved = client.post("/api/console/venues", headers=headers, json={
         "venue_name": "Venue at new address", "venue_kind": "physical",
-        "location": {"latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo"},
+        "location": {"address": "New address", "latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo"},
     })
     assert moved.status_code == 201 and moved.json()["item"]["venue_id"] != 1
     assert client.get("/api/console/venues/1/location").json()["address"] == "Corrected address"

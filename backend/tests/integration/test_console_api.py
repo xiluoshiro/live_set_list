@@ -639,7 +639,7 @@ def test_console_create_venue_persists_row_and_audit_log(
     response = integration_test_client.post(
         "/api/console/venues",
         headers={"X-CSRF-Token": csrf_token},
-        json={"venue_name": "Console Created Venue", "location": {"latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo"}},
+        json={"venue_name": "Console Created Venue", "location": {"address": "Tokyo address", "latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo"}},
     )
 
     assert response.status_code == 201
@@ -668,7 +668,7 @@ def test_console_create_venue_persists_row_and_audit_log(
         {
             "venue_name": "Console Created Venue",
             "venue_kind": "physical",
-            "location": {"locality_id": None, "address": None, "latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo", "coordinate_system": "WGS84"},
+            "location": {"locality_id": None, "address": "Tokyo address", "latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo", "coordinate_system": "WGS84"},
             "venue_name_version_id": payload["item"]["venue_name_version_id"],
         },
     )
