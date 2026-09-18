@@ -59,7 +59,7 @@ V32 已允许行政区层级。已新增 `JP / 沖縄県 / admin_area / Asia/Tok
 
 ## 本地主库执行与验收（2026-09-13）
 
-执行文件：[2026-09-13__backfill_verified_live_timezones.sql](../../backend/db/postgres/backfill/2026-09-13__backfill_verified_live_timezones.sql)。它不是 Flyway 迁移，只允许对本机 `live_statistic` 的 V32 基线执行。SQL 冻结了 576 条实体候选的日期、场馆、开场／开演时间、旧偏移、候选时区及修订号指纹；按 575／2／1 三批更新，任何数量或原值漂移会使整笔事务回滚。16 条 ONLINE 排除在外。该一次性脚本不应在已回填库重复执行；重复执行会在前置断言处停止，不会再次修改数据。
+执行文件：[2026-09-13__backfill_verified_live_timezones.sql](../../backfill/2026-09-13__backfill_verified_live_timezones.sql)。它不是 Flyway 迁移，只允许对本机 `live_statistic` 的 V32 基线执行。SQL 冻结了 576 条实体候选的日期、场馆、开场／开演时间、旧偏移、候选时区及修订号指纹；按 575／2／1 三批更新，任何数量或原值漂移会使整笔事务回滚。16 条 ONLINE 排除在外。该一次性脚本不应在已回填库重复执行；重复执行会在前置断言处停止，不会再次修改数据。
 
 - 手动备份：`live_statistic_manual_20260913_205749.dump`，`pg_restore -l` 和最小恢复 SQL 校验通过（35926 行）。
 - 同一 SQL 先以事务 `ROLLBACK` 演练，所有前置、后置断言通过；正式执行以 `COMMIT` 结束。

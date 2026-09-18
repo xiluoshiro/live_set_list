@@ -7,7 +7,7 @@ import pytest
 
 pytestmark = pytest.mark.integration
 ROOT = Path(__file__).resolve().parents[3]
-SQL_DIR = ROOT / "backend/db/postgres/backfill"
+SQL_DIR = ROOT / "backfill"
 SQL_01 = (SQL_DIR / "2026-09-18-01__backfill_venue_own_timezones.sql").read_text(encoding="utf-8")
 SQL_02 = (SQL_DIR / "2026-09-18-02__correct_initial_geography_revisions.sql").read_text(encoding="utf-8")
 

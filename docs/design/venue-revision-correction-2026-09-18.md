@@ -24,7 +24,7 @@
 ## 执行结果
 
 - 应用、API、前端和回归测试已按上述规则修改。地图关联不再因资料纠错自动失效；过期表单仍通过状态令牌返回 409。
-- 本地主库已执行 [02：修订元数据纠正 SQL](../../backend/db/postgres/backfill/2026-09-18-02__correct_initial_geography_revisions.sql)，在 01 时区回填之后执行：先 ROLLBACK 演练，后显式 COMMIT。154 个 Venue 的旧兼容数字恢复为 1，153 个核验时间恢复到本次错误更新前，578 条 Live 的地理来源修订清空。新增审计分别为 154 条和 578 条，原审计保留。
+- 本地主库已执行 [02：修订元数据纠正 SQL](../../backfill/2026-09-18-02__correct_initial_geography_revisions.sql)，在 01 时区回填之后执行：先 ROLLBACK 演练，后显式 COMMIT。154 个 Venue 的旧兼容数字恢复为 1，153 个核验时间恢复到本次错误更新前，578 条 Live 的地理来源修订清空。新增审计分别为 154 条和 578 条，原审计保留。
 - 修正前备份为 `~/Backups/live-set-list-docker\app\manual\live_statistic_manual_20260918_191950.dump`，归档目录与 SQL 提取检查通过。首次 IANA 回填前备份为同目录 `live_statistic_manual_20260918_185626.dump`。
 - 提交后的独立整行指纹核对确认：除声明的旧修订元数据和核验时间纠正外，Venue 事实、Live 排期、名称历史、地区、地图关联和 Flyway 历史均未变化。153 个实体 Venue 的 IANA 全部保留；所有 155 个 Venue 的旧位置数字为 1，594 条 Live 的来源修订均为空。
 - 最终 `python scripts/run_checks.py functional` 退出码为 0；覆盖资料补录与纠错、正式更名、搬迁新建、并发冲突及地图关联等回归场景。Flyway validate 通过，仍为 V33；对象归属检查为 0 项违规。

@@ -4,7 +4,7 @@
 
 当前仓库结构基线为 `B1__baseline_schema.sql`，后续 migration 为 V2~V32；V12 增加 `live_attrs.default_band_ids`，V13/V14 增加巡演和演出活动组聚合，V15 增加活动出演成员，V16 允许同一 session 保留多个已签发的 CSRF token hash，V17 为控制台 Setlist 完整集合更新授予窄范围删除权限，V18 增加 Live 状态与正式改期历史，V19 恢复四张完整集合关系表的窄范围删除授权，V20 禁止取消 Live 被收藏、清理状态切换前的收藏并为正式改期快照补充旧标题，V21 创建乐队历史名称、不可变阵容、Live 阵容上下文和逐曲出演关系结构，V22 为交接共演增加显式旧/新正式基准，V23 收紧约束并明确禁止 handover 的基准为 `NULL`，V24 恢复阵容历史完整集合替换所需的窄范围删除授权，V25 锁定开放版本并建立当前/有效 Band 视图，V26 在一致性断言后删除两个旧成员列，V27 允许场馆、开场和开演独立处于未公布状态，并把固定 UTC offset 独立保存，V28 建立 Venue 类型、正式名称版本及 Live 名称快照，V29 在运行数据整理后以一致性断言和复合外键收口 Venue/名称版本配对，V30 增加 Venue 所在地与地图关联框架，V31 为 Live 与正式改期历史增加 IANA 时区快照、来源和夏令时重复钟点选择。目标数据库的实际版本仍应通过 `flyway info` 确认。
 
-V32 仅扩展 `geo_localities` 的登记层级与约束，不修改现有资料。东京／香港／新加坡的层级归一和四条韩国场馆地址修正，保留在 [独立手工回填 SQL](postgres/backfill/2026-09-13__correct_venue_location_labels_and_addresses.sql)；需在 V32 迁移后单独审核并执行，不属于 Flyway 自动迁移。执行前应确保应用已能处理非城市层级和空 `locality_name`。
+V32 仅扩展 `geo_localities` 的登记层级与约束，不修改现有资料。东京／香港／新加坡的层级归一和四条韩国场馆地址修正，保留在 [独立手工回填 SQL](../../backfill/2026-09-13__correct_venue_location_labels_and_addresses.sql)；需在 V32 迁移后单独审核并执行，不属于 Flyway 自动迁移。执行前应确保应用已能处理非城市层级和空 `locality_name`。
 
 ## 角色分工
 
