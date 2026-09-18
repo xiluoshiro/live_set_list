@@ -11,9 +11,9 @@
 - 已修复 `/api/auth/me` 并发刷新 CSRF token 造成写接口 403 的竞态；根因已同步到 [E2E 测试设计](../../design/e2e.md)。
 - 当前剩余主线不再是录入链路接线，而是 E2E 回归落地、用户管理能力和更细的字段级错误展示。
 
-## 0. 本次只读查询 API 设计方案
+## 0. 控制台只读查询 API 设计方案
 
-本次只读查询接口服务于当前控制台前端的 mock 数据替换，优先覆盖 `MOCK_SONGS / MOCK_BANDS / MOCK_VENUES` 三类候选数据。
+控制台只读查询接口服务于当前控制台前端的 mock 数据替换，优先覆盖 `MOCK_SONGS / MOCK_BANDS / MOCK_VENUES` 三类候选数据。
 
 设计原则：
 

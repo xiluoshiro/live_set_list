@@ -9,7 +9,6 @@
 - 产品定位、用户视角和长期路线仍由 [社区 Live 数据库首页与个人工作台需求](../product/homepage-community-database.md) 维护。
 - 阶段 1 的历史实现边界见已归档的 [社区 Live 数据库首页阶段 1 开发设计](../archive/completed-design/homepage-community-database-phase1.md)。
 - 2026-07 第一轮视觉问题 F1–F20 已全部修正并完成浏览器复核，证据见已归档的 [公共端视觉走查报告](../archive/completed-design/public-ui-visual-audit-2026-07.md)。
-- 本轮以 `http://localhost:5173/` 的本地页面为最新 UI 基线；线上版本仅用于部署回归。
 
 当前状态：基础视觉、响应式、卡片键盘入口、加载/空/错状态和视觉层级收敛已完成；乐队名称搜索、可分享 URL、歌曲/场地后续路径、独立 Live 详情收藏和截图型视觉回归仍待后续阶段。
 
@@ -35,7 +34,7 @@
 
 ## 3. 实施前问题与剩余项
 
-本节保留本轮设计的原始问题背景。已经落地的项目以 `DONE` 标记；未标记项仍可作为后续精修候选。
+本节列出界面问题与修正方向。已经落地的项目以 `DONE` 标记；未标记项仍可作为后续精修候选。
 
 ### 3.1 响应式与移动端
 
@@ -79,7 +78,7 @@
 
 ## 4. 外部项目借鉴
 
-本轮只借鉴成熟资料库的产品结构，不复制其视觉：
+设计只借鉴成熟资料库的产品结构，不复制其视觉：
 
 - [setlist.fm](https://www.setlist.fm/)：首页把全局搜索、Setlist/艺人/场地等实体导航、数据规模、热门内容、近期内容和最近编辑组织为连续的发现路径；高级搜索还提供艺人、歌曲、巡演、场地、城市、国家和日期范围。
 - [Discogs](https://support.discogs.com/hc/en-us/articles/360003622014-How-To-Browse-Search-In-The-Database)：在结果页提供实体分类、过滤条件、排序和高级搜索，让用户能从模糊关键词逐步收敛到目标资料。
@@ -281,7 +280,7 @@ setlist：
 
 ## 8. URL 与状态设计
 
-继续使用原生 History API，不在本轮引入 React Router。URL 采用查询参数：
+继续使用原生 History API，不引入 React Router。URL 采用查询参数：
 
 ```text
 /?view=all&q=Roselia&year=2026&live_type=oneman&band_id=4&sort=date_desc
@@ -443,11 +442,7 @@ type LiveListFilters = {
 python scripts/run_checks.py functional
 ```
 
-浏览器视觉检查在 functional 通过后执行。纯 Markdown 状态同步使用：
-
-```powershell
-git diff --check
-```
+浏览器视觉检查应独立覆盖布局、溢出、主题和交互状态。
 
 ## 13. 非目标
 

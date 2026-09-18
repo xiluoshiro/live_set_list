@@ -81,6 +81,6 @@ scripts/          开发、检查、发布与恢复命令入口
 - [API 补充规则](docs/api.md)
 - [开发与检查脚本](scripts/README.md)
 - [数据库操作](backend/db/README.md)
-- [生产部署实录](docs/production-deployment-runbook.md)
+- [生产部署操作指南](docs/production-deployment-runbook.md)
 
 生产状态、发布验收、数据库角色、恢复流程、测试覆盖边界、完成历史和长期规划均由上述专项文档维护，根 README 不再重复保存这些易漂移内容。

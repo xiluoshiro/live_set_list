@@ -32,7 +32,6 @@
 - 后端单元测试：`_valid_live_payload` 基础值包含 `live_type: "oneman"`，新增 4 个非法值校验用例。
 - 后端集成测试：请求使用 `live_type: "oneman"`，DB 查询和审计断言包含 `live_type` 列。
 - 前端测试：mock 响应全部补齐 `live_type`，断言从 `type: "专场"` 改为 `live_type: "oneman"`。
-- `python scripts/run_checks.py functional` 全部通过。
 
 ## 2. 字段和值域
 

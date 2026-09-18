@@ -17,7 +17,7 @@
 
 ## 2. 结论摘要
 
-本轮采用以下方案：
+日历采用以下方案：
 
 1. 首页保留搜索、四项数据概览和“最新 Live 日期”。
 2. 删除“最近收录”标题及其六行 Live 列表，替换为整行宽度的“Live 日历”。
@@ -80,7 +80,7 @@ ORDER BY l.live_date DESC, l.id DESC
 
 | 参照 | 可取之处 | 不直接照搬的部分 | 对本方案的影响 |
 |---|---|---|---|
-| [setlist.fm](https://www.setlist.fm/) | 首页明确分开 Upcoming Events 与 Recent Edits | 两组长列表会挤占本项目较窄的首页 | “演出日期”和“资料编辑时间”必须分开命名；本轮只做日期浏览 |
+| [setlist.fm](https://www.setlist.fm/) | 首页明确分开 Upcoming Events 与 Recent Edits | 两组长列表会挤占本项目较窄的首页 | “演出日期”和“资料编辑时间”必须分开命名；日历只做日期浏览 |
 | [Concert Archives](https://www.concertarchives.org/) | Upcoming、Happening、Past 是稳定的时间阶段 | 大型全球演出流和购票导向不适合本资料库 | 继续沿用既有状态体系，不另造“新收录”状态 |
 | [Bandsintown](https://www.bandsintown.com/) | Today、This Week、This Month、Select Dates 先限定时间，再浏览条目 | 地理位置、推荐和票务不是本项目目标 | 月份是日历的主导航单位，选中日后再读详细条目 |
 | [Resident Advisor](https://ra.co/events) | 日期筛选与按日分组的事件列表相互配合 | 强类型、流派与城市筛选会使首屏过重 | 月视图负责定位，右侧或下方列表负责阅读，不把标题塞进日期格 |
@@ -100,7 +100,7 @@ ORDER BY l.live_date DESC, l.id DESC
 
 ### 5.2 非目标
 
-本轮不负责：
+范围之外：
 
 - 展示真实的最近新增、最近编辑或贡献动态。
 - 在日历中加入收藏、购票、签到、提醒或个人推荐。

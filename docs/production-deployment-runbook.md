@@ -1,21 +1,19 @@
-# LiveSetList 公网部署与自动发布实录
+# LiveSetList 公网部署与自动发布操作指南
 
 本文档是当前生产环境的操作 runbook。生产架构、安全基线和后续优先级见[生产部署设计](design/production-deployment.md)。不要将真实密码、SSH 私钥、数据库 dump 或 `/etc/livesetlist/*.env` 提交到仓库。
 
-## 当前状态
+## 环境约定
 
-截至 2026-07-17，以下路径已在生产 VM 上验证：
+部署环境使用以下约定：
 
 - Google Compute Engine VM：Debian 12 Bookworm（`debian-12-bookworm-v20260609`）。
 - Nginx 托管 `frontend/dist`，同源 `/api/*` 转发至 FastAPI `127.0.0.1:8000`；PostgreSQL Docker 容器仅绑定 `127.0.0.1:15432`。
-- 公网域名：`bang.dreamliveevents.com`；生产 OpenAPI 路径返回 `404`。
+- 公网域名：`bang.dreamliveevents.com`；生产禁用 OpenAPI。
 - 业务数据和管理员来自 PostgreSQL dump，`AUTH_DEFAULT_ADMIN_ENABLED=false`，`auth_sessions` 为空是预期状态。
 - `livesetlist-backup.timer` 每天 `03:20` 执行自动备份，根目录为 `/var/backups/livesetlist`。
-- GitHub Actions tag 发布已跑通：CI 创建隔离 PostgreSQL、执行 Flyway 和 `functional`、构建发布包并经 `production` Environment 审批后部署到 VM。
-- 首个完整成功的自动发布 tag 为 `v2026-07-14-006`。
-- migration release 已完成：生产数据库先从 V9 升至 V11，随后 `v2026-07-18-001` 完成 V12/V13 migration、应用切换和 health 验收。
+- GitHub Actions tag 发布流程：CI 创建隔离 PostgreSQL、执行 Flyway 和 `functional`、构建发布包并经 `production` Environment 审批后部署到 VM。
 
-两阶段 migration 发布代码、VM root-owned 入口、deploy-only sudoers 和 GitHub repository secrets/variables/Environments 已完成配置。生产当前已确认到 V13；当前仓库已增加 V14~V23 migration，但在取得生产 `flyway info`、release state / attestation 和 health 证据前，不得把生产状态写成 V14 或更高版本。tag 存在仍不等价于生产验收。
+实际部署版本以目标环境的 Flyway 历史、release state、attestation 和健康检查为准；tag 存在不能证明部署完成。
 
 ## 生产拓扑与目录
 
@@ -141,17 +139,6 @@ sudo install -o root -g root -m 755 \
 
 不要修改已执行 migration；回滚应用版本不等于回滚数据库。
 
-### 已执行记录：V9 -> V11
-
-本次生产数据库已从 V9 成功迁移至 V11：
-
-- `V10__allow_same_song_name_for_different_bands.sql` 成功将歌曲唯一约束调整为 `(song_name, band_id)`。
-- `V11__normalize_empty_other_members.sql` 成功规范化 `live_setlist.other_member` 中的空值。
-- 迁移顺序为 `info -> migrate -> validate -> info`；在存在 pending migration 时先执行 `validate` 会被 Flyway 12 拒绝，这是预期行为。
-- 服务器 env 中的密码包含 `$` 等字符。Bash `source` 会触发 `unbound variable`，Docker Compose 环境解析会插值并给出变量缺失警告；迁移使用 `python-dotenv(interpolate=False)` 读取后，由 Python 子进程环境把变量传给 Docker。
-
-迁移 release 已完成手工切换，后端数据库 health 通过。后续 SQL 不变的版本可继续使用现有自动发布路径。
-
 ## Flyway 变化时的两阶段自动发布
 
 实现入口为 `infra/production/release_manager.py`、`infra/production/livesetlist-deploy`、`.github/workflows/release.yml` 和 `.github/workflows/migration-release.yml`。必须先在 VM 安装新版 root-owned 入口，再合并或启用新 workflow；不能让新 workflow 调用旧服务器脚本。
@@ -220,7 +207,7 @@ build-and-verify
 
 ## VM 启用两阶段入口
 
-以下操作必须在包含本次代码的 tag 被推送前完成。生产 release 内的模板不会自动覆盖 `/usr/local/sbin` 下的 root-owned 入口。
+以下操作必须在包含新版入口代码的 tag 被推送前完成。生产 release 内的模板不会自动覆盖 `/usr/local/sbin` 下的 root-owned 入口。
 
 ### 1. 上传并安装服务器入口
 
@@ -290,14 +277,13 @@ sudo systemctl status livesetlist-backup.service --no-pager
 - Repository variables：`DEPLOY_HOST`、`DEPLOY_PORT`、`DEPLOY_USER=livesetlist-deploy`、`PUBLIC_BASE_URL`。
 - Environment：保留 `production`；另建 `production-migration`。套餐支持时为两者配置 required reviewer；不支持时，两次独立 `workflow_dispatch` 和确认词仍会阻止普通 tag 自动迁移数据库。
 
-### 4. 首次启用验收顺序
+### 4. 首次启用检查
 
-1. **已完成**：VM 入口安装、sudoers 校验、Flyway 镜像预拉取和备份 service 验证。
-2. **已完成**：合并并推送 workflow 代码。
-3. **已完成**：配置 repository secrets/variables，保留 `production` 并新建 `production-migration` Environment。
-4. **已完成 V13 migration release**：`v2026-07-18-001` 已完成 V12/V13 migration、应用切换和 health 验收；迁移前修正了生产业务表误归属 `live_project_flyway` 的历史漂移。
-5. **已增加 owner 契约**：CI fresh DB、生产 migration 前后、deploy 前和恢复流程共用 `backend/db/postgres/checks/ownership_contract.sql`。
-6. 后续 migration release 仍需在 Actions Summary 核对不带 `v` 的 version、归档 SHA-256、prepare 分类和状态文件；不要仅凭本地 tag 判断部署成功。
+1. 安装 VM 入口，校验 sudoers，预拉取 Flyway 镜像并检查备份 service。
+2. 推送 workflow 代码，配置 repository secrets/variables 及两个 Environment。
+3. 核对 prepare 分类、migration attestation、应用切换及 health。
+4. CI fresh DB、migration 前后、deploy 前和恢复流程共用 `backend/db/postgres/checks/ownership_contract.sql`。
+5. 在 Actions Summary 核对 version、归档 SHA-256 和状态文件，不能仅凭 tag 判断部署成功。
 
 首次验收或故障排查时可选执行的服务器侧检查（不是日常发布的人工步骤）：
 
@@ -339,7 +325,7 @@ curl.exe -I <PUBLIC_BASE_URL>/openapi.json
 
 最后一项应为 `404`。本机访问自身公网 IP 可能受 hairpin routing 影响，公网验收以外部工作站或 GitHub smoke test 为准。
 
-本次自动化实施中已修复的故障：
+常见故障及处理方式：
 
 | 现象 | 原因 | 固化处理 |
 | --- | --- | --- |

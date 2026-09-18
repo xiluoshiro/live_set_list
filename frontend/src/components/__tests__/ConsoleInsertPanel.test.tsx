@@ -1123,24 +1123,17 @@ describe("ConsoleInsertPanel", () => {
     expect(venueOptions).toEqual(["101 - Early Venue", "301 - Later Venue"]);
   });
 
-  test("查询venue旁的插入按钮会新增venue而不是提交Live", async () => {
-    // 测试点：venue 快捷插入应调用新增 venue API，并自动选中新建场地，不能误触发新增 Live 校验。
+  // 测试点：快捷插入携带名称打开完整场地录入，不能绕过实体场馆必填时区规则。
+  test("查询venue旁的插入按钮打开完整新增场地表单", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel />);
-
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
     await user.type(screen.getByLabelText("查询 venue"), "New Venue");
     await user.click(screen.getByRole("button", { name: "插入" }));
-
     expect(apiMocks.createConsoleVenue).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "确认新增 Venue" })).toBeInTheDocument();
-    expect(screen.getByText("New Venue")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
-
-    await waitFor(() => expect(apiMocks.createConsoleVenue).toHaveBeenCalledWith("New Venue", "csrf-token"));
-    expect(screen.getByText("已新增venue #88（New Venue）")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "88 - New Venue" })).toBeInTheDocument();
-    expect(screen.queryByText("新增Live失败：live_date 与 live_title 为必填项。")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "新增场地" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("名称")).toHaveValue("New Venue");
+    expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
   });
 
   // 测试点：新增 Live 成功后应重置表单，并让共享日志在切换标签页后继续显示最新结果。

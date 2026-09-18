@@ -343,9 +343,9 @@ CI 在 fresh DB 完成 Flyway migrate 后执行 owner 契约；生产 release ma
 - 对受管理对象：
   - 最稳妥方式是成为 owner，或继承 owner 角色
 
-### 当前本地测试库实际最少落地权限
+### 本地测试库最小权限配置
 
-当前本地测试库至少已具备：
+测试库需要以下权限：
 
 - `GRANT CONNECT ON DATABASE live_statistic_test TO live_project_flyway;`
 - `GRANT USAGE, CREATE ON SCHEMA public TO live_project_flyway;`

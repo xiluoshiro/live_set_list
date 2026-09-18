@@ -21,6 +21,7 @@ type VenueAdminSectionProps = {
   onVenuesChanged: () => Promise<void>;
   onOpenLive?: (liveId: number) => void;
   initialVenueId?: number | null;
+  initialCreateName?: string;
 };
 
 type ConfirmationKind = "kind" | "rename" | "correction";
@@ -49,7 +50,7 @@ function dateText(value: string | null, emptyText: string): string {
   return value ?? emptyText;
 }
 
-export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenLive, initialVenueId }: VenueAdminSectionProps) {
+export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenLive, initialVenueId, initialCreateName }: VenueAdminSectionProps) {
   const auth = useAuth();
   const [venues, setVenues] = useState<ConsoleVenueItem[]>([]);
   const [selectedVenueId, setSelectedVenueId] = useState<number | null>(null);
@@ -298,7 +299,7 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
 
       </>}
 
-      {variant === "create" && <VenueCreateSection onMessage={onMessage} onVenuesChanged={onVenuesChanged} />}
+      {variant === "create" && <VenueCreateSection initialName={initialCreateName} onMessage={onMessage} onVenuesChanged={onVenuesChanged} />}
 
       {variant === "edit" && detail && (
         <>

@@ -11,7 +11,6 @@ import {
   createConsoleLive,
   createConsoleSong,
   createConsoleSongsBatch,
-  createConsoleVenue,
   getConsoleBands,
   getConsoleBandHistory,
   getConsoleLive,
@@ -133,11 +132,6 @@ type BatchSongConfirmRow = {
 };
 
 type PendingConfirmation =
-  | {
-      kind: "venue";
-      title: string;
-      payload: { venue_name: string };
-    }
   | {
       kind: "live";
       title: string;
@@ -2493,24 +2487,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       return;
     }
 
-    setPendingConfirmation({
-      kind: "venue",
-      title: "确认新增 Venue",
-      payload: { venue_name: venueName },
-    });
-  };
-
-  const insertVenue = async (payload: { venue_name: string }, csrfToken: string) => {
-    try {
-      const response = await createConsoleVenue(payload.venue_name, csrfToken);
-      const inserted = toVenueOption(response.item);
-      setVenues((prev) => sortById([inserted, ...prev.filter((venue) => venue.venue_id !== inserted.venue_id)], (venue) => venue.venue_id));
-      setSelectedVenueId(inserted.venue_id);
-      setVenueOpen(false);
-      setMessage(`已新增venue #${inserted.venue_id}（${inserted.venue_name}）`);
-    } catch (error) {
-      setMessage(`新增venue失败：${errorMessage(error)}`);
-    }
+    setMode("venue_create");
+    setMessage("请补全场地资料；实体场馆必须填写坐标和已核验时区。");
   };
 
   const requestLiveConfirmation = () => {
@@ -2890,9 +2868,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
     setConfirmationSubmitting(true);
     try {
-      if (pendingConfirmation.kind === "venue") {
-        await insertVenue(pendingConfirmation.payload, auth.csrfToken);
-      } else if (pendingConfirmation.kind === "live") {
+      if (pendingConfirmation.kind === "live") {
         await saveLive(
           pendingConfirmation.action,
           pendingConfirmation.liveId,
@@ -2938,14 +2914,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
   const renderPendingConfirmationBody = () => {
     if (!pendingConfirmation) return null;
-
-    if (pendingConfirmation.kind === "venue") {
-      return (
-        <CompactConfirmationTable
-          rows={[["venue_name", pendingConfirmation.payload.venue_name]]}
-        />
-      );
-    }
 
     if (pendingConfirmation.kind === "live_discard") {
       return <p className="console-admin-hint">当前 Live 有未保存修改。确认放弃这些修改吗？</p>;
@@ -3449,6 +3417,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       {(mode === "venue_create" || mode === "venue") && (
         <VenueAdminSection
           variant={mode === "venue_create" ? "create" : "edit"}
+          initialCreateName={venueQueryText.trim()}
           onMessage={setMessage}
           onVenuesChanged={async () => {
             const response = await getConsoleVenues(undefined, 100);

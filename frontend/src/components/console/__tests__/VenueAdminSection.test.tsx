@@ -145,7 +145,7 @@ describe("VenueAdminSection", () => {
     const onVenuesChanged = vi.fn().mockResolvedValue(undefined);
     renderSection(onMessage, onVenuesChanged, "create");
 
-    const createBlock = screen.getByRole("heading", { name: "新增场地" }).closest(".tour-admin-block") as HTMLElement | null;
+    const createBlock = screen.getByRole("region", { name: "新增场地" });
     if (!createBlock) throw new Error("missing create block");
     await user.type(within(createBlock).getByLabelText("名称"), "Third Hall");
     await user.selectOptions(within(createBlock).getByLabelText("类型"), "undisclosed");

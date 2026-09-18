@@ -25,7 +25,7 @@ Design Read：这是面向演出资料查询者和站内维护者的全站重构
 
 ### 2.1 重构模式
 
-本轮属于 `Redesign - Overhaul`：
+重构范围属于 `Redesign - Overhaul`：
 
 - 保留路由语义、数据语义、用户任务、可访问性和回归契约。
 - 不保留旧页面的卡片、圆角、阴影、DOM 或 CSS class。
@@ -66,13 +66,13 @@ Design Read：这是面向演出资料查询者和站内维护者的全站重构
 4. `App.tsx` 仍承担大部分路由、列表、详情、抽屉和页面渲染逻辑，视觉迁移容易与状态迁移混在同一批次。
 5. `live-detail-stage-ledger.md` 仍标记为 `PROPOSED`，但仓库已存在 Stage Ledger 生产组件、CSS 和测试。开始全站实施前需要先核对真实完成状态并修正文档，不能把旧状态当成当前事实。
 
-### 3.3 必须带入本轮的失败记录
+### 3.3 已知风险与防范约束
 
 #### Ant Design 全局样式漏检
 
 [前端全局样式漏检复盘](../fails/frontend-global-style-coverage-gap.md)记录过一次控制台试点：在入口导入 `antd/dist/reset.css` 后，非控制台页面也发生变化，但 Vitest 和 jsdom 行为测试仍全部通过。
 
-本轮对应硬规则：
+约束：
 
 - 禁止在 `main.tsx` 或全站样式入口导入第三方 reset、normalize 或 base CSS。
 - 新增第三方样式必须能说明作用根节点、层级和卸载边界。
@@ -83,7 +83,7 @@ Design Read：这是面向演出资料查询者和站内维护者的全站重构
 
 [React 列表 key 碰撞复盘](../fails/react-list-key-collision.md)说明同一首歌在同一歌单或差异中重复出现是有效数据。重构列表时不能把 `song_id` 当成出现记录 ID。
 
-本轮对应硬规则：
+约束：
 
 - 歌单、巡演差异、历史记录和控制台操作记录都以记录实例为 key。
 - 回归必须包含 A -> B -> A 列表切换与重复歌曲。
@@ -608,4 +608,3 @@ git diff --check
 6. 320px、200% 缩放、键盘、读屏、reduced motion 和明暗主题通过回归。
 7. functional、真实浏览器截图矩阵和控制台错误检查全部通过。
 8. 旧可见实现、旧页面 CSS 和文档中的失真状态已清理，不存在双实现维护成本。
-
