@@ -205,8 +205,8 @@ describe("App dark mode", () => {
     peekMyFavoriteLivesMock.mockReturnValue(undefined);
   });
 
+  // 测试点：完整 system → dark → light → system 循环同步更新根节点、按钮文案/图标和持久化值。
   test("点击主题按钮可在跟随系统、夜间、浅色之间循环切换", async () => {
-    // 测试点：主题按钮应支持三态循环，并正确更新文案/图标与持久化值。
     installMatchMedia(false);
     const user = userEvent.setup();
     renderWithTheme();
@@ -230,6 +230,13 @@ describe("App dark mode", () => {
       expect(screen.getByRole("button", { name: "当前浅色模式，单击切换到跟随系统" })).toHaveTextContent("☀");
     });
     expect(localStorage.getItem("live-theme-mode")).toBe("light");
+
+    await user.click(screen.getByRole("button", { name: "当前浅色模式，单击切换到跟随系统" }));
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+      expect(screen.getByRole("button", { name: "当前跟随系统（浅色），单击锁定夜间模式" })).toHaveTextContent("⦿");
+    });
+    expect(localStorage.getItem("live-theme-mode")).toBe("system");
   });
 
   test("手动切到夜间后刷新仍保持夜间", async () => {

@@ -1680,8 +1680,8 @@ describe("App", () => {
     expect(getAuthMeMock).toHaveBeenCalledTimes(1);
   });
 
-  test("分页和每页条数切换正常工作", async () => {
-    // 测试点：分页跳转与 15/20 行切换后页码计算正确。
+  // 测试点：翻页请求与显示一致，返回已加载页复用快照，第二页改为 15 行后重新请求第一页。
+  test("分页请求、返回快照和每页条数切换保持一致", async () => {
     getLivesMock
       .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
@@ -1702,15 +1702,27 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
 
     const total = getTotalCount();
+    expect(getPerformancesMock).toHaveBeenCalledWith(1, 20, "all");
     const firstPageInfo = getPageInfo();
     expect(firstPageInfo.page).toBe(1);
     expect(firstPageInfo.totalPages).toBe(Math.ceil(total / 20));
 
     await user.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 21" })).toBeInTheDocument());
+    expect(getPerformancesMock).toHaveBeenLastCalledWith(2, 20, "all");
     const secondPageInfo = getPageInfo();
     expect(secondPageInfo.page).toBe(Math.min(2, secondPageInfo.totalPages));
 
+    await user.click(screen.getByRole("button", { name: "上一页" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    expect(getPageInfo().page).toBe(1);
+    expect(getPerformancesMock).toHaveBeenCalledTimes(2);
+
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() => expect(getPageInfo().page).toBe(2));
     await user.selectOptions(screen.getByLabelText("每页行数"), "15");
+    await waitFor(() => expect(getPerformancesMock).toHaveBeenLastCalledWith(1, 15, "all"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
     const pageInfoAfterResize = getPageInfo();
     expect(pageInfoAfterResize.page).toBe(1);
     expect(pageInfoAfterResize.totalPages).toBe(Math.ceil(total / 15));
@@ -1994,28 +2006,6 @@ describe("App", () => {
     });
   });
 
-  test("首次加载请求参数正确，切换每页数量后重新请求", async () => {
-    // 测试点：进入全量页后请求 page=1&page_size=20，切到 15 后重新请求 page_size=15。
-    getLivesMock
-      .mockResolvedValueOnce(
-        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
-      );
-    getPerformancesMock
-      .mockResolvedValueOnce(
-        makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-      )
-      .mockResolvedValueOnce(
-        makePerformancesResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
-      );
-    const user = userEvent.setup();
-    renderApp();
-    await openAllContent(user);
-
-    await waitFor(() => expect(getPerformancesMock).toHaveBeenCalledWith(1, 20, "all"));
-    await user.selectOptions(screen.getByLabelText("每页行数"), "15");
-    await waitFor(() => expect(getPerformancesMock).toHaveBeenCalledWith(1, 15, "all"));
-  });
-
   test("首次加载后会对当前页触发批量详情预读", async () => {
     // 测试点：首页加载完成后，使用当前页 live_id 列表调用 batch 详情接口。
     getLivesMock.mockResolvedValue(
@@ -2076,34 +2066,6 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "仅收藏" }));
     await waitFor(() => expect(getLiveDetailsBatchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
     expect(getLiveDetailsBatchMock).toHaveBeenLastCalledWith([101, 102]);
-  });
-
-  test("翻页会触发对应页码请求", async () => {
-    // 测试点：点击下一页/上一页会触发 page 参数变化。
-    getLivesMock
-      .mockResolvedValueOnce(
-        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
-      );
-    getPerformancesMock
-      .mockResolvedValueOnce(
-        makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-      )
-      .mockResolvedValueOnce(
-        makePerformancesResponse({ page: 2, pageSize: 20, total: 47, totalPages: 3, itemCount: 20, startId: 21 }),
-      )
-      .mockResolvedValueOnce(
-        makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-      );
-    const user = userEvent.setup();
-    renderApp();
-    await openAllContent(user);
-    await waitFor(() => expect(getPerformancesMock).toHaveBeenCalledWith(1, 20, "all"));
-
-    await user.click(screen.getByRole("button", { name: "下一页" }));
-    await waitFor(() => expect(getPerformancesMock).toHaveBeenCalledWith(2, 20, "all"));
-
-    await user.click(screen.getByRole("button", { name: "上一页" }));
-    await waitFor(() => expect(getPerformancesMock).toHaveBeenCalledWith(1, 20, "all"));
   });
 
   test("翻页后会对新页数据触发批量详情预读", async () => {
@@ -2244,8 +2206,8 @@ describe("App", () => {
     });
   });
 
-  // 测试点：接口异常时页面不崩溃，结构化错误状态与分页区域同时保留。
-  test("请求失败时显示错误提示且分页区域可见", async () => {
+  // 测试点：列表失败时保留错误提示与分页，并记录包含分页参数和错误原因的日志。
+  test("请求失败时显示错误提示、保留分页并记录上下文日志", async () => {
     getLivesMock
       .mockResolvedValueOnce(makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }));
     getPerformancesMock
@@ -2259,27 +2221,9 @@ describe("App", () => {
       expect(alert).toHaveTextContent("数据加载失败");
       expect(alert).toHaveTextContent("Request failed: 500");
       expect(screen.getByText(/第 \d+ \/ \d+ 页/)).toBeInTheDocument();
-    });
-  });
-
-  test("列表加载失败时会记录页面级错误日志", async () => {
-    // 测试点：列表请求失败后，页面 catch 会记录带分页上下文的业务日志。
-    getLivesMock
-      .mockResolvedValueOnce(makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }));
-    getPerformancesMock
-      .mockRejectedValueOnce(new Error("Request failed: 500"));
-    const user = userEvent.setup();
-    render(<App />);
-    await openAllContent(user);
-
-    await waitFor(() => {
       expect(logErrorMock).toHaveBeenCalledWith(
         "load_lives_failed",
-        expect.objectContaining({
-          page: 1,
-          pageSize: 20,
-          message: "Request failed: 500",
-        }),
+        expect.objectContaining({ page: 1, pageSize: 20, message: "Request failed: 500" }),
       );
     });
   });
@@ -2340,47 +2284,6 @@ describe("App", () => {
     });
     await user.click(screen.getAllByRole("button", { name: "取消收藏" })[0]);
     await waitFor(() => expect(unfavoriteLiveMock).toHaveBeenCalledWith(1, "csrf-token"));
-  });
-
-  test("主题按钮支持跟随系统、夜间、浅色三态循环", async () => {
-    // 测试点：顶部主题按钮应支持 system -> dark -> light -> system 的循环切换。
-    window.localStorage.setItem("live-theme-mode", "system");
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 3, totalPages: 1, itemCount: 3 }),
-    );
-    const user = userEvent.setup();
-
-    render(
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>,
-    );
-
-    const systemButton = await screen.findByRole("button", {
-      name: "当前跟随系统（浅色），单击锁定夜间模式",
-    });
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
-
-    await user.click(systemButton);
-    expect(
-      screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" }),
-    ).toBeInTheDocument();
-    expect(window.localStorage.getItem("live-theme-mode")).toBe("dark");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-
-    await user.click(screen.getByRole("button", { name: "当前夜间模式，单击切换到浅色模式" }));
-    expect(
-      screen.getByRole("button", { name: "当前浅色模式，单击切换到跟随系统" }),
-    ).toBeInTheDocument();
-    expect(window.localStorage.getItem("live-theme-mode")).toBe("light");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
-
-    await user.click(screen.getByRole("button", { name: "当前浅色模式，单击切换到跟随系统" }));
-    expect(
-      screen.getByRole("button", { name: "当前跟随系统（浅色），单击锁定夜间模式" }),
-    ).toBeInTheDocument();
-    expect(window.localStorage.getItem("live-theme-mode")).toBe("system");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 
   // 测试点：卡片模式的收藏与外链入口必须复用同一套 Phosphor 图标语言，不再混用字符和手写 SVG。

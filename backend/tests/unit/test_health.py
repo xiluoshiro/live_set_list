@@ -15,7 +15,8 @@ def _build_connection_mock(fetchone_value):
     return conn, cursor
 
 
-def test_db_healthcheck_success_returns_1():
+# 测试点：健康检查通过连接与 cursor 上下文执行一次查询，并返回准确的成功响应。
+def test_db_healthcheck_success_returns_1_using_connection_contexts():
     conn, cursor = _build_connection_mock((1,))
 
     with patch("app.routers.health.get_db_connection", return_value=conn):
@@ -25,6 +26,9 @@ def test_db_healthcheck_success_returns_1():
     assert response.status_code == 200
     assert response.json() == {"ok": True, "result": 1}
     cursor.execute.assert_called_once_with("select 1;")
+    conn.__enter__.assert_called_once()
+    conn.cursor.assert_called_once()
+    conn.cursor.return_value.__enter__.assert_called_once()
 
 
 def test_db_healthcheck_returns_none_when_no_row():
@@ -51,16 +55,3 @@ def test_db_healthcheck_db_error_returns_500():
     logger_exception.assert_called_once()
     assert logger_exception.call_args.args[0].startswith("db healthcheck failed")
     assert logger_exception.call_args.args[1] == "Error"
-
-
-def test_db_healthcheck_uses_connection_and_cursor_context():
-    conn, _ = _build_connection_mock((1,))
-
-    with patch("app.routers.health.get_db_connection", return_value=conn):
-        client = TestClient(app)
-        response = client.get("/api/health/db")
-
-    assert response.status_code == 200
-    conn.__enter__.assert_called_once()
-    conn.cursor.assert_called_once()
-    conn.cursor.return_value.__enter__.assert_called_once()

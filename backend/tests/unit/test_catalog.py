@@ -1,6 +1,8 @@
 from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import MagicMock, call, patch
 
+import pytest
+
 from fastapi.testclient import TestClient
 from psycopg2 import Error
 from psycopg2.errors import QueryCanceled
@@ -190,37 +192,32 @@ def test_get_catalog_calendar_december_month_rolls_to_next_year():
     ]
 
 
+# 测试点：非法月份（含空值）在数据库访问前返回 422。
 def test_get_catalog_calendar_invalid_month_returns_422():
-    # 测试点：非法月份格式应由参数校验返回 422，而不是落到数据库查询。
     client = TestClient(app)
-    for month in ("2026-13", "2026-00", "2026-8", "202608", "abc", ""):
-        response = client.get("/api/catalog/calendar", params={"month": month})
-        assert response.status_code == 422
+    with patch("app.routers.catalog.get_db_connection") as get_connection:
+        for month in ("2026-13", "2026-00", "2026-8", "202608", "abc", ""):
+            response = client.get("/api/catalog/calendar", params={"month": month})
+            assert response.status_code == 422, month
+    get_connection.assert_not_called()
 
 
-def test_get_catalog_calendar_query_timeout_returns_504():
-    # 测试点：日历查询超时应返回 504，不把超时解释为空月份。
+# 测试点：日历查询超时和普通数据库异常分别映射 504/500，并保留错误内容与异常日志。
+@pytest.mark.parametrize(
+    ("exc", "status", "detail", "exact_match"),
+    [
+        pytest.param(QueryCanceled("statement timeout"), 504, "Database query timeout", True, id="query-timeout"),
+        pytest.param(Error("db down"), 500, "Database error", False, id="database-error"),
+    ],
+)
+def test_get_catalog_calendar_database_errors(exc, status, detail, exact_match):
     conn, cursor = _build_connection_mock()
-    cursor.execute.side_effect = QueryCanceled("statement timeout")
-
+    cursor.execute.side_effect = exc
     with patch("app.routers.catalog.get_db_connection", return_value=conn), patch("app.routers.catalog.logger") as logger:
-        client = TestClient(app)
-        response = client.get("/api/catalog/calendar?month=2026-08")
-
-    assert response.status_code == 504
-    assert response.json()["detail"] == "Database query timeout"
-    logger.exception.assert_called_once()
-
-
-def test_get_catalog_calendar_database_error_returns_500():
-    # 测试点：一般数据库错误应返回 500 并保留错误详情。
-    conn, cursor = _build_connection_mock()
-    cursor.execute.side_effect = Error("db down")
-
-    with patch("app.routers.catalog.get_db_connection", return_value=conn), patch("app.routers.catalog.logger") as logger:
-        client = TestClient(app)
-        response = client.get("/api/catalog/calendar?month=2026-08")
-
-    assert response.status_code == 500
-    assert "Database error" in response.json()["detail"]
+        response = TestClient(app).get("/api/catalog/calendar?month=2026-08")
+    assert response.status_code == status
+    if exact_match:
+        assert response.json()["detail"] == detail
+    else:
+        assert detail in response.json()["detail"]
     logger.exception.assert_called_once()

@@ -1,6 +1,19 @@
 READONLY_ROLE = "live_project_ro"
 CONSOLE_WRITE_ROLE = "live_project_super_ro"
 
+EXPECTED_BAND_HISTORY_TABLES = {
+    "band_name_versions",
+    "band_lineup_versions",
+    "band_lineup_version_members",
+    "live_band_lineup_contexts",
+    "live_setlist_band_performances",
+    "live_setlist_band_performance_members",
+}
+EXPECTED_BAND_HISTORY_SEQUENCES = {
+    "band_name_versions_id_seq",
+    "band_lineup_versions_id_seq",
+}
+
 CONSOLE_DELETABLE_TABLES = {
     "venue_map_links",
     "band_lineup_version_members",
@@ -14,7 +27,7 @@ CONSOLE_DELETABLE_TABLES = {
 }
 
 
-# 测试点：所有业务表与序列满足角色矩阵，DELETE 仅开放给集合替换关系表和可取消的地图关联。
+# 测试点：历史结构对象必须存在；所有业务表和序列逐项满足权限矩阵，DELETE 仅开放给指定关系表。
 def test_all_business_objects_follow_runtime_permission_matrix(
     integration_admin_connection,
 ):
@@ -30,6 +43,9 @@ def test_all_business_objects_follow_runtime_permission_matrix(
         )
         table_names = [str(row[0]) for row in cursor.fetchall()]
         assert table_names
+        assert EXPECTED_BAND_HISTORY_TABLES <= set(table_names), (
+            EXPECTED_BAND_HISTORY_TABLES - set(table_names)
+        )
 
         for table_name in table_names:
             qualified_name = f"public.{table_name}"
@@ -38,7 +54,9 @@ def test_all_business_objects_follow_runtime_permission_matrix(
                 SELECT
                     has_table_privilege(%s, %s, 'SELECT'),
                     has_table_privilege(%s, %s, 'INSERT,UPDATE,DELETE'),
-                    has_table_privilege(%s, %s, 'SELECT,INSERT,UPDATE'),
+                    has_table_privilege(%s, %s, 'SELECT'),
+                    has_table_privilege(%s, %s, 'INSERT'),
+                    has_table_privilege(%s, %s, 'UPDATE'),
                     has_table_privilege(%s, %s, 'DELETE')
                 """,
                 (
@@ -50,12 +68,16 @@ def test_all_business_objects_follow_runtime_permission_matrix(
                     qualified_name,
                     CONSOLE_WRITE_ROLE,
                     qualified_name,
+                    CONSOLE_WRITE_ROLE,
+                    qualified_name,
+                    CONSOLE_WRITE_ROLE,
+                    qualified_name,
                 ),
             )
-            ro_select, ro_write, console_write, console_delete = cursor.fetchone()
+            ro_select, ro_write, *console_rights, console_delete = cursor.fetchone()
             assert ro_select is True, f"{READONLY_ROLE} cannot SELECT {qualified_name}"
             assert ro_write is False, f"{READONLY_ROLE} can write {qualified_name}"
-            assert console_write is True, f"{CONSOLE_WRITE_ROLE} cannot maintain {qualified_name}"
+            assert console_rights == [True, True, True], f"{CONSOLE_WRITE_ROLE} cannot maintain {qualified_name}"
             assert console_delete == (table_name in CONSOLE_DELETABLE_TABLES), (
                 f"{CONSOLE_WRITE_ROLE} DELETE mismatch for {qualified_name}"
             )
@@ -70,6 +92,9 @@ def test_all_business_objects_follow_runtime_permission_matrix(
         )
         sequence_names = [str(row[0]) for row in cursor.fetchall()]
         assert sequence_names
+        assert EXPECTED_BAND_HISTORY_SEQUENCES <= set(sequence_names), (
+            EXPECTED_BAND_HISTORY_SEQUENCES - set(sequence_names)
+        )
 
         for sequence_name in sequence_names:
             qualified_name = f"public.{sequence_name}"
@@ -78,7 +103,9 @@ def test_all_business_objects_follow_runtime_permission_matrix(
                 SELECT
                     has_sequence_privilege(%s, %s, 'SELECT'),
                     has_sequence_privilege(%s, %s, 'USAGE,UPDATE'),
-                    has_sequence_privilege(%s, %s, 'USAGE,SELECT,UPDATE')
+                    has_sequence_privilege(%s, %s, 'USAGE'),
+                    has_sequence_privilege(%s, %s, 'SELECT'),
+                    has_sequence_privilege(%s, %s, 'UPDATE')
                 """,
                 (
                     READONLY_ROLE,
@@ -87,9 +114,13 @@ def test_all_business_objects_follow_runtime_permission_matrix(
                     qualified_name,
                     CONSOLE_WRITE_ROLE,
                     qualified_name,
+                    CONSOLE_WRITE_ROLE,
+                    qualified_name,
+                    CONSOLE_WRITE_ROLE,
+                    qualified_name,
                 ),
             )
-            ro_select, ro_write, console_write = cursor.fetchone()
+            ro_select, ro_write, *console_rights = cursor.fetchone()
             assert ro_select is True, f"{READONLY_ROLE} cannot SELECT {qualified_name}"
             assert ro_write is False, f"{READONLY_ROLE} can advance {qualified_name}"
-            assert console_write is True, f"{CONSOLE_WRITE_ROLE} cannot use {qualified_name}"
+            assert console_rights == [True, True, True], f"{CONSOLE_WRITE_ROLE} cannot use {qualified_name}"

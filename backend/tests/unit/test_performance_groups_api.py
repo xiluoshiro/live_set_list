@@ -79,8 +79,8 @@ def test_get_performance_group_detail_returns_400_for_group_id_less_than_1():
     assert "group_id must be >= 1" in response.json()["detail"]
 
 
-# 测试点：详情接口应正确聚合 group 内所有 live 的乐队信息。
-def test_performance_group_detail_includes_correct_band_aggregation():
+# 测试点：详情接口完整映射数据库返回的多个乐队与多个场馆。
+def test_performance_group_detail_maps_bands_and_venues():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (2, "Multi Band Group", date(2026, 7, 1), date(2026, 7, 3), 3, 2)
     cursor.fetchall.side_effect = [
@@ -95,32 +95,12 @@ def test_performance_group_detail_includes_correct_band_aggregation():
     with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
         response = TestClient(app).get("/api/catalog/performance-groups/2")
 
+    assert response.status_code == 200
     payload = response.json()
     assert len(payload["bands"]) == 2
     assert payload["bands"][0]["band_id"] == 1
     assert payload["bands"][1]["band_id"] == 2
-
-
-# 测试点：详情接口应正确聚合 group 内所有 live 的场馆信息。
-def test_performance_group_detail_includes_correct_venue_aggregation():
-    conn, cursor = _build_connection_mock()
-    cursor.fetchone.return_value = (3, "Venue Group", date(2026, 8, 1), date(2026, 8, 2), 2, 2)
-    cursor.fetchall.side_effect = [
-        [(1, "Poppin'Party", "ppp")],
-        [("Shibuya WWW X",), ("Zepp Shinjuku",)],
-        [
-            (301, date(2026, 8, 1), "Shibuya Show", "oneman", "17:00:00+09", "Shibuya WWW X", [1], None, True),
-            (302, date(2026, 8, 2), "Zepp Show", "oneman", "17:00:00+09", "Zepp Shinjuku", [1], None, False),
-        ],
-    ]
-
-    with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
-        response = TestClient(app).get("/api/catalog/performance-groups/3")
-
-    payload = response.json()
-    assert len(payload["venues"]) == 2
-    assert "Shibuya WWW X" in payload["venues"]
-    assert "Zepp Shinjuku" in payload["venues"]
+    assert payload["venues"] == ["Shibuya WWW X", "Zepp Shinjuku"]
 
 
 # 测试点：活动组同日场次应先显示取消场次，再按开演时间和 ID 保持稳定顺序。

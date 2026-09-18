@@ -261,35 +261,6 @@ def test_editor_can_update_performance_group(
         cur.execute("DELETE FROM performance_group_attrs WHERE id = %s", (group_id,))
 
 
-# 测试点：同一 live 不能同时属于两个活动组。
-def test_same_live_cannot_belong_to_two_groups(integration_admin_connection):
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cursor:
-        cursor.execute(
-            "INSERT INTO performance_group_attrs (group_title) VALUES ('Group A') RETURNING id"
-        )
-        group_a = int(cursor.fetchone()[0])
-        cursor.execute(
-            "INSERT INTO performance_group_attrs (group_title) VALUES ('Group B') RETURNING id"
-        )
-        group_b = int(cursor.fetchone()[0])
-
-        cursor.execute(
-            "INSERT INTO performance_group_lives (group_id, live_id) VALUES (%s, 41)",
-            (group_a,),
-        )
-
-        with pytest.raises(UniqueViolation):
-            cursor.execute(
-                "INSERT INTO performance_group_lives (group_id, live_id) VALUES (%s, 41)",
-                (group_b,),
-            )
-
-        # Cleanup
-        cursor.execute("DELETE FROM performance_group_lives WHERE group_id IN (%s, %s)", (group_a, group_b))
-        cursor.execute("DELETE FROM performance_group_attrs WHERE id IN (%s, %s)", (group_a, group_b))
-
-
 # 测试点：一个 live 可以同时属于一个巡演和一个活动组，互不冲突。
 def test_live_can_belong_to_both_tour_and_performance_group(
     integration_test_client,
@@ -368,8 +339,8 @@ def test_public_live_read_paths_return_consistent_performance_group_ref(
         cur.execute("DELETE FROM performance_group_attrs WHERE id = %s", (group_id,))
 
 
-# 测试点：公开 GET 详情应返回包含 bands、venues、lives 的完整结构。
-def test_public_get_detail_returns_correct_structure(
+# 测试点：匿名活动组详情保留完整结构，且每个实际返回的场次均未收藏。
+def test_public_get_detail_returns_correct_structure_and_anonymous_favorites(
     integration_test_client,
     integration_admin_connection,
 ):
@@ -391,7 +362,8 @@ def test_public_get_detail_returns_correct_structure(
     assert payload["group_title"] == "Public Test Group"
     assert payload["live_count"] == 2
     assert len(payload["lives"]) == 2
-    assert len(payload["bands"]) >= 0
+    assert all(live["is_favorite"] is False for live in payload["lives"])
+    assert isinstance(payload["bands"], list)
     assert isinstance(payload["day_count"], int)
     assert payload["display_type"] in ("single_day_multi_show", "multi_day")
 
@@ -401,34 +373,7 @@ def test_public_get_detail_returns_correct_structure(
         cur.execute("DELETE FROM performance_group_attrs WHERE id = %s", (group_id,))
 
 
-# 测试点：匿名用户访问活动组详情时，所有 live 的 is_favorite 应为 False。
-def test_anonymous_user_sees_is_favorite_false(
-    integration_test_client,
-    integration_admin_connection,
-):
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cur:
-        cur.execute(
-            "INSERT INTO performance_group_attrs (group_title) VALUES ('Anon Group') RETURNING id"
-        )
-        group_id = int(cur.fetchone()[0])
-        cur.execute(
-            "INSERT INTO performance_group_lives (group_id, live_id) VALUES (%s, 1), (%s, 2)",
-            (group_id, group_id),
-        )
-
-    response = integration_test_client.get(f"/api/catalog/performance-groups/{group_id}")
-    assert response.status_code == 200
-    lives = response.json()["lives"]
-    assert all(live["is_favorite"] is False for live in lives)
-
-    # Cleanup
-    with integration_admin_connection.cursor() as cur:
-        cur.execute("DELETE FROM performance_group_lives WHERE group_id = %s", (group_id,))
-        cur.execute("DELETE FROM performance_group_attrs WHERE id = %s", (group_id,))
-
-
-# 测试点：GET /api/catalog/performances 应返回独立 live 和有效 group 的混合列表。
+# 测试点：两场组以 group 返回，单场组不聚合且其 Live 仍出现在混合列表中。
 def test_catalog_performances_returns_mixed_items(
     integration_test_client,
     integration_admin_connection,
@@ -444,6 +389,15 @@ def test_catalog_performances_returns_mixed_items(
             (group_id, group_id),
         )
 
+        cur.execute(
+            "INSERT INTO performance_group_attrs (group_title) VALUES ('Single Live Group') RETURNING id"
+        )
+        singleton_group_id = int(cur.fetchone()[0])
+        cur.execute(
+            "INSERT INTO performance_group_lives (group_id, live_id) VALUES (%s, 41)",
+            (singleton_group_id,),
+        )
+
     response = integration_test_client.get(
         "/api/catalog/performances?scope=all&page=1&page_size=20"
     )
@@ -456,10 +410,20 @@ def test_catalog_performances_returns_mixed_items(
         for item in payload["items"]
     )
 
+    assert not any(
+        item["kind"] == "performance_group"
+        and item["performance_group"]["group_id"] == singleton_group_id
+        for item in payload["items"]
+    )
+    assert any(
+        item["kind"] == "live" and item["live"]["live_id"] == 41
+        for item in payload["items"]
+    )
+
     # Cleanup
     with integration_admin_connection.cursor() as cur:
-        cur.execute("DELETE FROM performance_group_lives WHERE group_id = %s", (group_id,))
-        cur.execute("DELETE FROM performance_group_attrs WHERE id = %s", (group_id,))
+        cur.execute("DELETE FROM performance_group_lives WHERE group_id IN (%s, %s)", (group_id, singleton_group_id))
+        cur.execute("DELETE FROM performance_group_attrs WHERE id IN (%s, %s)", (group_id, singleton_group_id))
 
 
 # 测试点：活动组仅部分满足组合筛选时应逐场返回，并以单场日期时间参与分页排序。

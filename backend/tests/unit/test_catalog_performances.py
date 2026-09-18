@@ -1,6 +1,7 @@
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -115,18 +116,19 @@ def test_valid_groups_appear_as_kind_performance_group():
     assert item["performance_group"]["live_count"] == 3
 
 
-# 测试点：少于 2 场 live 的 group 不应以 group 形式返回（HAVING COUNT >= 2 过滤）。
-def test_groups_with_fewer_than_2_lives_not_returned():
+# 测试点：计数与分页 SQL 都必须限定至少两场的有效组，空查询结果仍返回空列表和零总数。
+def test_catalog_queries_require_at_least_two_distinct_group_lives():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (0,)
     cursor.fetchall.return_value = []
-
     with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
         response = TestClient(app).get("/api/catalog/performances?scope=all&page=1&page_size=20")
-
     assert response.status_code == 200
-    payload = response.json()
-    assert payload["pagination"]["total"] == 0
+    assert response.json()["items"] == []
+    assert response.json()["pagination"]["total"] == 0
+    assert cursor.execute.call_count == 2
+    for query_call in cursor.execute.call_args_list:
+        assert "HAVING COUNT(DISTINCT l.id) >= 2" in query_call.args[0]
 
 
 # 测试点：scope=favorites 且未登录时应返回 401。
@@ -170,69 +172,39 @@ def test_scope_favorites_returns_only_favorited_items():
     assert "WHEN gs.live_count > 0 AND gs.cancelled_live_count >= gs.live_count THEN 2" in page_sql
 
 
-# 测试点：搜索关键词 q 应过滤独立 live 的标题。
-def test_filters_q_filter_standalone_lives():
+# 测试点：关键词、年份、类型和乐队筛选必须进入计数及分页 SQL，并按占位符顺序绑定值。
+@pytest.mark.parametrize(
+    ("query", "sql_fragment", "bound_params"),
+    [
+        pytest.param("q=Special", "l.live_title ILIKE %s", ("%Special%",) * 11, id="keyword"),
+        pytest.param(
+            "year=2026", "l.live_date >= %s AND l.live_date < %s",
+            (date(2026, 1, 1), date(2027, 1, 1)) * 2, id="year",
+        ),
+        pytest.param("live_type=oneman", "l.live_type = %s", ("oneman",) * 2, id="live-type"),
+        pytest.param("band_id=3", "effective.band_id = %s", (3, 3), id="band"),
+    ],
+)
+def test_catalog_filters_bind_values_to_count_and_page(query, sql_fragment, bound_params):
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (1,)
     cursor.fetchall.return_value = [
-        _live_row(100, date(2026, 6, 1), "Special Concert", [1]),
+        _live_row(100, date(2026, 6, 1), "Special Concert", [3]),
     ]
-
     with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
         response = TestClient(app).get(
-            "/api/catalog/performances?scope=all&q=Special&page=1&page_size=20"
+            f"/api/catalog/performances?scope=all&{query}&page=1&page_size=20"
         )
-
     assert response.status_code == 200
     items = response.json()["items"]
     assert len(items) == 1
     assert items[0]["live"]["live_title"] == "Special Concert"
-
-
-# 测试点：year 参数应过滤独立 live 的年份范围。
-def test_filters_year_filter_standalone_lives():
-    conn, cursor = _build_connection_mock()
-    cursor.fetchone.return_value = (0,)
-    cursor.fetchall.return_value = []
-
-    with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
-        response = TestClient(app).get(
-            "/api/catalog/performances?scope=all&year=2026&page=1&page_size=20"
-        )
-
-    assert response.status_code == 200
-
-
-# 测试点：live_type 过滤应只影响独立 live 的查询条件。
-def test_filters_live_type_filter_standalone_lives():
-    conn, cursor = _build_connection_mock()
-    cursor.fetchone.return_value = (1,)
-    cursor.fetchall.return_value = [
-        _live_row(200, date(2026, 7, 1), "Oneman Live", [1], live_type="oneman"),
-    ]
-
-    with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
-        response = TestClient(app).get(
-            "/api/catalog/performances?scope=all&live_type=oneman&page=1&page_size=20"
-        )
-
-    assert response.status_code == 200
-
-
-# 测试点：band_id 过滤应过滤独立 live 对其参与乐队的依赖。
-def test_filters_band_id_filter_standalone_lives():
-    conn, cursor = _build_connection_mock()
-    cursor.fetchone.return_value = (1,)
-    cursor.fetchall.return_value = [
-        _live_row(300, date(2026, 5, 1), "Band Live", [3]),
-    ]
-
-    with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
-        response = TestClient(app).get(
-            "/api/catalog/performances?scope=all&band_id=3&page=1&page_size=20"
-        )
-
-    assert response.status_code == 200
+    assert cursor.execute.call_count == 2
+    count_call, page_call = cursor.execute.call_args_list
+    assert sql_fragment in count_call.args[0]
+    assert sql_fragment in page_call.args[0]
+    assert count_call.args[1] == bound_params
+    assert page_call.args[1] == (*bound_params, 20, 0)
 
 
 # 测试点：venue_id 应同时约束活动组完整匹配和独立 Live，供场馆详情复用统一聚合规则。
@@ -283,50 +255,27 @@ def test_filters_expand_partially_matching_group_into_lives():
     }
 
 
-# 测试点：sort=date_desc 应按最后一场日期、开演时间倒序，ID 只作稳定兜底。
-def test_sort_date_desc_uses_correct_ordering():
+# 测试点：升序使用首场时间，降序使用末场时间；日期、时间和 ID 同向排序且空时间置后。
+@pytest.mark.parametrize(
+    ("sort", "time_field", "direction"),
+    [("date_asc", "start_time", "ASC"), ("date_desc", "end_time", "DESC")],
+    ids=["ascending", "descending"],
+)
+def test_sort_uses_correct_group_time_and_ordering(sort, time_field, direction):
     conn, cursor = _build_connection_mock()
-    cursor.fetchone.return_value = (2,)
-    cursor.fetchall.return_value = [
-        _live_row(10, date(2026, 12, 30), "December Live", [1]),
-        _group_row(
-            1, "Earlier Group", date(2026, 1, 1), date(2026, 1, 2), 2, 2,
-            "multi_day", [], ["V"],
-        ),
-    ]
-
+    cursor.fetchone.return_value = (0,)
+    cursor.fetchall.return_value = []
     with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
         response = TestClient(app).get(
-            "/api/catalog/performances?scope=all&sort=date_desc&page=1&page_size=20"
+            f"/api/catalog/performances?scope=all&sort={sort}&page=1&page_size=20"
         )
-
     assert response.status_code == 200
     page_sql = str(cursor.execute.call_args_list[1].args[0])
-    assert "gs.end_time AS sort_time" in page_sql
-    assert "ORDER BY sort_rank ASC, sort_date DESC, sort_time DESC NULLS LAST, sort_id DESC" in page_sql
-
-
-# 测试点：sort=date_asc 应按第一场日期、开演时间升序，ID 只作稳定兜底。
-def test_sort_date_asc_uses_correct_ordering():
-    conn, cursor = _build_connection_mock()
-    cursor.fetchone.return_value = (2,)
-    cursor.fetchall.return_value = [
-        _group_row(
-            1, "Early Group", date(2026, 1, 1), date(2026, 2, 1), 2, 2,
-            "multi_day", [], ["V"],
-        ),
-        _live_row(10, date(2026, 6, 1), "June Live", [1]),
-    ]
-
-    with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
-        response = TestClient(app).get(
-            "/api/catalog/performances?scope=all&sort=date_asc&page=1&page_size=20"
-        )
-
-    assert response.status_code == 200
-    page_sql = str(cursor.execute.call_args_list[1].args[0])
-    assert "gs.start_time AS sort_time" in page_sql
-    assert "ORDER BY sort_rank ASC, sort_date ASC, sort_time ASC NULLS LAST, sort_id ASC" in page_sql
+    assert f"gs.{time_field} AS sort_time" in page_sql
+    assert (
+        f"ORDER BY sort_rank ASC, sort_date {direction}, "
+        f"sort_time {direction} NULLS LAST, sort_id {direction}"
+    ) in page_sql
 
 
 # 测试点：page_size 必须为 15 或 20，其他值应返回 400。

@@ -264,9 +264,10 @@ def test_get_my_favorite_lives_applies_shared_filters(integration_test_client):
     assert payload["items"][0]["is_favorite"] is True
 
 
-# 测试点：收藏与取消收藏都应保持幂等，重复调用不应报错。
-def test_favorite_live_put_and_delete_are_idempotent(
+# 测试点：重复收藏和取消均返回 204，最终列表为空，审计仅记录实际发生的两次状态变化。
+def test_favorite_live_put_and_delete_are_idempotent_and_audit_only_changes(
     integration_test_client,
+    integration_admin_connection,
 ):
     csrf_token = _login_and_get_csrf(integration_test_client)
 
@@ -297,6 +298,11 @@ def test_favorite_live_put_and_delete_are_idempotent(
     assert second_delete.status_code == 204
     assert favorite_list_response.status_code == 200
     assert favorite_list_response.json()["items"] == []
+    assert _get_audit_action_rows(integration_admin_connection, user_id=1) == [
+        ("login_success", "1"),
+        ("favorite_add", "2"),
+        ("favorite_remove", "2"),
+    ]
 
 
 # 测试点：新登录且从未收藏的用户，请求收藏列表时应返回空 items 和统一分页结构。
@@ -779,42 +785,6 @@ def test_favorites_are_isolated_between_users(
     assert lives_by_id_a[2]["is_favorite"] is False
     assert detail_response_a.status_code == 200
     assert detail_response_a.json()["is_favorite"] is True
-
-
-# 测试点：幂等收藏与取消收藏只应在状态真正变化时写入审计日志，不能重复记账。
-def test_favorite_write_endpoints_only_log_state_changes(
-    integration_test_client,
-    integration_admin_connection,
-):
-    csrf_token = _login_and_get_csrf(integration_test_client)
-
-    first_put = integration_test_client.put(
-        "/api/me/favorites/lives/2",
-        headers={"X-CSRF-Token": csrf_token},
-    )
-    second_put = integration_test_client.put(
-        "/api/me/favorites/lives/2",
-        headers={"X-CSRF-Token": csrf_token},
-    )
-    first_delete = integration_test_client.delete(
-        "/api/me/favorites/lives/2",
-        headers={"X-CSRF-Token": csrf_token},
-    )
-    second_delete = integration_test_client.delete(
-        "/api/me/favorites/lives/2",
-        headers={"X-CSRF-Token": csrf_token},
-    )
-    audit_rows = _get_audit_action_rows(integration_admin_connection, user_id=1)
-
-    assert first_put.status_code == 204
-    assert second_put.status_code == 204
-    assert first_delete.status_code == 204
-    assert second_delete.status_code == 204
-    assert audit_rows == [
-        ("login_success", "1"),
-        ("favorite_add", "2"),
-        ("favorite_remove", "2"),
-    ]
 
 
 # 测试点：`live_project_user_rw` 只应拥有收藏链路所需的最小权限，既能写收藏，也不能越权写认证或主业务表。

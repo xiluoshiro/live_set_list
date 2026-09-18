@@ -311,28 +311,6 @@ describe("App optimistic favorite sync", () => {
     await waitFor(() => expect(optimisticButton).toBeInTheDocument());
   });
 
-  test("连续失败三次后会显示统一的收藏同步提示", async () => {
-    // 测试点：收藏同步连续失败达到阈值后，页面会显示固定提示文案。
-    getPerformancesSyncMock.mockResolvedValue(
-      makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-    );
-    favoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
-    unfavoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
-    unfavoriteLiveMock.mockRejectedValueOnce(new Error("Request timeout"));
-    const user = userEvent.setup();
-    renderApp();
-    await openAllContent(user);
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
-    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 1")).getByRole("button", { name: "取消收藏" }));
-    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 2")).getByRole("button", { name: "取消收藏" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("收藏同步失败，请稍后重试或刷新页面确认")).toBeInTheDocument();
-    });
-  });
-
   // 测试点：全量页残留的乐观收藏状态，会在进入收藏页后通过服务端快照重新对齐。
   test("进入收藏页时会用服务端快照收敛之前失败的乐观收藏", async () => {
     getAuthMeMock
@@ -397,8 +375,8 @@ describe("App optimistic favorite sync", () => {
     await waitFor(() => expect(within(getTableRowByLiveTitle("示例 Live 名称 1")).getByRole("button", { name: "取消收藏" })).toBeInTheDocument());
   });
 
+  // 测试点：连续三次失败显示固定同步告警，后续一次成功立即清除告警。
   test("连续失败达到阈值后，后续一次成功会清除同步告警", async () => {
-    // 测试点：warning 出现后只要成功一次，应立即清空会话失败告警。
     getPerformancesSyncMock.mockResolvedValue(
       makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
