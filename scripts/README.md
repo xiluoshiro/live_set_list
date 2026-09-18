@@ -58,6 +58,10 @@ python scripts/run_checks.py <arguments>
 
 使用 `python scripts/run_checks.py functional --backend-workers 1` 可退回 unit 串行模式；`--backend-workers 4` 可提高并发上限。每个文件仍启动全新进程，使用独立临时目录和应用日志，禁用共享 pytest cache 写入，完成后整块输出日志及耗时。mypy 先完成，所有 unit 文件完成后才串行执行 integration；不改变每例 seed 和文件级白名单重试。
 
+integration 每例仍执行完整 seed；仅复用进程内的 seed SQL 文本及三个固定测试用户的密码哈希。只有请求 `integration_test_client` 的 API 用例才启动应用、通过真实 lifespan 创建默认管理员，并批量插入测试用户。纯 SQL 用例不初始化客户端或鉴权数据；用户记录、会话、cookie 均不跨用例共享。
+
+2026-09-19 本机同一临时计时插件下的单轮前后对照：`functional` 墙钟时间 116.26s → 92.21s；固定测试用户初始化（包含优化后的进程级哈希计算）累计 16.60s → 1.70s。seed 仍逐例执行，累计 9.24s → 9.41s。优化后新增 4 个隔离回归场景，integration 执行数 148 → 152；两轮均 exit 0、无失败重试。此为一次本机对照，非 CI 耗时或稳定提速保证；临时计时插件未加入常规 runner。
+
 后端 integration 测试和 `restore_test_seed.py` 会共用 PostgreSQL advisory lock；如果另一轮检查仍在使用测试库，后启动的一轮会等待，避免并发 `TRUNCATE` 污染用例。integration 测试结束后，`run_checks.py` 会调用内部脚本 `scripts/internal/restore_test_seed.py`，重新导入测试库 seed，并按 `infra/auth/.env.auth` 恢复默认 admin，避免测试执行污染手工联调用的测试库状态。
 
 backend unit 与 integration 按文件拆进程是 Windows 下的稳定性契约：单个长进程连续创建大量 FastAPI `TestClient` 事件循环会累积 socket 资源，并可能触发 `WinError 10055`。执行器只会对输出命中明确环境错误白名单的当前文件分组自动重跑；断言、类型、数据库契约或业务失败不会套用该重试。任何必需检查都必须取得成功退出码，不能用“环境问题”或“与本次修改无关”作为通过或交付理由。若白名单错误连续耗尽重试预算，必须继续修正分组、隔离或清理规则。
