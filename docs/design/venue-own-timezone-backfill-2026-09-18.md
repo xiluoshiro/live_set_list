@@ -11,19 +11,9 @@
 
 不再校验本地 Flyway 历史指纹、执行时间、执行账号或整表固定行数。目标场地按已核对 ID、实体类型及坐标确认；只保留实际冲突检查，并在同一事务内比较执行前后数据，保证没有越界修改。真实冲突或缺失必要的修订 3 审计仍会拒绝整笔事务；不改写 Flyway 历史。
 
-[候选 CSV](venue-timezone-candidates-2026-09-18.csv) 是核对附件，SQL 已内嵌所需候选，不读取 CSV。原先的 old_revision/new_revision 列记录错误方案，已移除。
+[候选 CSV](venue-timezone-candidates-2026-09-18.csv) 是核对附件，SQL 已内嵌所需候选，不读取 CSV。
 
 ## 当前文件 SHA-256
 
 - `2026-09-18-01__backfill_venue_own_timezones.sql`：`4682D617D8A773125D3D85C23B35245635F81746AA7FAB6C642B5E806878D063`
 - `2026-09-18-02__correct_initial_geography_revisions.sql`：`010D4B20C09D6A774D1BFBF8214F0379CF6FB6F13CCFE59F6B42508C5B9CE804`
-
-## 历史执行与当前验证边界
-
-本地已完成 153 个实体场地 IANA 回填，并完成 154 个 Venue、578 条 Live 的伪修订纠正，详见 [纠正记录](venue-revision-correction-2026-09-18.md)。最早执行版本错误递增修订，随后由本地纠正恢复；当前 01 已直接遵守“不增修订”规则，不重演旧错误。
-
-此前默认 ROLLBACK、使用 psql 提交变量、绑定本地整表指纹的说明全部作废。旧执行文件 SHA-256 `AB98108DAA930242310FCE7A7A397904D5FD6989E21CB7086AC77C0F3C1800D9` 仅用于历史追溯，不代表当前文件。
-
-此次改版不连接或执行远端库，不重新写本地主库；可执行文件的实际提交、幂等和冲突回滚由 PostgreSQL 测试库集成测试验证。不能将测试库通过表述为远端已执行。
-
-改版验证已通过：`test_venue_timezone_backfill_sql.py` 的 5 项 PostgreSQL 集成用例实际执行原 SQL，覆盖 COMMIT 生效、重复执行不重复写入、冲突整笔回滚以及本库修订 3 审计恢复；完整 `python scripts/run_checks.py functional` 退出码为 0。

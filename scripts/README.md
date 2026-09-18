@@ -60,8 +60,6 @@ python scripts/run_checks.py <arguments>
 
 integration 每例仍执行完整 seed；仅复用进程内的 seed SQL 文本及三个固定测试用户的密码哈希。只有请求 `integration_test_client` 的 API 用例才启动应用、通过真实 lifespan 创建默认管理员，并批量插入测试用户。纯 SQL 用例不初始化客户端或鉴权数据；用户记录、会话、cookie 均不跨用例共享。
 
-2026-09-19 本机同一临时计时插件下的单轮前后对照：`functional` 墙钟时间 116.26s → 92.21s；固定测试用户初始化（包含优化后的进程级哈希计算）累计 16.60s → 1.70s。seed 仍逐例执行，累计 9.24s → 9.41s。优化后新增 4 个隔离回归场景，integration 执行数 148 → 152；两轮均 exit 0、无失败重试。此为一次本机对照，非 CI 耗时或稳定提速保证；临时计时插件未加入常规 runner。
-
 后端 integration 测试和 `restore_test_seed.py` 会共用 PostgreSQL advisory lock；如果另一轮检查仍在使用测试库，后启动的一轮会等待，避免并发 `TRUNCATE` 污染用例。integration 测试结束后，`run_checks.py` 会调用内部脚本 `scripts/internal/restore_test_seed.py`，重新导入测试库 seed，并按 `infra/auth/.env.auth` 恢复默认 admin，避免测试执行污染手工联调用的测试库状态。
 
 backend unit 与 integration 按文件拆进程是 Windows 下的稳定性契约：单个长进程连续创建大量 FastAPI `TestClient` 事件循环会累积 socket 资源，并可能触发 `WinError 10055`。执行器只会对输出命中明确环境错误白名单的当前文件分组自动重跑；断言、类型、数据库契约或业务失败不会套用该重试。任何必需检查都必须取得成功退出码，不能用“环境问题”或“与本次修改无关”作为通过或交付理由。若白名单错误连续耗尽重试预算，必须继续修正分组、隔离或清理规则。
@@ -94,11 +92,9 @@ python scripts/build_release.py --version 2026-07-10-001
 - [infra/production/README.md](D:/Code/PythonCode/5%20LiveSetList/infra/production/README.md)
 - [生产发布 runbook](D:/Code/PythonCode/5%20LiveSetList/docs/production-deployment-runbook.md)
 
-### 当前自动发布状态
+### 自动发布流程
 
 常规生产发布不需要在本机手工上传 `.tar.gz`。推送格式为 `vYYYY-MM-DD-NNN` 的 tag 会触发 `.github/workflows/release.yml`：隔离 PostgreSQL CI、`functional`、前端构建、白名单归档、SHA-256，并在 VM 按当前 SQL 分类。app-only release 继续进入 `production` 部署；migration release 停止并等待 `.github/workflows/migration-release.yml` 的两次手工阶段。
-
-当前仓库 migration 已到 V21；生产数据库已有证据仍只确认到 V13。`v2026-07-18-001` 已完成 V12/V13 migration 和应用切换。后续带 SQL 变化的 tag 仍必须按 migration release 验收，不能因为 tag 已存在或测试库已经迁移就假定生产数据库已经升级。
 
 `build_release.py` 仍用于首次 VM bootstrap、离线交付或手工排障。包含 `backend/db/flyway/sql` 变化的版本必须先运行 `phase=migrate` 生成服务器端 attestation，验收后再运行 `phase=deploy`；部署入口会拒绝缺少或不匹配 attestation 的 migration release。
 

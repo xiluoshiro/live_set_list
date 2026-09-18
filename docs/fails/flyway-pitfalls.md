@@ -1,6 +1,6 @@
 # Flyway 踩坑指南
 
-本文档记录 2026-04-11 这轮 Flyway owner 收口问题的定位过程、根因结论和后续规避方式。
+本文说明 Flyway owner 调整中的锁冲突、权限边界与防范措施。
 
 适用范围：
 
@@ -9,7 +9,7 @@
 
 ## 1. 现象概览
 
-这轮问题表面上看是：
+故障表现：
 
 - `flyway migrate` 长时间无输出，像是“卡死”
 - `flyway info` 在异常状态下也会表现得很慢
@@ -30,7 +30,7 @@
 - 会直接导致迁移长时间阻塞
 - 如果没有 `lock_timeout`，表现上接近“无限卡死”
 
-本轮实际触发方式：
+触发条件：
 
 - 早期版本的 `V3` 使用了 `REASSIGN OWNED BY live_project_flyway TO live_project_owner`
 - 该语句会把 `live_project_flyway` 拥有的对象一并纳入处理
@@ -41,18 +41,6 @@
 - Flyway 一个元数据会话持有 `flyway_schema_history` 的 `AccessShareLock`
 - 迁移执行会话在 `REASSIGN OWNED` 中申请该表的 `AccessExclusiveLock`
 - 后者被前者阻塞，迁移停住
-
-本轮抓到的核心现场：
-
-- `pid=1291`
-  - `usename = live_project_flyway`
-  - `state = idle in transaction`
-  - 持有 `flyway_schema_history` 的 `AccessShareLock`
-- `pid=1292`
-  - `usename = live_project_flyway`
-  - 执行 `REASSIGN OWNED BY live_project_flyway TO live_project_owner`
-  - 等待 `flyway_schema_history` 的 `AccessExclusiveLock`
-  - `blocking_pids = {1291}`
 
 结论：
 
@@ -66,7 +54,7 @@
 
 - 迁移不会卡死，但会直接失败
 
-本轮实际触发方式：
+触发条件：
 
 - 中间版本的 `V3` 先 `SET ROLE live_project_owner`
 - 然后尝试 `ALTER TABLE ... OWNER TO live_project_owner`
@@ -94,7 +82,7 @@
 - 不一定是新的数据库问题
 - 但会让后续 `info` / `migrate` 看起来仍然像“继续卡住”
 
-本轮实际现象：
+故障表现：
 
 - 超时后存在残留 `java` 进程
 - 在 kill 掉残留进程之前，很难判断是数据库锁还在，还是旧 Flyway 进程没有退出
@@ -111,18 +99,9 @@
 - 不会直接导致事故扩大
 - 但会把排查方向带偏
 
-本轮实际情况：
-
-- `public` 下对象量很小
-  - 10 张表
-  - 7 个序列
-  - 21 个索引
-  - 0 个 routine
-  - 0 个自定义 type
-
 结论：
 
-- 这类规模远不足以解释长时间卡死
+- 对象数量较少仍可能发生锁等待，不能仅按对象数量解释长时间阻塞
 - 如果 `migrate` 卡在 owner 调整语句上，应优先看锁，而不是先怀疑对象数量
 
 ### `P2` 中风险：只看 Flyway 输出，不看 PostgreSQL 锁现场
@@ -131,7 +110,7 @@
 
 - 容易得到模糊结论，例如“可能是网络问题”或“可能是 Flyway bug”
 
-本轮有效的定位手段：
+定位方法：
 
 - 并行开两个会话
 - 会话 1：执行 `flyway migrate`
@@ -152,7 +131,7 @@
 - 不一定直接导致迁移失败
 - 但会让测试库对 migration 问题的暴露不稳定，形成“主库炸了，测试库没炸”的错觉
 
-本轮实际现象：
+故障表现：
 
 - 主库在执行 `V3` 时暴露了 owned sequence 的 owner 调整问题
 - 测试库没有先一步暴露同样的问题
@@ -172,7 +151,7 @@
 - 测试库会继承之前的 Flyway history 和对象状态
 - 一旦 migration 被 `repair` 过、对象 owner 被手工调过，测试库就不再是“从零验证”的环境
 
-为什么这次会影响判断：
+环境差异的影响：
 
 - `V3` 原先对 owned sequence 的处理本身就不安全
 - 再叠加 `pg_class` 返回顺序未显式 `ORDER BY`
@@ -185,24 +164,18 @@
 
 ## 3. 根因回溯
 
-本轮问题经历了三个关键判断阶段：
-
-1. 初步怀疑 `REASSIGN OWNED BY` 遍历对象过多
-2. 直接连接测试库查看 `pg_stat_activity` / `pg_locks`
-3. 通过双会话并发采样确认锁冲突对象就是 `flyway_schema_history`
-
 最终根因可以收敛成两条：
 
 - **直接根因**：`REASSIGN OWNED BY live_project_flyway TO live_project_owner` 试图改动 `flyway_schema_history`，与 Flyway 自己的元数据锁冲突
 - **次级根因**：迁移脚本最初把“Flyway 管理对象”和“业务对象”混在一起处理，没有把 `flyway_schema_history` 视为特殊对象
 
-这轮还补充确认了一条流程级根因：
+环境根因：
 
 - **环境根因**：旧的 `recovery_db.py test --force` 不是 fresh DB，只能验证“现有测试库继续迁移”这条路径，不能完全替代“从零建库到最新版本”的验证
 
 ## 4. 最终修复方案
 
-当前已经验证通过的安全修复方式如下：
+修复方式：
 
 1. 从 migration 中移除：
    - `REASSIGN OWNED BY live_project_flyway TO live_project_owner`

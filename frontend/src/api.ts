@@ -1848,7 +1848,7 @@ export async function createConsoleSongsBatch(
 export async function createConsoleVenue(
   venueName: string,
   csrfToken: string,
-  venueKind: ConsoleVenueDetail["venue_kind"] = "physical",
+  venueKind: "physical" | "undisclosed" = "physical",
   location?: Omit<VenueLocationWrite, "expected_state_token">,
 ): Promise<ConsoleVenueMutationResponse> {
   const response = await fetchWithTimeout(

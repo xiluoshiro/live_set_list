@@ -11,7 +11,7 @@
 - [巡演聚合产品需求](product/tour-aggregation.md)：巡演与单场 Live 的产品边界、用户页面、资料口径、阶段范围和验收标准。
 - [Flyway 落地说明](design/flyway.md)：仓库 migration、角色和日常迁移流程；当前仓库已到 V23。
 - [生产部署设计](design/production-deployment.md)：目标架构、安全边界和未完成的运维项。
-- [生产部署实录](production-deployment-runbook.md)：已执行步骤、发布流程、验收和排障；生产状态以此处的已确认记录为准。
+- [生产部署操作指南](production-deployment-runbook.md)：环境配置、发布流程、检查要求和排障。
 
 ## 当前设计
 
@@ -42,12 +42,14 @@
 - `fails/`：已发生问题、原因、规避方式和仍需补齐的看护能力。
 - [归档索引](archive/README.md)：已完成需求、设计和视觉走查的统一入口。
 - [已完成需求](archive/completed-product/)：已验收并退出活动路线图的需求历史。
-- [已完成设计与走查](archive/completed-design/)：已落地方案、阶段设计和视觉验收历史；只用于理解背景，不作为当前 API、UI 或部署状态的唯一依据。
+- [已完成设计与走查](archive/completed-design/)：已落地方案、阶段设计和视觉问题分析；只用于理解背景，不作为当前 API、UI 或部署状态的唯一依据。
 
 ## 维护规则
 
 1. API 字段变化先更新后端 schema / route，再导出或检查 OpenAPI，最后更新 `api.md` 的补充规则。
-2. 数据库结构变化只新增 Flyway migration，并同步 `design/flyway.md`、相关 README 和部署记录。
+2. 数据库结构变化只新增 Flyway migration，并同步 `design/flyway.md`、相关 README 和部署说明。
 3. 用户可见导航、页签或标题变化，要同步根 README、产品需求、UI 设计和 E2E 用例名称。
 4. 生产状态必须区分“仓库已具备”“tag 已创建”“Actions 已通过”“VM 已验收”，不能互相替代。
 5. 仅修改 Markdown 时运行 `git diff --check` 并检查本地链接；业务代码变化按仓库规则运行 `python scripts/run_checks.py functional`。
+
+6. 设计与实现文档保留功能规则、技术方案、操作规范和故障原因；不写对话归因、执行流水账、测试结果、耗时、退出码或逐次验收记录。

@@ -118,15 +118,15 @@ class ConsoleVenueListResponse(BaseModel):
 
 class ConsoleVenueCreateRequest(BaseModel):
     venue_name: str = Field(..., min_length=1, max_length=255, description="Venue display name")
-    venue_kind: VenueKind = "physical"
+    venue_kind: Literal["physical", "undisclosed"] = "physical"
     location: LocationFields | None = None
 
     @model_validator(mode="after")
     def validate_location_kind(self) -> "ConsoleVenueCreateRequest":
+        if self.venue_kind == "physical" and (self.location is None or not self.location.timezone_id):
+            raise ValueError("实体场馆必须填写已核验的 IANA 时区")
         if self.location is not None:
             values = self.location.model_dump(exclude={"coordinate_system"})
-            if self.venue_kind == "online" and any(value is not None for value in values.values()):
-                raise ValueError("线上场馆不保存实体位置")
             if self.venue_kind == "undisclosed" and any(value is not None for key, value in values.items() if key != "locality_id"):
                 raise ValueError("未公开具体场馆只保存已公布地区")
         return self

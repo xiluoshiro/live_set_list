@@ -1223,6 +1223,20 @@
   border-radius: 7px;
 }
 
+/* Reuse the Live input table; only field-specific column widths differ. */
+.venue-create-form-table {
+  min-width: 1200px;
+  table-layout: fixed;
+}
+
+.venue-create-name-column { width: 20%; }
+.venue-create-kind-column { width: 152px; }
+.venue-create-coordinate-column { width: 132px; }
+.venue-create-timezone-column { width: 220px; }
+
+.venue-create-actions { flex-wrap: wrap; }
+.venue-create-actions > button { flex-shrink: 0; white-space: nowrap; }
+
 .timezone-source-copy {
   flex-direction: column;
   gap: 4px;

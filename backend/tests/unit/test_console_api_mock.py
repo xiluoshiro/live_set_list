@@ -105,7 +105,7 @@ def _valid_live_payload(**overrides):
 
 def _valid_venue_payload(**overrides):
     """Return a minimal valid venue-create request body with optional field overrides."""
-    payload = {"venue_name": "Mock Venue"}
+    payload = {"venue_name": "Mock Venue", "venue_kind": "undisclosed"}
     payload.update(overrides)
     return payload
 
@@ -569,7 +569,7 @@ def test_console_update_song_mock_success_persists_and_audits():
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
 
 
-# 测试点：新增 Venue 原子建立实体与首个名称版本，未补录时区明确返回 null。
+# 测试点：新增未公开 Venue 原子建立名称版本且允许时区为空。
 def test_console_create_venue_mock_success_persists_and_audits():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(fetchone_side_effect=[None, (88,), (99,)])
@@ -589,7 +589,7 @@ def test_console_create_venue_mock_success_persists_and_audits():
             "venue_id": 88,
             "venue_name": "New Venue",
             "venue_name_version_id": 99,
-            "venue_kind": "physical",
+            "venue_kind": "undisclosed",
             "timezone_id": None,
             "matched_name": None,
             "matched_name_version_id": None,
@@ -603,7 +603,7 @@ def test_console_create_venue_mock_success_persists_and_audits():
     assert cursor.execute.call_count == 5
     assert "pg_advisory_xact_lock" in cursor.execute.call_args_list[0].args[0]
     assert "INSERT INTO venue_list (venue, venue_kind)" in cursor.execute.call_args_list[2].args[0]
-    assert cursor.execute.call_args_list[2].args[1] == ("New Venue", "physical")
+    assert cursor.execute.call_args_list[2].args[1] == ("New Venue", "undisclosed")
     assert "INSERT INTO venue_name_versions" in cursor.execute.call_args_list[3].args[0]
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[4].args[0]
 
@@ -643,7 +643,8 @@ def test_console_create_venue_rejects_invalid_locality(locality):
 
 # 测试点：非实体类型、缺半边坐标及非法时区不能绕过新增表单写入。
 @pytest.mark.parametrize(("kind", "location"), [
-    ("online", {"locality_id": 1}), ("undisclosed", {"address": "hidden"}),
+    ("online", {}), ("online", {"locality_id": 1}), ("physical", {}),
+    ("physical", {"latitude": 35, "longitude": 139}), ("undisclosed", {"address": "hidden"}),
     ("physical", {"latitude": 10}), ("physical", {"latitude": 91, "longitude": 0}),
     ("physical", {"timezone_id": "Asia/Tokyo"}),
     ("physical", {"latitude": 0, "longitude": 0, "timezone_id": "Invalid/Zone"}),

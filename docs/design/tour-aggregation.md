@@ -440,7 +440,7 @@ python scripts/run_checks.py functional
 6. `DONE`：增加独立巡演资料页签、无限滚动巡演列表、巡演详情、逐场 Live 收藏、相邻/任意场次统计和 Live 反向入口。
 7. `DONE`：所有 Live 公共读取路径返回一致的 Tour 反向引用；公共搜索的 Tour 实体分组仍待实现。
 8. `DONE`：同步 `docs/api.md`、Flyway/数据库 README 和产品状态。
-9. `PARTIAL`：functional 已通过；桌面与 390px 真实浏览器验收随发布批次执行。
+9. 浏览器验收覆盖桌面与 390px 视口。
 
 ## 后续演进
 
