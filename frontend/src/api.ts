@@ -600,6 +600,7 @@ export type ConsoleBandTransitionLiveCandidate = {
 };
 
 export type ConsoleVenueItem = {
+  timezone_id?: string | null;
   venue_id: number;
   venue_name: string;
   venue_name_version_id: number;
@@ -799,6 +800,7 @@ export type ConsoleVenueNameVersion = {
 };
 
 export type ConsoleVenueDetail = {
+  timezone_id?: string | null;
   venue_id: number;
   venue_name: string;
   venue_name_version_id: number;
@@ -850,6 +852,7 @@ export type ConsoleEventAttendee = {
 };
 
 export type ConsoleLiveMutationItem = {
+  timezone_offset_minutes?: number | null;
   live_id: number;
   live_date: string;
   live_title: string;

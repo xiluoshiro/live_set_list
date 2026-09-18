@@ -116,7 +116,8 @@ def _load_detail(cur: Any, venue_id: int) -> dict[str, Any]:
             venue.merged_into_venue_id,
             COUNT(live.id),
             MIN(live.live_date),
-            MAX(live.live_date)
+            MAX(live.live_date),
+            venue.timezone_id
         FROM venue_list venue
         LEFT JOIN venue_name_versions current_version
           ON current_version.venue_id = venue.id
@@ -161,6 +162,7 @@ def _load_detail(cur: Any, venue_id: int) -> dict[str, Any]:
         "live_count": int(row[5]),
         "first_live_date": row[6],
         "last_live_date": row[7],
+        "timezone_id": row[8],
         "name_versions": [
             {
                 "venue_name_version_id": int(version[0]),
@@ -218,7 +220,8 @@ def list_venues(
                             venue.merged_into_venue_id,
                             matched_version.venue_name AS matched_name,
                             matched_version.id AS matched_version_id,
-                            matched_version.valid_to IS NULL AS is_current_match
+                            matched_version.valid_to IS NULL AS is_current_match,
+                            venue.timezone_id
                         FROM venue_list venue
                         JOIN venue_name_versions current_version
                           ON current_version.venue_id = venue.id
@@ -235,9 +238,12 @@ def list_venues(
                         WHERE venue_id IS NOT NULL
                         GROUP BY venue_id
                     )
-                    SELECT matched.*, COALESCE(usage.live_count, 0),
+                    SELECT matched.id, matched.venue_name, matched.current_version_id,
+                           matched.venue_kind, matched.merged_into_venue_id,
+                           matched.matched_name, matched.matched_version_id, matched.is_current_match,
+                           COALESCE(usage.live_count, 0),
                            usage.first_live_date, usage.last_live_date,
-                           COUNT(*) OVER()
+                           COUNT(*) OVER(), matched.timezone_id
                     FROM matched
                     LEFT JOIN usage ON usage.venue_id = matched.id
                     ORDER BY matched.venue_name, matched.id
@@ -264,6 +270,7 @@ def list_venues(
                 "live_count": int(row[8]),
                 "first_live_date": row[9],
                 "last_live_date": row[10],
+                "timezone_id": row[12],
             }
             for row in rows
         ],

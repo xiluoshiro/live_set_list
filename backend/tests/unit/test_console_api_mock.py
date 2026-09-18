@@ -160,7 +160,7 @@ def test_console_lookup_mock_requires_authenticated_editor_role():
     assert viewer_response.json()["detail"]["code"] == "AUTH_FORBIDDEN"
 
 
-# 测试点：console 只读查询接口不需要 CSRF，歌曲结果应同时返回服务端分页信息。
+# 测试点：只读查询无需 CSRF，Venue 响应保留真实 IANA 时区，歌曲返回分页信息。
 def test_console_lookup_mock_returns_items_without_csrf_for_editor():
     _set_authenticated_role("editor")
     songs_conn, _ = _build_connection_mock(
@@ -171,7 +171,7 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
         fetchall_side_effect=[[(2, "Roselia", "rsl", ["Yukina", "Sayo"])]],
     )
     venues_conn, _ = _build_connection_mock(
-        fetchall_side_effect=[[(3, "Zepp Shinjuku", 7, "physical", None, "Zepp Shinjuku", 7, True, 0, None, None, 1)]],
+        fetchall_side_effect=[[(3, "Zepp Shinjuku", 7, "physical", None, "Zepp Shinjuku", 7, True, 0, None, None, 1, "Asia/Tokyo")]],
     )
 
     with patch("app.routers.console_read.get_db_connection", side_effect=[songs_conn, bands_conn]), patch(
@@ -210,6 +210,7 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
             "venue_name": "Zepp Shinjuku",
             "venue_name_version_id": 7,
             "venue_kind": "physical",
+            "timezone_id": "Asia/Tokyo",
             "matched_name": "Zepp Shinjuku",
             "matched_name_version_id": 7,
             "match_kind": "current",
@@ -568,7 +569,7 @@ def test_console_update_song_mock_success_persists_and_audits():
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[2].args[0]
 
 
-# 测试点：新增 Venue 成功时应原子建立实体、首个名称版本并记录审计日志。
+# 测试点：新增 Venue 原子建立实体与首个名称版本，未补录时区明确返回 null。
 def test_console_create_venue_mock_success_persists_and_audits():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(fetchone_side_effect=[None, (88,), (99,)])
@@ -589,6 +590,7 @@ def test_console_create_venue_mock_success_persists_and_audits():
             "venue_name": "New Venue",
             "venue_name_version_id": 99,
             "venue_kind": "physical",
+            "timezone_id": None,
             "matched_name": None,
             "matched_name_version_id": None,
             "match_kind": "current",
@@ -632,6 +634,7 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         "venue_name_version_id": 1,
         "announced_locality_id": None,
         "timezone_id": None,
+        "timezone_offset_minutes": 540,
         "timezone_source": "legacy_offset",
         "timezone_source_revision": None,
         "opening_time_fold": None,

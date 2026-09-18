@@ -446,6 +446,7 @@ def _build_live_mutation_item(
         "venue_name_version_id": venue_name_version_id,
         "announced_locality_id": announced_locality_id,
         "timezone_id": resolved_timezone.timezone_id,
+        "timezone_offset_minutes": timezone_offset_minutes,
         "timezone_source": resolved_timezone.timezone_source,
         "timezone_source_revision": resolved_timezone.timezone_source_revision,
         "opening_time_fold": opening_time_fold,

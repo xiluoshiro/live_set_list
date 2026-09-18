@@ -14,6 +14,7 @@ export type BandOption = {
 };
 
 export type VenueOption = {
+  timezone_id?: string | null;
   venue_id: number;
   venue_name: string;
   venue_name_version_id: number;

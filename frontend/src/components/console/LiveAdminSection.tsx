@@ -212,6 +212,7 @@ export function LiveAdminSection({
   submitInsertDisabled,
 }: LiveAdminSectionProps) {
   const [scheduleAttentionOpen, setScheduleAttentionOpen] = useState(false);
+  const selectedVenue = venues.find((venue) => venue.venue_id === selectedVenueId);
   const selectedVenueText = (() => {
     if (!venueAnnounced) return "未公布";
     const selected = venues.find((venue) => venue.venue_id === selectedVenueId);
@@ -465,8 +466,12 @@ export function LiveAdminSection({
                 <div className={`timezone-input-group${venueAnnounced ? " timezone-source-copy" : ""}`}>
                   {venueAnnounced ? (
                     <>
-                      <strong>{venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_kind === "online" ? "线上 Live" : "由场馆时区决定"}</strong>
-                      <small>{venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_kind === "online" ? "请选择活动时区" : "场馆未设置 IANA 时区时使用默认 UTC+09:00"}</small>
+                      {selectedVenue?.venue_kind !== "online" && (
+                        <strong>{selectedVenue ? selectedVenue.timezone_id ?? "UTC+09:00" : "请选择场馆"}</strong>
+                      )}
+                      {selectedVenue && selectedVenue.venue_kind !== "online" && !selectedVenue.timezone_id && (
+                        <small>场馆未设置时区，使用默认 UTC+09:00</small>
+                      )}
                     </>
                   ) : (
                     <label>
@@ -485,7 +490,8 @@ export function LiveAdminSection({
                       </select>
                     </label>
                   )}
-                  {venueAnnounced && venues.find((venue) => venue.venue_id === selectedVenueId)?.venue_kind === "online" && (
+                  {!venueAnnounced && <strong>UTC+09:00</strong>}
+                  {venueAnnounced && selectedVenue?.venue_kind === "online" && (
                     <label>
                       <span>线上活动时区</span>
                       <select
