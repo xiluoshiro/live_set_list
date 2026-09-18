@@ -318,12 +318,13 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
-  // 测试点：控制台入口每类只占一格，并在同一行保留可用的新增与管理入口。
+  // 测试点：控制台入口直接显示七类导航，不显示内容管理标题，并保留新增与管理入口。
   test("控制台导航按资料类型单行分列", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel initialMode="live_create" />);
 
     const content = screen.getByRole("navigation", { name: "控制台录入类型" });
+    expect(within(content).queryByRole("heading", { name: "内容管理" })).not.toBeInTheDocument();
     expect(within(content).getByRole("tablist", { name: "内容管理" })).toBeInTheDocument();
     expect(Array.from(content.querySelectorAll(".console-mode-cell")).map((cell) => cell.textContent)).toEqual([
       "演出（新增 / 管理）", "歌单（新增 / 管理）", "歌曲（新增 / 管理）", "乐队（管理）",

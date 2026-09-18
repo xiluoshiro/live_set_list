@@ -3188,8 +3188,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       <PageTitle kicker="Console" title="控制台" description="录入和维护演出、歌单、歌曲、乐队、场地与巡演资料。" />
       {message && <p className="console-admin-hint" role="status" aria-live="polite">{message}</p>}
 
-      <nav className="console-mode-card" aria-label="控制台录入类型">
-        <h2>内容管理</h2>
+      <nav className="console-mode-nav" aria-label="控制台录入类型">
         <div className="console-mode-scroll">
           <div className="console-mode-grid" role="tablist" aria-label="内容管理">
             {CONSOLE_MODE_COLUMNS.map(({ title, create, manage }) => (
