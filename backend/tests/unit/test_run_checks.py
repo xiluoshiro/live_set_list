@@ -11,7 +11,7 @@ run_checks = importlib.util.module_from_spec(run_checks_spec)
 run_checks_spec.loader.exec_module(run_checks)
 
 
-# 测试点：仅有 npm.exe 时，前端检查应使用系统找到的可执行文件，不依赖 npm.cmd。
+# 测试点：前端使用系统找到的 npm，且不对普通断言失败进行无条件重试。
 def test_frontend_steps_use_discovered_npm_executable(monkeypatch, tmp_path):
     npm_executable = tmp_path / "npm.exe"
     npm_executable.write_bytes(b"")
@@ -21,6 +21,7 @@ def test_frontend_steps_use_discovered_npm_executable(monkeypatch, tmp_path):
     steps, failures = run_checks.build_frontend_steps()
 
     assert failures == []
+    assert all(retries == 0 for _label, _name, _command, _cwd, retries in steps)
     assert [command[0] for _label, _step_name, command, _cwd, _retries in steps] == [
         str(npm_executable), str(npm_executable),
     ]

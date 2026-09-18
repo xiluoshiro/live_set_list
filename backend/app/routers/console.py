@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.routers.console_bands import router as console_bands_router
 from app.routers.console_geography import router as console_geography_router
+from app.routers.console_geocoding import router as console_geocoding_router
 from app.routers.console_geography_quality import router as console_geography_quality_router
 from app.routers.console_performance_groups import router as console_performance_groups_router
 from app.routers.console_read import router as console_read_router
@@ -12,6 +13,7 @@ from app.routers.console_write import router as console_write_router
 router = APIRouter(prefix="/api/console", tags=["console"])
 router.include_router(console_bands_router)
 router.include_router(console_geography_router)
+router.include_router(console_geocoding_router)
 router.include_router(console_geography_quality_router)
 router.include_router(console_venues_router)
 router.include_router(console_read_router)
