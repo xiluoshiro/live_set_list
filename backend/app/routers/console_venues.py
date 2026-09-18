@@ -351,6 +351,14 @@ def create_venue(
             with conn.cursor() as cur:
                 _lock_name_registry(cur)
                 _ensure_name_available(cur, payload.venue_name)
+                location = payload.location
+                if location is not None and location.locality_id is not None:
+                    cur.execute("SELECT timezone_id FROM geo_localities WHERE id = %s FOR SHARE", (location.locality_id,))
+                    locality = cur.fetchone()
+                    if locality is None:
+                        raise HTTPException(422, "地区不存在，请重新选择")
+                    if location.timezone_id and locality[0] and location.timezone_id != locality[0]:
+                        raise HTTPException(422, "场馆时区与地区时区不一致，请先核对所在地资料")
                 cur.execute(
                     "INSERT INTO venue_list (venue, venue_kind) VALUES (%s, %s) RETURNING id",
                     (payload.venue_name, payload.venue_kind),
@@ -365,12 +373,22 @@ def create_venue(
                     (venue_id, payload.venue_name),
                 )
                 version_id = int(cur.fetchone()[0])
+                if location is not None:
+                    cur.execute(
+                        """UPDATE venue_list SET locality_id=%s, address=%s, latitude=%s, longitude=%s,
+                           timezone_id=%s, location_verified_at=CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END
+                           WHERE id=%s""",
+                        (location.locality_id, location.address, location.latitude, location.longitude,
+                         location.timezone_id, any(value is not None for key, value in location.model_dump().items()
+                                                   if key != "coordinate_system"), venue_id),
+                    )
                 _write_audit(
                     cur,
                     user_id=context.user.id,
                     action="venue_create",
                     venue_id=venue_id,
-                    payload={"venue_name": payload.venue_name, "venue_kind": payload.venue_kind, "venue_name_version_id": version_id},
+                    payload={"venue_name": payload.venue_name, "venue_kind": payload.venue_kind, "venue_name_version_id": version_id,
+                             **({"location": location.model_dump()} if location is not None else {})},
                 )
     except HTTPException:
         raise
@@ -385,6 +403,7 @@ def create_venue(
             "venue_name": payload.venue_name,
             "venue_name_version_id": version_id,
             "venue_kind": payload.venue_kind,
+            "timezone_id": payload.location.timezone_id if payload.location else None,
         },
     }
 

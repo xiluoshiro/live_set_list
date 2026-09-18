@@ -7,6 +7,8 @@ import { VenueAdminSection } from "../VenueAdminSection";
 
 const apiMocks = vi.hoisted(() => ({
   getConsoleVenuePage: vi.fn(),
+  getConsoleLocalities: vi.fn(),
+  getConsoleTimezones: vi.fn(),
   getConsoleVenue: vi.fn(),
   createConsoleVenue: vi.fn(),
   updateConsoleVenueKind: vi.fn(),
@@ -99,6 +101,8 @@ describe("VenueAdminSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     installPagedVenues();
+    apiMocks.getConsoleLocalities.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20 });
+    apiMocks.getConsoleTimezones.mockResolvedValue(["Asia/Tokyo"]);
   });
 
   // 测试点：场地管理只读取当前分页，并提供搜索和翻页入口，避免一次加载全部 Venue。
@@ -141,17 +145,17 @@ describe("VenueAdminSection", () => {
     const onVenuesChanged = vi.fn().mockResolvedValue(undefined);
     renderSection(onMessage, onVenuesChanged, "create");
 
-    const createBlock = screen.getByRole("heading", { name: "新增 Venue" }).closest(".tour-admin-block") as HTMLElement | null;
+    const createBlock = screen.getByRole("heading", { name: "新增场地" }).closest(".tour-admin-block") as HTMLElement | null;
     if (!createBlock) throw new Error("missing create block");
     await user.type(within(createBlock).getByLabelText("名称"), "Third Hall");
     await user.selectOptions(within(createBlock).getByLabelText("类型"), "undisclosed");
     await user.click(within(createBlock).getByRole("button", { name: "提交插入" }));
     expect(apiMocks.createConsoleVenue).not.toHaveBeenCalled();
-    const dialog = screen.getByRole("dialog", { name: "确认新增 Venue" });
-    expect(within(dialog).getByRole("table", { name: "新增 Venue 确认" })).toHaveTextContent("未公开");
+    const dialog = screen.getByRole("dialog", { name: "确认新增场地" });
+    expect(within(dialog).getByRole("table", { name: "新增场地确认" })).toHaveTextContent("未公开");
     await user.click(within(dialog).getByRole("button", { name: "提交插入" }));
 
-    await waitFor(() => expect(apiMocks.createConsoleVenue).toHaveBeenCalledWith("Third Hall", "csrf-token", "undisclosed"));
+    await waitFor(() => expect(apiMocks.createConsoleVenue).toHaveBeenCalledWith("Third Hall", "csrf-token", "undisclosed", expect.objectContaining({ locality_id: null, address: null })));
     expect(screen.queryByLabelText("已有 Venue")).not.toBeInTheDocument();
     expect(onVenuesChanged).toHaveBeenCalledTimes(1);
   });

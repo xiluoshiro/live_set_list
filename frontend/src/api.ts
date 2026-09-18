@@ -1849,13 +1849,14 @@ export async function createConsoleVenue(
   venueName: string,
   csrfToken: string,
   venueKind: ConsoleVenueDetail["venue_kind"] = "physical",
+  location?: Omit<VenueLocationWrite, "expected_state_token">,
 ): Promise<ConsoleVenueMutationResponse> {
   const response = await fetchWithTimeout(
     `${BASE_URL}/api/console/venues`,
     {
       method: "POST",
       headers: jsonHeaders(csrfToken),
-      body: JSON.stringify({ venue_name: venueName, venue_kind: venueKind }),
+      body: JSON.stringify({ venue_name: venueName, venue_kind: venueKind, ...(location ? { location } : {}) }),
     },
     {
       requestKind: "console_venue_create",

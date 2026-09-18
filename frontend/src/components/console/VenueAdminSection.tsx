@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import {
-  createConsoleVenue,
   createConsoleVenueNameVersion,
   getConsoleVenue,
   getConsoleVenuePage,
@@ -13,6 +12,7 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleDateInput, isIsoCalendarDate } from "./ConsoleDateInput";
+import { VenueCreateSection } from "./VenueCreateSection";
 import { VenueLocationPanel } from "./VenueLocationPanel";
 
 type VenueAdminSectionProps = {
@@ -23,7 +23,7 @@ type VenueAdminSectionProps = {
   initialVenueId?: number | null;
 };
 
-type ConfirmationKind = "create" | "kind" | "rename" | "correction";
+type ConfirmationKind = "kind" | "rename" | "correction";
 
 type VenueConfirmation = {
   title: string;
@@ -64,8 +64,6 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
   const [venueTotalPages, setVenueTotalPages] = useState(1);
   const [confirmationKind, setConfirmationKind] = useState<ConfirmationKind | null>(null);
 
-  const [createName, setCreateName] = useState("");
-  const [createKind, setCreateKind] = useState<ConsoleVenueDetail["venue_kind"]>("physical");
   const [kindDraft, setKindDraft] = useState<ConsoleVenueDetail["venue_kind"]>("physical");
   const [renameName, setRenameName] = useState("");
   const [renameDate, setRenameDate] = useState("");
@@ -153,22 +151,6 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
     await onVenuesChanged();
   };
 
-  const submitCreate = async () => {
-    setSubmitting(true);
-    try {
-      const response = await createConsoleVenue(createName.trim(), auth.csrfToken ?? "", createKind);
-      setConfirmationKind(null);
-      setCreateName("");
-      setCreateKind("physical");
-      await onVenuesChanged();
-      onMessage(`已新增 Venue #${response.item.venue_id} 并建立首个名称版本`);
-    } catch (error) {
-      onMessage(`新增 Venue 失败：${errorMessage(error)}`);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const submitKind = async () => {
     if (!detail) return;
     setSubmitting(true);
@@ -231,15 +213,7 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
     (version) => version.venue_name_version_id === correctionVersionId,
   ) ?? null;
 
-  const confirmation: VenueConfirmation | null = confirmationKind === "create"
-    ? {
-        title: "确认新增 Venue",
-        ariaLabel: "新增 Venue 确认",
-        rows: [["名称", createName.trim()], ["类型", KIND_LABELS[createKind]]],
-        confirmLabel: "提交插入",
-        submit: submitCreate,
-      }
-    : confirmationKind === "kind" && detail
+  const confirmation: VenueConfirmation | null = confirmationKind === "kind" && detail
       ? {
           title: "确认修改场地类型",
           ariaLabel: "场地类型变化确认",
@@ -324,21 +298,7 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
 
       </>}
 
-      {variant === "create" && (
-        <div className="tour-admin-block">
-          <h3>新增 Venue</h3>
-          <div className="tour-admin-fields">
-            <label>名称<input value={createName} onChange={(event) => setCreateName(event.target.value)} /></label>
-            <label>类型<select value={createKind} onChange={(event) => setCreateKind(event.target.value as ConsoleVenueDetail["venue_kind"])}>
-              {Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select></label>
-          </div>
-          <p className="console-admin-hint">服务端将在一个事务中建立稳定 Venue 和首个开放名称版本。</p>
-          <div className="console-submit-row">
-            <button type="button" className="console-submit-btn" disabled={submitting || !createName.trim()} onClick={() => setConfirmationKind("create")}>提交插入</button>
-          </div>
-        </div>
-      )}
+      {variant === "create" && <VenueCreateSection onMessage={onMessage} onVenuesChanged={onVenuesChanged} />}
 
       {variant === "edit" && detail && (
         <>

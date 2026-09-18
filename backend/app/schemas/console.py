@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.lives import DatePhase, EventStatus, LiveScheduleHistoryItem
+from app.schemas.geography import LocationFields
 
 LIVE_TYPE_VALUES = ("oneman", "taiban", "multi_act", "festival", "event", "other")
 ScheduleField = Literal["venue", "opening_time", "start_time"]
@@ -118,6 +119,17 @@ class ConsoleVenueListResponse(BaseModel):
 class ConsoleVenueCreateRequest(BaseModel):
     venue_name: str = Field(..., min_length=1, max_length=255, description="Venue display name")
     venue_kind: VenueKind = "physical"
+    location: LocationFields | None = None
+
+    @model_validator(mode="after")
+    def validate_location_kind(self) -> "ConsoleVenueCreateRequest":
+        if self.location is not None:
+            values = self.location.model_dump(exclude={"coordinate_system"})
+            if self.venue_kind == "online" and any(value is not None for value in values.values()):
+                raise ValueError("线上场馆不保存实体位置")
+            if self.venue_kind == "undisclosed" and any(value is not None for key, value in values.items() if key != "locality_id"):
+                raise ValueError("未公开具体场馆只保存已公布地区")
+        return self
 
     @field_validator("venue_name")
     @classmethod

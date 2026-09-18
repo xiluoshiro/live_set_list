@@ -608,6 +608,56 @@ def test_console_create_venue_mock_success_persists_and_audits():
     assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[4].args[0]
 
 
+# 测试点：创建时位置与名称共用写入事务，响应返回时区并完整审计位置。
+def test_console_create_venue_with_location():
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(fetchone_side_effect=[None, ("Asia/Tokyo",), (88,), (99,)])
+    location = {"locality_id": 4, "address": "  Tokyo Hall  ", "latitude": 35.6,
+                "longitude": 139.7, "timezone_id": "Asia/Tokyo"}
+    with patch("app.routers.console_venues.get_write_db_connection", return_value=conn):
+        with TestClient(app) as client:
+            response = client.post("/api/console/venues", json={"venue_name": "New Hall", "location": location},
+                                   headers={"X-CSRF-Token": CSRF_TOKEN})
+    assert response.status_code == 201, response.text
+    assert response.json()["item"]["timezone_id"] == "Asia/Tokyo"
+    update = next(call for call in cursor.execute.call_args_list if "UPDATE venue_list SET locality" in call.args[0])
+    assert update.args[1] == (4, "Tokyo Hall", 35.6, 139.7, "Asia/Tokyo", True, 88)
+    audit = cursor.execute.call_args_list[-1].args[1][-1].adapted
+    assert audit["location"]["address"] == "Tokyo Hall"
+
+
+# 测试点：不存在的地区及冲突时区在创建场地前返回 422，不留下场地或名称。
+@pytest.mark.parametrize("locality", [None, ("America/New_York",)])
+def test_console_create_venue_rejects_invalid_locality(locality):
+    _set_authenticated_role("editor")
+    conn, cursor = _build_connection_mock(fetchone_side_effect=[None, locality])
+    with patch("app.routers.console_venues.get_write_db_connection", return_value=conn):
+        with TestClient(app) as client:
+            response = client.post("/api/console/venues", headers={"X-CSRF-Token": CSRF_TOKEN}, json={
+                "venue_name": "Bad Hall", "location": {"locality_id": 99, "latitude": 35,
+                "longitude": 139, "timezone_id": "Asia/Tokyo"},
+            })
+    assert response.status_code == 422
+    assert not any("INSERT INTO" in call.args[0] for call in cursor.execute.call_args_list)
+
+
+# 测试点：非实体类型、缺半边坐标及非法时区不能绕过新增表单写入。
+@pytest.mark.parametrize(("kind", "location"), [
+    ("online", {"locality_id": 1}), ("undisclosed", {"address": "hidden"}),
+    ("physical", {"latitude": 10}), ("physical", {"latitude": 91, "longitude": 0}),
+    ("physical", {"timezone_id": "Asia/Tokyo"}),
+    ("physical", {"latitude": 0, "longitude": 0, "timezone_id": "Invalid/Zone"}),
+])
+def test_console_create_venue_rejects_invalid_location_shape(kind, location):
+    _set_authenticated_role("editor")
+    with patch("app.routers.console_venues.get_write_db_connection") as connection:
+        with TestClient(app) as client:
+            response = client.post("/api/console/venues", headers={"X-CSRF-Token": CSRF_TOKEN},
+                                   json={"venue_name": "Bad Hall", "venue_kind": kind, "location": location})
+    assert response.status_code == 422
+    connection.assert_not_called()
+
+
 # 测试点：无场地 IANA 时区的 Live 使用默认 +09:00，写入与审计仍规范化钟点。
 def test_console_create_live_mock_success_normalizes_times_and_audits():
     _set_authenticated_role("admin")

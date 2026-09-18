@@ -4,7 +4,7 @@ import { getGeographyCapabilities, resolveGeography, searchGeography,
 import { VenueLocationMap } from "./VenueLocationMap";
 
 type Props = {
-  venueId: number; venueName: string; csrf: string; disabled: boolean;
+  venueId?: number; venueName: string; csrf: string; disabled: boolean;
   point: LocationPoint | null; savedPoint: LocationPoint | null; timezone: string; address: string; locality: GeoLocality | null;
   onPoint: (point: LocationPoint | null) => void; onTimezone: (zone: string) => void;
   onAddress: (address: string) => void; onLocality: (locality: GeoLocality) => void;
@@ -41,7 +41,7 @@ export function VenueLocationPicker(props: Props) {
   useEffect(() => { if (autoZone.current !== props.timezone) autoZone.current = null; }, [props.timezone]);
   useEffect(() => {
     const controller = new AbortController();
-    const requestId = `${props.venueId}-${++generation.current}`;
+    const requestId = `${props.venueId ?? "new"}-${++generation.current}`;
     addressRequest.current?.abort(); setResolution(null); setZone(null); setZoneReviewed(false); setMessage("");
     setQueryBusy(false);
     if (autoZone.current && current.current.timezone === autoZone.current) current.current.onTimezone("");
@@ -80,7 +80,7 @@ export function VenueLocationPicker(props: Props) {
     if (!props.point) return;
     addressRequest.current?.abort();
     const controller = new AbortController(); addressRequest.current = controller;
-    const requestId = `address-${props.venueId}-${++generation.current}`;
+    const requestId = `address-${props.venueId ?? "new"}-${++generation.current}`;
     const requestedPoint = key;
     addressAtRequest.current = props.address; localityAtRequest.current = props.locality?.id ?? null;
     setQueryBusy(true); setMessage(""); setResolution(null);
@@ -98,7 +98,7 @@ export function VenueLocationPicker(props: Props) {
     <div className="console-submit-row">
       <button type="button" className="console-ghost-btn" disabled={disabled || !config?.geocoding || query.trim().length < 2} onClick={() => void find()}>搜索位置</button>
       <button type="button" className="console-ghost-btn" disabled={disabled || !props.point || !config?.geocoding} onClick={() => void parseAddress()}>解析此位置</button>
-      <button type="button" className="console-ghost-btn" disabled={props.disabled} onClick={() => props.onPoint(props.savedPoint)}>回到已保存位置</button>
+      <button type="button" className="console-ghost-btn" disabled={props.disabled} onClick={() => props.onPoint(props.savedPoint)}>{props.venueId === undefined ? "清空草稿位置" : "回到已保存位置"}</button>
     </div>
     {search?.items.map((candidate, index) => <div key={`${candidate.latitude}-${candidate.longitude}-${index}`} className="console-admin-hint">
       <span>{candidate.name} · {candidate.address} </span>
