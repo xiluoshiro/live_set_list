@@ -36,6 +36,33 @@ def verified(**values):
     return values
 
 
+# 测试点：新增场地一次保存的位置可通过真实位置接口读回，错误地区不会留下半成品。
+def test_create_venue_with_location_is_atomic(integration_test_client, integration_admin_connection):
+    client = integration_test_client
+    headers = login(client)
+    locality = city(client, headers)
+    location = {"locality_id": locality["id"], "address": "Tokyo address", "latitude": 35.6,
+                "longitude": 139.7, "timezone_id": "Asia/Tokyo"}
+    response = client.post("/api/console/venues", headers=headers,
+                           json={"venue_name": "Atomic New Hall", "location": location})
+    assert response.status_code == 201, response.text
+    venue_id = response.json()["item"]["venue_id"]
+    saved = client.get(f"/api/console/venues/{venue_id}/location")
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["locality"]["id"] == locality["id"]
+    for key in ("address", "latitude", "longitude", "timezone_id"):
+        assert saved.json()[key] == location[key]
+    invalid = client.post("/api/console/venues", headers=headers, json={
+        "venue_name": "Must Not Exist", "location": {**location, "locality_id": 99999999},
+    })
+    assert invalid.status_code == 422, invalid.text
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM venue_list WHERE venue='Must Not Exist'")
+        assert cur.fetchone()[0] == 0
+        cur.execute("SELECT COUNT(*) FROM venue_name_versions WHERE venue_name='Must Not Exist'")
+        assert cur.fetchone()[0] == 0
+
+
 # 测试点：场馆查询和详情返回实际时区，无时间的 Live 也返回按演出日期解析的夏令时偏移。
 @pytest.mark.parametrize(("live_date", "offset"), [("2026-01-15", -300), ("2026-07-15", -240)])
 def test_console_timezone_read_contract(integration_test_client, integration_admin_connection, live_date, offset):

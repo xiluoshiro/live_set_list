@@ -65,9 +65,8 @@ class LocalityPage(BaseModel):
     page_size: int
 
 
-class LocationWrite(BaseModel):
+class LocationFields(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    expected_state_token: str = Field(pattern=r"^[0-9a-f]{64}$")
     locality_id: int | None = Field(default=None, ge=1)
     address: str | None = Field(default=None, max_length=500)
     latitude: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
@@ -95,6 +94,10 @@ class LocationWrite(BaseModel):
             self.latitude = round(self.latitude, 6)
             self.longitude = round(self.longitude, 6)
         return self
+
+
+class LocationWrite(LocationFields):
+    expected_state_token: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class MapCandidate(BaseModel):
