@@ -303,7 +303,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("tab", { name: "演出管理" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "新增歌单" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "歌单管理" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "歌曲新增与管理" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "歌曲管理" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "新增乐队" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "新增演出" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByLabelText("查询 venue")).toHaveFocus();
@@ -318,7 +318,7 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
-  // 测试点：控制台入口直接显示七类导航，不显示内容管理标题，并保留新增与管理入口。
+  // 测试点：控制台入口按实际模式显示七类导航，歌曲仅有管理入口。
   test("控制台导航按资料类型单行分列", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel initialMode="live_create" />);
@@ -327,10 +327,12 @@ describe("ConsoleInsertPanel", () => {
     expect(within(content).queryByRole("heading", { name: "内容管理" })).not.toBeInTheDocument();
     expect(within(content).getByRole("tablist", { name: "内容管理" })).toBeInTheDocument();
     expect(Array.from(content.querySelectorAll(".console-mode-cell")).map((cell) => cell.textContent)).toEqual([
-      "演出（新增 / 管理）", "歌单（新增 / 管理）", "歌曲（新增 / 管理）", "乐队（管理）",
+      "演出（新增 / 管理）", "歌单（新增 / 管理）", "歌曲（管理）", "乐队（管理）",
       "场地（新增 / 管理）", "巡演（管理）", "活动组（管理）",
     ]);
     expect(within(content).getAllByRole("tab")).toHaveLength(10);
+    expect(within(content.querySelectorAll<HTMLElement>(".console-mode-cell")[2]).getAllByRole("tab")).toHaveLength(1);
+    expect(within(content).getByRole("tab", { name: "歌曲管理" })).toHaveTextContent("管理");
     expect(within(content).queryByRole("tab", { name: "新增歌曲" })).not.toBeInTheDocument();
 
     await user.click(within(content).getByRole("tab", { name: "场地管理" }));
@@ -887,7 +889,7 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel />);
 
     await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
-    await user.click(screen.getByRole("tab", { name: "歌曲新增与管理" }));
+    await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.click(screen.getByRole("button", { name: "请选择 band_id" }));
     expect(await screen.findByText("9 - Real Band")).toBeInTheDocument();
 
@@ -1054,7 +1056,7 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel />);
 
     expect(await screen.findByText(/加载控制台候选失败/)).toHaveTextContent("bands: bands offline");
-    await userEvent.click(screen.getByRole("tab", { name: "歌曲新增与管理" }));
+    await userEvent.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await userEvent.click(screen.getByRole("button", { name: "请选择 band_id" }));
     expect(screen.queryByText(/1 - /)).not.toBeInTheDocument();
 
@@ -1108,7 +1110,7 @@ describe("ConsoleInsertPanel", () => {
       "101 - Early Live (2026-04-01)",
     ]));
 
-    await user.click(screen.getByRole("tab", { name: "歌曲新增与管理" }));
+    await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.click(screen.getByRole("button", { name: "请选择 band_id" }));
     const bandMenu = screen.getByText("9 - Later Band").closest(".bands-floating-menu") as HTMLElement;
     const bandOptions = within(bandMenu).getAllByText(/Band$/).map((node) => node.textContent);
@@ -1866,7 +1868,7 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel />);
 
-    await user.click(screen.getByRole("tab", { name: "歌曲新增与管理" }));
+    await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.type(screen.getByPlaceholderText("请输入歌曲名"), "新曲");
     await user.click(screen.getByRole("button", { name: "请选择 band_id" }));
     await user.click(await screen.findByText("2 - Roselia"));
@@ -1901,7 +1903,7 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-    await user.click(screen.getByRole("tab", { name: "歌曲新增与管理" }));
+    await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.selectOptions(screen.getByLabelText("选择要编辑的歌曲"), "901");
     await user.clear(screen.getByPlaceholderText("请输入歌曲名"));
     await user.type(screen.getByPlaceholderText("请输入歌曲名"), "改名曲");
@@ -1959,7 +1961,7 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-    await user.click(screen.getByRole("tab", { name: "歌曲新增与管理" }));
+    await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("", 20, 1));
     await user.type(screen.getByPlaceholderText("输入歌曲名"), "搜索命中");
     await user.selectOptions(screen.getByLabelText("按乐队查询"), "2");
@@ -2180,7 +2182,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("选择 live_id")).toHaveValue("24");
 
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "23");
-    await user.click(screen.getByRole("tab", { name: "歌曲新增与管理" }));
+    await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.click(screen.getByRole("tab", { name: "新增歌单" }));
 
     await waitFor(() => expect(screen.getByText("第 1 / 2 页，共 21 条")).toBeInTheDocument());
@@ -2493,7 +2495,7 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel />);
 
-    await user.click(screen.getByRole("tab", { name: "歌曲新增与管理" }));
+    await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.click(screen.getByRole("button", { name: "请选择 band_id" }));
     const menu = await screen.findByText("9 - Scrollable Band");
     fireEvent.scroll(menu.closest(".bands-floating-menu") as HTMLElement);
@@ -2973,7 +2975,7 @@ describe("ConsoleInsertPanel", () => {
     });
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
-    await user.click(screen.getByRole("tab", { name: "歌曲新增与管理" }));
+    await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     const trigger = screen.getByRole("button", { name: "请选择 band_id" });
 
     const rectSpy = vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
