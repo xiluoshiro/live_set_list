@@ -36,6 +36,30 @@ def verified(**values):
     return values
 
 
+# 测试点：场馆查询和详情返回实际时区，无时间的 Live 也返回按演出日期解析的夏令时偏移。
+@pytest.mark.parametrize(("live_date", "offset"), [("2026-01-15", -300), ("2026-07-15", -240)])
+def test_console_timezone_read_contract(integration_test_client, integration_admin_connection, live_date, offset):
+    client = integration_test_client
+    headers = login(client)
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("UPDATE venue_list SET latitude=40.7, longitude=-74.0, timezone_id='America/New_York' WHERE id=1")
+    detail = client.get("/api/console/venues/1")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["timezone_id"] == "America/New_York"
+    page = client.get("/api/console/venues?limit=100")
+    assert page.status_code == 200, page.text
+    assert next(item for item in page.json()["items"] if item["venue_id"] == 1)["timezone_id"] == "America/New_York"
+    response = client.post("/api/console/lives", headers=headers, json={
+        "live_date": live_date, "live_title": "Timezone contract", "live_type": "oneman",
+        "url": "https://example.com/timezone", "opening_time": None, "start_time": None,
+        "venue_id": 1, "venue_name_version_id": detail.json()["venue_name_version_id"],
+        "default_band_ids": [], "event_attendees": [],
+    })
+    assert response.status_code == 201, response.text
+    assert response.json()["item"]["timezone_id"] == "America/New_York"
+    assert response.json()["item"]["timezone_offset_minutes"] == offset
+
+
 # 测试点：国家和行政区级所在地缺少城市名时，默认列表、场馆位置与公开详情仍能返回。
 def test_region_only_localities_remain_readable(integration_test_client, integration_admin_connection):
     client = integration_test_client

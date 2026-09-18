@@ -33,6 +33,7 @@ const apiMocks = vi.hoisted(() => ({
   getConsoleLocalities: vi.fn(),
   getConsoleTimezones: vi.fn(),
   getConsoleVenues: vi.fn(),
+  getConsoleVenue: vi.fn(),
   getLiveDetail: vi.fn(),
   getLives: vi.fn(),
 }));
@@ -71,6 +72,7 @@ vi.mock("../../api", () => ({
   getConsoleLocalities: apiMocks.getConsoleLocalities,
   getConsoleTimezones: apiMocks.getConsoleTimezones,
   getConsoleVenues: apiMocks.getConsoleVenues,
+  getConsoleVenue: apiMocks.getConsoleVenue,
   getLiveDetail: apiMocks.getLiveDetail,
   getLives: apiMocks.getLives,
 }));
@@ -147,6 +149,8 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleLocalities.mockReset();
     apiMocks.getConsoleTimezones.mockReset();
     apiMocks.getConsoleVenues.mockReset();
+    apiMocks.getConsoleVenue.mockReset();
+    apiMocks.getConsoleVenue.mockResolvedValue({ venue_kind: "physical", timezone_id: "Asia/Tokyo" });
     apiMocks.getLiveDetail.mockReset();
     apiMocks.getLives.mockReset();
     apiMocks.getConsoleSongs.mockResolvedValue({ items: [] });
@@ -265,6 +269,31 @@ describe("ConsoleInsertPanel", () => {
     });
   });
 
+  // 测试点：切换场馆时实际时区及日期阶段同步变化，不使用日本默认值判断美国的今天。
+  test("venue selection updates timezone and local date phase", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-15T02:00:00Z"));
+    try {
+      apiMocks.getConsoleVenues.mockResolvedValue({ items: [
+        { venue_id: 1, venue_name: "Tokyo", venue_name_version_id: 1, timezone_id: "Asia/Tokyo" },
+        { venue_id: 2, venue_name: "New York", venue_name_version_id: 2, timezone_id: "America/New_York" },
+      ] });
+      const user = userEvent.setup();
+      render(<ConsoleInsertPanel initialMode="live_create" />);
+      await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalled());
+      fireEvent.change(screen.getByLabelText("live_date"), { target: { value: "2026-07-14" } });
+      expect(await screen.findByText("Asia/Tokyo")).toBeInTheDocument();
+      expect(document.querySelector(".live-admin-readonly-field")).toHaveAttribute("data-status-tone", "past");
+      await user.click(screen.getByRole("button", { name: "1 - Tokyo" }));
+      await user.click(await screen.findByRole("radio", { name: "2 - New York" }));
+      expect(screen.getByText("America/New_York")).toBeInTheDocument();
+      expect(document.querySelector(".live-admin-readonly-field")).toHaveAttribute("data-status-tone", "today");
+      expect(screen.queryByText(/场馆未设置/)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // 测试点：控制台首次进入应优先新增 Live、聚焦场地查询，且不预加载隐藏的 Setlist 候选。
   test("默认渲染新增 Live 并聚焦场地查询", async () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
@@ -284,7 +313,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("opening_time")).toHaveAttribute("type", "time");
     expect(screen.getByLabelText("start_time")).toHaveValue("19:00");
     expect(screen.getByLabelText("start_time")).toHaveAttribute("type", "time");
-    expect(screen.getByText("由场馆时区决定")).toBeInTheDocument();
+    expect(screen.getByText("请选择场馆")).toBeInTheDocument();
     expect(screen.queryByLabelText("timezone")).not.toBeInTheDocument();
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
@@ -1117,8 +1146,16 @@ describe("ConsoleInsertPanel", () => {
     const onLiveDataChanged = vi.fn();
     const todayDate = getTodayDateInputValue();
     apiMocks.getConsoleVenues.mockResolvedValue({
-      items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }],
+      items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188, timezone_id: "America/New_York" }],
     });
+    // 测试点：确认和保存记录读取真实时区，无入场时间也不回退到日本时区。
+    apiMocks.createConsoleLive.mockResolvedValueOnce({ ok: true, item: {
+      live_id: 39, live_date: "2026-04-01", live_title: "Inserted Live", live_type: "oneman",
+      url: "https://example.com/inserted", opening_time: null, start_time: "19:00:00-04:00",
+      timezone_id: "America/New_York", timezone_offset_minutes: -240,
+      timezone_source: "venue", venue_id: 88, venue_name_version_id: 188,
+      default_band_ids: [3], event_attendees: [], event_status: "scheduled",
+    } });
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: [] }],
     });
@@ -1143,7 +1180,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("dialog", { name: "确认新增 Live" })).toBeInTheDocument();
     expect(screen.getByText("Inserted Live")).toBeInTheDocument();
     expect(screen.getByText("New Venue")).toBeInTheDocument();
-    expect(screen.getByText("由场馆时区决定")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog", { name: "确认新增 Live" })).getByText("America/New_York")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
@@ -1170,6 +1207,7 @@ describe("ConsoleInsertPanel", () => {
     ));
     expect(screen.getByText("已新增Live #39（Inserted Live）")).toBeInTheDocument();
     expect(document.querySelector(".live-history-table tbody tr")?.textContent).toContain("39");
+    expect(document.querySelector(".live-history-table tbody tr")?.textContent).toContain("America/New_York");
     expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("");
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
@@ -1257,7 +1295,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("checkbox", { name: "新增后清空录入数据" })).not.toBeChecked();
   });
 
-  // 测试点：更新已有 Setlist 的 Live 后不得加入新增 Setlist 候选，切回页签时应重新加载候选。
+  // 测试点：编辑时补取场馆真实时区，更新已有 Setlist 的 Live 不加入新增歌单候选。
   test("Live管理会加载并更新既有Live", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleLiveCandidates.mockResolvedValue({
@@ -1276,6 +1314,8 @@ describe("ConsoleInsertPanel", () => {
     const selector = await screen.findByRole("combobox", { name: "选择要编辑的 Live" });
     await user.selectOptions(selector, "55");
     await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live"));
+    expect(apiMocks.getConsoleVenue).toHaveBeenCalledWith(88);
+    expect(screen.getByText("Asia/Tokyo")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
 
     await user.clear(screen.getByPlaceholderText("请输入Live标题"));

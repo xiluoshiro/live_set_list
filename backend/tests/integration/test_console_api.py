@@ -86,7 +86,7 @@ def _count_rows(
     return int(row[0])
 
 
-# 测试点：`editor+` 只读查询接口应返回前端控制台下拉、搜索和歌曲分页所需的 seed 数据。
+# 测试点：只读查询返回控制台候选和分页数据，未补录时区的场馆明确返回 null。
 def test_console_lookup_endpoints_return_seeded_options(
     integration_test_client,
 ):
@@ -138,6 +138,7 @@ def test_console_lookup_endpoints_return_seeded_options(
                 "venue_name": "Zepp Shinjuku",
                 "venue_name_version_id": 2,
                 "venue_kind": "physical",
+                "timezone_id": None,
                 "matched_name": "Zepp Shinjuku",
                 "matched_name_version_id": 2,
                 "match_kind": "current",
@@ -813,7 +814,7 @@ def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "login_success"
 
 
-# 测试点：新增 Live 应校验并持久化 Venue 名称版本、default_band_ids 与 live_type。
+# 测试点：新增 Live 持久化名称版本、Band 与类型，响应返回实际保存的时区偏移。
 def test_console_create_live_persists_live_row(
     integration_test_client,
     integration_admin_connection,
@@ -887,6 +888,7 @@ def test_console_create_live_persists_live_row(
             "venue_name_version_id": expected_venue_name_version_id,
             "announced_locality_id": None,
             "timezone_id": None,
+            "timezone_offset_minutes": 540,
             "timezone_source": "legacy_offset",
             "timezone_source_revision": None,
             "opening_time_fold": None,

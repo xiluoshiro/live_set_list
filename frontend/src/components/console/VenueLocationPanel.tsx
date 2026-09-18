@@ -166,7 +166,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
       {busy && <p className="console-admin-hint">正在处理…</p>}
       {!data && !busy && <button type="button" className="console-ghost-btn" onClick={() => void load()}>重新加载</button>}
       {data && <>
-        <p className="console-admin-hint">场地 IANA 时区：{data.timezone_id ?? "未设置（关联 Live 使用默认 UTC+09:00）"}。</p>
+        {venueKind !== "online" && <p className="console-admin-hint">场地 IANA 时区：{data.timezone_id ?? "未设置（新录入 Live 使用默认 UTC+09:00）"}。</p>}
         <p className="console-admin-hint">此处用于补录或纠正资料，不产生版本；场馆搬迁请新建 Venue。正式更名请使用名称历史。</p>
         <p className="console-admin-hint">先按场馆名称核对所在地。地图候选由可选供应商适配器返回，候选坐标统一转换为 WGS84；服务未配置或不可用时仍可手工关联。</p>
         {venueKind === "online" && <p className="console-admin-hint">线上场馆不登记实体位置；活动时间基准由每场 Live 单独维护。</p>}

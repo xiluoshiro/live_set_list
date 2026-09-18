@@ -445,6 +445,7 @@ def get_editable_live(
             "opening_time": opening_time,
             "start_time": start_time,
             "timezone": timezone,
+            "timezone_offset_minutes": int(row[17]),
             "venue_id": int(row[7]) if row[7] is not None else None,
             "venue_name_version_id": int(row[8]) if row[8] is not None else None,
             "announced_locality_id": int(row[18]) if row[18] is not None else None,

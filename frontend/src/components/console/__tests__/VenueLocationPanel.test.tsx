@@ -40,6 +40,13 @@ async function openPanel(onOpenLive?: (liveId: number) => void) {
   return user;
 }
 
+// 测试点：线上场馆不错误提示关联 Live 使用日本默认时区。
+test("online venues do not advertise a physical venue timezone fallback", async () => {
+  render(<VenueLocationPanel venueId={1} venueName="Online" venueKind="online" />);
+  expect(await screen.findByText(/活动时间基准由每场 Live 单独维护/)).toBeInTheDocument();
+  expect(screen.queryByText(/场地 IANA 时区：|使用默认 UTC/)).not.toBeInTheDocument();
+});
+
 // 测试点：所在地与地图直接加载且不再折叠，地区时区与缺失坐标如实展示，单个坐标不能提交。
 test("loads directly and validates paired coordinates", async () => {
   const user = await openPanel();

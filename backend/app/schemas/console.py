@@ -93,6 +93,7 @@ VenueKind = Literal["physical", "online", "undisclosed"]
 
 
 class ConsoleVenueItem(BaseModel):
+    timezone_id: str | None = None
     venue_id: int = Field(..., description="venue_list.id")
     venue_name: str = Field(..., description="Venue display name")
     venue_name_version_id: int | None = None
@@ -145,6 +146,7 @@ class ConsoleVenueNameVersion(BaseModel):
 
 
 class ConsoleVenueDetailResponse(BaseModel):
+    timezone_id: str | None = None
     venue_id: int
     venue_name: str
     venue_name_version_id: int
@@ -350,6 +352,7 @@ class ConsoleLiveUpdateRequest(ConsoleLiveBaseRequest):
 
 
 class ConsoleLiveItem(BaseModel):
+    timezone_offset_minutes: int | None = None
     live_id: int = Field(..., description="Created live ID")
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., description="Live title")

@@ -21,6 +21,7 @@ import {
   getConsoleSongs,
   getConsoleTimezones,
   getConsoleVenues,
+  getConsoleVenue,
   getLiveDetail,
   getLives,
   updateConsoleLive,
@@ -205,6 +206,7 @@ function toVenueOption(item: ConsoleVenueItem): VenueOption {
       : item.venue_name,
     venue_name_version_id: item.matched_name_version_id ?? item.venue_name_version_id,
     venue_kind: item.venue_kind,
+    timezone_id: item.timezone_id,
   };
 }
 
@@ -266,11 +268,7 @@ function formatTimedLabel(value: string | null | undefined): string {
   if (!offsetHour) return timePart;
 
   const normalizedOffset = `${offsetHour}:${offsetMinute ?? "00"}`;
-  const timezoneLabelMap: Record<string, string> = {
-    "+08:00": "CN",
-    "+09:00": "JP",
-  };
-  const timezoneLabel = timezoneLabelMap[normalizedOffset] ?? `UTC${normalizedOffset}`;
+  const timezoneLabel = `UTC${normalizedOffset}`;
   return `${timePart}(${timezoneLabel})`;
 }
 
@@ -669,7 +667,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [venueAnnounced, setVenueAnnounced] = useState(true);
   const [openingTimeAnnounced, setOpeningTimeAnnounced] = useState(true);
   const [startTimeAnnounced, setStartTimeAnnounced] = useState(true);
-  const [timezone, setTimezone] = useState(DEFAULT_LIVE_TIMEZONE);
   const [announcedLocalityId, setAnnouncedLocalityId] = useState<number | null>(null);
   const [explicitTimezoneId, setExplicitTimezoneId] = useState<string | null>(null);
   const [openingTimeFold, setOpeningTimeFold] = useState<0 | 1 | null>(null);
@@ -799,7 +796,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     startTime,
     startTimeAnnounced,
     statusNote,
-    timezone,
     announcedLocalityId,
     explicitTimezoneId,
     openingTimeFold,
@@ -834,7 +830,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       && currentLivePayload[field] !== null
     ));
   const requiresScheduleChangeKind = hasScheduleChanges && !isAnnouncementOnlyChange;
-  const currentDatePhase = deriveDatePhaseForOffset(liveDate, timezone);
+  const selectedVenue = venueAnnounced ? venues.find((venue) => venue.venue_id === selectedVenueId) : undefined;
+  const currentTimezoneId = selectedVenue?.venue_kind === "online" ? explicitTimezoneId : selectedVenue?.timezone_id;
+  const currentTimezoneLabel = currentTimezoneId ?? (selectedVenue?.venue_kind === "online" ? "请选择线上活动时区" : "UTC+09:00");
+  const todayInZone = currentTimezoneId
+    ? new Intl.DateTimeFormat("en-CA", { timeZone: currentTimezoneId, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
+    : null;
+  const currentDatePhase: DatePhase = todayInZone
+    ? liveDate < todayInZone ? "past" : liveDate > todayInZone ? "upcoming" : "today"
+    : deriveDatePhaseForOffset(liveDate, DEFAULT_LIVE_TIMEZONE);
 
   useEffect(() => {
     if (requiresScheduleChangeKind) return;
@@ -1182,7 +1186,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setVenueAnnounced(true);
     setOpeningTimeAnnounced(true);
     setStartTimeAnnounced(true);
-    setTimezone(DEFAULT_LIVE_TIMEZONE);
     setAnnouncedLocalityId(null);
     setExplicitTimezoneId(null);
     setOpeningTimeFold(null);
@@ -1213,7 +1216,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     setVenueAnnounced(payload.venue_id !== null);
     setOpeningTime(payload.opening_time ?? DEFAULT_LIVE_OPENING_TIME);
     setStartTime(payload.start_time ?? DEFAULT_LIVE_START_TIME);
-    setTimezone(payload.timezone ?? DEFAULT_LIVE_TIMEZONE);
     setAnnouncedLocalityId(payload.announced_locality_id ?? null);
     setExplicitTimezoneId(payload.explicit_timezone_id ?? null);
     setOpeningTimeFold(payload.opening_time_fold ?? null);
@@ -1490,12 +1492,15 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         && item.venue_name !== null
         && item.venue_name_version_id !== null
       ) {
+        const venue = await getConsoleVenue(item.venue_id);
         setVenues((current) => sortById([
           ...current.filter((venue) => venue.venue_id !== item.venue_id),
           {
             venue_id: item.venue_id as number,
             venue_name: item.venue_name as string,
             venue_name_version_id: item.venue_name_version_id as number,
+            venue_kind: venue.venue_kind,
+            timezone_id: venue.timezone_id,
           },
         ], (venue) => venue.venue_id));
       }
@@ -2600,6 +2605,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       const response = action === "create"
         ? await createConsoleLive(payload, csrfToken)
         : await updateConsoleLive(liveId as number, updatePayload, csrfToken);
+      const offsetMinutes = response.item.timezone_offset_minutes;
+      const savedTimezone = offsetMinutes != null
+        ? `${offsetMinutes < 0 ? "-" : "+"}${String(Math.floor(Math.abs(offsetMinutes) / 60)).padStart(2, "0")}:${String(Math.abs(offsetMinutes) % 60).padStart(2, "0")}`
+        : response.item.start_time?.match(/[+-]\d{2}:\d{2}$/)?.[0]
+          ?? response.item.opening_time?.match(/[+-]\d{2}:\d{2}$/)?.[0]
+          ?? DEFAULT_LIVE_TIMEZONE;
       const historyEntryId = liveHistoryEntryIdRef.current + 1;
       liveHistoryEntryIdRef.current = historyEntryId;
       const inserted: LiveInsertDraft = {
@@ -2612,7 +2623,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         url: response.item.url,
         opening_time: response.item.opening_time,
         start_time: response.item.start_time,
-        timezone: response.item.opening_time?.match(/[+-]\d{2}:\d{2}$/)?.[0] ?? payload.timezone ?? DEFAULT_LIVE_TIMEZONE,
+        timezone: response.item.timezone_id ?? `UTC${savedTimezone}`,
         venue_id: response.item.venue_id,
         venue_name_version_id: response.item.venue_name_version_id,
         default_band_ids: response.item.default_band_ids ?? [],
@@ -2627,7 +2638,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         url: response.item.url,
         opening_time: getClockValue(response.item.opening_time),
         start_time: getClockValue(response.item.start_time),
-        timezone: response.item.opening_time?.match(/[+-]\d{2}:\d{2}$/)?.[0] ?? payload.timezone ?? DEFAULT_LIVE_TIMEZONE,
+        timezone: savedTimezone,
         venue_id: response.item.venue_id,
         venue_name_version_id: response.item.venue_name_version_id,
         announced_locality_id: response.item.announced_locality_id ?? null,
@@ -2956,7 +2967,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
               ["url", payload.url],
               ["opening_time", payload.opening_time ?? "未公布"],
               ["start_time", payload.start_time ?? "未公布"],
-              ["timezone", payload.timezone],
+              ["timezone", currentTimezoneLabel],
               ["venue_id", payload.venue_id ?? "未公布"],
               ["venue_name", pendingConfirmation.venueName],
               ["default_band_ids", payload.default_band_ids.join(", ") || "-"],
