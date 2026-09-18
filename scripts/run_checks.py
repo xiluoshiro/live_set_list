@@ -209,7 +209,7 @@ def build_frontend_steps() -> tuple[list[CheckStep], list[CheckFailure]]:
     steps.extend(
         [
             ("frontend", "typecheck", [npm_command(), "run", "typecheck"], FRONTEND_DIR, 0),
-            ("frontend", "test", [npm_command(), "run", "test"], FRONTEND_DIR, 1),
+            ("frontend", "test", [npm_command(), "run", "test"], FRONTEND_DIR, 0),
         ]
     )
     return steps, failures

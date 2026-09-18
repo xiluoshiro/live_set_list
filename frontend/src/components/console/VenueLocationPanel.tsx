@@ -9,6 +9,7 @@ import {
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
+import { VenueLocationPicker } from "./VenueLocationPicker";
 
 const PROVIDERS: Record<MapProvider, string> = { google: "Google Maps", apple: "Apple Maps", amap: "高德地图" };
 const AREA_LEVELS: Record<GeoLocality["area_level"], string> = {
@@ -48,6 +49,8 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [mapReview, setMapReview] = useState(false);
   const [localityEditorMode, setLocalityEditorMode] = useState<"create" | "edit" | null>(null);
   const [areaLevel, setAreaLevel] = useState<GeoLocality["area_level"]>("locality");
   const [country, setCountry] = useState("");
@@ -236,8 +239,17 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
           <label>经度（WGS84）<input inputMode="decimal" value={longitude} disabled={busy || !physical} onChange={e => setLongitude(e.target.value)} /></label>
         </div>
         {invalidCoordinates && <p role="alert">请同时填写有效经纬度，或同时清空。</p>}
+        {physical && <>
+          <button className="console-ghost-btn" type="button" aria-expanded={mapOpen} disabled={busy} onClick={() => setMapOpen(!mapOpen)}>{mapOpen ? "收起选点地图" : "地图选点与自动解析"}</button>
+          {mapOpen && <VenueLocationPicker key={`${venueId}-${data.state_token}`} venueId={venueId} venueName={venueName}
+            csrf={auth.csrfToken ?? ""} disabled={busy} timezone={timezone} address={address} locality={selectedCity}
+            point={!invalidCoordinates && latitude.trim() && longitude.trim() ? { latitude: Number(latitude), longitude: Number(longitude) } : null}
+            savedPoint={data.latitude !== null && data.longitude !== null ? { latitude: data.latitude, longitude: data.longitude } : null}
+            onPoint={point => { setLatitude(point ? String(point.latitude) : ""); setLongitude(point ? String(point.longitude) : ""); }}
+            onTimezone={setTimezone} onAddress={setAddress} onLocality={setSelectedCity} onReview={setMapReview} />}
+        </>}
         <div className="console-submit-row">
-          <button className="console-submit-btn" type="button" disabled={busy || !dirty || invalidCoordinates || (!!timezone && !latitude.trim())} onClick={() => void preview()}>保存修改</button>
+          <button className="console-submit-btn" type="button" disabled={busy || mapReview || !dirty || invalidCoordinates || (!!timezone && !latitude.trim())} onClick={() => void preview()}>保存修改</button>
           <button className="console-ghost-btn" type="button" disabled={busy} onClick={() => void load()}>重新加载</button>
         </div>
         {physical && <><h3>已保存位置的地图链接</h3>

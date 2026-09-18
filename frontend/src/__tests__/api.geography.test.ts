@@ -2,6 +2,22 @@ import { afterEach, expect, test, vi } from "vitest";
 
 afterEach(() => vi.unstubAllGlobals());
 
+// 测试点：只读解析 POST 携带 CSRF，切换草稿时取消实际 HTTP 请求而非仅忽略响应。
+test("resolution propagates cancellation and CSRF", async () => {
+  const fetchMock = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    init.signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")));
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  const { resolveGeography } = await import("../api");
+  const controller = new AbortController();
+  const promise = resolveGeography({ latitude: 35, longitude: 139 }, "timezone", "draft-1", "csrf", controller.signal);
+  const rejection = expect(promise).rejects.toMatchObject({ name: "AbortError" });
+  controller.abort();
+  await rejection;
+  expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ headers: expect.objectContaining({ "X-CSRF-Token": "csrf" }), method: "POST" }));
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).coordinate_system).toBe("WGS84");
+});
+
 // 测试点：Venue、地区和地图关联写入携带 CSRF 与数据状态令牌，影响预览保持只读请求。
 test("geography requests preserve write and concurrency contracts", async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });

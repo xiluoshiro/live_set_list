@@ -4,3 +4,4 @@ psycopg2-binary==2.9.10
 python-dotenv==1.1.1
 argon2-cffi==25.1.0
 tzdata==2026.3
+timezonefinder==8.2.0

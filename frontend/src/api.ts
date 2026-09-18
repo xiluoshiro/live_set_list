@@ -694,9 +694,10 @@ export type LocalityPreview = {
   live_count: number;
 };
 
-async function geographyRequest<T>(path: string, method = "GET", payload?: unknown, csrfToken?: string): Promise<T> {
+async function geographyRequest<T>(path: string, method = "GET", payload?: unknown, csrfToken?: string, signal?: AbortSignal): Promise<T> {
   const response = await fetchWithTimeout(`${BASE_URL}/api/console${path}`, {
     method,
+    signal,
     ...(payload !== undefined || csrfToken ? { headers: jsonHeaders(csrfToken ?? "") } : {}),
     ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
   }, { requestKind: "console_geography", method });
@@ -704,6 +705,22 @@ async function geographyRequest<T>(path: string, method = "GET", payload?: unkno
 }
 
 export const getConsoleTimezones = () => geographyRequest<string[]>("/timezones");
+
+export type GeographyCapabilities = { tile_url: string; attribution: string; geocoding: boolean; timezone: boolean };
+export type LocationPoint = { latitude: number; longitude: number };
+export type GeocodingCandidate = LocationPoint & { name: string; address: string; country_code: string | null; admin_area: string | null; locality_name: string | null };
+export type GeocodingResult = { status: "ready" | "not_found" | "unavailable"; items: GeocodingCandidate[]; message: string | null; attribution: string; attribution_url: string };
+export type LocationResolution = LocationPoint & {
+  request_id: string;
+  timezone: { status: "ready" | "not_found" | "unavailable" | "not_requested"; timezone_id: string | null; message: string | null };
+  address: GeocodingResult | null;
+  localities: GeoLocality[];
+};
+export const getGeographyCapabilities = (signal?: AbortSignal) => geographyRequest<GeographyCapabilities>("/geography/capabilities", "GET", undefined, undefined, signal);
+export const searchGeography = (query: string, country_code: string | null, csrf: string, signal?: AbortSignal) =>
+  geographyRequest<GeocodingResult>("/geography/search", "POST", { query, country_code }, csrf, signal);
+export const resolveGeography = (point: LocationPoint, parts: "timezone" | "address", request_id: string, csrf: string, signal?: AbortSignal) =>
+  geographyRequest<LocationResolution>("/geography/resolve", "POST", { ...point, parts, request_id, coordinate_system: "WGS84" }, csrf, signal);
 export const getConsoleLocalities = (q = "", page = 1) => geographyRequest<GeoLocalityPage>(
   `/localities?${new URLSearchParams({ q, page: String(page), limit: "20" })}`,
 );
@@ -1185,6 +1202,9 @@ async function fetchWithTimeout(
   const method = meta?.method ?? init?.method ?? "GET";
   const requestKind = meta?.requestKind ?? "lives";
   const controller = new AbortController();
+  const cancel = () => controller.abort();
+  if (init?.signal?.aborted) controller.abort();
+  init?.signal?.addEventListener("abort", cancel, { once: true });
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const startedAt = performance.now();
   logInfo("api_request_start", {
@@ -1216,6 +1236,7 @@ async function fetchWithTimeout(
     }
     return response;
   } catch (error) {
+    if (init?.signal?.aborted) throw error;
     const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
     const message =
       error instanceof DOMException && error.name === "AbortError"
@@ -1236,6 +1257,7 @@ async function fetchWithTimeout(
     throw error;
   } finally {
     clearTimeout(timeoutId);
+    init?.signal?.removeEventListener("abort", cancel);
   }
 }
 
