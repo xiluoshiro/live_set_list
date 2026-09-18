@@ -2,7 +2,7 @@ import importlib.util
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 RUN_DEV_PATH = ROOT / "scripts" / "run_dev.py"
 run_dev_spec = importlib.util.spec_from_file_location("run_dev", RUN_DEV_PATH)
 assert run_dev_spec is not None and run_dev_spec.loader is not None

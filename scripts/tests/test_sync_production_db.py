@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = ROOT / "scripts" / "sync_production_db.py"
 script_spec = importlib.util.spec_from_file_location("sync_production_db", SCRIPT_PATH)
 assert script_spec is not None and script_spec.loader is not None

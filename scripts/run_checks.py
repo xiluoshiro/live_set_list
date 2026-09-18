@@ -3,7 +3,11 @@ import ast
 import os
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from itertools import groupby
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from time import perf_counter
 from typing import Protocol
 
 
@@ -21,6 +25,7 @@ TRANSIENT_ENVIRONMENT_MARKERS = (
     "由于系统缓冲区空间不足或队列已满",
 )
 TRANSIENT_ENVIRONMENT_RETRIES = 3
+BACKEND_UNIT_WORKERS = 2
 
 
 class CompletedProcessLike(Protocol):
@@ -38,10 +43,11 @@ def backend_python() -> Path:
     return BACKEND_DIR / ".venv" / "bin" / "python"
 
 
-def _run_captured_step(args: list[str], cwd: Path) -> CompletedProcessLike:
+def _run_captured_step(args: list[str], cwd: Path, env: dict[str, str] | None = None) -> CompletedProcessLike:
     return subprocess.run(
         args,
         cwd=cwd,
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -60,7 +66,15 @@ def run_step(
     cwd: Path,
     retries: int = 0,
     transient_environment_retries: int = 0,
+    log: list[str] | None = None,
+    env: dict[str, str] | None = None,
 ) -> int:
+    def report(message: str) -> None:
+        if log is None:
+            print(message, flush=True)
+        else:
+            log.append(message)
+
     attempt = 1
     generic_retries_remaining = retries
     environment_retries_remaining = transient_environment_retries
@@ -68,29 +82,26 @@ def run_step(
         show_attempt = retries > 0 or transient_environment_retries > 0
         total_attempts = 1 + retries + transient_environment_retries
         suffix = f" (attempt {attempt}/{total_attempts})" if show_attempt else ""
-        print(f"[{label}] {' '.join(args)}{suffix}", flush=True)
+        report(f"[{label}] {' '.join(args)}{suffix}")
         if transient_environment_retries > 0:
-            completed = _run_captured_step(args, cwd)
+            completed = _run_captured_step(args, cwd, env=env)
             output = completed.stdout or ""
             if output:
-                print(output, end="" if output.endswith("\n") else "\n", flush=True)
+                report(output.rstrip("\n"))
         else:
-            completed = subprocess.run(args, cwd=cwd)
+            completed = subprocess.run(args, cwd=cwd, env=env)
             output = ""
         if completed.returncode == 0:
             return 0
         if environment_retries_remaining > 0 and _is_transient_environment_failure(output):
             environment_retries_remaining -= 1
             attempt += 1
-            print(
-                "检测到可重试的环境错误；仅重跑当前测试分组，不能将其作为通过或交付理由。",
-                flush=True,
-            )
+            report("检测到可重试的环境错误；仅重跑当前测试分组，不能将其作为通过或交付理由。")
             continue
         if generic_retries_remaining > 0:
             generic_retries_remaining -= 1
             attempt += 1
-            print(f"命令失败，准备重试。退出码: {completed.returncode}", flush=True)
+            report(f"命令失败，准备重试。退出码: {completed.returncode}")
             continue
         return completed.returncode
 
@@ -122,7 +133,7 @@ def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckF
                 (
                     "backend",
                     f"pytest {relative_test_file.as_posix()}",
-                    [str(python_path), "-m", "pytest", "-s", str(relative_test_file), "-q"],
+                    [str(python_path), "-m", "pytest", "-s", str(relative_test_file), "-q", "-p", "no:cacheprovider"],
                     BACKEND_DIR,
                     0,
                 )
@@ -148,6 +159,28 @@ def build_backend_steps(mode: str = "all") -> tuple[list[CheckStep], list[CheckF
                 )
             )
     return steps, failures
+
+
+def build_scripts_steps() -> tuple[list[CheckStep], list[CheckFailure]]:
+    test_dir = SCRIPTS_DIR / "tests"
+    test_files = sorted(test_dir.glob("test_*.py"))
+    if not test_files:
+        return [], [("scripts", "scripts/tests 测试文件检查", 1)]
+    python_path = backend_python()
+    if not python_path.exists():
+        return [], [("scripts", "Python 环境检查", 1)]
+    return [
+        ("scripts", "mypy", [str(python_path), "-m", "mypy", "--config-file", "scripts/mypy.ini"], ROOT, 0),
+        ("scripts", "pytest scripts/tests", [str(python_path), "-m", "pytest", str(test_dir), "-q"], ROOT, 0),
+    ], []
+
+
+def run_scripts_check_steps() -> list[CheckFailure]:
+    failures = run_scripts_syntax_steps()
+    steps, setup_failures = build_scripts_steps()
+    failures.extend(setup_failures)
+    failures.extend(run_check_steps(steps))
+    return failures
 
 
 def build_recovery_steps(mode: str = "unit") -> tuple[list[CheckStep], list[CheckFailure]]:
@@ -239,26 +272,66 @@ def restore_test_seed_after_integration() -> CheckFailure | None:
     return None
 
 
-def run_backend_check_steps(steps: list[CheckStep]) -> list[CheckFailure]:
+def _run_backend_unit_file(step: CheckStep) -> tuple[int, list[str]]:
+    label, name, command, cwd, retries = step
+    log: list[str] = []
+    started = perf_counter()
+    try:
+        with TemporaryDirectory(prefix="livesetlist-unit-") as temp_dir:
+            env = os.environ.copy()
+            env["APP_LOG_FILE"] = str(Path(temp_dir) / "app.log")
+            isolated_command = [*command, "--basetemp", str(Path(temp_dir) / "pytest")]
+            code = run_step(
+                label, isolated_command, cwd, retries=retries,
+                transient_environment_retries=TRANSIENT_ENVIRONMENT_RETRIES, log=log, env=env,
+            )
+    except OSError as exc:
+        log.append(f"{label} 执行或清理失败 {name}: {exc}")
+        code = 1
+    log.append(f"[{label}] {name}: exit {code}, {perf_counter() - started:.2f}s")
+    return code, log
+
+
+def run_backend_unit_steps(steps: list[CheckStep], workers: int) -> list[CheckFailure]:
+    failures: list[CheckFailure] = []
+    started = perf_counter()
+    print(f"[backend] unit: {len(steps)} files, max workers={workers}", flush=True)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(_run_backend_unit_file, step): step for step in steps}
+        for future in as_completed(futures):
+            label, name, _command, _cwd, _retries = futures[future]
+            code, log = future.result()
+            print("\n".join(log), flush=True)
+            if code != 0:
+                failures.append((label, name, code))
+    print(f"[backend] unit completed in {perf_counter() - started:.2f}s", flush=True)
+    return sorted(failures)
+
+
+def run_backend_check_steps(
+    steps: list[CheckStep], workers: int = BACKEND_UNIT_WORKERS,
+) -> list[CheckFailure]:
+    if workers < 1:
+        raise ValueError("backend workers must be >= 1")
     failures: list[CheckFailure] = []
     ran_integration = False
-    for label, step_name, command, cwd, retries in steps:
-        is_integration_step = label == "backend" and step_name.startswith("pytest tests/integration/")
-        is_backend_test_file_step = is_integration_step or (
-            label == "backend" and step_name.startswith("pytest tests/unit/")
-        )
-        if is_integration_step:
-            ran_integration = True
-        code = run_step(
-            label,
-            command,
-            cwd,
-            retries=retries,
-            transient_environment_retries=(TRANSIENT_ENVIRONMENT_RETRIES if is_backend_test_file_step else 0),
-        )
-        if code != 0:
-            print(f"{label} 检查失败：{step_name}，退出码: {code}", flush=True)
-            failures.append((label, step_name, code))
+    # Each non-unit stage is a barrier: mypy finishes first, integration starts after all unit files.
+    for is_unit, group in groupby(
+        steps, key=lambda step: step[0] == "backend" and step[1].startswith("pytest tests/unit/"),
+    ):
+        if is_unit:
+            failures.extend(run_backend_unit_steps(list(group), workers))
+            continue
+        for label, step_name, command, cwd, retries in group:
+            is_integration = label == "backend" and step_name.startswith("pytest tests/integration/")
+            ran_integration |= is_integration
+            code = run_step(
+                label, command, cwd, retries=retries,
+                transient_environment_retries=TRANSIENT_ENVIRONMENT_RETRIES if is_integration else 0,
+            )
+            if code != 0:
+                print(f"{label} 检查失败：{step_name}，退出码: {code}", flush=True)
+                failures.append((label, step_name, code))
     if ran_integration:
         restore_failure = restore_test_seed_after_integration()
         if restore_failure is not None:
@@ -301,7 +374,7 @@ def print_summary(target: str, failures: list[CheckFailure]) -> int:
         elif target == "frontend":
             print("前端检查完成：typecheck + test 全部通过。")
         elif target == "scripts":
-            print("脚本检查完成：scripts/*.py 语法全部通过。")
+            print("脚本检查完成：scripts 语法 + mypy + tests 全部通过。")
         elif target == "functional":
             print("功能检查完成：scripts + frontend + backend + recovery-unit 全部通过。")
         elif target == "full":
@@ -316,21 +389,21 @@ def print_summary(target: str, failures: list[CheckFailure]) -> int:
     return 1
 
 
-def run_backend_checks() -> int:
+def run_backend_checks(workers: int = BACKEND_UNIT_WORKERS) -> int:
     steps, failures = build_backend_steps(mode="all")
-    failures.extend(run_backend_check_steps(steps))
+    failures.extend(run_backend_check_steps(steps, workers=workers))
     return print_summary("backend", failures)
 
 
-def run_backend_unit_checks() -> int:
+def run_backend_unit_checks(workers: int = BACKEND_UNIT_WORKERS) -> int:
     steps, failures = build_backend_steps(mode="unit")
-    failures.extend(run_backend_check_steps(steps))
+    failures.extend(run_backend_check_steps(steps, workers=workers))
     return print_summary("backend-unit", failures)
 
 
-def run_backend_integration_checks() -> int:
+def run_backend_integration_checks(workers: int = BACKEND_UNIT_WORKERS) -> int:
     steps, failures = build_backend_steps(mode="integration")
-    failures.extend(run_backend_check_steps(steps))
+    failures.extend(run_backend_check_steps(steps, workers=workers))
     return print_summary("backend-integration", failures)
 
 
@@ -341,7 +414,7 @@ def run_frontend_checks() -> int:
 
 
 def run_scripts_checks() -> int:
-    failures = run_scripts_syntax_steps()
+    failures = run_scripts_check_steps()
     return print_summary("scripts", failures)
 
 
@@ -363,14 +436,14 @@ def run_recovery_all_checks() -> int:
     return print_summary("recovery", failures)
 
 
-def run_functional_checks() -> int:
+def run_functional_checks(workers: int = BACKEND_UNIT_WORKERS) -> int:
     failures: list[CheckFailure] = []
     backend_steps, backend_failures = build_backend_steps(mode="all")
     frontend_steps, frontend_failures = build_frontend_steps()
     recovery_steps, recovery_failures = build_recovery_steps(mode="unit")
-    failures.extend(run_scripts_syntax_steps())
+    failures.extend(run_scripts_check_steps())
     failures.extend(backend_failures)
-    failures.extend(run_backend_check_steps(backend_steps))
+    failures.extend(run_backend_check_steps(backend_steps, workers=workers))
     failures.extend(frontend_failures)
     failures.extend(run_check_steps(frontend_steps))
     failures.extend(recovery_failures)
@@ -378,14 +451,14 @@ def run_functional_checks() -> int:
     return print_summary("functional", failures)
 
 
-def run_full_checks() -> int:
+def run_full_checks(workers: int = BACKEND_UNIT_WORKERS) -> int:
     failures: list[CheckFailure] = []
     backend_steps, backend_failures = build_backend_steps(mode="all")
     frontend_steps, frontend_failures = build_frontend_steps()
     recovery_steps, recovery_failures = build_recovery_steps(mode="all")
-    failures.extend(run_scripts_syntax_steps())
+    failures.extend(run_scripts_check_steps())
     failures.extend(backend_failures)
-    failures.extend(run_backend_check_steps(backend_steps))
+    failures.extend(run_backend_check_steps(backend_steps, workers=workers))
     failures.extend(frontend_failures)
     failures.extend(run_check_steps(frontend_steps))
     failures.extend(recovery_failures)
@@ -411,17 +484,24 @@ def parse_args() -> argparse.Namespace:
         ],
         help="Check target: frontend / backend / backend-unit / backend-integration / recovery-unit / recovery-integration / recovery / scripts / functional / full.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--backend-workers", type=int, default=BACKEND_UNIT_WORKERS,
+        help="Maximum concurrent backend unit files (default: 2; use 1 for serial execution).",
+    )
+    args = parser.parse_args()
+    if args.backend_workers < 1:
+        parser.error("--backend-workers must be >= 1")
+    return args
 
 
 def main() -> int:
     args = parse_args()
     if args.target == "backend":
-        return run_backend_checks()
+        return run_backend_checks(workers=args.backend_workers)
     if args.target == "backend-unit":
-        return run_backend_unit_checks()
+        return run_backend_unit_checks(workers=args.backend_workers)
     if args.target == "backend-integration":
-        return run_backend_integration_checks()
+        return run_backend_integration_checks(workers=args.backend_workers)
     if args.target == "recovery-unit":
         return run_recovery_checks()
     if args.target == "recovery-integration":
@@ -433,9 +513,9 @@ def main() -> int:
     if args.target == "scripts":
         return run_scripts_checks()
     if args.target == "functional":
-        return run_functional_checks()
+        return run_functional_checks(workers=args.backend_workers)
     if args.target == "full":
-        return run_full_checks()
+        return run_full_checks(workers=args.backend_workers)
     return 1
 
 
