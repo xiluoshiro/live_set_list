@@ -19,7 +19,6 @@ const CATEGORIES: Array<{ value: GeographyQualityCategory | "all"; label: string
   { value: "missing_coordinates", label: "缺坐标" },
   { value: "missing_timezone", label: "缺有效时区" },
   { value: "zero_coordinates", label: "零坐标" },
-  { value: "stale_map_link", label: "过期地图关联" },
 ];
 
 const categoryLabel = (value: GeographyQualityCategory) =>

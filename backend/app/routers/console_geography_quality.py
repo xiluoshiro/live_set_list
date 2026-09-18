@@ -18,7 +18,6 @@ QUALITY_CATEGORIES = (
     "missing_coordinates",
     "missing_timezone",
     "zero_coordinates",
-    "stale_map_link",
 )
 
 QUALITY_CTE = f"""
@@ -32,13 +31,7 @@ QUALITY_CTE = f"""
                venue.longitude,
                venue.timezone_id AS effective_timezone_id,
                NULLIF(concat_ws(' / ', locality.country_code, locality.admin_area, locality.locality_name), '')
-                   AS locality_label,
-               (
-                   SELECT string_agg(link.provider, ', ' ORDER BY link.provider)
-                   FROM venue_map_links link
-                   WHERE link.venue_id = venue.id
-                     AND link.location_revision <> venue.location_revision
-               ) AS stale_providers
+                   AS locality_label
         FROM venue_list venue
         JOIN venue_name_versions version ON version.venue_id = venue.id AND version.valid_to IS NULL
         LEFT JOIN geo_localities locality ON locality.id = venue.locality_id
@@ -55,9 +48,7 @@ QUALITY_CTE = f"""
                 ('missing_address', base.address IS NULL OR btrim(base.address) = '', '实体 Venue 尚未登记公开门牌地址'),
                 ('missing_coordinates', base.latitude IS NULL, '实体 Venue 尚未登记 WGS84 坐标'),
                 ('missing_timezone', base.effective_timezone_id IS NULL, 'Venue 未登记 IANA 时区；关联 Live 使用默认 +09:00'),
-                ('zero_coordinates', base.latitude = 0 AND base.longitude = 0, '坐标为 (0, 0)，需要人工核对'),
-                ('stale_map_link', base.stale_providers IS NOT NULL,
-                    '过期地图关联：' || COALESCE(base.stale_providers, ''))
+                ('zero_coordinates', base.latitude = 0 AND base.longitude = 0, '坐标为 (0, 0)，需要人工核对')
         ) AS issue(category, matches, detail)
         WHERE issue.matches
     ), quality AS (
@@ -70,7 +61,7 @@ QUALITY_CTE = f"""
 def list_geography_quality(
     category: Literal[
         "all", "missing_locality", "missing_address", "missing_coordinates", "missing_timezone",
-        "zero_coordinates", "stale_map_link",
+        "zero_coordinates",
     ] = Query(default="all"),
     q: str = Query(default="", max_length=255),
     page: int = Query(default=1, ge=1),
