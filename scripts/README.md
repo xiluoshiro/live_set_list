@@ -44,8 +44,8 @@ python scripts/run_checks.py <arguments>
 ```
 
 - `frontend`：只运行前端 `typecheck + test`
-- `scripts`：只运行 `scripts/*.py` 语法检查，不写入 `__pycache__`
-- `backend-unit`：按 `test_*.py` 文件分组、每组使用独立 Python 进程运行后端单元测试集
+- `scripts`：运行 `scripts/*.py` 语法检查、`scripts/tests` 的 mypy 和 pytest（使用 backend 虚拟环境）
+- `backend-unit`：运行后端 mypy，再按 `test_*.py` 文件启动独立 Python 进程，默认最多 2 个文件并行；不包含 `scripts/tests`
 - `backend-integration`：运行后端 `mypy(app + tests)`，再按 `test_*.py` 文件分组、每组使用独立 Python 进程执行 integration 测试
 - `backend`：相当于运行 `backend-unit + backend-integration`
 - `recovery-unit`：运行恢复脚本的 mock/命令契约测试
@@ -53,6 +53,10 @@ python scripts/run_checks.py <arguments>
 - `recovery`：相当于运行 `recovery-unit + recovery-integration`，这组检查会真实操作独立 Docker 沙箱，明显更重
 - `functional`：运行功能测试集，包含 `scripts + frontend + backend + recovery-unit`
 - `full`：运行全部检查，等于 `scripts + frontend + backend + recovery`
+
+脚本测试位于 `scripts/tests/`：`test_apply_remote_sql.py`、`test_sync_production_db.py`、`test_run_dev.py`、`test_run_checks.py`、`test_production_assets.py`。`scripts`、`functional`、`full` 均执行它们，`backend` 和 `backend-unit` 不再执行。
+
+使用 `python scripts/run_checks.py functional --backend-workers 1` 可退回 unit 串行模式；`--backend-workers 4` 可提高并发上限。每个文件仍启动全新进程，使用独立临时目录和应用日志，禁用共享 pytest cache 写入，完成后整块输出日志及耗时。mypy 先完成，所有 unit 文件完成后才串行执行 integration；不改变每例 seed 和文件级白名单重试。
 
 后端 integration 测试和 `restore_test_seed.py` 会共用 PostgreSQL advisory lock；如果另一轮检查仍在使用测试库，后启动的一轮会等待，避免并发 `TRUNCATE` 污染用例。integration 测试结束后，`run_checks.py` 会调用内部脚本 `scripts/internal/restore_test_seed.py`，重新导入测试库 seed，并按 `infra/auth/.env.auth` 恢复默认 admin，避免测试执行污染手工联调用的测试库状态。
 

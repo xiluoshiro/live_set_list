@@ -5,7 +5,7 @@ import tarfile
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 RELEASE_SCRIPT_PATH = ROOT / "scripts" / "build_release.py"
 release_spec = importlib.util.spec_from_file_location("build_release", RELEASE_SCRIPT_PATH)
 assert release_spec is not None and release_spec.loader is not None
