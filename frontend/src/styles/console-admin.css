@@ -42,50 +42,40 @@
 
 .console-mode-grid {
   display: grid;
-  grid-template-columns: 76px repeat(7, 150px);
-  width: max-content;
+  grid-template-columns: repeat(7, minmax(170px, 1fr));
+  min-width: max-content;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
 }
 
-.console-mode-heading,
-.console-mode-axis,
 .console-mode-cell {
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
-  padding: 10px 8px;
+  padding: 12px 8px;
   border-right: 1px solid var(--border-subtle);
-  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
 }
 
-.console-mode-grid > :nth-child(8n) {
+.console-mode-grid > :last-child {
   border-right: 0;
 }
 
-.console-mode-grid > :nth-last-child(-n + 8) {
-  border-bottom: 0;
-}
-
 .console-mode-heading {
-  background: var(--surface-head);
   color: var(--text-heading);
   font-weight: 700;
 }
 
-.console-mode-axis {
-  background: var(--surface-chip-soft);
-  color: var(--text-heading);
-  font-weight: 600;
+.console-mode-actions {
+  color: var(--text-muted);
 }
 
 .console-mode-button {
-  min-width: 112px;
-  max-width: 100%;
-  min-height: 40px;
-  white-space: nowrap;
+  padding: 4px 5px;
+  border-color: transparent;
+  background: transparent;
   font-weight: 600;
 }
 

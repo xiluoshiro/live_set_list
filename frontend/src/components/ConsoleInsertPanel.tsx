@@ -110,9 +110,9 @@ type ConsoleInsertPanelProps = {
 };
 
 const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; label: string }; manage: { value: ConsoleMode; label: string } }[] = [
-  { title: "Live", create: { value: "live_create", label: "新增Live" }, manage: { value: "live_edit", label: "Live管理" } },
-  { title: "Setlist", create: { value: "setlist", label: "新增Setlist" }, manage: { value: "setlist_edit", label: "Setlist管理" } },
-  { title: "歌曲", manage: { value: "song", label: "歌曲管理" } },
+  { title: "演出", create: { value: "live_create", label: "新增演出" }, manage: { value: "live_edit", label: "演出管理" } },
+  { title: "歌单", create: { value: "setlist", label: "新增歌单" }, manage: { value: "setlist_edit", label: "歌单管理" } },
+  { title: "歌曲", manage: { value: "song", label: "歌曲新增与管理" } },
   { title: "乐队", manage: { value: "band", label: "乐队管理" } },
   { title: "场地", create: { value: "venue_create", label: "新增场地" }, manage: { value: "venue", label: "场地管理" } },
   { title: "巡演", manage: { value: "tour", label: "巡演管理" } },
@@ -3174,25 +3174,20 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         </div>
       )}
       <section className="console-admin">
-      <PageTitle kicker="Console" title="控制台" description="录入和维护 Live、Setlist、歌曲、乐队、场地与巡演资料。" />
+      <PageTitle kicker="Console" title="控制台" description="录入和维护演出、歌单、歌曲、乐队、场地与巡演资料。" />
       {message && <p className="console-admin-hint" role="status" aria-live="polite">{message}</p>}
 
       <nav className="console-mode-card" aria-label="控制台录入类型">
         <h2>内容管理</h2>
         <div className="console-mode-scroll">
           <div className="console-mode-grid" role="tablist" aria-label="内容管理">
-            <div className="console-mode-axis console-mode-heading">操作</div>
-            {CONSOLE_MODE_COLUMNS.map(({ title }) => <div className="console-mode-heading" key={title}>{title}</div>)}
-            <div className="console-mode-axis">新增</div>
-            {CONSOLE_MODE_COLUMNS.map(({ title, create }) => (
-              <div className="console-mode-cell" key={`${title}-create`}>
-                {create && <button type="button" role="tab" aria-selected={mode === create.value} className={`section-tab-btn console-mode-button${mode === create.value ? " active" : ""}`} onClick={() => changeConsoleMode(create.value)}>{create.label}</button>}
-              </div>
-            ))}
-            <div className="console-mode-axis">管理</div>
-            {CONSOLE_MODE_COLUMNS.map(({ title, manage }) => (
-              <div className="console-mode-cell" key={`${title}-manage`}>
-                <button type="button" role="tab" aria-selected={mode === manage.value} className={`section-tab-btn console-mode-button${mode === manage.value ? " active" : ""}`} onClick={() => changeConsoleMode(manage.value)}>{manage.label}</button>
+            {CONSOLE_MODE_COLUMNS.map(({ title, create, manage }) => (
+              <div className="console-mode-cell" key={title}>
+                <span className="console-mode-heading">{title}</span>
+                <span className="console-mode-actions">
+                  （{create && <><button type="button" role="tab" aria-label={create.label} aria-selected={mode === create.value} className={`section-tab-btn console-mode-button${mode === create.value ? " active" : ""}`} onClick={() => changeConsoleMode(create.value)}>新增</button><span aria-hidden="true"> / </span></>}
+                  <button type="button" role="tab" aria-label={manage.label} aria-selected={mode === manage.value} className={`section-tab-btn console-mode-button${mode === manage.value ? " active" : ""}`} onClick={() => changeConsoleMode(manage.value)}>{title === "歌曲" ? "新增 / 管理" : "管理"}</button>）
+                </span>
               </div>
             ))}
           </div>
