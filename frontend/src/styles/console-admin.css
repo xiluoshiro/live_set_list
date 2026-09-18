@@ -612,6 +612,7 @@
 .tour-admin-fields label {
   display: grid;
   gap: 6px;
+  align-content: start;
   color: var(--text-secondary);
   font-weight: 600;
 }
@@ -665,10 +666,14 @@
   font-weight: 600;
 }
 
-.tour-band-trigger {
+.tour-admin-fields .tour-band-trigger {
   display: block;
   width: 100%;
-  min-height: 39px;
+  height: 32px;
+  min-height: 32px;
+  border-color: var(--border-strong);
+  color: var(--text-main);
+  font-family: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
