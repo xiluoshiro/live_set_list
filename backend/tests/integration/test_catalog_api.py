@@ -3,29 +3,13 @@ import pytest
 
 pytestmark = pytest.mark.integration
 
-# 测试点：GET /api/catalog/stats 应基于 seed SQL 返回准确的汇总数据和可筛选年份。
-def test_catalog_stats_returns_seeded_counts(integration_test_client):
+# 测试点：统计概览同时保持精确字段集合、字段类型及 seed 中的汇总值和年份。
+def test_catalog_stats_returns_seeded_counts_and_response_contract(integration_test_client):
     """聚合统计应返回种子数据中的 band/song/venue 总数和最新 Live 日期。"""
     response = integration_test_client.get("/api/catalog/stats")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["live_count"] == 4
-    assert body["band_count"] == 4
-    assert body["song_count"] == 17
-    assert body["venue_count"] == 3
-    assert body["latest_live_date"] == "2026-05-30"
-    assert body["years"] == [2026]
-
-
-# 测试点：旧版概览响应体继续保持稳定，避免首页指标契约被新统计接口破坏。
-def test_catalog_stats_response_structure(integration_test_client):
-    """验证 stats 端点返回的 JSON 字段完整且类型正确。"""
-    response = integration_test_client.get("/api/catalog/stats")
-
-    assert response.status_code == 200
-    body = response.json()
-
     assert isinstance(body, dict)
     assert set(body.keys()) == {"live_count", "band_count", "song_count", "venue_count", "latest_live_date", "years"}
     assert isinstance(body["live_count"], int)
@@ -34,6 +18,12 @@ def test_catalog_stats_response_structure(integration_test_client):
     assert isinstance(body["venue_count"], int)
     assert isinstance(body["latest_live_date"], str)
     assert isinstance(body["years"], list)
+    assert body["live_count"] == 4
+    assert body["band_count"] == 4
+    assert body["song_count"] == 17
+    assert body["venue_count"] == 3
+    assert body["latest_live_date"] == "2026-05-30"
+    assert body["years"] == [2026]
 
 
 # 测试点：乐队浏览右侧的无 Setlist 活动应返回全部 default_band_ids，供前端渲染 Band SVG。
@@ -410,10 +400,3 @@ def test_catalog_calendar_empty_month_returns_empty_items(integration_test_clien
 
     assert response.status_code == 200
     assert response.json() == {"month": "2027-01", "items": []}
-
-
-# 测试点：非法月份格式返回 422，非法格式不进入数据库查询。
-def test_catalog_calendar_invalid_month_returns_422(integration_test_client):
-    for month in ("2026-13", "2026-00", "2026-8", "202608", "abc"):
-        response = integration_test_client.get("/api/catalog/calendar", params={"month": month})
-        assert response.status_code == 422

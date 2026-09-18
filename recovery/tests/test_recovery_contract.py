@@ -237,8 +237,8 @@ def test_recover_main_database_uses_snapshot_backup_and_rolls_back_on_check_fail
     ]
 
 
-def test_recover_main_database_rolls_back_on_pg_restore_failure(monkeypatch, tmp_path) -> None:
-    # 测试点：候选主库恢复失败时，应回滚候选容器并清理临时快照。
+# 测试点：恢复子流程抛错时停止后续步骤、回滚候选容器并清理临时快照。
+def test_recover_main_database_rolls_back_on_restore_failure(monkeypatch, tmp_path) -> None:
     calls: list[str] = []
     backup_path = tmp_path / "restore.dump"
     snapshot_path = tmp_path / "snapshot.dump"
@@ -254,39 +254,7 @@ def test_recover_main_database_rolls_back_on_pg_restore_failure(monkeypatch, tmp
         "prepare_candidate_database",
         lambda *_args, **_kwargs: ("candidate-container", "candidate-volume", "old-container", "old-volume"),
     )
-    monkeypatch.setattr(core, "restore_app_database_from_backup", lambda *_args: (_ for _ in ()).throw(SystemExit("pg_restore failed")))
-    monkeypatch.setattr(core, "recover_test_database", lambda *_args: calls.append("recover-test"))
-    monkeypatch.setattr(core, "rollback_candidate", lambda *_args, **_kwargs: calls.append("rollback"))
-    monkeypatch.setattr(core, "remove_recovery_snapshot", lambda path: calls.append(f"cleanup:{path.name if path else 'none'}"))
-
-    exit_code = core.recover_main_database(_env_values(), "docker")
-
-    assert exit_code == 1
-    assert calls == [
-        "confirm-restore",
-        "rollback",
-        "cleanup:snapshot.dump",
-    ]
-
-
-def test_recover_main_database_rolls_back_on_flyway_info_failure(monkeypatch, tmp_path) -> None:
-    # 测试点：候选主库恢复后若 Flyway info 失败，也应回滚候选容器并清理临时快照。
-    calls: list[str] = []
-    backup_path = tmp_path / "restore.dump"
-    snapshot_path = tmp_path / "snapshot.dump"
-    backup_path.write_bytes(b"backup")
-    snapshot_path.write_bytes(b"snapshot")
-
-    monkeypatch.setattr(core, "get_latest_app_backup", lambda: backup_path)
-    monkeypatch.setattr(core, "confirm_restore", lambda _path: calls.append("confirm-restore"))
-    monkeypatch.setattr(core, "create_app_backup", lambda *_args, **_kwargs: snapshot_path)
-    monkeypatch.setattr(core, "container_exists", lambda *_args: True)
-    monkeypatch.setattr(
-        core,
-        "prepare_candidate_database",
-        lambda *_args, **_kwargs: ("candidate-container", "candidate-volume", "old-container", "old-volume"),
-    )
-    monkeypatch.setattr(core, "restore_app_database_from_backup", lambda *_args: (_ for _ in ()).throw(SystemExit("flyway info failed")))
+    monkeypatch.setattr(core, "restore_app_database_from_backup", lambda *_args: (_ for _ in ()).throw(SystemExit("restore failed")))
     monkeypatch.setattr(core, "recover_test_database", lambda *_args: calls.append("recover-test"))
     monkeypatch.setattr(core, "rollback_candidate", lambda *_args, **_kwargs: calls.append("rollback"))
     monkeypatch.setattr(core, "remove_recovery_snapshot", lambda path: calls.append(f"cleanup:{path.name if path else 'none'}"))

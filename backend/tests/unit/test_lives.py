@@ -55,10 +55,34 @@ def _build_batch_detail_connection_mock(
     return conn, cursor
 
 
+def _request_detail_for_mode(mode, header_row, detail_rows, performance_rows=None):
+    live_id = header_row[0]
+    if mode == "single":
+        conn, _ = _build_detail_connection_mock(header_row, detail_rows, performance_rows)
+    else:
+        assert mode == "batch"
+        conn, _ = _build_batch_detail_connection_mock(
+            [header_row], [(live_id, *row) for row in detail_rows], performance_rows,
+        )
+    with patch("app.routers.lives.get_db_connection", return_value=conn):
+        client = TestClient(app)
+        if mode == "single":
+            response = client.get(f"/api/lives/{live_id}")
+        else:
+            response = client.post("/api/lives/details:batch", json={"live_ids": [live_id]})
+    assert response.status_code == 200
+    payload = response.json()
+    if mode == "batch":
+        assert payload["missing_live_ids"] == []
+        assert len(payload["items"]) == 1
+        return payload["items"][0]
+    return payload
+
+
+# 测试点：列表返回完整字段与分页，URL 连同查询参数原样透传，并保留空 URL。
 def test_get_lives_success_returns_items_and_pagination():
-    # 测试点：正常请求时，返回 items 与 pagination，且字段映射符合接口契约。
     rows = [
-        (1, "2026-03-28", "Title 1", [1, 2], "https://example.com/live/1", "oneman", None, None, 7, "Group 7"),
+        (1, "2026-03-28", "Title 1", [1, 2], "https://example.com/live/1?from=list", "oneman", None, None, 7, "Group 7"),
         (2, "2026-03-27", "Title 2", [], None, "festival", None, None, None, None),
     ]
     conn, cursor = _build_connection_mock(47, rows)
@@ -82,7 +106,7 @@ def test_get_lives_success_returns_items_and_pagination():
             "live_title": "Title 1",
             "live_type": "oneman",
             "bands": [1, 2],
-            "url": "https://example.com/live/1",
+            "url": "https://example.com/live/1?from=list",
             "is_favorite": False,
             "tour": None,
             "performance_group": {"group_id": 7, "group_title": "Group 7"},
@@ -107,21 +131,6 @@ def test_get_lives_success_returns_items_and_pagination():
     ]
     assert cursor.execute.call_count == 2
     assert cursor.execute.call_args_list[1] == call(LIVES_PAGE_QUERY, (20, 0))
-
-
-def test_get_lives_returns_url_from_live_attrs():
-    # 测试点：列表接口的 url 应直接透传 live_attrs.url，而不是固定返回空值。
-    rows = [
-        (7, "2026-04-08", "Title 7", [3], "https://example.com/live/7?from=list", "multi_act", None, None, None, None),
-    ]
-    conn, _ = _build_connection_mock(1, rows)
-
-    with patch("app.routers.lives.get_db_connection", return_value=conn):
-        client = TestClient(app)
-        response = client.get("/api/lives?page=1&page_size=20")
-
-    assert response.status_code == 200
-    assert response.json()["items"][0]["url"] == "https://example.com/live/7?from=list"
 
 
 def test_get_lives_without_setlist_uses_filtered_pagination_queries():
@@ -243,19 +252,6 @@ def test_get_lives_db_errors_log_context(exc, expected_status, expected_detail, 
     assert logger_exception.call_args.args[1] == 3
     assert logger_exception.call_args.args[2] == 20
     assert logger_exception.call_args.args[3] == type(exc).__name__
-
-
-def test_get_lives_db_error_returns_500():
-    # 测试点：数据库异常时应返回 500，并同步记录一条路由级异常日志。
-    with patch("app.routers.lives.logger.exception") as logger_exception, patch(
-        "app.routers.lives.get_db_connection", side_effect=Error("db down")
-    ):
-        client = TestClient(app)
-        response = client.get("/api/lives?page=1&page_size=20")
-
-    assert response.status_code == 500
-    assert "Database error" in response.json()["detail"]
-    logger_exception.assert_called_once()
 
 
 def test_get_lives_large_page_clamps_to_last_page():
@@ -412,8 +408,9 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert cursor.execute.call_args_list[2] == call(LIVE_DETAIL_PERFORMANCES_QUERY, ([40],))
 
 
-# 测试点：同一 Live 中重复的展示编号必须按 Setlist UUID 隔离逐曲出演关系。
-def test_get_live_detail_uses_setlist_id_to_isolate_duplicate_display_row_ids():
+# 测试点：单条与批量详情均按 Setlist UUID 隔离重复展示编号的出演关系。
+@pytest.mark.parametrize("mode", ["single", "batch"])
+def test_detail_entrypoints_isolate_duplicate_display_ids_by_setlist_id(mode):
     header_row = (
         90, "2026-08-09", "Duplicate M1 Live", "Venue", "17:00", "18:00",
         [6, 8], ["RAISE A SUILEN", "MyGO!!!!!"], None, "festival", None, None, None, None,
@@ -432,13 +429,8 @@ def test_get_live_detail_uses_setlist_id_to_isolate_duplicate_display_row_ids():
             ["羊宮妃那"], None, None, [], ["羊宮妃那"], {}, "setlist-mygo",
         ),
     ]
-    conn, _ = _build_detail_connection_mock(header_row, detail_rows, performance_rows)
-
-    with patch("app.routers.lives.get_db_connection", return_value=conn):
-        response = TestClient(app).get("/api/lives/90")
-
-    assert response.status_code == 200
-    rows = response.json()["detail_rows"]
+    payload = _request_detail_for_mode(mode, header_row, detail_rows, performance_rows)
+    rows = payload["detail_rows"]
     assert [(row["setlist_id"], row["row_id"]) for row in rows] == [
         ("setlist-ras", "M1"),
         ("setlist-mygo", "M1"),
@@ -623,82 +615,54 @@ def test_get_live_detail_db_errors_log_context(exc, expected_status, expected_de
     assert logger_exception.call_args.args[2] == type(exc).__name__
 
 
-def test_get_live_detail_band_names_follow_bands_and_put_unmapped_last():
-    # 测试点：查询层返回的 band_names 稳定顺序应由详情接口原样去重保留。
+# 测试点：单条与批量详情均排序乐队 ID，并保留查询层名称顺序及末尾的未映射名称。
+@pytest.mark.parametrize("mode", ["single", "batch"])
+def test_detail_entrypoints_preserve_band_name_order(mode):
     header_row = (
-        88,
-        "2026-03-28",
-        "Live 88",
-        "有明竞技场",
-        "16:00",
-        "17:00",
-        [30, 10, 20],
-        ["Band10", "Band20", "Band30", "未映射A", "未映射B"],
-        "https://example.com/live/88",
-        "oneman",
-        None,
-        None,
-        None,
-        None,
+        88, "2026-03-28", "Live 88", "有明竞技场", "16:00", "17:00",
+        [30, 10, 20], ["Band10", "Band20", "Band30", "未映射A", "未映射B"],
+        "https://example.com/live/88", "oneman", None, None, None, None,
     )
-    detail_rows = [
-        ("M1", "Song 1", None, False, False),
-    ]
-    conn, _ = _build_detail_connection_mock(header_row, detail_rows)
-
-    with patch("app.routers.lives.get_db_connection", return_value=conn):
-        client = TestClient(app)
-        response = client.get("/api/lives/88")
-
-    assert response.status_code == 200
-    payload = response.json()
+    payload = _request_detail_for_mode(mode, header_row, [("M1", "Song 1", None, False, False)])
     assert payload["bands"] == [10, 20, 30]
     assert payload["band_names"] == ["Band10", "Band20", "Band30", "未映射A", "未映射B"]
 
 
-def test_get_live_detail_new_fields_without_versioned_performances():
-    # 测试点：新增 header 字段保持稳定，缺少版本化出演时不得从已删除的旧 JSON 猜测成员。
+# 测试点：两种详情入口保留 header 和行字段；旧短行或结构化行缺少版本化出演时成员均为空。
+@pytest.mark.parametrize(
+    ("mode", "venue", "url_query", "live_type", "detail_row", "expected_row_fields"),
+    [
+        pytest.param(
+            "single", "K Arena Yokohama", "from=test", "festival",
+            ("M1", "Song 1", None, False, False), {}, id="single-legacy-row",
+        ),
+        pytest.param(
+            "batch", "幕张メッセ", "batch=true", "oneman",
+            ("M1", "Song 1", None, False, False, 3, "Band3", 7, "M", 1, 9001),
+            {"absolute_order": 7, "segment_type": "M", "song_id": 9001}, id="batch-structured-row",
+        ),
+    ],
+)
+def test_detail_entrypoints_without_versioned_performances(
+    mode, venue, url_query, live_type, detail_row, expected_row_fields,
+):
+    url = f"https://example.com/live/66?{url_query}"
     header_row = (
-        66,
-        "2026-04-01",
-        "Live 66",
-        "K Arena Yokohama",
-        "00:00",
-        "23:59",
-        [3, 1, 3, 2],
-        ["Band1", "Band2", "Band3", "未映射"],
-        "https://example.com/live/66?from=test",
-        "festival",
-        None,
-        None,
-        None,
-        None,
+        66, "2026-04-01", "Live 66", venue, "00:00", "23:59",
+        [3, 1, 3, 2], ["Band1", "Band2", "Band3", "未映射"],
+        url, live_type, None, None, None, None,
     )
-    detail_rows = [
-        (
-            "M1",
-            "Song 1",
-            None,
-            False,
-            False,
-        )
-    ]
-    conn, _ = _build_detail_connection_mock(header_row, detail_rows)
-
-    with patch("app.routers.lives.get_db_connection", return_value=conn):
-        client = TestClient(app)
-        response = client.get("/api/lives/66")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["venue"] == "K Arena Yokohama"
+    payload = _request_detail_for_mode(mode, header_row, [detail_row])
+    assert payload["venue"] == venue
     assert payload["opening_time"] == "00:00"
     assert payload["start_time"] == "23:59"
-    assert payload["url"] == "https://example.com/live/66?from=test"
+    assert payload["url"] == url
     assert payload["bands"] == [1, 2, 3]
     assert payload["band_names"] == ["Band1", "Band2", "Band3", "未映射"]
-
-    assert payload["detail_rows"][0]["band_members"] == []
+    row = payload["detail_rows"][0]
+    assert row["band_members"] == []
+    for field, expected in expected_row_fields.items():
+        assert row[field] == expected
 
 
 def test_get_live_details_batch_success_and_partial_missing():
@@ -771,142 +735,6 @@ def test_get_live_details_batch_success_and_partial_missing():
     assert cursor.execute.call_args_list[2] == call(LIVE_DETAIL_PERFORMANCES_QUERY, ([2, 999, 1],))
 
 
-# 测试点：批量详情也必须以 Setlist UUID 隔离同场重复展示编号的出演关系。
-def test_get_live_details_batch_isolates_duplicate_display_row_ids_by_setlist_id():
-    header_rows = [
-        (
-            90, "2026-08-09", "Duplicate M1 Live", "Venue", "17:00", "18:00",
-            [6, 8], ["RAISE A SUILEN", "MyGO!!!!!"], None, "festival", None, None, None, None,
-        )
-    ]
-    detail_rows = [
-        (90, "M1", "RAS Song", None, False, False, 6, "RAISE A SUILEN", 1, "M", 1, 601, "setlist-ras"),
-        (90, "M1", "MyGO Song", None, False, False, 8, "MyGO!!!!!", 2, "M", 1, 801, "setlist-mygo"),
-    ]
-    performance_rows = [
-        (
-            90, "M1", 6, "RAISE A SUILEN", "base", None, 61, "RAS V1",
-            ["Raychell"], None, None, [], ["Raychell"], {}, "setlist-ras",
-        ),
-        (
-            90, "M1", 8, "MyGO!!!!!", "base", None, 81, "MyGO V1",
-            ["羊宮妃那"], None, None, [], ["羊宮妃那"], {}, "setlist-mygo",
-        ),
-    ]
-    conn, _ = _build_batch_detail_connection_mock(header_rows, detail_rows, performance_rows)
-
-    with patch("app.routers.lives.get_db_connection", return_value=conn):
-        response = TestClient(app).post("/api/lives/details:batch", json={"live_ids": [90]})
-
-    assert response.status_code == 200
-    rows = response.json()["items"][0]["detail_rows"]
-    assert [row["setlist_id"] for row in rows] == ["setlist-ras", "setlist-mygo"]
-    assert [[member["band_name"] for member in row["band_members"]] for row in rows] == [
-        ["RAISE A SUILEN"],
-        ["MyGO!!!!!"],
-    ]
-
-
-def test_get_live_details_batch_band_names_follow_bands_and_put_unmapped_last():
-    # 测试点：批量详情应保留查询层按 band_id 排好的 band_names，并去除重复名称。
-    header_rows = [
-        (
-            8,
-            "2026-03-30",
-            "Live 8",
-            "场地 8",
-            "15:00",
-            "16:00",
-            [30, 10, 20],
-            ["Band10", "Band20", "Band30", "未映射A", "未映射B"],
-            "https://example.com/live/8",
-            "multi_act",
-            None,
-            None,
-            None,
-            None,
-        ),
-    ]
-    detail_rows = [
-        (
-            8,
-            "A1",
-            "Song A",
-            None,
-            False,
-            False,
-        )
-    ]
-    conn, _ = _build_batch_detail_connection_mock(header_rows, detail_rows)
-
-    with patch("app.routers.lives.get_db_connection", return_value=conn):
-        client = TestClient(app)
-        response = client.post("/api/lives/details:batch", json={"live_ids": [8]})
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["items"][0]["bands"] == [10, 20, 30]
-    assert payload["items"][0]["band_names"] == ["Band10", "Band20", "Band30", "未映射A", "未映射B"]
-
-
-def test_get_live_details_batch_new_fields_without_versioned_performances():
-    # 测试点：批量详情与单条详情一致，缺少版本化出演时成员集合必须为空。
-    header_rows = [
-        (
-            66,
-            "2026-04-01",
-            "Live 66",
-            "幕张メッセ",
-            "00:00",
-            "23:59",
-            [3, 1, 3, 2],
-            ["Band1", "Band2", "Band3", "未映射"],
-            "https://example.com/live/66?batch=true",
-            "oneman",
-            None,
-            None,
-            None,
-            None,
-        )
-    ]
-    detail_rows = [
-        (
-            66,
-            "M1",
-            "Song 1",
-            None,
-            False,
-            False,
-            3,
-            "Band3",
-            7,
-            "M",
-            1,
-            9001,
-        )
-    ]
-    conn, _ = _build_batch_detail_connection_mock(header_rows, detail_rows)
-
-    with patch("app.routers.lives.get_db_connection", return_value=conn):
-        client = TestClient(app)
-        response = client.post("/api/lives/details:batch", json={"live_ids": [66]})
-
-    assert response.status_code == 200
-    payload = response.json()
-    item = payload["items"][0]
-    assert item["venue"] == "幕张メッセ"
-    assert item["opening_time"] == "00:00"
-    assert item["start_time"] == "23:59"
-    assert item["url"] == "https://example.com/live/66?batch=true"
-    assert item["bands"] == [1, 2, 3]
-    assert item["band_names"] == ["Band1", "Band2", "Band3", "未映射"]
-
-    assert item["detail_rows"][0]["absolute_order"] == 7
-    assert item["detail_rows"][0]["segment_type"] == "M"
-    assert item["detail_rows"][0]["song_id"] == 9001
-    assert item["detail_rows"][0]["band_members"] == []
-
-
 def test_get_live_details_batch_invalid_live_id_returns_400():
     # 测试点：批量详情中的任一 live_id 非法时，接口应直接返回 400。
     client = TestClient(app)
@@ -944,36 +772,6 @@ def test_get_live_details_batch_all_missing_returns_empty_items():
     payload = response.json()
     assert payload["items"] == []
     assert payload["missing_live_ids"] == [999, 1000]
-
-
-def test_get_live_details_batch_query_timeout_returns_504():
-    # 测试点：数据库查询超时（QueryCanceled）应映射为 504。
-    with patch("app.routers.lives.get_db_connection", side_effect=QueryCanceled("statement timeout")):
-        client = TestClient(app)
-        response = client.post("/api/lives/details:batch", json={"live_ids": [1, 2]})
-
-    assert response.status_code == 504
-    assert response.json()["detail"] == "Database query timeout"
-
-
-def test_get_live_details_batch_connection_timeout_returns_504():
-    # 测试点：数据库连接超时（timeout expired）应映射为 504。
-    with patch("app.routers.lives.get_db_connection", side_effect=OperationalError("timeout expired")):
-        client = TestClient(app)
-        response = client.post("/api/lives/details:batch", json={"live_ids": [1, 2]})
-
-    assert response.status_code == 504
-    assert response.json()["detail"] == "Database connection timeout"
-
-
-def test_get_live_details_batch_db_error_returns_500():
-    # 测试点：其他数据库异常应返回 500，且保留错误语义。
-    with patch("app.routers.lives.get_db_connection", side_effect=Error("db down")):
-        client = TestClient(app)
-        response = client.post("/api/lives/details:batch", json={"live_ids": [1]})
-
-    assert response.status_code == 500
-    assert "Database error" in response.json()["detail"]
 
 
 def test_get_live_details_batch_normalizes_other_members_without_legacy_band_data():

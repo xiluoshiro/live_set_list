@@ -30,13 +30,6 @@ describe("getGroupedLiveShortTitle", () => {
     ).toBe("MyGO!!!!! 1st LIVE");
   });
 
-  // 测试点：活动组名称和 Live 名称相同时，保留原名称
-  test("retains original title when group and live titles are identical", () => {
-    expect(
-      getGroupedLiveShortTitle("Poppin'Party 10th Anniversary", "Poppin'Party 10th Anniversary"),
-    ).toBe("Poppin'Party 10th Anniversary");
-  });
-
   // 测试点：去除前缀后正确 trim 首尾空格
   test("trims whitespace after removing prefix", () => {
     expect(

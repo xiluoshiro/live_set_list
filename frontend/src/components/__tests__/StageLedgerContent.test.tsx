@@ -337,36 +337,56 @@ describe("StageLedgerContent", () => {
     expect(screen.queryByText(/取消原因/)).not.toBeInTheDocument();
   });
 
-  test("待举行 Live 空状态提示本场演出尚未举行", () => {
-    // 测试点：未举行场次无曲目时只显示“本场演出尚未举行。”，不再显示“演出流程尚未记录”。
-    renderStage(makeDetail({ date_phase: "upcoming", detail_rows: [] }));
+  // 测试点：空曲目列表按场次类型和日期阶段展示对应标题、正文，并排除旧提示。
+  test.each([
+    {
+      caseName: "待举行 Live 空状态提示本场演出尚未举行",
+      detail: { date_phase: "upcoming" },
+      heading: "本场演出尚未举行。",
+      body: null,
+      excludedHeading: "演出流程尚未记录",
+      excludedText: null,
+    },
+    {
+      caseName: "已结束活动空状态提示本场活动暂无演出曲目",
+      detail: { live_type: "event", date_phase: "past" },
+      heading: "本场活动暂无演出曲目。",
+      body: null,
+      excludedHeading: null,
+      excludedText: "本页目前只收录演出基本资料",
+    },
+    {
+      caseName: "已结束普通场次空状态保留原提示",
+      detail: { date_phase: "past" },
+      heading: "演出流程尚未记录",
+      body: "本页目前只收录演出基本资料，暂无演出曲目记录。",
+      excludedHeading: null,
+      excludedText: null,
+    },
+    {
+      caseName: "进行中活动空状态保留原提示",
+      detail: { live_type: "event", date_phase: "today" },
+      heading: "本页目前只收录演出基本资料",
+      body: "暂无出席阵容或演出曲目记录。",
+      excludedHeading: null,
+      excludedText: null,
+    },
+  ] satisfies Array<{
+    caseName: string;
+    detail: Partial<LiveDetailResponse>;
+    heading: string;
+    body: string | null;
+    excludedHeading: string | null;
+    excludedText: string | null;
+  }>)("$caseName", ({ detail, heading, body, excludedHeading, excludedText }) => {
+    renderStage(makeDetail({ ...detail, detail_rows: [] }));
 
-    expect(screen.getByRole("heading", { name: "本场演出尚未举行。" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "演出流程尚未记录" })).not.toBeInTheDocument();
-  });
-
-  test("已结束活动空状态提示本场活动暂无演出曲目", () => {
-    // 测试点：已结束且无出席阵容、无曲目的活动只显示一句“本场活动暂无演出曲目。”。
-    renderStage(makeDetail({ live_type: "event", date_phase: "past", detail_rows: [] }));
-
-    expect(screen.getByRole("heading", { name: "本场活动暂无演出曲目。" })).toBeInTheDocument();
-    expect(screen.queryByText("本页目前只收录演出基本资料")).not.toBeInTheDocument();
-  });
-
-  test("已结束普通场次空状态保留原提示", () => {
-    // 测试点：已结束且无曲目的普通场次仍显示“演出流程尚未记录”的原有提示。
-    renderStage(makeDetail({ date_phase: "past", detail_rows: [] }));
-
-    expect(screen.getByRole("heading", { name: "演出流程尚未记录" })).toBeInTheDocument();
-    expect(screen.getByText("本页目前只收录演出基本资料，暂无演出曲目记录。")).toBeInTheDocument();
-  });
-
-  test("进行中活动空状态保留原提示", () => {
-    // 测试点：进行中的活动空状态不受文案调整影响，保留原有两行提示。
-    renderStage(makeDetail({ live_type: "event", date_phase: "today", detail_rows: [] }));
-
-    expect(screen.getByRole("heading", { name: "本页目前只收录演出基本资料" })).toBeInTheDocument();
-    expect(screen.getByText("暂无出席阵容或演出曲目记录。")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+    if (body) expect(screen.getByText(body)).toBeInTheDocument();
+    if (excludedHeading) {
+      expect(screen.queryByRole("heading", { name: excludedHeading })).not.toBeInTheDocument();
+    }
+    if (excludedText) expect(screen.queryByText(excludedText)).not.toBeInTheDocument();
   });
 
   test("未登录时只提供登录后收藏入口", async () => {

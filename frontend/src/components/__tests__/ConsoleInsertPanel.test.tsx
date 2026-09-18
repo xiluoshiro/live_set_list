@@ -2215,8 +2215,8 @@ describe("ConsoleInsertPanel", () => {
     expect(getComputedStyle(detailTableWrap as HTMLElement).overflow).toBe("auto");
   });
 
-  // 测试点：批量粘贴只在点击应用后替换表格、清空来源文本，并正确处理 from 成员归属。
-  test("批量粘贴Setlist可解析预览并应用到草稿表格", async () => {
+  // 测试点：未解析时禁止应用，确认后写入曲目及 from 成员归属，并清空粘贴文本与预览。
+  test("批量粘贴Setlist先解析预览再确认应用到草稿表格", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [
@@ -2234,6 +2234,7 @@ describe("ConsoleInsertPanel", () => {
       },
     });
     expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "应用到表格" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "解析" }));
     expect(screen.getByText("预览：2 行，提示 0 条")).toBeInTheDocument();
@@ -2456,19 +2457,6 @@ describe("ConsoleInsertPanel", () => {
     fireEvent.scroll(menu.closest(".bands-floating-menu") as HTMLElement);
 
     expect(screen.getByText("9 - Scrollable Band")).toBeInTheDocument();
-  });
-
-  test("未解析时应用到表格按钮为禁用态", async () => {
-    // 测试点：必须先点"解析"才能点"应用到表格"，避免未确认结果就直接应用。
-    render(<ConsoleInsertPanel />);
-    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-    await waitFor(() => expect(screen.getByLabelText("批量粘贴 Setlist 文本")).toBeInTheDocument());
-
-    fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
-      target: { value: "<Roselia>\nM1. BLACK SHOUT" },
-    });
-
-    expect(screen.getByRole("button", { name: "应用到表格" })).toBeDisabled();
   });
 
   test("应用到表格弹出确认窗口，预览 abs/sub 后确认才替换下方表格", async () => {
@@ -2738,8 +2726,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("button", { name: "确认提交" })).not.toBeDisabled();
   });
 
-  test("双击abs列可进入编辑态，修改有效值后下行级联递增", async () => {
-    // 测试点：双击 abs 单元格弹出数字输入框，填入前向合法的值后下游行自动重算。
+  // 测试点：有效 abs 编辑使下游编号递增，并在被编辑的单元格标记 manual-override。
+  test("双击abs修改有效值后下行级联递增并标记手动修改", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
@@ -2757,6 +2745,7 @@ describe("ConsoleInsertPanel", () => {
     });
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("6")).toBeInTheDocument();
+    expect(document.querySelectorAll(".setlist-table td .editable-cell")[0]).toHaveClass("manual-override");
   });
 
   test("abs填入小于前行有效值的数时报错并拒绝修改", async () => {
@@ -2789,23 +2778,6 @@ describe("ConsoleInsertPanel", () => {
     });
     const afterCells = document.querySelectorAll(".setlist-table td .editable-cell");
     expect(afterCells.length).toBe(beforeCount);
-  });
-
-  test("手动修改abs后单元格添加下划线样式", async () => {
-    // 测试点：手动编辑过 abs 的行应带有 manual-override class，区分于自动计算行。
-    const user = userEvent.setup();
-    render(<ConsoleInsertPanel />);
-    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-    const absCells = document.querySelectorAll(".setlist-table td .editable-cell");
-    await user.dblClick(absCells[0]);
-    const absInput = screen.getByLabelText(/abs-/);
-    fireEvent.change(absInput, { target: { value: "3" } });
-    fireEvent.blur(absInput);
-    await waitFor(() => {
-      expect(screen.queryByLabelText(/abs-/)).not.toBeInTheDocument();
-    });
-    const manualCells = document.querySelectorAll(".setlist-table td .manual-override");
-    expect(manualCells.length).toBeGreaterThanOrEqual(1);
   });
 
   test("sub填入小于段组内前行有效值的数时报错并拒绝修改", async () => {

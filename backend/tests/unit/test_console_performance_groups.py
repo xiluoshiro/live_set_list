@@ -87,44 +87,30 @@ def test_get_performance_group_live_candidates_returns_paginated_results_excludi
     )
 
 
-# 测试点：live-candidates 支持按标题搜索。
-def test_get_performance_group_live_candidates_supports_search_by_title():
+# 测试点：标题和数字关键词均绑定到候选总数/分页 SQL 的标题匹配与精确 ID 分支。
+@pytest.mark.parametrize(
+    ("query", "live_id", "title"),
+    [pytest.param("Special", 201, "Special Live", id="title"), pytest.param("42", 42, "Some Live", id="id")],
+)
+def test_performance_group_candidates_bind_search_to_count_and_page(query, live_id, title):
     _authenticate_editor()
     conn, cursor = _connection_mock()
     cursor.fetchone.return_value = (1,)
-    cursor.fetchall.return_value = [
-        (201, date(2026, 6, 1), "Special Live", "17:00:00+09:00", "Venue", [1]),
-    ]
-
+    cursor.fetchall.return_value = [(live_id, date(2026, 6, 1), title, "17:00:00+09:00", "Venue", [1])]
     with patch("app.routers.console_performance_groups.get_db_connection", return_value=conn):
         response = TestClient(app).get(
-            "/api/console/performance-groups/live-candidates?q=Special&page=1&page_size=20"
+            "/api/console/performance-groups/live-candidates", params={"q": query, "page": 1, "page_size": 20},
         )
-
     assert response.status_code == 200
     payload = response.json()
     assert len(payload["items"]) == 1
-    assert payload["items"][0]["live_title"] == "Special Live"
-
-
-# 测试点：live-candidates 支持按 ID 搜索（文本匹配）。
-def test_get_performance_group_live_candidates_supports_search_by_id():
-    _authenticate_editor()
-    conn, cursor = _connection_mock()
-    cursor.fetchone.return_value = (1,)
-    cursor.fetchall.return_value = [
-        (42, date(2026, 4, 1), "Some Live", "19:00:00+09:00", "Venue", [1]),
-    ]
-
-    with patch("app.routers.console_performance_groups.get_db_connection", return_value=conn):
-        response = TestClient(app).get(
-            "/api/console/performance-groups/live-candidates?q=42&page=1&page_size=20"
-        )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert len(payload["items"]) == 1
-    assert payload["items"][0]["live_id"] == 42
+    assert payload["items"][0]["live_id"] == live_id
+    assert payload["items"][0]["live_title"] == title
+    assert cursor.execute.call_count == 2
+    for call_args in cursor.execute.call_args_list:
+        assert "(l.live_title ILIKE %s OR CAST(l.id AS text) = %s)" in str(call_args.args[0])
+    assert cursor.execute.call_args_list[0].args[1] == (f"%{query}%", query)
+    assert cursor.execute.call_args_list[1].args[1] == (f"%{query}%", query, 20, 0)
 
 
 # 测试点：控制台活动组列表返回全部可编辑组，不依赖公共演出分页。
@@ -208,26 +194,18 @@ def test_create_performance_group_returns_201_and_writes_to_db():
     assert any("INSERT INTO audit_logs" in sql for sql in executed_sql)
 
 
-# 测试点：Schema min_length=2 应在请求体验证阶段拒绝少于 2 个 live。
-def test_create_performance_group_rejects_fewer_than_2_lives():
+# 测试点：少于两场与重复 Live ID 均在请求验证阶段拒绝，不进入写库流程。
+@pytest.mark.parametrize("live_ids", [pytest.param([41], id="too-few"), pytest.param([41, 41], id="duplicate")])
+def test_create_performance_group_rejects_invalid_live_ids(live_ids):
     _authenticate_editor()
-    response = TestClient(app).post(
-        "/api/console/performance-groups",
-        json=_upsert_payload(live_ids=[41]),
-        headers={"X-CSRF-Token": CSRF_TOKEN},
-    )
+    with patch("app.routers.console_performance_groups.get_write_db_connection") as get_connection:
+        response = TestClient(app).post(
+            "/api/console/performance-groups",
+            json=_upsert_payload(live_ids=live_ids),
+            headers={"X-CSRF-Token": CSRF_TOKEN},
+        )
     assert response.status_code == 422
-
-
-# 测试点：Schema 应在请求体验证阶段拒绝重复的 live_id。
-def test_create_performance_group_rejects_duplicate_live_ids():
-    _authenticate_editor()
-    response = TestClient(app).post(
-        "/api/console/performance-groups",
-        json=_upsert_payload(live_ids=[41, 41]),
-        headers={"X-CSRF-Token": CSRF_TOKEN},
-    )
-    assert response.status_code == 422
+    get_connection.assert_not_called()
 
 
 # 测试点：Live 已属于其他活动组时应返回 409 并包含冲突信息。
@@ -320,43 +298,21 @@ def test_update_performance_group_handles_live_conflict():
     assert "PERFORMANCE_GROUP_LIVE_CONFLICT" in response.json()["detail"]["code"]
 
 
-# 测试点：无 CSRF 头的创建请求应返回 403。
-def test_create_requires_csrf_token():
-    _authenticate_editor()
-    response = TestClient(app).post(
-        "/api/console/performance-groups",
-        json=_upsert_payload(),
-    )
+# 测试点：创建/更新路由各自拒绝缺少 CSRF 的 editor 和携带有效 CSRF 的 viewer，且不访问写库。
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [pytest.param("POST", "/api/console/performance-groups", id="create"),
+     pytest.param("PUT", "/api/console/performance-groups/1", id="update")],
+)
+@pytest.mark.parametrize("role", [pytest.param("editor", id="missing-csrf"), pytest.param("viewer", id="insufficient-role")])
+def test_performance_group_writes_require_editor_and_csrf(method, path, role):
+    if role == "editor":
+        _authenticate_editor()
+        headers = {}
+    else:
+        _authenticate_viewer()
+        headers = {"X-CSRF-Token": CSRF_TOKEN}
+    with patch("app.routers.console_performance_groups.get_write_db_connection") as get_connection:
+        response = TestClient(app).request(method, path, json=_upsert_payload(), headers=headers)
     assert response.status_code == 403
-
-
-# 测试点：无 CSRF 头的更新请求应返回 403。
-def test_update_requires_csrf_token():
-    _authenticate_editor()
-    response = TestClient(app).put(
-        "/api/console/performance-groups/1",
-        json=_upsert_payload(),
-    )
-    assert response.status_code == 403
-
-
-# 测试点：viewer 角色无权创建活动组，应返回 403。
-def test_create_requires_editor_role():
-    _authenticate_viewer()
-    response = TestClient(app).post(
-        "/api/console/performance-groups",
-        json=_upsert_payload(),
-        headers={"X-CSRF-Token": CSRF_TOKEN},
-    )
-    assert response.status_code == 403
-
-
-# 测试点：viewer 角色无权更新活动组，应返回 403。
-def test_update_requires_editor_role():
-    _authenticate_viewer()
-    response = TestClient(app).put(
-        "/api/console/performance-groups/1",
-        json=_upsert_payload(),
-        headers={"X-CSRF-Token": CSRF_TOKEN},
-    )
-    assert response.status_code == 403
+    get_connection.assert_not_called()

@@ -150,75 +150,45 @@ describe("PerformanceGroupDetailPage", () => {
 
     render(<PerformanceGroupDetailPage groupId={1}  />);
 
+    await screen.findByText("BanG Dream! 12th LIVE");
     await waitFor(() => {
       expect(screen.queryByText("已收录日期：")).not.toBeInTheDocument();
       expect(screen.queryByText("2025-04-26 — 2025-04-27")).not.toBeInTheDocument();
     });
   });
 
-  // 测试点：日数为 1 时显示"单日多场"类型
-  test("displays '单日多场' type when display_type is single_day_multi_show", async () => {
-    getPerformanceGroupDetailMock.mockResolvedValue(
-      makeDetailResponse({
-        display_type: "single_day_multi_show",
-        day_count: 1,
-        start_date: "2025-04-26",
-        end_date: "2025-04-26",
-      }),
-    );
-
-    render(<PerformanceGroupDetailPage groupId={1}  />);
-
-    await waitFor(() => {
-      expect(screen.getByText("单日多场")).toBeInTheDocument();
-    });
-  });
-
-  // 测试点：日数大于 1 时显示"多日活动"类型
-  test("displays '多日活动' type when display_type is multi_day", async () => {
-    getPerformanceGroupDetailMock.mockResolvedValue(
-      makeDetailResponse({ display_type: "multi_day", day_count: 2 }),
-    );
-
-    render(<PerformanceGroupDetailPage groupId={1}  />);
-
-    await waitFor(() => {
-      expect(screen.getByText("多日活动")).toBeInTheDocument();
-    });
-  });
-
-  // 测试点：显示场次数文案（已收录 N 场 / 已收录 N 日 · M 场）
-  test("displays live count text for single-day group", async () => {
-    getPerformanceGroupDetailMock.mockResolvedValue(
-      makeDetailResponse({
+  // 测试点：单日与多日活动各自同时显示正确的类型标签和已收录日数/场次数。
+  test.each([
+    {
+      typeLabel: "单日多场",
+      countLabel: "已收录 5 场",
+      detail: {
         display_type: "single_day_multi_show",
         day_count: 1,
         live_count: 5,
         start_date: "2025-04-26",
         end_date: "2025-04-26",
-      }),
-    );
-
-    render(<PerformanceGroupDetailPage groupId={1}  />);
-
-    await waitFor(() => {
-      expect(screen.getByText("已收录 5 场")).toBeInTheDocument();
-    });
-  });
-
-  test("displays '已收录 N 日 · M 场' for multi-day group", async () => {
+      },
+    },
+    {
+      typeLabel: "多日活动",
+      countLabel: "已收录 2 日 · 3 场",
+      detail: { display_type: "multi_day", day_count: 2, live_count: 3 },
+    },
+  ])("displays $typeLabel with $countLabel", async ({ typeLabel, countLabel, detail }) => {
     getPerformanceGroupDetailMock.mockResolvedValue(
-      makeDetailResponse({ day_count: 2, live_count: 3 }),
+      makeDetailResponse(detail),
     );
 
     render(<PerformanceGroupDetailPage groupId={1}  />);
 
     await waitFor(() => {
-      expect(screen.getByText("已收录 2 日 · 3 场")).toBeInTheDocument();
+      expect(screen.getByText(typeLabel)).toBeInTheDocument();
+      expect(screen.getByText(countLabel)).toBeInTheDocument();
     });
   });
 
-  // 测试点：活动组场次复用巡演的单行短标题导航，不显示日期分组或开演时间。
+  // 测试点：场次导航移除活动组标题前缀，且不显示日期分组、分隔符或开演时间。
   test("renders a flat short-title navigation like tour stops", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
@@ -231,17 +201,7 @@ describe("PerformanceGroupDetailPage", () => {
       expect(nav.querySelectorAll(".tour-stop-separator")).toHaveLength(0);
       expect(nav).not.toHaveTextContent("2025-04-26");
       expect(nav).not.toHaveTextContent("18:00");
-    });
-  });
-
-  // 测试点：场次按钮文字为去除前缀后的短标题
-  test("shortens live title buttons by removing group title prefix", async () => {
-    getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
-
-    render(<PerformanceGroupDetailPage groupId={1}  />);
-
-    await waitFor(() => {
-      const button = screen.getByRole("button", { name: /DAY 1: Poppin'Party/ });
+      const button = within(nav).getByRole("button", { name: /DAY 1: Poppin'Party/ });
       expect(button).toBeInTheDocument();
       expect(button).not.toHaveTextContent("BanG Dream! 12th LIVE");
     });

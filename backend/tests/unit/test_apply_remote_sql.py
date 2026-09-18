@@ -60,8 +60,17 @@ def test_precheck_requires_existing_sql_file(tmp_path, monkeypatch) -> None:
         apply_remote_sql.main([str(tmp_path / "missing.sql"), "--ssh-host", "production", "--precheck"])
 
 
-# 测试点：预检探针上传失败时不得尝试数据库命令，且要清理远端暂存目录。
-def test_precheck_failed_scp_does_not_probe_database(tmp_path, monkeypatch) -> None:
+# 测试点：预检/执行模式在上传或远端入口失败时均报错并清理，上传失败不得继续执行入口。
+@pytest.mark.parametrize(
+    ("mode", "failure_stage", "message", "entrypoint"),
+    [
+        pytest.param("--precheck", "scp", "SCP 预检失败", "check", id="precheck-upload"),
+        pytest.param("--precheck", "remote", "远端预检失败", "check", id="precheck-database"),
+        pytest.param("--force", "scp", "SQL 上传失败", "apply", id="apply-upload"),
+        pytest.param("--force", "remote", "校验或执行失败", "apply", id="apply-execution"),
+    ],
+)
+def test_failed_remote_steps_stop_and_cleanup(tmp_path, monkeypatch, mode, failure_stage, message, entrypoint) -> None:
     sql_file = tmp_path / "change.sql"
     sql_file.write_text("SELECT 1;", encoding="utf-8")
     calls: list[list[str]] = []
@@ -69,34 +78,23 @@ def test_precheck_failed_scp_does_not_probe_database(tmp_path, monkeypatch) -> N
 
     def fake_run(command, **_kwargs):
         calls.append(command)
-        return subprocess.CompletedProcess(command, 1 if command[0] == "scp" else 0)
-
-    monkeypatch.setattr(apply_remote_sql.subprocess, "run", fake_run)
-
-    with pytest.raises(SystemExit, match="SCP 预检失败"):
-        apply_remote_sql.main([str(sql_file), "--ssh-host", "production", "--precheck"])
-    assert len(calls) == 3
-    assert calls[2][-1].startswith("rm -f --")
-
-
-# 测试点：预检数据库探测失败必须返回失败，不能误报环境可用。
-def test_precheck_failed_database_probe(tmp_path, monkeypatch) -> None:
-    sql_file = tmp_path / "change.sql"
-    sql_file.write_text("SELECT 1;", encoding="utf-8")
-    calls: list[list[str]] = []
-    monkeypatch.setattr(apply_remote_sql, "resolve_command", lambda name: name)
-
-    def fake_run(command, **_kwargs):
-        calls.append(command)
-        failed = "livesetlist-sql-exec check" in command[-1]
+        failed = command[0] == "scp" if failure_stage == "scp" else f"livesetlist-sql-exec {entrypoint}" in command[-1]
         return subprocess.CompletedProcess(command, 1 if failed else 0)
 
     monkeypatch.setattr(apply_remote_sql.subprocess, "run", fake_run)
-
-    with pytest.raises(SystemExit, match="远端预检失败"):
-        apply_remote_sql.main([str(sql_file), "--ssh-host", "production", "--precheck"])
-    assert len(calls) == 4
-    assert calls[3][-1].startswith("rm -f --")
+    with pytest.raises(SystemExit, match=message):
+        apply_remote_sql.main([str(sql_file), "--ssh-host", "production", mode])
+    assert len(calls) == (3 if failure_stage == "scp" else 4)
+    assert calls[1][0] == "scp"
+    assert calls[-1][-1].startswith("rm -f --")
+    assert "rmdir --" in calls[-1][-1]
+    remote_calls = [command for command in calls if "livesetlist-sql-exec" in command[-1]]
+    if failure_stage == "scp":
+        assert remote_calls == []
+    else:
+        assert len(remote_calls) == 1
+        assert f"livesetlist-sql-exec {entrypoint}" in remote_calls[0][-1]
+    assert calls[1][-1].endswith("/probe.txt" if mode == "--precheck" else "/input.sql")
 
 
 # 测试点：SSH 参数中的 shell 字符在上传前就被拒绝。
@@ -129,41 +127,3 @@ def test_upload_verify_execute_and_cleanup(tmp_path, monkeypatch) -> None:
     assert "sudo -n /usr/local/sbin/livesetlist-sql-exec apply" in calls[2][-1]
     assert calls[3][-1].startswith("rm -f -- /home/livesetlist-sql/uploads/livesetlist-sql-")
     assert "rmdir -- /home/livesetlist-sql/uploads/livesetlist-sql-" in calls[3][-1]
-
-
-# 测试点：SCP 失败时不能调用远端 psql，但仍应清理可能残留的半成品文件。
-def test_failed_upload_never_executes_sql(tmp_path, monkeypatch) -> None:
-    sql_file = tmp_path / "change.sql"
-    sql_file.write_text("SELECT 1;", encoding="utf-8")
-    calls: list[list[str]] = []
-    monkeypatch.setattr(apply_remote_sql, "resolve_command", lambda name: name)
-
-    def fake_run(command, **_kwargs):
-        calls.append(command)
-        return subprocess.CompletedProcess(command, 1 if command[0] == "scp" else 0)
-
-    monkeypatch.setattr(apply_remote_sql.subprocess, "run", fake_run)
-
-    with pytest.raises(SystemExit, match="SQL 上传失败"):
-        apply_remote_sql.main([str(sql_file), "--ssh-host", "production", "--force"])
-    assert len(calls) == 3
-    assert calls[2][-1].startswith("rm -f --")
-
-
-# 测试点：远端数据库执行失败时必须返回失败并清理已上传的 SQL 文件。
-def test_failed_remote_execution_cleans_up(tmp_path, monkeypatch) -> None:
-    sql_file = tmp_path / "change.sql"
-    sql_file.write_text("SELECT 1;", encoding="utf-8")
-    calls: list[list[str]] = []
-    monkeypatch.setattr(apply_remote_sql, "resolve_command", lambda name: name)
-
-    def fake_run(command, **_kwargs):
-        calls.append(command)
-        return subprocess.CompletedProcess(command, 1 if "sha256sum --check" in command[-1] else 0)
-
-    monkeypatch.setattr(apply_remote_sql.subprocess, "run", fake_run)
-
-    with pytest.raises(SystemExit, match="校验或执行失败"):
-        apply_remote_sql.main([str(sql_file), "--ssh-host", "production", "--force"])
-    assert len(calls) == 4
-    assert calls[3][-1].startswith("rm -f --")

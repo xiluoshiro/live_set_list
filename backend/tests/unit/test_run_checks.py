@@ -2,6 +2,8 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[3]
 RUN_CHECKS_PATH = ROOT / "scripts" / "run_checks.py"
@@ -64,50 +66,30 @@ def test_functional_checks_include_recovery_unit(monkeypatch):
     assert executed_steps == ["pytest recovery/tests (unit+contract)"]
 
 
-# 测试点：后端集成测试必须按文件启动独立 Python 进程，避免长进程累积 TestClient socket 资源。
-def test_backend_integration_steps_are_split_by_test_file(monkeypatch, tmp_path):
+# 测试点：unit 与 integration 各自按文件创建独立 Python 进程，且保留 mypy 和排序后的文件清单。
+@pytest.mark.parametrize("mode", ["unit", "integration"])
+def test_backend_steps_are_split_by_test_file(monkeypatch, tmp_path, mode):
     backend_dir = tmp_path / "backend"
-    integration_dir = backend_dir / "tests" / "integration"
-    integration_dir.mkdir(parents=True)
-    (integration_dir / "test_beta.py").write_text("", encoding="utf-8")
-    (integration_dir / "test_alpha.py").write_text("", encoding="utf-8")
+    test_dir = backend_dir / "tests" / mode
+    test_dir.mkdir(parents=True)
+    (test_dir / "test_beta.py").write_text("", encoding="utf-8")
+    (test_dir / "test_alpha.py").write_text("", encoding="utf-8")
     python_path = backend_dir / ".venv" / ("Scripts/python.exe" if run_checks.os.name == "nt" else "bin/python")
     python_path.parent.mkdir(parents=True)
     python_path.write_text("", encoding="utf-8")
-
     monkeypatch.setattr(run_checks, "BACKEND_DIR", backend_dir)
 
-    steps, failures = run_checks.build_backend_steps(mode="integration")
+    steps, failures = run_checks.build_backend_steps(mode=mode)
 
     assert failures == []
     assert [step_name for _label, step_name, _command, _cwd, _retries in steps] == [
-        "mypy",
-        "pytest tests/integration/test_alpha.py",
-        "pytest tests/integration/test_beta.py",
+        "mypy", f"pytest tests/{mode}/test_alpha.py", f"pytest tests/{mode}/test_beta.py",
     ]
-
-
-# 测试点：后端单元测试也必须按文件启动独立进程，避免大量 TestClient 用例共享同一 socket 生命周期。
-def test_backend_unit_steps_are_split_by_test_file(monkeypatch, tmp_path):
-    backend_dir = tmp_path / "backend"
-    unit_dir = backend_dir / "tests" / "unit"
-    unit_dir.mkdir(parents=True)
-    (unit_dir / "test_beta.py").write_text("", encoding="utf-8")
-    (unit_dir / "test_alpha.py").write_text("", encoding="utf-8")
-    python_path = backend_dir / ".venv" / ("Scripts/python.exe" if run_checks.os.name == "nt" else "bin/python")
-    python_path.parent.mkdir(parents=True)
-    python_path.write_text("", encoding="utf-8")
-
-    monkeypatch.setattr(run_checks, "BACKEND_DIR", backend_dir)
-
-    steps, failures = run_checks.build_backend_steps(mode="unit")
-
-    assert failures == []
-    assert [step_name for _label, step_name, _command, _cwd, _retries in steps] == [
-        "mypy",
-        "pytest tests/unit/test_alpha.py",
-        "pytest tests/unit/test_beta.py",
-    ]
+    for step, filename in zip(steps[1:], ("test_alpha.py", "test_beta.py")):
+        _label, _name, command, cwd, retries = step
+        assert command == [str(python_path), "-m", "pytest", "-s", str(Path("tests") / mode / filename), "-q"]
+        assert cwd == backend_dir
+        assert retries == 0
 
 
 # 测试点：已识别的 Windows 10055 偶发错误只重跑当前分组，直到下一次有效通过。

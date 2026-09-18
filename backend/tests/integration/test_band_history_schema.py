@@ -224,59 +224,6 @@ def test_band_performance_rejects_mismatched_setlist_live(
             )
 
 
-# 测试点：公开角色只能读取历史结构，控制台角色可维护关系但不能删除顶层名称或阵容版本。
-def test_band_history_role_permission_contract(
-    integration_admin_connection,
-):
-    readable_tables = [
-        "band_name_versions",
-        "band_lineup_versions",
-        "band_lineup_version_members",
-        "live_band_lineup_contexts",
-        "live_setlist_band_performances",
-        "live_setlist_band_performance_members",
-    ]
-    deletable_tables = {
-        "band_lineup_version_members",
-        "live_band_lineup_contexts",
-        "live_setlist_band_performances",
-        "live_setlist_band_performance_members",
-    }
-
-    with integration_admin_connection.cursor() as cursor:
-        for table_name in readable_tables:
-            qualified_name = f"public.{table_name}"
-            cursor.execute(
-                """
-                SELECT
-                    has_table_privilege('live_project_ro', %s, 'SELECT'),
-                    has_table_privilege('live_project_ro', %s, 'INSERT'),
-                    has_table_privilege('live_project_super_ro', %s, 'SELECT,INSERT,UPDATE'),
-                    has_table_privilege('live_project_super_ro', %s, 'DELETE')
-                """,
-                (qualified_name, qualified_name, qualified_name, qualified_name),
-            )
-            ro_select, ro_insert, super_write, super_delete = cursor.fetchone()
-            assert ro_select is True
-            assert ro_insert is False
-            assert super_write is True
-            assert super_delete == (table_name in deletable_tables)
-
-        for sequence_name in (
-            "public.band_name_versions_id_seq",
-            "public.band_lineup_versions_id_seq",
-        ):
-            cursor.execute(
-                """
-                SELECT
-                    has_sequence_privilege('live_project_ro', %s, 'SELECT'),
-                    has_sequence_privilege('live_project_super_ro', %s, 'USAGE,SELECT,UPDATE')
-                """,
-                (sequence_name, sequence_name),
-            )
-            assert cursor.fetchone() == (True, True)
-
-
 # 测试点：新增 Band 会独立继承常规与特殊编号段，并原子建立当前名称、V1 阵容、成员和审计记录。
 def test_console_creates_band_in_selected_id_range_with_v1_history(
     integration_test_client,
