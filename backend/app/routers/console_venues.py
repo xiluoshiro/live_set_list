@@ -441,7 +441,7 @@ def update_venue(
                 else:
                     cur.execute("SELECT timezone_id FROM venue_list WHERE id=%s", (venue_id,))
                     if not cur.fetchone()[0]:
-                        raise HTTPException(status_code=422, detail="场地必须填写自身 IANA 时区")
+                        raise HTTPException(status_code=422, detail="场馆必须填写自身 IANA 时区")
                 cur.execute("UPDATE venue_list SET venue_kind = %s WHERE id = %s", (payload.venue_kind, venue_id))
                 _write_audit(cur, user_id=context.user.id, action="venue_update", venue_id=venue_id, payload={"venue_kind": payload.venue_kind})
                 return _load_detail(cur, venue_id)

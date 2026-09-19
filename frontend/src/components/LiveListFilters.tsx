@@ -77,7 +77,7 @@ export function LiveListFiltersToolbar({
               id={`${idPrefix}-query`}
               type="search"
               value={queryDraft}
-              placeholder="搜索 Live、乐队、歌曲或场地"
+              placeholder="搜索 Live、乐队、歌曲或场馆"
               onChange={(event) => setQueryDraft(event.target.value)}
             />
             <button type="submit">搜索</button>

@@ -70,7 +70,7 @@ def _build_connection_mock(
 
     def fetchone():
         if cursor.execute.call_args and "SELECT venue_kind" in cursor.execute.call_args.args[0]:
-            # 测试点：时区查询只读取场地类型与 IANA，不再读取地理来源修订。
+            # 测试点：时区查询只读取场馆类型与 IANA，不再读取地理来源修订。
             return ("physical", "Asia/Tokyo")
         return next(rows)
 
@@ -608,7 +608,7 @@ def test_console_create_venue_with_location():
     assert audit["location"]["address"] == "Tokyo Hall"
 
 
-# 测试点：不存在的地区及冲突时区在创建场地前返回 422，不留下场地或名称。
+# 测试点：不存在的地区及冲突时区在创建场馆前返回 422，不留下场馆或名称。
 @pytest.mark.parametrize("locality", [None])
 def test_console_create_venue_rejects_invalid_locality(locality):
     _set_authenticated_role("editor")
@@ -656,7 +656,7 @@ def test_console_create_physical_venue_requires_address(address):
     connection.assert_not_called()
 
 
-# 测试点：无场地 IANA 时区的 Live 使用默认 +09:00，写入与审计仍规范化钟点。
+# 测试点：无场馆 IANA 时区的 Live 使用默认 +09:00，写入与审计仍规范化钟点。
 def test_console_create_live_mock_success_normalizes_times_and_audits():
     _set_authenticated_role("admin")
     conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (77,)])
@@ -900,7 +900,7 @@ def test_console_create_live_mock_accepts_24_00_only_with_default_offset():
     [
         (_valid_live_payload(opening_time="18:0x"), 422, "Invalid isoformat string: '18:0x'"),
         (_valid_live_payload(opening_time="24:01"), 422, "hour must be in 0..23"),
-        (_valid_live_payload(timezone="+14:15"), 422, "非 ONLINE 演出使用场地自身时区"),
+        (_valid_live_payload(timezone="+14:15"), 422, "非 ONLINE 演出使用场馆自身时区"),
         (_valid_live_payload(timezone="+9"), 422, None),
         (
             _valid_live_payload(venue_id=999, venue_name_version_id=999),

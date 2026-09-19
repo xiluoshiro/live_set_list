@@ -124,13 +124,13 @@ class ConsoleVenueCreateRequest(BaseModel):
     @model_validator(mode="after")
     def validate_location_kind(self) -> "ConsoleVenueCreateRequest":
         if self.location is None or not self.location.timezone_id:
-            raise ValueError("场地必须填写自身 IANA 时区")
+            raise ValueError("场馆必须填写自身 IANA 时区")
         if self.venue_kind == "physical" and (self.location is None or not self.location.address):
             raise ValueError("实体场馆必须填写公开门牌地址")
         if self.location is not None:
             values = self.location.model_dump(exclude={"coordinate_system"})
             if self.venue_kind == "undisclosed" and any(value is not None for key, value in values.items() if key not in {"locality_id", "timezone_id"}):
-                raise ValueError("未公开具体场馆只保存已公布地区和场地时区")
+                raise ValueError("未公开具体场馆只保存已公布地区和场馆时区")
         return self
 
     @field_validator("venue_name")

@@ -25,7 +25,7 @@ async function setup(onVenuesChanged = vi.fn().mockResolvedValue(undefined)) {
 }
 async function confirm(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "提交插入" }));
-  return within(screen.getByRole("dialog", { name: "确认新增场地" }));
+  return within(screen.getByRole("dialog", { name: "确认新增场馆" }));
 }
 
 // 测试点：完整位置在确认后一次提交，地区搜索保留完整标签，成功后恢复默认值且不嵌入管理界面。
@@ -88,10 +88,10 @@ test("preserves draft on failure and distinguishes refresh failure", async () =>
   expect(screen.getByLabelText("名称")).toHaveValue("New Hall");
 });
 
-// 测试点：新增场地以六列表头和单行值录入，不查询历史场地，地图辅助默认收起。
+// 测试点：新增场馆以六列表头和单行值录入，不查询历史场馆，地图辅助默认收起。
 test("uses a single input row without venue management controls", async () => {
   const user = await setup();
-  const table = within(screen.getByRole("table", { name: "新增场地资料" }));
+  const table = within(screen.getByRole("table", { name: "新增场馆资料" }));
   expect(table.getAllByRole("columnheader").map(cell => cell.textContent)).toEqual([
     "名称", "类型", "公开门牌地址", "纬度（WGS84）", "经度（WGS84）", "场馆精确时区",
   ]);
@@ -102,7 +102,7 @@ test("uses a single input row without venue management controls", async () => {
     expect(row.getByLabelText(label)).toBeInTheDocument();
   }
   expect(table.queryByLabelText("已公布地区")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "查询已有场地" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "查询已有场馆" })).not.toBeInTheDocument();
   expect(api.getConsoleVenuePage).not.toHaveBeenCalled();
   expect(screen.queryByText("地图选点组件")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "地图选点" }));

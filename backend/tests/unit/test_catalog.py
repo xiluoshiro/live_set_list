@@ -30,7 +30,7 @@ def _build_connection_mock():
 
 
 def test_search_catalog_returns_grouped_public_results():
-    # 测试点：公共搜索应按 Live、乐队、歌曲和场地分组返回，且匿名访问不查收藏表。
+    # 测试点：公共搜索应按 Live、乐队、歌曲和场馆分组返回，且匿名访问不查收藏表。
     conn, cursor = _build_connection_mock()
     cursor.fetchall.side_effect = [
         [(24, 1, "2026-03-28", "Poppin'Party Live", [1], "https://example.com/live/1", "oneman", None, None, 5, "Party Weekend")],

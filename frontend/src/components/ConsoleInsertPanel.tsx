@@ -117,7 +117,7 @@ const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; labe
   { title: "巡演", manage: { value: "tour", label: "巡演管理" } },
   { title: "活动组", manage: { value: "performance_group", label: "活动组管理" } },
   { title: "乐队", manage: { value: "band", label: "乐队管理" } },
-  { title: "场地", create: { value: "venue_create", label: "新增场地" }, manage: { value: "venue", label: "场地管理" } },
+  { title: "场馆", create: { value: "venue_create", label: "新增场馆" }, manage: { value: "venue", label: "场馆管理" } },
   { title: "地区", create: { value: "locality", label: "新增地区" } },
 ];
 
@@ -2468,11 +2468,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       return;
     }
     if (!venueAnnounced && (openingTimeAnnounced || startTimeAnnounced)) {
-      setMessage("未选择场地时不能填写开场或开演时间");
+      setMessage("未选择场馆时不能填写开场或开演时间");
       return;
     }
     if (venueAnnounced && selectedVenueId <= 0) {
-      setMessage(`${action === "create" ? "新增" : "更新"}Live失败：请先选择场地。`);
+      setMessage(`${action === "create" ? "新增" : "更新"}Live失败：请先选择场馆。`);
       return;
     }
     if (venueAnnounced && currentLivePayload.venue_name_version_id === null) {
@@ -3484,7 +3484,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
                 <span>{setlistStartTimeText}</span>
               </p>
               <p className="detail-inline-item detail-inline-item-venue">
-                <strong>场地：</strong>
+                <strong>场馆：</strong>
                 <span>{setlistVenueText}</span>
               </p>
               <p className="detail-inline-item detail-inline-item-type">

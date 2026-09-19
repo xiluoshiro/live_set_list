@@ -271,8 +271,8 @@ describe("ConsoleInsertPanel", () => {
     });
   });
 
-  test("空白表单不请求无效场地的时间预览", async () => {
-    // 测试点：初始及清空表单中的场地占位值不会触发不存在场地的错误提示。
+  test("空白表单不请求无效场馆的时间预览", async () => {
+    // 测试点：初始及清空表单中的场馆占位值不会触发不存在场馆的错误提示。
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalled());
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
@@ -305,8 +305,8 @@ describe("ConsoleInsertPanel", () => {
     }
   });
 
-  // 测试点：控制台首次进入应优先新增 Live、聚焦场地查询，且不预加载隐藏的 Setlist 候选。
-  test("默认渲染新增 Live 并聚焦场地查询", async () => {
+  // 测试点：控制台首次进入应优先新增 Live、聚焦场馆查询，且不预加载隐藏的 Setlist 候选。
+  test("默认渲染新增 Live 并聚焦场馆查询", async () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
 
@@ -317,19 +317,19 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("tab", { name: "歌曲管理" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "新增乐队" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "新增演出" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByLabelText("查询场地")).toHaveFocus();
+    expect(screen.getByLabelText("查询场馆")).toHaveFocus();
     expect(screen.getAllByRole("columnheader", { name: "live_date" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("columnheader", { name: "live_title" }).length).toBeGreaterThan(0);
     expect(screen.getByLabelText("opening_time")).toHaveValue("18:00");
     expect(screen.getByLabelText("opening_time")).toHaveAttribute("type", "time");
     expect(screen.getByLabelText("start_time")).toHaveValue("19:00");
     expect(screen.getByLabelText("start_time")).toHaveAttribute("type", "time");
-    expect(screen.getByText("请选择场馆")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "请选择场馆" })).toBeInTheDocument();
     expect(screen.queryByLabelText("timezone")).not.toBeInTheDocument();
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
-  // 测试点：歌曲仅提供管理入口；场地后的新增地区为独立资料入口。
+  // 测试点：歌曲仅提供管理入口；场馆后的新增地区为独立资料入口。
   test("控制台导航支持按资料类型切换", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel initialMode="live_create" />);
@@ -340,11 +340,11 @@ describe("ConsoleInsertPanel", () => {
     expect(within(content).getByRole("tab", { name: "歌曲管理" })).toHaveTextContent("管理");
     expect(within(content).queryByRole("tab", { name: "新增歌曲" })).not.toBeInTheDocument();
     expect(within(content).getAllByRole("tab").map((tab) => tab.getAttribute("aria-label"))).toEqual([
-      "新增演出", "演出管理", "新增歌单", "歌单管理", "歌曲管理", "巡演管理", "活动组管理", "乐队管理", "新增场地", "场地管理", "新增地区",
+      "新增演出", "演出管理", "新增歌单", "歌单管理", "歌曲管理", "巡演管理", "活动组管理", "乐队管理", "新增场馆", "场馆管理", "新增地区",
     ]);
 
-    await user.click(within(content).getByRole("tab", { name: "场地管理" }));
-    expect(within(content).getByRole("tab", { name: "场地管理" })).toHaveAttribute("aria-selected", "true");
+    await user.click(within(content).getByRole("tab", { name: "场馆管理" }));
+    expect(within(content).getByRole("tab", { name: "场馆管理" })).toHaveAttribute("aria-selected", "true");
 
     await user.click(within(content).getByRole("tab", { name: "新增地区" }));
     expect(within(content).getByRole("tab", { name: "新增地区" })).toHaveAttribute("aria-selected", "true");
@@ -1069,7 +1069,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText(/1 - /)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("tab", { name: "新增演出" }));
-    expect(screen.getByRole("button", { name: "请选择场地" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "请选择场馆" })).toBeInTheDocument();
     expect(screen.queryByText(/301 - /)).not.toBeInTheDocument();
   });
 
@@ -1125,20 +1125,20 @@ describe("ConsoleInsertPanel", () => {
     expect(bandOptions).toEqual(["2 - Early Band", "9 - Later Band"]);
 
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
-    await user.click(screen.getByRole("button", { name: "请选择场地" }));
+    await user.click(screen.getByRole("button", { name: "请选择场馆" }));
     const venueMenu = screen.getByText("301 - Later Venue").closest(".bands-floating-menu") as HTMLElement;
     const venueOptions = within(venueMenu).getAllByText(/Venue$/).map((node) => node.textContent);
     expect(venueOptions).toEqual(["101 - Early Venue", "301 - Later Venue"]);
   });
 
-  // 测试点：新增演出查询栏不再提供场地插入入口，使用中文场地和乐队标签。
-  test("新增演出只查询选择场地，不提供快捷插入", async () => {
+  // 测试点：新增演出查询栏不再提供场馆插入入口，使用中文场馆和乐队标签。
+  test("新增演出只查询选择场馆，不提供快捷插入", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel />);
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
-    await user.type(screen.getByLabelText("查询场地"), "New Venue");
+    await user.type(screen.getByLabelText("查询场馆"), "New Venue");
     expect(screen.queryByRole("button", { name: "插入" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "请选择场地" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "请选择场馆" })).toBeInTheDocument();
     expect(screen.getByText("默认乐队")).toBeInTheDocument();
     expect(apiMocks.createConsoleVenue).not.toHaveBeenCalled();
   });
@@ -1166,10 +1166,10 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel onLiveDataChanged={onLiveDataChanged} />);
 
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
-    await user.click(screen.getByRole("button", { name: "请选择场地" }));
+    await user.click(screen.getByRole("button", { name: "请选择场馆" }));
     await user.click(await screen.findByRole("radio", { name: "88 - New Venue" }));
     expect(screen.getByRole("checkbox", { name: "新增后清空录入数据" })).toBeChecked();
-    await user.type(screen.getByLabelText("查询场地"), "New");
+    await user.type(screen.getByLabelText("查询场馆"), "New");
     await user.click(screen.getByRole("button", { name: "请选择默认乐队" }));
     await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
     expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toHaveAttribute("aria-expanded", "true");
@@ -1212,8 +1212,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("");
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
-    expect(screen.getByLabelText("查询场地")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "请选择场地" })).toBeInTheDocument();
+    expect(screen.getByLabelText("查询场馆")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "请选择场馆" })).toBeInTheDocument();
     expect(screen.queryByLabelText("timezone")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "请选择默认乐队" })).toHaveAttribute("aria-expanded", "false");
     await user.click(screen.getByRole("button", { name: "请选择默认乐队" }));
@@ -1282,7 +1282,7 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await screen.findByRole("button", { name: "88 - New Venue" });
     await user.click(screen.getByRole("checkbox", { name: "新增后清空录入数据" }));
-    await user.type(screen.getByLabelText("查询场地"), "Keep Venue");
+    await user.type(screen.getByLabelText("查询场馆"), "Keep Venue");
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Keep Draft Live");
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/keep-draft");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
@@ -1291,7 +1291,7 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalled());
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Keep Draft Live");
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("https://example.com/keep-draft");
-    expect(screen.getByLabelText("查询场地")).toHaveValue("Keep Venue");
+    expect(screen.getByLabelText("查询场馆")).toHaveValue("Keep Venue");
     expect(screen.getByRole("button", { name: "88 - New Venue" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "新增后清空录入数据" })).not.toBeChecked();
   });
@@ -1845,7 +1845,7 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel />);
 
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
-    await user.click(screen.getByRole("button", { name: "请选择场地" }));
+    await user.click(screen.getByRole("button", { name: "请选择场馆" }));
     await user.click(await screen.findByRole("radio", { name: "88 - New Venue" }));
     await user.selectOptions(screen.getByDisplayValue("专场"), "event");
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "No Band Event");

@@ -112,7 +112,7 @@ describe("LiveAdminSection", () => {
   test("keeps the timezone selector hidden for physical venues", () => {
     renderSection();
     expect(screen.queryByLabelText("online timezone offset")).not.toBeInTheDocument();
-    expect(screen.getByText("场地未设置时区，不能录入演出")).toBeInTheDocument();
+    expect(screen.getByText("场馆未设置时区，不能录入演出")).toBeInTheDocument();
   });
 
   // 测试点：新增和编辑都显示实际 IANA 时区，不显示静态来源文案或缺失提示。
@@ -122,7 +122,7 @@ describe("LiveAdminSection", () => {
     expect(screen.queryByText(/场馆未设置|由场馆|来自场馆/)).not.toBeInTheDocument();
   });
 
-  // 测试点：只有 online 场地可从 Live 表单选择主办方公布的活动时区。
+  // 测试点：只有 online 场馆可从 Live 表单选择主办方公布的活动时区。
   test("shows the timezone selector for online venues", () => {
     renderSection(vi.fn(), { venueKind: "online" });
     expect(screen.getByLabelText("online timezone offset")).toBeInTheDocument();
@@ -272,7 +272,7 @@ describe("LiveAdminSection", () => {
   test("shows create controls without the existing Live toolbar", () => {
     renderSection();
     expect(screen.getByDisplayValue("其他")).toBeInTheDocument();
-    expect(screen.getByLabelText("查询场地")).toBeEnabled();
+    expect(screen.getByLabelText("查询场馆")).toBeEnabled();
     expect(screen.getByRole("button", { name: /Test Venue/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toBeEnabled();
 

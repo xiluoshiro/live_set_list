@@ -267,7 +267,7 @@ function formatScheduleHistoryParts(
     parts.push(`开演 ${formatTimedLabel(history.previous_start_time, history.previous_start_timezone_label)}`);
   }
   if ((history.previous_venue ?? null) !== (nextVenue ?? null)) {
-    parts.push(`场地 ${history.previous_venue ?? "未公布"}`);
+    parts.push(`场馆 ${history.previous_venue ?? "未公布"}`);
   }
   if (history.note) parts.push(history.note);
   return parts;

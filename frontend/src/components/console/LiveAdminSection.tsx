@@ -213,7 +213,7 @@ export function LiveAdminSection({
   const selectedVenueText = (() => {
     if (!venueAnnounced) return "未公布";
     const selected = venues.find((venue) => venue.venue_id === selectedVenueId);
-    if (!selected) return "请选择场地";
+    if (!selected) return "请选择场馆";
     return `${selected.venue_id} - ${selected.venue_name}`;
   })();
   const selectableBands = bandOptions.filter((band) => band.band_id > 0);
@@ -368,14 +368,14 @@ export function LiveAdminSection({
         <>
 
       <div className="live-id-selector live-create-query-row">
-        <label className="live-management-label" htmlFor="venue-query-input">查询场地</label>
+        <label className="live-management-label" htmlFor="venue-query-input">查询场馆</label>
         <input
           id="venue-query-input"
           ref={venueQueryInputRef}
           className="venue-query-input live-management-primary-control"
           value={venueQueryText}
           onChange={(e) => onVenueQueryTextChange(e.target.value)}
-          placeholder="输入场地关键词"
+          placeholder="输入场馆关键词"
           disabled={!venueAnnounced}
         />
         <button type="button" className="console-ghost-btn" onClick={onQueryVid} disabled={!venueAnnounced}>
@@ -384,7 +384,7 @@ export function LiveAdminSection({
 
       </div>
       <div className="live-id-selector live-create-tools">
-        <label className="live-management-label">选择场地</label>
+        <label className="live-management-label">选择场馆</label>
         <button
           ref={venueTriggerRef}
           type="button"
@@ -462,10 +462,10 @@ export function LiveAdminSection({
                   {venueAnnounced ? (
                     <>
                       {selectedVenue?.venue_kind !== "online" && (
-                        <strong>{selectedVenue ? selectedVenue.timezone_id ?? "请先补全场地时区" : "请选择场馆"}</strong>
+                        <strong>{selectedVenue ? selectedVenue.timezone_id ?? "请先补全场馆时区" : "请选择场馆"}</strong>
                       )}
                       {selectedVenue && selectedVenue.venue_kind !== "online" && !selectedVenue.timezone_id && (
-                        <small>场地未设置时区，不能录入演出</small>
+                        <small>场馆未设置时区，不能录入演出</small>
                       )}
                     </>
                   ) : (
@@ -485,7 +485,7 @@ export function LiveAdminSection({
                       </select>
                     </label>
                   )}
-                  {!venueAnnounced && <small>未选择场地时，开场、开演须为未公布。</small>}
+                  {!venueAnnounced && <small>未选择场馆时，开场、开演须为未公布。</small>}
                   {venueAnnounced && selectedVenue?.venue_kind === "online" && (
                     <label>
                       <span>线上活动 UTC 偏移</span>

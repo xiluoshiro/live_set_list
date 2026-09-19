@@ -643,8 +643,8 @@ def test_detail_entrypoints_without_versioned_performances(
 def test_get_live_details_batch_success_and_partial_missing():
     # 测试点：批量详情应去重保序，并按各自行成员隔离计算旧翻唱与跨乐队翻唱。
     header_rows = [
-        (1, "2026-03-28", "Live 1", "场地 1", "16:30:00+09:00", "17:30:00+09:00", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman", None, None, 7, "Group 7"),
-        (2, "2026-03-27", "Live 2", "场地 2", "17:00:00+09:00", "18:00:00+09:00", [2], ["Afterglow"], "https://example.com/live/2", "festival", None, None, None, None),
+        (1, "2026-03-28", "Live 1", "场馆 1", "16:30:00+09:00", "17:30:00+09:00", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman", None, None, 7, "Group 7"),
+        (2, "2026-03-27", "Live 2", "场馆 2", "17:00:00+09:00", "18:00:00+09:00", [2], ["Afterglow"], "https://example.com/live/2", "festival", None, None, None, None),
     ]
     detail_rows = [
         (
@@ -690,7 +690,7 @@ def test_get_live_details_batch_success_and_partial_missing():
     assert [item["live_id"] for item in payload["items"]] == [2, 1]
 
     first_item = payload["items"][0]
-    assert first_item["venue"] == "场地 2"
+    assert first_item["venue"] == "场馆 2"
     assert first_item["opening_time"] == "17:00:00+09:00"
     assert first_item["start_time"] == "18:00:00+09:00"
     assert first_item["url"] == "https://example.com/live/2"
@@ -752,7 +752,7 @@ def test_get_live_details_batch_all_missing_returns_empty_items():
 def test_get_live_details_batch_normalizes_other_members_without_legacy_band_data():
     # 测试点：批量接口只规范化 other_member，且不得从旧 Band JSON 合成出演。
     header_rows = [
-        (1, "2026-03-28", "Live 1", "场地 1", "16:30:00+09:00", "17:30:00+09:00", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman", None, None, None, None),
+        (1, "2026-03-28", "Live 1", "场馆 1", "16:30:00+09:00", "17:30:00+09:00", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman", None, None, None, None),
     ]
     detail_rows = [
         (

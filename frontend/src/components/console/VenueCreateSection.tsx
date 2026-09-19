@@ -95,9 +95,9 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
   const invalidCoordinates = (latitude.trim() === "") !== (longitude.trim() === "")
     || (!!latitude.trim() && (!Number.isFinite(Number(latitude)) || Math.abs(Number(latitude)) > 90))
     || (!!longitude.trim() && (!Number.isFinite(Number(longitude)) || Math.abs(Number(longitude)) > 180));
-  const validation = !name.trim() ? "请填写场地名称。"
+  const validation = !name.trim() ? "请填写场馆名称。"
     : physical && !address.trim() ? "实体场馆必须填写公开门牌地址。"
-    : !timezone ? "场地必须选择 IANA 时区。"
+    : !timezone ? "场馆必须选择 IANA 时区。"
     : physical && invalidCoordinates ? "请同时填写有效经纬度，或同时清空（纬度 −90～90，经度 −180～180）。"
     : mapReview ? "请先核对地图解析的时区。" : "";
   const location: Omit<VenueLocationWrite, "expected_state_token"> = {
@@ -122,11 +122,11 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
       const result = await createConsoleVenue(name.trim(), auth.csrfToken ?? "", kind, location);
       setConfirm(false);
       if (clearAfter) clear();
-      const success = `已新增场地 #${result.item.venue_id} ${result.item.venue_name}，名称和所在地资料已保存。`;
+      const success = `已新增场馆 #${result.item.venue_id} ${result.item.venue_name}，名称和所在地资料已保存。`;
       setMessage(success); onMessage(success);
       try { await onVenuesChanged(); }
       catch (error) { const warning = `${success} 候选刷新失败，请刷新页面；无需重复提交：${errorText(error)}`; setMessage(warning); onMessage(warning); }
-    } catch (error) { setMessage(`新增场地失败，已保留填写内容：${errorText(error)}`); }
+    } catch (error) { setMessage(`新增场馆失败，已保留填写内容：${errorText(error)}`); }
     finally { submittingRef.current = false; setSubmitting(false); }
   };
 
@@ -153,11 +153,11 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
       {loadError && <p role="alert">地区或时区加载失败：{loadError}</p>}
       {loading && <p role="status">正在加载地区与时区…</p>}
       <div className="console-table-wrap">
-        <table className="console-admin-table venue-create-form-table" aria-label="新增场地资料">
+        <table className="console-admin-table venue-create-form-table" aria-label="新增场馆资料">
           <colgroup><col className="venue-create-name-column" /><col className="venue-create-kind-column" /><col /><col className="venue-create-coordinate-column" /><col className="venue-create-coordinate-column" /><col className="venue-create-timezone-column" /></colgroup>
           <thead><tr><th scope="col">名称</th><th scope="col">类型</th><th scope="col">公开门牌地址</th><th scope="col">纬度（WGS84）</th><th scope="col">经度（WGS84）</th><th scope="col">场馆精确时区</th></tr></thead>
           <tbody><tr>
-            <td><input aria-label="名称" placeholder="请输入场地名称" maxLength={255} value={name} disabled={submitting} onChange={e => setName(e.target.value)} /></td>
+            <td><input aria-label="名称" placeholder="请输入场馆名称" maxLength={255} value={name} disabled={submitting} onChange={e => setName(e.target.value)} /></td>
             <td><select aria-label="类型" value={kind} disabled={submitting} onChange={e => {
               const next = e.target.value as keyof typeof KINDS; setKind(next);
               if (next !== "physical") { setAddress(""); setLatitude(""); setLongitude(""); setGooglePlace(null); setMapOpen(false); setMapReview(false); }
@@ -188,8 +188,8 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
           onGooglePlace={setGooglePlace} onReview={setMapReview} onDone={() => setMapOpen(false)} />}
     </div>
     {confirm && <div className="modal-mask" onClick={() => !submitting && setConfirm(false)}><div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="venue-create-confirm-title" onClick={e => e.stopPropagation()}>
-      <div className="modal-head"><h2 id="venue-create-confirm-title">确认新增场地</h2></div>
-      <div className="console-confirm-body"><CompactConfirmationTable ariaLabel="新增场地确认" rows={rows} />{message && <p role="alert">{message}</p>}</div>
+      <div className="modal-head"><h2 id="venue-create-confirm-title">确认新增场馆</h2></div>
+      <div className="console-confirm-body"><CompactConfirmationTable ariaLabel="新增场馆确认" rows={rows} />{message && <p role="alert">{message}</p>}</div>
       <div className="console-confirm-actions"><button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirm(false)}>取消</button><button type="button" className="console-submit-btn" disabled={submitting || !!validation} onClick={() => void submit()}>{submitting ? "正在提交…" : "提交插入"}</button></div>
     </div></div>}
   </>;

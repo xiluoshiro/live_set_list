@@ -62,7 +62,7 @@ export function HomeDashboard({
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索 Live、乐队、歌曲、场地"
+              placeholder="搜索 Live、乐队、歌曲、场馆"
             />
             <button type="submit" disabled={!normalizedQuery}>
               搜索
@@ -85,7 +85,7 @@ export function HomeDashboard({
           <strong className="home-metric-value">{stats?.song_count ?? "..."}</strong>
         </div>
         <div className="home-metric">
-          <span className="home-metric-label">场地</span>
+          <span className="home-metric-label">场馆</span>
           <strong className="home-metric-value">{stats?.venue_count ?? "..."}</strong>
         </div>
       </section>

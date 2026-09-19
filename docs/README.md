@@ -21,8 +21,8 @@
 - [演出活动组聚合实现设计](design/performance-group-aggregation.md)：统一支持多日 Live、单日午场 / 晚场、演出资料列表聚合和完整收藏聚合。
 - [乐队改名与历史阵容实现设计](design/band-name-and-lineup-history.md)：同一 Band 身份下的历史名称、不可变阵容版本、同场交接共演、逐曲出演和控制台适配。
 - [Venue 独立管理与历史名称实现设计](design/venue-management.md)：稳定 Venue 身份、正式名称版本、Live 名称固化、分页管理与重复项合并。
-- [演出时区与访问者日期](design/live-timezone.md)：场地 IANA 时区、ONLINE 固定偏移、时间录入约束与访问者日历归组。
-- [Venue 所在地、多地图链接与 Live 自动时区设计](design/venue-location-and-timezone.md)：名称定位、统一坐标、多平台场馆链接与场地自身时区。
+- [演出时区与访问者日期](design/live-timezone.md)：场馆 IANA 时区、ONLINE 固定偏移、时间录入约束与访问者日历归组。
+- [Venue 所在地、多地图链接与 Live 自动时区设计](design/venue-location-and-timezone.md)：名称定位、统一坐标、多平台场馆链接与场馆自身时区。
 - [Live 状态与日期阶段实现设计](archive/completed-design/live-status.md)：人工状态、正式改期历史与资料修正边界；日期阶段以现行时区设计为准。
 - [公共端 UI 精修](design/public-ui-refresh.md)
 - [E2E 测试设计](design/e2e.md)

@@ -165,7 +165,7 @@ SET previous_venue_name_version_id = (
 )
 WHERE previous_venue_id = 90 AND id IN (2, 3);
 
--- 101/124 是同一场地：统一展示名、改绑唯一引用，然后删除歧义项 124。
+-- 101/124 是同一场馆：统一展示名、改绑唯一引用，然后删除歧义项 124。
 UPDATE public.venue_list SET venue = '品川ステラボール' WHERE id = 101;
 UPDATE public.venue_name_versions
 SET venue_name = '品川ステラボール'

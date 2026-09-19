@@ -22,7 +22,7 @@ beforeEach(() => {
   });
 });
 
-// 测试点：质量中心只列场地地理缺陷，不再出现坐标口径或 Live 时区复核项。
+// 测试点：质量中心只列场馆地理缺陷，不再出现坐标口径或 Live 时区复核项。
 test("lists venue geography issues without removed categories", async () => {
   const onOpenVenue = vi.fn();
   const onOpenLive = vi.fn();

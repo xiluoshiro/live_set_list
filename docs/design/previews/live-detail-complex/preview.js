@@ -320,7 +320,7 @@ function renderMeta(scenario) {
     ["日期", scenario.date],
     ["开场", scenario.opening],
     ["开演", scenario.start],
-    ["场地", scenario.venue],
+    ["场馆", scenario.venue],
     ["类型", `<span class="meta-badge">${htmlEscape(scenario.type)}</span>`],
   ];
   metaElement.innerHTML = values
