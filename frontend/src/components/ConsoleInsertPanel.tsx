@@ -110,7 +110,7 @@ type ConsoleInsertPanelProps = {
   initialMode?: ConsoleMode;
 };
 
-const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; label: string }; manage: { value: ConsoleMode; label: string } }[] = [
+const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; label: string }; manage?: { value: ConsoleMode; label: string } }[] = [
   { title: "演出", create: { value: "live_create", label: "新增演出" }, manage: { value: "live_edit", label: "演出管理" } },
   { title: "歌单", create: { value: "setlist", label: "新增歌单" }, manage: { value: "setlist_edit", label: "歌单管理" } },
   { title: "歌曲", manage: { value: "song", label: "歌曲管理" } },
@@ -118,7 +118,7 @@ const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; labe
   { title: "活动组", manage: { value: "performance_group", label: "活动组管理" } },
   { title: "乐队", manage: { value: "band", label: "乐队管理" } },
   { title: "场地", create: { value: "venue_create", label: "新增场地" }, manage: { value: "venue", label: "场地管理" } },
-  { title: "地区", manage: { value: "locality", label: "地区（管理）" } },
+  { title: "地区", create: { value: "locality", label: "新增地区" } },
 ];
 
 type SetlistConfirmRow = ConsoleLiveSetlistRowPayload & {
@@ -3129,8 +3129,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
               <div className="console-mode-cell" key={title}>
                 <span className="console-mode-heading">{title}</span>
                 <span className="console-mode-actions">
-                  （{create && <><button type="button" role="tab" aria-label={create.label} aria-selected={mode === create.value} className={`section-tab-btn console-mode-button${mode === create.value ? " active" : ""}`} onClick={() => changeConsoleMode(create.value)}>新增</button><span aria-hidden="true"> / </span></>}
-                  <button type="button" role="tab" aria-label={manage.label} aria-selected={mode === manage.value} className={`section-tab-btn console-mode-button${mode === manage.value ? " active" : ""}`} onClick={() => changeConsoleMode(manage.value)}>管理</button>）
+                  （{create && <button type="button" role="tab" aria-label={create.label} aria-selected={mode === create.value} className={`section-tab-btn console-mode-button${mode === create.value ? " active" : ""}`} onClick={() => changeConsoleMode(create.value)}>新增</button>}
+                  {create && manage && <span aria-hidden="true"> / </span>}
+                  {manage && <button type="button" role="tab" aria-label={manage.label} aria-selected={mode === manage.value} className={`section-tab-btn console-mode-button${mode === manage.value ? " active" : ""}`} onClick={() => changeConsoleMode(manage.value)}>管理</button>}）
                 </span>
               </div>
             ))}

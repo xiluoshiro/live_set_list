@@ -1,142 +1,91 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
-import {
-  createConsoleLocality, getConsoleLocalities, previewConsoleLocality, saveConsoleLocality,
-  type GeoLocality, type GeoLocalityCreate, type GeoLocalityPage,
-} from "../../api";
+import { createConsoleLocality, type GeoLocality, type GeoLocalityCreate } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 
 const AREA_LEVELS: Record<GeoLocality["area_level"], string> = {
   country: "国家／地区", admin_area: "一级行政区", locality: "城市",
 };
-const localityLabel = (locality: GeoLocality) =>
+const localityLabel = (locality: Pick<GeoLocality, "country_code" | "admin_area" | "locality_name">) =>
   [locality.country_code, locality.admin_area, locality.locality_name].filter(Boolean).join(" / ");
-
-type Confirmation = {
-  title: string;
-  rows: ReadonlyArray<readonly [string, ReactNode]>;
-  confirmLabel: "提交插入" | "保存修改";
-  submit: () => Promise<void>;
-};
+const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 export function LocalityAdminSection({ onMessage }: { onMessage: (message: string) => void }) {
   const auth = useAuth();
-  const [page, setPage] = useState<GeoLocalityPage>({ items: [], total: 0, page: 1, page_size: 20 });
-  const [query, setQuery] = useState("");
-  const [searchedQuery, setSearchedQuery] = useState("");
-  const [selected, setSelected] = useState<GeoLocality | null>(null);
-  const [mode, setMode] = useState<"create" | "edit" | null>(null);
   const [areaLevel, setAreaLevel] = useState<GeoLocality["area_level"]>("locality");
   const [country, setCountry] = useState("");
   const [region, setRegion] = useState("");
   const [cityName, setCityName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const [confirm, setConfirm] = useState(false);
+  const [clearAfter, setClearAfter] = useState(true);
 
-  const load = async (nextQuery: string, nextPage: number) => {
-    setBusy(true);
-    try {
-      const result = await getConsoleLocalities(nextQuery, nextPage);
-      setPage(result);
-      setSearchedQuery(nextQuery);
-      setSelected((current) => result.items.find((item) => item.id === current?.id) ?? null);
-    } catch (error) {
-      onMessage(`加载地区失败：${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-  useEffect(() => { void load("", 1); }, []);
-
-  const open = (nextMode: "create" | "edit") => {
-    if (nextMode === "edit" && selected) {
-      setAreaLevel(selected.area_level); setCountry(selected.country_code);
-      setRegion(selected.admin_area ?? ""); setCityName(selected.locality_name ?? "");
-    } else {
-      setAreaLevel("locality"); setCountry(""); setRegion(""); setCityName("");
-    }
-    setMode(nextMode);
-  };
   const payload: GeoLocalityCreate = {
-    country_code: country,
+    country_code: country.trim(),
     admin_area: areaLevel === "country" ? null : region.trim() || null,
     locality_name: areaLevel === "locality" ? cityName.trim() || null : null,
     area_level: areaLevel,
   };
-  const valid = /^[A-Z]{2}$/.test(country)
-    && (areaLevel !== "admin_area" || !!region.trim())
-    && (areaLevel !== "locality" || !!cityName.trim());
+  const validation = !/^[A-Z]{2}$/.test(payload.country_code) ? "国家／地区代码必须是两个大写英文字母。"
+    : areaLevel === "admin_area" && !payload.admin_area ? "一级行政区必须填写行政区名称。"
+    : areaLevel === "locality" && !payload.locality_name ? "城市层级必须填写城市名称。" : "";
   const rows: ReadonlyArray<readonly [string, ReactNode]> = [
-    ["层级", AREA_LEVELS[areaLevel]], ["国家／地区", country],
+    ["层级", AREA_LEVELS[areaLevel]], ["国家／地区", payload.country_code],
     ["行政区", payload.admin_area ?? "未填写"], ["城市", payload.locality_name ?? "未填写"],
   ];
 
-  return <section className="tour-admin-section" aria-label="地区管理">
-    <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar">
-      <span className="live-management-label">已登记地区</span>
-      <input className="venue-query-input live-management-primary-control" aria-label="搜索地区" value={query}
-        disabled={busy} onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={(event) => { if (event.key === "Enter") void load(query.trim(), 1); }} />
-      <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => void load(query.trim(), 1)}>查询</button>
-      <select aria-label="已登记地区" value={selected?.id ?? ""} disabled={busy || page.items.length === 0}
-        onChange={(event) => setSelected(page.items.find((item) => item.id === Number(event.target.value)) ?? null)}>
-        <option value="">选择地区</option>{page.items.map((item) => <option key={item.id} value={item.id}>{localityLabel(item)}</option>)}
-      </select>
-      <div className="tour-candidate-pager">
-        <button type="button" className="console-ghost-btn" disabled={busy || page.page <= 1} onClick={() => void load(searchedQuery, page.page - 1)}>上一页</button>
-        <span>第 {page.page} / {Math.max(1, Math.ceil(page.total / page.page_size))} 页，共 {page.total} 个地区</span>
-        <button type="button" className="console-ghost-btn" disabled={busy || page.page * page.page_size >= page.total} onClick={() => void load(searchedQuery, page.page + 1)}>下一页</button>
+  const clear = () => {
+    setAreaLevel("locality"); setCountry(""); setRegion(""); setCityName(""); setMessage("");
+  };
+  const submit = async () => {
+    if (validation || submittingRef.current) return;
+    submittingRef.current = true; setSubmitting(true); setMessage("");
+    try {
+      const created = await createConsoleLocality(payload, auth.csrfToken ?? "");
+      setConfirm(false);
+      if (clearAfter) clear();
+      const success = `已新增地区 #${created.id} ${localityLabel(created)}。`;
+      setMessage(success); onMessage(success);
+    } catch (error) {
+      setMessage(`新增地区失败，已保留填写内容：${errorText(error)}`);
+    } finally {
+      submittingRef.current = false; setSubmitting(false);
+    }
+  };
+
+  return <section className="tour-admin-section" aria-label="新增地区">
+    <div>
+      <div className="console-table-wrap">
+        <table className="console-admin-table" aria-label="新增地区资料">
+          <thead><tr><th scope="col">地区层级</th><th scope="col">国家／地区代码</th><th scope="col">都道府县／省／州</th><th scope="col">城市名称</th></tr></thead>
+          <tbody><tr>
+            <td><select aria-label="地区层级" value={areaLevel} disabled={submitting} onChange={event => setAreaLevel(event.target.value as GeoLocality["area_level"])}>
+              {Object.entries(AREA_LEVELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select></td>
+            <td><input aria-label="国家／地区代码" maxLength={2} placeholder="JP" value={country} disabled={submitting} onChange={event => setCountry(event.target.value.toUpperCase())} /></td>
+            <td><input aria-label="都道府县／省／州" value={region} disabled={submitting || areaLevel === "country"} onChange={event => setRegion(event.target.value)} /></td>
+            <td><input aria-label="城市名称" value={cityName} disabled={submitting || areaLevel !== "locality"} onChange={event => setCityName(event.target.value)} /></td>
+          </tr></tbody>
+        </table>
+      </div>
+      {validation && (country || region || cityName) && <p className="console-admin-hint" role="status">{validation}</p>}
+      {message && <p className="console-admin-hint" role="status">{message}</p>}
+      <div className="console-submit-row live-admin-insert-row venue-create-actions">
+        <label className="live-clear-after-create-option"><input type="checkbox" checked={clearAfter} disabled={submitting} onChange={event => setClearAfter(event.target.checked)} />新增成功后清空表单</label>
+        <button type="button" className="console-ghost-btn" disabled={submitting} onClick={clear}>清空</button>
+        <button type="button" className="console-submit-btn" disabled={submitting || !!validation} onClick={() => { setMessage(""); setConfirm(true); }}>提交插入</button>
       </div>
     </div>
-    <div className="console-submit-row">
-      <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => open("create")}>登记已核验地区</button>
-      <button type="button" className="console-ghost-btn" disabled={busy || !selected} onClick={() => open("edit")}>修改已选地区</button>
-    </div>
-    {mode && <div className="tour-admin-block">
-      <h3>{mode === "create" ? "登记已核验地区" : "修改已选地区"}</h3>
-      <div className="tour-admin-fields">
-        <label>地区层级<select aria-label="地区层级" value={areaLevel} disabled={busy} onChange={(event) => setAreaLevel(event.target.value as GeoLocality["area_level"])}>
-          {Object.entries(AREA_LEVELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select></label>
-        <label>国家／地区代码<input maxLength={2} value={country} disabled={busy} placeholder="JP" onChange={(event) => setCountry(event.target.value.toUpperCase())} /></label>
-        <label>都道府县／省／州<input value={region} disabled={busy || areaLevel === "country"} onChange={(event) => setRegion(event.target.value)} /></label>
-        <label>城市名称<input value={cityName} disabled={busy || areaLevel !== "locality"} onChange={(event) => setCityName(event.target.value)} /></label>
-      </div>
-      <p className="console-admin-hint">先查询已有地区，避免重复登记。</p>
-      <div className="console-submit-row">
-        <button type="button" className="console-submit-btn" disabled={busy || !valid} onClick={() => {
-          if (mode === "create") {
-            setConfirmation({ title: "确认登记地区", rows, confirmLabel: "提交插入", submit: async () => {
-              const created = await createConsoleLocality(payload, auth.csrfToken ?? "");
-              setMode(null); onMessage("地区已登记。"); await load(searchedQuery, 1); setSelected(created);
-            }});
-          } else if (selected) {
-            const update = { ...payload, expected_state_token: selected.state_token };
-            void (async () => {
-              try {
-                const preview = await previewConsoleLocality(selected.id, update);
-                setConfirmation({ title: "确认地区资料修改", confirmLabel: "保存修改", rows: [
-                  ["原地区", localityLabel(preview.before)], ["新地区", localityLabel({ ...preview.before, ...preview.after })],
-                  ["引用 Venue", preview.venue_count], ["关联 Live", preview.live_count],
-                ], submit: async () => {
-                  const saved = await saveConsoleLocality(selected.id, preview.after, auth.csrfToken ?? "");
-                  setMode(null); onMessage("地区已保存；关联 Live 的已存时间偏移不随本次资料修改而变动。"); await load(searchedQuery, page.page); setSelected(saved);
-                }});
-              } catch (error) { onMessage(`预览地区修改失败：${error instanceof Error ? error.message : String(error)}`); }
-            })();
-          }
-        }}>{mode === "create" ? "提交插入" : "预览修改"}</button>
-        <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => setMode(null)}>取消</button>
-      </div>
-    </div>}
-    {confirmation && <div className="modal-mask" onClick={() => !busy && setConfirmation(null)}>
-      <div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="locality-confirm-title" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-head"><h2 id="locality-confirm-title">{confirmation.title}</h2></div>
-        <div className="console-confirm-body"><CompactConfirmationTable ariaLabel={confirmation.title} rows={confirmation.rows} /></div>
+    {confirm && <div className="modal-mask" onClick={() => !submitting && setConfirm(false)}>
+      <div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="locality-confirm-title" onClick={event => event.stopPropagation()}>
+        <div className="modal-head"><h2 id="locality-confirm-title">确认新增地区</h2></div>
+        <div className="console-confirm-body"><CompactConfirmationTable ariaLabel="新增地区确认" rows={rows} />{message && <p role="alert">{message}</p>}</div>
         <div className="console-confirm-actions">
-          <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => setConfirmation(null)}>取消</button>
-          <button type="button" className="console-submit-btn" disabled={busy} onClick={() => { setBusy(true); void confirmation.submit().then(() => setConfirmation(null)).catch((error) => onMessage(`保存地区失败：${error instanceof Error ? error.message : String(error)}`)).finally(() => setBusy(false)); }}>{confirmation.confirmLabel}</button>
+          <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirm(false)}>取消</button>
+          <button type="button" className="console-submit-btn" disabled={submitting || !!validation} onClick={() => void submit()}>{submitting ? "正在提交…" : "提交插入"}</button>
         </div>
       </div>
     </div>}
