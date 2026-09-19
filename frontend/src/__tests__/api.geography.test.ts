@@ -29,7 +29,7 @@ test("geography requests preserve write and concurrency contracts", async () => 
   } = await import("../api");
   const payload = {
     expected_state_token: "3".repeat(64), locality_id: null, address: null, latitude: 0, longitude: 0,
-    coordinate_system: "WGS84" as const, timezone_id: null,
+    coordinate_system: "WGS84" as const, timezone_id: null, google_place: null,
   };
   await saveConsoleVenueLocation(7, payload, "csrf-token");
   expect(fetchMock.mock.calls[0][0]).toBe("/api/console/venues/7/location");
@@ -62,10 +62,10 @@ test("geography requests preserve write and concurrency contracts", async () => 
   expect(qualityUrl.searchParams.get("category")).toBe("missing_timezone");
   expect(qualityUrl.searchParams.get("q")).toBe("A & B");
   expect(qualityUrl.searchParams.get("page")).toBe("3");
-  await searchConsoleVenueMapCandidates(7, "google", "A & B");
+  await searchConsoleVenueMapCandidates(7, "apple", "A & B");
   const mapSearchUrl = new URL(fetchMock.mock.calls[6][0], "http://localhost");
   expect(mapSearchUrl.pathname).toBe("/api/console/venues/7/map-candidates");
-  expect(mapSearchUrl.searchParams.get("provider")).toBe("google");
+  expect(mapSearchUrl.searchParams.get("provider")).toBe("apple");
   expect(mapSearchUrl.searchParams.get("q")).toBe("A & B");
   const candidate = {
     provider_place_id: "place-1", provider_url: "https://www.google.com/maps/place/1",

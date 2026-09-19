@@ -380,13 +380,25 @@ def create_venue(
                          location.timezone_id, any(value is not None for key, value in location.model_dump().items()
                                                    if key != "coordinate_system"), venue_id),
                     )
+                    if location.google_place is not None:
+                        cur.execute(
+                            """INSERT INTO venue_map_links
+                               (venue_id, provider, provider_place_id, provider_url, location_revision)
+                               VALUES (%s,'google',%s,%s,1)""",
+                            (venue_id, location.google_place.provider_place_id, location.google_place.provider_url),
+                        )
+                location_audit: dict[str, Any] | None = None
+                if location is not None:
+                    location_audit = location.model_dump()
+                if location_audit is not None and location is not None and "google_place" not in location.model_fields_set:
+                    location_audit.pop("google_place", None)
                 _write_audit(
                     cur,
                     user_id=context.user.id,
                     action="venue_create",
                     venue_id=venue_id,
                     payload={"venue_name": payload.venue_name, "venue_kind": payload.venue_kind, "venue_name_version_id": version_id,
-                             **({"location": location.model_dump()} if location is not None else {})},
+                             **({"location": location_audit} if location_audit is not None else {})},
                 )
     except HTTPException:
         raise

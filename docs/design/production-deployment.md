@@ -246,7 +246,9 @@ LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist
 Venue 地图候选搜索是可选能力。启用对应供应商时，在后端 secret 中按需增加下列变量；不要把 Key、Apple 私钥或 token 写入 release 包、前端变量或仓库。未配置的供应商仍可使用手工详情链接和 WGS84 坐标兜底。
 
 ```powershell
-GOOGLE_MAPS_PLACES_API_KEY=<server-side-key>
+GOOGLE_MAPS_BROWSER_API_KEY=<browser-key-restricted-by-exact-console-origin>
+GOOGLE_MAPS_SERVER_API_KEY=<server-key-restricted-by-egress-ip>
+GOOGLE_MAPS_CACHE_PATH=/var/cache/livesetlist/google-maps.sqlite3
 APPLE_MAPS_SERVER_API_TOKEN=<short-lived-maps-access-token>
 AMAP_WEB_SERVICE_API_KEY=<web-service-key>
 ```

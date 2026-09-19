@@ -16,7 +16,7 @@ from app.map_providers import haversine_distance_m, search_map_candidates
 from app.routers.console_venues import _raise_database_error
 from app.schemas.geography import (
     Locality, LocalityCreate, LocalityPage, LocalityPreview, LocalityUpdate, LocationPreview, LocationWrite,
-    MapCandidateSearch, MapLinkWrite, MapProvider, VenueLocation,
+    MapCandidateSearch, MapLinkWrite, MapProvider, MapSearchProvider, VenueLocation,
 )
 
 router = APIRouter(dependencies=[Depends(require_role("editor"))])
@@ -143,11 +143,11 @@ def _validate(cur: Any, row: dict[str, Any], payload: LocationWrite) -> str | No
         raise HTTPException(409, "场馆资料已更新，请重新加载并检查修改")
     if row["venue_kind"] == "online" and any(value is not None for value in (
         payload.locality_id, payload.address, payload.latitude, payload.longitude,
-        payload.timezone_id,
+        payload.timezone_id, payload.google_place,
     )):
         raise HTTPException(422, "线上场馆不保存实体位置，请在活动中指定时间基准")
     if row["venue_kind"] == "undisclosed" and any(value is not None for value in (
-        payload.address, payload.latitude, payload.longitude,
+        payload.address, payload.latitude, payload.longitude, payload.google_place,
     )):
         raise HTTPException(422, "未公开具体场馆可保存地区和时区，不保存门牌、坐标或地图关联")
     _locality(cur, payload.locality_id)
@@ -156,7 +156,7 @@ def _validate(cur: Any, row: dict[str, Any], payload: LocationWrite) -> str | No
     return payload.timezone_id
 
 
-def _changed_fields(row: dict[str, Any], payload: LocationWrite) -> list[str]:
+def _changed_fields(cur: Any, row: dict[str, Any], payload: LocationWrite) -> list[str]:
     changed = []
     if row["locality_id"] != payload.locality_id:
         changed.append("locality_id")
@@ -169,11 +169,34 @@ def _changed_fields(row: dict[str, Any], payload: LocationWrite) -> list[str]:
         changed.append("coordinates")
     if row["timezone_id"] != payload.timezone_id:
         changed.append("timezone_id")
+    if "google_place" in payload.model_fields_set:
+        cur.execute("SELECT provider_place_id, provider_url FROM venue_map_links WHERE venue_id=%s AND provider='google'", (row["id"],))
+        stored = cur.fetchone()
+        target = payload.google_place
+        if (stored is None) != (target is None) or (stored and target and (
+            stored["provider_place_id"] != target.provider_place_id or stored["provider_url"] != target.provider_url
+        )):
+            changed.append("google_place")
     return changed
 
 
-def _changed(row: dict[str, Any], payload: LocationWrite) -> bool:
-    return bool(_changed_fields(row, payload))
+def _changed(cur: Any, row: dict[str, Any], payload: LocationWrite) -> bool:
+    return bool(_changed_fields(cur, row, payload))
+
+
+def _write_google_place(cur: Any, venue_id: int, payload: LocationWrite) -> None:
+    if "google_place" not in payload.model_fields_set:
+        return
+    if payload.google_place is None:
+        cur.execute("DELETE FROM venue_map_links WHERE venue_id=%s AND provider='google'", (venue_id,))
+        return
+    cur.execute(
+        """INSERT INTO venue_map_links (venue_id, provider, provider_place_id, provider_url, location_revision)
+           VALUES (%s,'google',%s,%s,1) ON CONFLICT (venue_id,provider) DO UPDATE SET
+           provider_place_id=EXCLUDED.provider_place_id, provider_url=EXCLUDED.provider_url,
+           verified_at=CURRENT_TIMESTAMP""",
+        (venue_id, payload.google_place.provider_place_id, payload.google_place.provider_url),
+    )
 
 
 @router.get("/timezones", response_model=list[str], summary="可用 IANA 时区")
@@ -289,7 +312,7 @@ def preview_location(venue_id: int, payload: LocationWrite):
             before = _read(cur, row)
             cur.execute("SELECT COUNT(*) FROM live_attrs WHERE venue_id = %s", (venue_id,))
             live_count = cur.fetchone()["count"]
-            changed_fields = _changed_fields(row, payload)
+            changed_fields = _changed_fields(cur, row, payload)
             return {"before": before, "after": payload,
                     "live_count": live_count,
                     "changed_fields": changed_fields}
@@ -306,7 +329,7 @@ def save_location(venue_id: int, payload: LocationWrite, request: Request,
             row = _venue(cur, venue_id, lock=True)
             _validate(cur, row, payload)
             before = VenueLocation.model_validate(_read(cur, row)).model_dump(mode="json")
-            if _changed(row, payload):
+            if _changed(cur, row, payload):
                 cur.execute(
                     """UPDATE venue_list SET locality_id=%s, address=%s, latitude=%s, longitude=%s,
                        timezone_id=%s,
@@ -315,6 +338,7 @@ def save_location(venue_id: int, payload: LocationWrite, request: Request,
                      payload.timezone_id, venue_id),
                 )
                 row = dict(cur.fetchone())
+                _write_google_place(cur, venue_id, payload)
                 after = VenueLocation.model_validate(_read(cur, row)).model_dump(mode="json")
                 _audit(cur, context, "venue_location_update", "venue", venue_id, {
                     "before": before,
@@ -326,7 +350,7 @@ def save_location(venue_id: int, payload: LocationWrite, request: Request,
 
 
 @router.get("/venues/{venue_id}/map-candidates", response_model=MapCandidateSearch, summary="搜索地图平台场馆候选")
-def search_venue_map_candidates(venue_id: int, provider: MapProvider,
+def search_venue_map_candidates(venue_id: int, provider: MapSearchProvider,
                                 q: str = Query(min_length=1, max_length=200)):
     query = q.strip()
     if not query:

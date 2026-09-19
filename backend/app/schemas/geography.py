@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.geography import validate_map_url, validate_timezone
 
 MapProvider = Literal["google", "apple", "amap"]
+MapSearchProvider = Literal["apple", "amap"]
 AreaLevel = Literal["country", "admin_area", "locality"]
 MapProviderStatus = Literal["ready", "not_configured", "unavailable"]
 ProviderCoordinateSystem = Literal["WGS84", "GCJ02"]
@@ -58,6 +59,19 @@ class LocalityPage(BaseModel):
     page_size: int
 
 
+class GooglePlaceDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    provider_place_id: str = Field(min_length=1, max_length=255)
+    provider_url: str = Field(min_length=1, max_length=2048)
+    name: str = Field(min_length=1, max_length=500)
+
+    @field_validator("provider_url")
+    @classmethod
+    def valid_google_url(cls, value: str) -> str:
+        validate_map_url("google", value)
+        return value
+
+
 class LocationFields(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     locality_id: int | None = Field(default=None, ge=1)
@@ -66,6 +80,7 @@ class LocationFields(BaseModel):
     longitude: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
     coordinate_system: Literal["WGS84"] = "WGS84"
     timezone_id: str | None = Field(default=None, max_length=100)
+    google_place: GooglePlaceDraft | None = None
 
     @field_validator("address", "timezone_id", mode="before")
     @classmethod
@@ -84,6 +99,8 @@ class LocationFields(BaseModel):
         if self.latitude is not None and self.longitude is not None:
             self.latitude = round(self.latitude, 6)
             self.longitude = round(self.longitude, 6)
+        if self.google_place is not None and self.latitude is None:
+            raise ValueError("Google Maps 场馆关联必须同时保存坐标")
         return self
 
 
@@ -127,7 +144,7 @@ class MapLinkWrite(BaseModel):
 
 
 class MapCandidateSearch(BaseModel):
-    provider: MapProvider
+    provider: MapSearchProvider
     status: MapProviderStatus
     message: str | None
     candidates: list[MapCandidate]

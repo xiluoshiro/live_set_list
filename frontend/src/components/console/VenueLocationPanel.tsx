@@ -3,8 +3,8 @@ import {
   createConsoleLocality, deleteConsoleVenueMapLink, getConsoleLocalities,
   getConsoleTimezones, getConsoleVenueLocation, previewConsoleLocality, previewConsoleVenueLocation,
   saveConsoleLocality, saveConsoleVenueLocation, saveConsoleVenueMapLink, searchConsoleVenueMapCandidates,
-  type GeoLocality, type GeoLocalityCreate, type GeoLocalityPage, type MapCandidate,
-  type MapCandidateSearch, type MapProvider,
+  type GeoLocality, type GeoLocalityCreate, type GeoLocalityPage, type GooglePlaceDraft, type MapCandidate,
+  type MapCandidateSearch, type MapProvider, type MapSearchProvider,
   type VenueLocation, type VenueLocationWrite,
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
@@ -12,12 +12,14 @@ import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { VenueLocationPicker } from "./VenueLocationPicker";
 
 const PROVIDERS: Record<MapProvider, string> = { google: "Google Maps", apple: "Apple Maps", amap: "高德地图" };
+const EDITABLE_PROVIDERS: MapSearchProvider[] = ["apple", "amap"];
 const AREA_LEVELS: Record<GeoLocality["area_level"], string> = {
   country: "国家／地区", admin_area: "一级行政区", locality: "城市",
 };
 const FIELD_LABELS: Record<string, string> = {
   locality_id: "已公布地区", address: "公开门牌地址", coordinates: "WGS84 坐标",
   timezone_id: "场馆精确时区",
+  google_place: "Google Maps 场馆",
 };
 const cityLabel = (city: GeoLocality) => [city.country_code, city.admin_area, city.locality_name].filter(Boolean).join(" / ");
 const pointLabel = (point: { latitude: number | null; longitude: number | null }) =>
@@ -51,12 +53,13 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
   const [mapReview, setMapReview] = useState(false);
+  const [googlePlace, setGooglePlace] = useState<GooglePlaceDraft | null>(null);
   const [localityEditorMode, setLocalityEditorMode] = useState<"create" | "edit" | null>(null);
   const [areaLevel, setAreaLevel] = useState<GeoLocality["area_level"]>("locality");
   const [country, setCountry] = useState("");
   const [region, setRegion] = useState("");
   const [cityName, setCityName] = useState("");
-  const [provider, setProvider] = useState<MapProvider>("google");
+  const [provider, setProvider] = useState<MapSearchProvider>("apple");
   const [mapQuery, setMapQuery] = useState(venueName);
   const [mapSearch, setMapSearch] = useState<MapCandidateSearch | null>(null);
   const [selectedMapCandidate, setSelectedMapCandidate] = useState<MapCandidate | null>(null);
@@ -71,6 +74,10 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
     setLatitude(next.latitude === null ? "" : String(next.latitude));
     setLongitude(next.longitude === null ? "" : String(next.longitude));
     setTimezone(next.timezone_id ?? "");
+    const google = next.map_links.find(link => link.provider === "google");
+    setGooglePlace(google?.provider_place_id && google.provider_url
+      ? { provider_place_id: google.provider_place_id, provider_url: google.provider_url, name: venueName }
+      : null);
   };
   const perform = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -125,10 +132,14 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
     longitude: physical ? nullableNumber(longitude) : null,
     coordinate_system: "WGS84",
     timezone_id: venueKind !== "online" ? timezone || null : null,
+    google_place: physical ? googlePlace : null,
   };
+  const savedGoogle = data?.map_links.find(link => link.provider === "google");
   const dirty = !!data && ((data.locality?.id ?? null) !== draft.locality_id || data.address !== draft.address
     || data.latitude !== draft.latitude || data.longitude !== draft.longitude
-    || data.timezone_id !== draft.timezone_id);
+    || data.timezone_id !== draft.timezone_id
+    || (savedGoogle?.provider_place_id ?? null) !== (googlePlace?.provider_place_id ?? null)
+    || (savedGoogle?.provider_url ?? null) !== (googlePlace?.provider_url ?? null));
 
   const preview = () => perform(async () => {
     const result = await previewConsoleVenueLocation(venueId, draft);
@@ -141,6 +152,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
         ["原地址", result.before.address ?? "未填写"], ["新地址", result.after.address ?? "未填写"],
         ["原坐标", pointLabel(result.before)], ["新坐标", pointLabel(result.after)],
         ["原时区", result.before.timezone_id ?? "待核验"], ["新时区", result.after.timezone_id ?? "待核验"],
+        ["Google Maps 场馆", result.after.google_place?.name ?? "未关联"],
         ["本次变更字段", result.changed_fields.map(field => FIELD_LABELS[field] ?? field).join("、") || "无"],
         ["关联 Live", `${result.live_count} 场（本次不修改排期）`],
       ],
@@ -229,18 +241,21 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
         <div className="tour-admin-fields">
           <label>公开门牌地址<input value={address} disabled={busy || !physical} onChange={e => setAddress(e.target.value)} /></label>
           <label>场馆精确时区<select aria-label="场馆精确时区" value={timezone} disabled={busy || venueKind === "online"} onChange={e => setTimezone(e.target.value)}>{zoneOptions}</select></label>
-          <label>纬度（WGS84）<input inputMode="decimal" value={latitude} disabled={busy || !physical} onChange={e => setLatitude(e.target.value)} /></label>
-          <label>经度（WGS84）<input inputMode="decimal" value={longitude} disabled={busy || !physical} onChange={e => setLongitude(e.target.value)} /></label>
+          <label>纬度（WGS84）<input inputMode="decimal" value={latitude} disabled={busy || !physical} onChange={e => { setLatitude(e.target.value); setGooglePlace(null); }} /></label>
+          <label>经度（WGS84）<input inputMode="decimal" value={longitude} disabled={busy || !physical} onChange={e => { setLongitude(e.target.value); setGooglePlace(null); }} /></label>
         </div>
         {invalidCoordinates && <p role="alert">请同时填写有效经纬度，或同时清空。</p>}
         {physical && <>
-          <button className="console-ghost-btn" type="button" aria-expanded={mapOpen} disabled={busy} onClick={() => setMapOpen(!mapOpen)}>{mapOpen ? "收起选点地图" : "地图选点与自动解析"}</button>
-          {mapOpen && <VenueLocationPicker key={`${venueId}-${data.state_token}`} venueId={venueId} venueName={venueName}
+          <button className="console-ghost-btn" type="button" aria-expanded={mapOpen} disabled={busy} onClick={() => {
+            setMapOpen(!mapOpen);
+          }}>{mapOpen ? "收起选点地图" : "地图选点与自动解析"}</button>
+          {mapOpen && <VenueLocationPicker venueId={venueId} venueName={venueName}
             csrf={auth.csrfToken ?? ""} disabled={busy} timezone={timezone} address={address} locality={selectedCity}
             point={!invalidCoordinates && latitude.trim() && longitude.trim() ? { latitude: Number(latitude), longitude: Number(longitude) } : null}
             savedPoint={data.latitude !== null && data.longitude !== null ? { latitude: data.latitude, longitude: data.longitude } : null}
             onPoint={point => { setLatitude(point ? String(point.latitude) : ""); setLongitude(point ? String(point.longitude) : ""); }}
-            onTimezone={setTimezone} onAddress={setAddress} onLocality={setSelectedCity} onReview={setMapReview} />}
+            onTimezone={setTimezone} onAddress={setAddress} onLocality={setSelectedCity}
+            onGooglePlace={setGooglePlace} onReview={setMapReview} />}
         </>}
         <div className="console-submit-row">
           <button className="console-submit-btn" type="button" disabled={busy || mapReview || !dirty || invalidCoordinates || (venueKind !== "online" && !timezone)} onClick={() => void preview()}>保存修改</button>
@@ -258,8 +273,8 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
         <h3>搜索地图候选</h3>
         <div className="tour-admin-fields venue-map-link-editor">
           <label>地图平台<select value={provider} disabled={busy} onChange={e => {
-            setProvider(e.target.value as MapProvider); setMapUrl(""); setMapSearch(null); setSelectedMapCandidate(null);
-          }}>{Object.entries(PROVIDERS).map(([key, name]) => <option value={key} key={key}>{name}</option>)}</select></label>
+            setProvider(e.target.value as MapSearchProvider); setMapUrl(""); setMapSearch(null); setSelectedMapCandidate(null);
+          }}>{EDITABLE_PROVIDERS.map(key => <option value={key} key={key}>{PROVIDERS[key]}</option>)}</select></label>
           <label>名称或地址<input value={mapQuery} disabled={busy} onChange={e => setMapQuery(e.target.value)} /></label>
         </div>
         <div className="console-submit-row">

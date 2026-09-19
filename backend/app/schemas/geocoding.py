@@ -18,6 +18,12 @@ class ResolveInput(BaseModel):
     parts: Literal["timezone", "address"]
 
 
+class PlaceInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    place_id: str = Field(min_length=1, max_length=255)
+    request_id: str = Field(min_length=1, max_length=80)
+
+
 class GeocodingCandidate(BaseModel):
     name: str
     address: str
@@ -26,6 +32,8 @@ class GeocodingCandidate(BaseModel):
     country_code: str | None
     admin_area: str | None
     locality_name: str | None
+    provider_place_id: str | None = None
+    provider_url: str | None = None
 
 
 class SearchResult(BaseModel):

@@ -217,16 +217,16 @@ test("requires an explicit candidate selection before linking a map place", asyn
   const located = { ...location, latitude: 35, longitude: 139 };
   api.getConsoleVenueLocation.mockResolvedValue(located);
   api.searchConsoleVenueMapCandidates.mockResolvedValue({
-    provider: "google", status: "ready", message: null, candidates: [
-      { provider_place_id: "first", provider_url: "https://www.google.com/maps/place/first", name: "First Hall", address: "1 Main St", latitude: 35.0001, longitude: 139.0001, source_coordinate_system: "WGS84", distance_m: 14 },
-      { provider_place_id: "second", provider_url: "https://www.google.com/maps/place/second", name: "Second Hall", address: "2 Main St", latitude: 35.001, longitude: 139.001, source_coordinate_system: "WGS84", distance_m: 143 },
+    provider: "apple", status: "ready", message: null, candidates: [
+      { provider_place_id: "first", provider_url: "https://maps.apple.com/place?place-id=first", name: "First Hall", address: "1 Main St", latitude: 35.0001, longitude: 139.0001, source_coordinate_system: "WGS84", distance_m: 14 },
+      { provider_place_id: "second", provider_url: "https://maps.apple.com/place?place-id=second", name: "Second Hall", address: "2 Main St", latitude: 35.001, longitude: 139.001, source_coordinate_system: "WGS84", distance_m: 143 },
     ],
   });
   api.saveConsoleVenueMapLink.mockResolvedValue(located);
   const user = await openPanel();
 
   await user.click(screen.getByRole("button", { name: "查询候选" }));
-  expect(await screen.findByRole("table", { name: "Google Maps 地图候选" })).toHaveTextContent("First Hall");
+  expect(await screen.findByRole("table", { name: "Apple Maps 地图候选" })).toHaveTextContent("First Hall");
   expect(screen.getByRole("button", { name: "关联所选候选" })).toBeDisabled();
   await user.click(screen.getByRole("radio", { name: "选择 Second Hall" }));
   await user.click(screen.getByRole("button", { name: "关联所选候选" }));
@@ -235,9 +235,9 @@ test("requires an explicit candidate selection before linking a map place", asyn
   expect(api.saveConsoleVenueMapLink).not.toHaveBeenCalled();
   await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
   await waitFor(() => expect(api.saveConsoleVenueMapLink).toHaveBeenCalledWith(
-    1, "google", expect.objectContaining({
+    1, "apple", expect.objectContaining({
       provider_place_id: "second",
-      provider_url: "https://www.google.com/maps/place/second",
+      provider_url: "https://maps.apple.com/place?place-id=second",
     }), "2".repeat(64), "csrf",
   ));
 });

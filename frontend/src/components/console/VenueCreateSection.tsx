@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createConsoleVenue, getConsoleLocalities, getConsoleTimezones,
-  type GeoLocality, type VenueLocationWrite,
+  type GeoLocality, type GooglePlaceDraft, type VenueLocationWrite,
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
@@ -42,7 +42,7 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
   const [clearAfter, setClearAfter] = useState(true);
   const [mapOpen, setMapOpen] = useState(false);
   const [mapReview, setMapReview] = useState(false);
-  const [draftKey, setDraftKey] = useState(0);
+  const [googlePlace, setGooglePlace] = useState<GooglePlaceDraft | null>(null);
   const generation = useRef(0);
 
   const loadOptions = async (q = "", initialize = false) => {
@@ -88,8 +88,8 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
 
   const clear = () => {
     setName(""); setKind("physical"); setLocality(defaultLocality.current); setMenuPosition(null); setAddress("");
-    setLatitude(""); setLongitude(""); setTimezone(DEFAULT_TIMEZONE); setMapOpen(false); setMapReview(false);
-    setQuery(""); setDraftKey(value => value + 1);
+    setLatitude(""); setLongitude(""); setTimezone(DEFAULT_TIMEZONE); setGooglePlace(null); setMapOpen(false); setMapReview(false);
+    setQuery("");
   };
   const physical = kind === "physical";
   const invalidCoordinates = (latitude.trim() === "") !== (longitude.trim() === "")
@@ -106,12 +106,14 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
     latitude: physical && latitude.trim() ? Number(latitude) : null,
     longitude: physical && longitude.trim() ? Number(longitude) : null,
     timezone_id: timezone || null, coordinate_system: "WGS84",
+    google_place: physical ? googlePlace : null,
   };
   const options = [...new Map([...cities, ...(locality ? [locality] : [])].map(item => [item.id, item])).values()];
   const rows: [string, string][] = [["名称", name.trim()], ["类型", KINDS[kind]]];
   rows.push(["已公布地区", locality ? localityLabel(locality) : "未填写"]);
   rows.push(["场馆精确时区", timezone]);
-  if (physical) rows.push(["公开门牌地址", location.address ?? "未填写"], ["WGS84 坐标", location.latitude === null ? "未填写" : `${location.latitude}, ${location.longitude}`]);
+  if (physical) rows.push(["公开门牌地址", location.address ?? "未填写"], ["WGS84 坐标", location.latitude === null ? "未填写" : `${location.latitude}, ${location.longitude}`],
+    ["Google Maps 场馆", googlePlace?.name ?? "未关联"]);
 
   const submit = async () => {
     if (validation || submittingRef.current) return;
@@ -158,11 +160,11 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
             <td><input aria-label="名称" placeholder="请输入场地名称" maxLength={255} value={name} disabled={submitting} onChange={e => setName(e.target.value)} /></td>
             <td><select aria-label="类型" value={kind} disabled={submitting} onChange={e => {
               const next = e.target.value as keyof typeof KINDS; setKind(next);
-              if (next !== "physical") { setAddress(""); setLatitude(""); setLongitude(""); setMapOpen(false); setMapReview(false); }
+              if (next !== "physical") { setAddress(""); setLatitude(""); setLongitude(""); setGooglePlace(null); setMapOpen(false); setMapReview(false); }
             }}>{Object.entries(KINDS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
             <td><input aria-label="公开门牌地址" required={physical} placeholder={physical ? "请输入地址（必填）" : "不适用"} maxLength={500} value={address} disabled={submitting || !physical} onChange={e => setAddress(e.target.value)} /></td>
-            <td><input aria-label="纬度（WGS84）" inputMode="decimal" value={latitude} disabled={submitting || !physical} onChange={e => setLatitude(e.target.value)} /></td>
-            <td><input aria-label="经度（WGS84）" inputMode="decimal" value={longitude} disabled={submitting || !physical} onChange={e => setLongitude(e.target.value)} /></td>
+            <td><input aria-label="纬度（WGS84）" inputMode="decimal" value={latitude} disabled={submitting || !physical} onChange={e => { setLatitude(e.target.value); setGooglePlace(null); }} /></td>
+            <td><input aria-label="经度（WGS84）" inputMode="decimal" value={longitude} disabled={submitting || !physical} onChange={e => { setLongitude(e.target.value); setGooglePlace(null); }} /></td>
             <td><select aria-label="场馆精确时区" value={timezone} disabled={submitting || loading} onChange={e => setTimezone(e.target.value)}><option value="" disabled>请选择时区（必填）</option>{[...new Set([...zones, ...(timezone ? [timezone] : [])])].map(zone => <option key={zone}>{zone}</option>)}</select></td>
           </tr></tbody>
         </table>
@@ -172,15 +174,18 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
       {message && <p role="status" className="console-admin-hint">{message}</p>}
       <div className="console-submit-row live-admin-insert-row venue-create-actions">
         <label className="live-clear-after-create-option"><input type="checkbox" checked={clearAfter} disabled={submitting} onChange={e => setClearAfter(e.target.checked)} />新增成功后清空表单</label>
-        {physical && <button type="button" className="console-ghost-btn" aria-expanded={mapOpen} disabled={submitting} onClick={() => setMapOpen(!mapOpen)}>{mapOpen ? "收起选点地图" : "地图选点与自动解析"}</button>}
+        {physical && <button type="button" className="console-ghost-btn" aria-expanded={mapOpen} disabled={submitting} onClick={() => {
+          setMapOpen(!mapOpen);
+        }}>{mapOpen ? "收起选点地图" : "地图选点与自动解析"}</button>}
         <button type="button" className="console-ghost-btn" disabled={submitting} onClick={clear}>清空</button>
         <button type="button" className="console-submit-btn" disabled={submitting || !!validation} onClick={() => { setMessage(""); setConfirm(true); }}>提交插入</button>
       </div>
-        {mapOpen && <VenueLocationPicker key={draftKey} venueName={name} csrf={auth.csrfToken ?? ""} disabled={submitting || confirm}
+        {mapOpen && <VenueLocationPicker venueName={name} csrf={auth.csrfToken ?? ""} disabled={submitting || confirm}
           point={!invalidCoordinates && latitude.trim() && longitude.trim() ? { latitude: Number(latitude), longitude: Number(longitude) } : null}
           savedPoint={null} timezone={timezone} address={address} locality={locality}
           onPoint={point => { setLatitude(point ? String(point.latitude) : ""); setLongitude(point ? String(point.longitude) : ""); }}
-          onTimezone={setTimezone} onAddress={setAddress} onLocality={setLocality} onReview={setMapReview} />}
+          onTimezone={setTimezone} onAddress={setAddress} onLocality={setLocality} onName={setName}
+          onGooglePlace={setGooglePlace} onReview={setMapReview} />}
     </div>
     {confirm && <div className="modal-mask" onClick={() => !submitting && setConfirm(false)}><div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="venue-create-confirm-title" onClick={e => e.stopPropagation()}>
       <div className="modal-head"><h2 id="venue-create-confirm-title">确认新增场地</h2></div>

@@ -4,24 +4,27 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { VenueLocationPicker } from "../VenueLocationPicker";
 import type { LocationPoint, LocationResolution } from "../../../api";
 
-const api = vi.hoisted(() => ({ getGeographyCapabilities: vi.fn(), resolveGeography: vi.fn(), searchGeography: vi.fn() }));
+const api = vi.hoisted(() => ({ getGeographyCapabilities: vi.fn(), resolveGeography: vi.fn(), resolveGooglePlace: vi.fn(), searchGeography: vi.fn() }));
 vi.mock("../../../api", () => api);
-vi.mock("../VenueLocationMap", () => ({ VenueLocationMap: ({ onPoint }: { onPoint: (point: LocationPoint) => void }) => <>
+vi.mock("../VenueLocationMap", () => ({ VenueLocationMap: ({ onPoint, onPlaceId }: { onPoint: (point: LocationPoint) => void; onPlaceId: (id: string) => void }) => <>
   <button onClick={() => onPoint({ latitude: 35, longitude: 139 })}>测试点选</button>
   <button onClick={() => onPoint({ latitude: 40, longitude: -74 })}>测试拖动</button>
+  <button onClick={() => onPlaceId("place-1")}>测试POI</button>
 </> }));
 
 function Harness({ initialTimezone = "" }: { initialTimezone?: string }) {
   const [point, setPoint] = useState<LocationPoint | null>(null);
   const [timezone, setTimezone] = useState(initialTimezone);
   const [address, setAddress] = useState("原地址");
+  const [googlePlace, setGooglePlace] = useState("");
   const [review, setReview] = useState(false);
   return <><input aria-label="当前时区" value={timezone} onChange={e => setTimezone(e.target.value)} />
     <input aria-label="当前地址" value={address} onChange={e => setAddress(e.target.value)} />
     <button disabled={review}>模拟保存</button>
+    <output aria-label="Google Place">{googlePlace}</output>
     <VenueLocationPicker venueId={1} venueName="Hall" csrf="csrf" disabled={false} point={point} savedPoint={null}
       timezone={timezone} address={address} locality={null} onPoint={setPoint} onTimezone={setTimezone}
-      onAddress={setAddress} onLocality={vi.fn()} onReview={setReview} />
+      onAddress={setAddress} onLocality={vi.fn()} onGooglePlace={place => setGooglePlace(place?.provider_place_id ?? "")} onReview={setReview} />
   </>;
 }
 function resolved(point: LocationPoint, id: string, zone = "Asia/Tokyo"): LocationResolution {
@@ -29,8 +32,12 @@ function resolved(point: LocationPoint, id: string, zone = "Asia/Tokyo"): Locati
 }
 beforeEach(() => {
   vi.clearAllMocks();
-  api.getGeographyCapabilities.mockResolvedValue({ tile_url: "https://tile.test/{z}/{x}/{y}", attribution: "OSM", geocoding: true, timezone: true });
+  api.getGeographyCapabilities.mockResolvedValue({ google_maps_browser_api_key: "browser-key", geocoding: true, timezone: true });
   api.resolveGeography.mockImplementation((point: LocationPoint, _parts: string, id: string) => Promise.resolve(resolved(point, id)));
+  api.resolveGooglePlace.mockResolvedValue({ status: "ready", message: null, attribution: "Google Maps", attribution_url: "https://maps.google.com/",
+    items: [{ name: "Google Hall", address: "Google address", latitude: 35.1, longitude: 139.1, country_code: "JP",
+      admin_area: "東京都", locality_name: null, provider_place_id: "place-1",
+      provider_url: "https://www.google.com/maps/search/?api=1&query_place_id=place-1" }] });
 });
 
 // 测试点：地图配置失败结束加载提示，不阻止手工维护。
@@ -44,7 +51,9 @@ test("configuration failure does not leave a permanent loading state", async () 
 
 // 测试点：无旧坐标可搜索，搜索不默选；点选后自动设置坐标对应的时区。
 test("search without saved coordinates and fill an empty timezone", async () => {
-  api.searchGeography.mockResolvedValue({ status: "ready", message: null, items: [{ name: "Hall", address: "address", latitude: 35, longitude: 139 }] });
+  api.searchGeography.mockResolvedValue({ status: "ready", message: null, attribution: "Google Maps", attribution_url: "https://maps.google.com/",
+    items: [{ name: "Hall", address: "address", latitude: 35, longitude: 139, country_code: "JP", admin_area: null,
+      locality_name: null, provider_place_id: "place-1", provider_url: "https://www.google.com/maps/search/?api=1&query_place_id=place-1" }] });
   render(<Harness />);
   await waitFor(() => expect(screen.getByRole("button", { name: "搜索位置" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "搜索位置" }));
@@ -53,6 +62,16 @@ test("search without saved coordinates and fill an empty timezone", async () => 
   fireEvent.click(screen.getByRole("button", { name: "选择此位置" }));
   await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue("Asia/Tokyo"));
   expect(screen.getByRole("button", { name: "模拟保存" })).toBeEnabled();
+});
+
+// 测试点：点击 Google POI 后直接采用 Place Details 的地址、坐标和场馆链接，不弹出冲突选择。
+test("POI click directly fills Google place data", async () => {
+  render(<Harness />);
+  fireEvent.click(await screen.findByRole("button", { name: "测试POI" }));
+  await waitFor(() => expect(screen.getByLabelText("Google Place")).toHaveTextContent("place-1"));
+  expect(screen.getByLabelText("当前地址")).toHaveValue("Google address");
+  await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue("Asia/Tokyo"));
+  expect(api.resolveGooglePlace).toHaveBeenCalledWith("place-1", expect.stringMatching(/^place-1-/), "csrf", expect.any(AbortSignal));
 });
 
 // 测试点：坐标解析成功后直接覆盖已有时区，不要求用户处理冲突提示。
@@ -99,8 +118,9 @@ test("address suggestions cannot overwrite an intervening edit", async () => {
   fireEvent.click(screen.getByRole("button", { name: "解析此位置" }));
   fireEvent.change(screen.getByLabelText("当前地址"), { target: { value: "手工纠正" } });
   await act(async () => finish?.({ ...resolved({ latitude: 35, longitude: 139 }, requestId), address: {
-    status: "ready", message: null, attribution: "OSM", attribution_url: "https://www.openstreetmap.org/copyright",
-    items: [{ name: "Hall", address: "附近地址", latitude: 35, longitude: 139, country_code: "JP", admin_area: null, locality_name: null }],
+    status: "ready", message: null, attribution: "Google Maps", attribution_url: "https://maps.google.com/",
+    items: [{ name: "Hall", address: "附近地址", latitude: 35, longitude: 139, country_code: "JP", admin_area: null,
+      locality_name: null, provider_place_id: null, provider_url: null }],
   } }));
   expect(screen.getByRole("button", { name: "采用地址建议" })).toBeDisabled();
   expect(screen.getByText(/不会自动新增地区/)).toBeInTheDocument();

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { getAuthMe, login, logout, type AuthUser } from "../api";
 import { logError } from "../logger";
+import { resetGoogleMapSession } from "../components/console/googleMapsSession";
 
 type AuthContextValue = {
   isLoading: boolean;
@@ -118,11 +119,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       logout: async () => {
         await logout(state.csrfToken);
+        resetGoogleMapSession();
         setState(anonymousState);
       },
       refreshSession: async () => {
         const payload = await getAuthMe();
         if (!payload.authenticated) {
+          resetGoogleMapSession();
           setState(anonymousState);
           return;
         }
@@ -134,7 +137,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }),
         );
       },
-      setAnonymous: () => setState(anonymousState),
+      setAnonymous: () => {
+        resetGoogleMapSession();
+        setState(anonymousState);
+      },
     };
   }, [state]);
 

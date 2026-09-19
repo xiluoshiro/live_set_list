@@ -1,6 +1,6 @@
 # Venue 地图点选、拖动与自动解析方案
 
-本方案包含点选、拖动、名称定位、地址建议和离线 IANA 解析。本方案承接现有 Venue 位置编辑、地图关联及 IANA 回填，不新增业务版本体系。
+本方案包含 Google Maps 点选、拖动、Places 名称定位、地址建议、Google Place 关联和离线 IANA 解析。本方案承接现有 Venue 位置编辑、地图关联及 IANA 回填，不新增业务版本体系。
 
 ## 目标与完成口径
 
@@ -10,7 +10,7 @@
 
 - 正式更名才新增名称历史版本；真实搬迁新建 Venue。地址、坐标、地区、时区的补录和纠错不产生版本。
 - 地图调整不修改场馆名称，不增减名称历史，不自动改写既有 Live 的时区快照或排期。
-- 已保存的 Google／Apple／高德 POI 关联保持有效，只能通过明确的关联修改／取消入口处理。位置调整不自动重建或作废关联。
+- 已保存的 Apple／高德 POI 关联保持有效，只能通过明确的关联修改／取消入口处理。Google POI 点击或搜索候选会更新 Google Place 关联草稿，并与位置资料一起预览和保存。
 - physical 才显示精确选点；online 不登记实体地理资料，undisclosed 仅登记已公布地区。
 - 不要求记录入口／建筑中心等坐标口径，不增加核验来源、来源链接或自由说明表单。技术来源仅用于解析响应、必要诊断和归属标识。
 
@@ -20,8 +20,8 @@
 |---|---|
 | `frontend/src/components/console/VenueLocationPanel.tsx` | 已有坐标输入、地区选择、IANA、预览确认；增加可折叠地图与解析建议 |
 | `backend/app/routers/console_geography.py` | 保留 location-preview、location 保存和 expected_state_token；增加只读查询接口 |
-| `backend/app/map_providers.py` | 现有三平台候选主要用于 POI 关联；不将它们的坐标一律当作可跨底图使用的主数据 |
-| `backend/app/geography.py` | 已校验 IANA、计算夏令时；尚无坐标到时区边界查询 |
+| `backend/app/map_providers.py` | Google Places 同时提供地图搜索与 Google POI 关联；Apple／高德候选继续用于各自关联 |
+| `backend/app/geography.py` | 已校验 IANA、计算夏令时；`timezonefinder` 已从 WGS84 坐标解析 IANA |
 | 地图候选搜索 | 目前要求已保存坐标，不能解决新场馆首次定位；新增独立的名称／地址定位查询 |
 | `venue_list` 与 `geo_localities` | 现有列足够；首期不需要 schema migration、PostGIS 或预装全球地区库 |
 
@@ -29,23 +29,21 @@
 
 ## 技术方案
 
-建议首期采用以下组合，不同时开发三套交互地图。
+采用以下唯一组合，不保留 OSM、Leaflet、Nominatim 或多 Provider 底图分支。
 
 | 能力 | 建议实现 | 边界 |
 |---|---|---|
-| 交互地图 | Leaflet 稳定版本，React 内封装一个按需加载的组件 | 只需单标记、点击、拖动、缩放；暂不引入 3D 或路线能力 |
-| 底图 | 可配置 OSM 兼容栅格底图；本地低频验证可使用符合政策的 OSM 标准瓦片 | 底图 URL、归属文本、缩放范围可替换，不硬编码为不可替换依赖 |
-| 名称定位与逆地理编码 | 服务端 Nominatim 兼容适配器 | 查询和返回地址都是候选；无结果不伪造完整地址 |
+| 交互地图 | Google Maps JavaScript API | 只需单标记、点击、拖动、缩放；暂不引入 3D 或路线能力 |
+| 名称定位与逆地理编码 | 服务端 Google Places API (New) 与 Geocoding API | 查询和返回地址都是候选；无结果不伪造完整地址 |
 | 坐标到时区 | 服务端 `timezonefinder` 陆地区域查询，结合现有 `zoneinfo` 校验 | 不向商业时区 API 逐次付费；不把海洋固定偏移区当场馆 IANA |
-| 已有三平台 POI | 保持现有人工搜索、确认与外链功能 | 不因加入底图而自动关联，不把受限平台结果直接叠加到 OSM 底图 |
+| Google POI | 地图 POI 点击或 Places 搜索结果提供 Place ID、名称、地址、坐标和 Maps URI | 新增 Venue 可预填名称；已有 Venue 不绕过名称历史自动更名 |
+| Apple／高德 POI | 保持现有人工搜索、确认与外链功能 | 不从 Google 坐标静默重建其他平台关联 |
 
-Leaflet 提供点击事件和可拖动 Marker；地图显示投影与业务经纬度分开处理。采用 WGS84 经纬度作为接口值，不传瓦片像素或 EPSG:3857 米制值。[Leaflet 官方参考](https://leafletjs.com/reference.html)
+Google Maps JavaScript API 在管理员首次展开地图时按需加载。浏览器 Key 会出现在浏览器请求中，不能作为秘密；必须与服务端 Key 分离，并同时限制为生产／本地域名及 Maps JavaScript API。服务端 Key 只在后端调用 Places 与 Geocoding，使用服务器出口 IP 和 API 限制，不返回客户端。
 
-OSM 标准瓦片只按当前视口加载，显示归属，遵守缓存规则，不实现离线下载或批量预取；若不可用保留坐标表单。瓦片服务是可替换配置。[瓦片使用政策](https://operations.osmfoundation.org/policies/tiles/)
+地图实例由已登录页面内的单例会话模块持有。首次展开时创建，收起、搜索、解析、切换 Venue 和保存后只移动同一个地图 DOM，并更新视口、Marker 与当前草稿回调，不销毁实例；退出登录或登录态失效时销毁。浏览器刷新会清空 JavaScript 内存，即使 HttpOnly 登录 Cookie 仍有效，再次展开仍会产生新的地图加载。
 
-公共 Nominatim 仅作低频管理工具的可选入口：名称搜索通过点击按钮触发，不做输入联想；应用整体限速不超过每秒一次，标识应用、缓存重复查询，并可切换服务。多进程必须共享节流器，不能仅在每个 worker 各自限速；无法共享时禁用公共端点自动请求。[Nominatim 使用政策](https://operations.osmfoundation.org/policies/nominatim/)
-
-逆地理编码可能返回附近可检索对象的地址，不能当成坐标所属建筑的精确门牌。行政层级建议使用结构化返回，避免拆分 display_name 推断地区。[Nominatim Reverse 文档](https://nominatim.org/release-docs/latest/api/Reverse/)
+Google POI 图标点击会提供 Place ID；搜索候选也包含 Place ID。后端只请求当前流程需要的名称、格式化地址、坐标和 Google Maps URI。普通地图位置点击没有 Place ID 时只更新坐标并按需逆地理，不伪造场馆身份，也不偷偷触发 Nearby Search。
 
 `timezonefinder` 的 `timezone_at_land` 可避免返回海洋时区。实现时固定兼容 Python 3.12 的库与边界数据版本，校验安装体积、启动成本和内存；不在请求时下载数据。边界数据更新与 Venue 业务版本无关，更新数据包不能自动改写已保存 Venue 或 Live。[使用文档](https://timezonefinder.readthedocs.io/en/latest/1_usage.html)、[API 文档](https://timezonefinder.readthedocs.io/en/latest/4_api.html)、[边界数据项目](https://github.com/evansiroky/timezone-boundary-builder)
 
@@ -53,11 +51,11 @@ OSM 标准瓦片只按当前视口加载，显示归属，遵守缓存规则，�
 
 1. 先选已有 Venue，或沿用现有新增流程创建名称身份，再展开“所在地与地图”。不建立无名称的坐标对象，也不在地图组件中另造 Venue 创建接口。
 2. 已有坐标：居中显示已保存点。无坐标：显示概览视图与“尚未选点”，可按名称＋地区／地址搜索；地图中心不视为选中坐标。
-3. 名称搜索返回有限数量候选，显示名称、地址、地区和定位按钮。管理员主动选择候选，才生成草稿标记；不默认选第一项。名称查询不依赖旧坐标，视口／国家只作可选约束。
-4. 单击地图或拖动标记结束后更新草稿经纬度；拖动过程中只更新视觉位置。手工经纬度输入同步标记，并提供“回到已保存位置”。
+3. 名称搜索返回有限数量 Google Place 候选，显示名称、地址、地区和定位按钮。管理员主动选择候选后更新草稿坐标、地址和 Google Place 关联；新增 Venue 名称为空时同时预填 Google 名称。
+4. 单击 Google POI 时使用 Place ID 自动填充场地资料和 Google Maps 链接草稿；单击普通位置或拖动标记只更新草稿经纬度。手工经纬度输入同步标记，并提供“回到已保存位置”。
 5. 停止调整后自动查询本地 IANA 建议。地址／地区解析由“解析此位置”按钮触发，避免每次试拖都访问外部服务；若后续接入允许持续交互的服务，可配置拖动结束后解析，但仍必须限流。
 6. 展示解析结果。时区在成功解析后直接写入草稿并覆盖原草稿值；自动地址和地区仍先展示建议，用户选择后才进入草稿。
-7. 使用现有“预览修改 → 确认保存”流程提交草稿。预览列出原值、新值及差异；只有此步写数据库和通用 before/after 审计。
+7. 使用现有“预览修改 → 确认保存”流程提交草稿。预览列出原值、新值、Google Place 关联及差异；只有此步在同一事务写数据库和通用 before/after 审计。
 
 “自动解析”表示由坐标计算建议，不表示自动保存。名称和地址搜索是坐标的候选来源；解析结果不是场馆身份判定，也不是识别搬迁的算法。
 
@@ -71,7 +69,7 @@ OSM 标准瓦片只按当前视口加载，显示归属，遵守缓存规则，�
 - 查询失败不清空已保存值或用户输入。用户可重试、继续手工纠错或保持时区为空；遵守现有保存约束，不额外发明默认地区、`(0,0)` 或解析成功的 `+09:00`。
 - 时区解析成功后以当前坐标结果覆盖草稿；地址和地区的“采用建议”只修改对应字段，不覆盖编辑者在请求发出后手工改过的内容。
 - 保存失败或 409 保留草稿供对比，要求重新加载当前资料后重新预览；不自动取得新 token 并强行重试。
-- 切换 Venue、关闭面板、组件卸载时清理请求、监听和地图实例。保存成功以服务端回读数据刷新；名称历史与已保存 POI 关联不受影响。
+- 切换 Venue、关闭面板、组件卸载时清理请求和组件监听，地图实例移入隐藏停放节点等待复用；退出登录时才销毁实例。保存成功以服务端回读数据刷新。
 
 ## 地区、地址和时区的解析规则
 
@@ -94,26 +92,27 @@ OSM 标准瓦片只按当前视口加载，显示归属，遵守缓存规则，�
 - 接口统一明确字段 latitude、longitude，均须有限数、范围合法且成对存在，保存六位小数；不能依赖数组顺序猜测经纬度。跨日期变更线的显示经度需归一后再提交。
 - 第一切片只开放 WGS84 选点底图。Web Mercator 显示不到的极区不截断修改业务坐标，继续允许合法的手工经纬度；地图提示不可显示。
 - 不将 GCJ-02／BD-09 值直接作为 WGS84 保存；不把在错误坐标系底图上看到的位置当作误差校正。高德点选采集暂不纳入本期，后续须独立验证接口坐标契约及转换误差。
-- 三平台现有搜索继续用于各自 POI 关联。若未来要将供应商候选用于主坐标，应由适配器明确声明允许的用途、坐标系与转换能力，不由所选 Venue 地区或管理员点击确认来推定。
-- 保存地图拖动结果与保存平台 POI 是两个明确操作。新点不会自动成为任何平台地点 ID，也不会清理旧地点 ID。
+- Google Places 搜索候选明确提供 WGS84 坐标并可用于主坐标草稿；Apple／高德搜索继续只用于各自 POI 关联。
+- Google POI 点击或搜索候选形成 Google Place 关联草稿，并与位置资料一起预览保存。普通地图点不会自动成为平台地点 ID；坐标离开已选 POI 时清空旧 Google Place 草稿，避免把旧场馆链接绑定到新坐标。
 
 ## 接口与代码拆分（拟定）
 
 | 接口／模块 | 责任 |
 |---|---|
-| `GET /api/console/geography/capabilities` | 返回底图公开配置与搜索、逆地理、离线时区是否可用；不返回服务端密钥 |
+| `GET /api/console/geography/capabilities` | 返回受域名限制的浏览器 Key 与搜索、逆地理、离线时区可用性；绝不返回服务端 Key |
 | `POST /api/console/geography/search` | 名称／地址、可选国家和视口输入；输出 WGS84 候选及必要归属，不要求已有坐标 |
 | `POST /api/console/geography/resolve` | WGS84 点、request_id、parts 输入；parts 可为 timezone 或 address，分别返回状态、建议、当前点与归属 |
-| 现有 location-preview／location | 仍是唯一的场馆位置预览和保存路径，保留 expected_state_token 校验 |
-| `VenueLocationMap.tsx` | Leaflet 生命周期、标记交互、手输同步和地图加载失败处理 |
-| `geocoding.py` | 定位搜索、逆地理接口、限流、缓存和地区候选归一 |
+| 现有 location-preview／location | 场馆位置和 Google Place 关联的统一预览／保存路径，保留 expected_state_token 校验 |
+| `googleMapsSession.ts` | 已登录页面内的 SDK、地图实例、Marker、停放节点和活动草稿回调生命周期 |
+| `VenueLocationMap.tsx` | 复用会话地图实例，处理显示、点击、拖动和 POI Place ID |
+| `geocoding.py` | Google Places 搜索、Place Details、逆地理、缓存和地区候选归一 |
 | `timezone_lookup.py` | 初始化一个可复用的离线查询器、IANA 校验和异常转换 |
 
-resolve 响应的 address 与 timezone 各自包含 `status`（ready／not_found／unavailable／not_requested）与可空建议，允许部分成功。地区候选引用已有 locality_id；第三方坐标返回到客户端前须校验。语法错误返回 422，限流返回 429 并提示重试时间，服务端不可用返回清晰状态，不伪装为空结果。
+resolve 响应的 address 与 timezone 各自包含 `status`（ready／not_found／unavailable／not_requested）与可空建议，允许部分成功。地区候选引用已有 locality_id；第三方坐标返回到客户端前须校验。语法错误返回 422；Google 限流或服务失败返回 unavailable 和明确文案，不伪装为空结果。
 
 接口限 editor+ 会话使用；新增 POST 依项目约定校验 CSRF。只读解析不能写 Venue、地区、地图关联、Live 或名称历史。外部请求不占用数据库写事务；后端配置允许的服务地址，不接收客户端任意 URL。缓存按解析类型、坐标／查询、语言和服务配置区分，失败不长期缓存；外部正文、凭据不写审计。
 
-前端动态加载 Leaflet 及其样式，只影响地图区域。复用现有表单、提示、确认对话框和 console 样式；地图弹层层级不得盖住确认对话框。窄屏固定适当地图高度，保留归属文字、缩放按钮、经纬度输入；键盘用户可通过输入坐标完成全部操作。
+前端动态加载 Google Maps JavaScript API，只影响地图区域。复用现有表单、提示、确认对话框和 console 样式；地图弹层层级不得盖住确认对话框。窄屏固定适当地图高度，保留 Google 归属、缩放按钮和经纬度输入；键盘用户可通过搜索或输入坐标完成全部操作。
 
 ## 实施顺序与本地验收
 
@@ -131,28 +130,27 @@ resolve 响应的 address 与 timezone 各自包含 `status`（ready／not_found
 - 修订兼容字段、名称版本数量及 Live 事实在资料纠错后不变；已确认的 POI 链接仍有效；另一个编辑者保存后旧 token 返回 409。
 - 外部请求超时、429、恶意／超长文本、缺失字段、反转经纬度及非法数字的处理有契约测试。外部服务不可用与结果为空分开显示。
 - 共享限流在两个客户端并发时仍符合服务额度；公共端点不发输入联想或批量任务。
-- 使用固定解析桩和真实离线数据做自动测试，不依赖在线地图服务稳定性；另在本地浏览器验证真实瓦片、至少一次真实定位／逆地理请求和归属展示。浏览器通过仅验证本地交互，不替代自动回归。
+- 使用固定 Google 响应桩和真实离线时区数据做自动测试，不依赖在线地图服务稳定性；另在本地浏览器验证真实地图、POI 点击、定位／逆地理请求和 Google 归属展示。浏览器通过仅验证本地交互，不替代自动回归。
 
 实现修改业务代码后按根目录要求以 `python scripts/run_checks.py functional` 作最终自动验证。交互画布的自动测试验证事件和状态契约，不替代浏览器视觉验收。
 
 ## 组件与服务实现
 
-- “所在地与地图”新增“地图选点与自动解析”入口，沿用已有表单、按钮、提示和最终预览确认。Leaflet 1.9.4 按需加载；地图画布新增局部样式，没有另建保存流程。
+- “所在地与地图”沿用现有“地图选点与自动解析”入口、表单、按钮、提示和最终预览确认。Google SDK 首次展开时按需加载，地图实例在同一已登录页面中长效复用，没有另建保存流程。
 - 新增 geography/capabilities、search、resolve 接口；editor+ 权限，POST 校验 CSRF。解析不写业务表，已有地区仅给候选，不自动登记。位置保存继续使用原 state_token 并发保护。
 - 自动时区查询采用 timezonefinder 8.2.0 的本地陆地边界数据；地址服务通过“解析此位置”主动触发。成功解析的时区直接覆盖草稿；查询期间手工改过的地址不允许直接覆盖。
-- 地址服务使用同机 SQLite 共享节流与缓存：请求间隔至少 1.1 秒，缓存 24 小时、最多 256 个查询，网络超时 8 秒、响应最大 256 KiB；上游 429 会延长共享冷却期。缓存独立于业务数据库，不新增 Flyway 迁移。
+- Google 服务端查询使用同机 SQLite 缓存：缓存 24 小时、最多 256 个查询，网络超时 8 秒、响应最大 256 KiB；上游错误返回明确不可用状态。缓存独立于业务数据库，不新增 Flyway 迁移。
 
-### 可选配置
+### 配置
 
 | 环境变量 | 默认及用途 |
 |---|---|
-| `VENUE_MAP_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png`，底图模板；空值关闭底图 |
-| `VENUE_MAP_ATTRIBUTION` | `© OpenStreetMap contributors`，底图归属文字；当前归属链接指向 OSM copyright，首期使用 OSM 兼容底图 |
-| `VENUE_GEOCODING_URL` | `https://nominatim.openstreetmap.org`，受信任的 HTTPS Nominatim 服务；空值关闭在线解析 |
-| `VENUE_GEOCODING_CACHE_PATH` | 系统临时目录中的 `livesetlist-geocoding.sqlite3`；同一服务的所有 worker 须使用同一个可写文件 |
+| `GOOGLE_MAPS_BROWSER_API_KEY` | Maps JavaScript API 浏览器 Key；前端可见，必须限制允许域名和 API |
+| `GOOGLE_MAPS_SERVER_API_KEY` | Places API (New) 与 Geocoding API 服务端 Key；只允许服务器出口 IP和所需 API，不返回客户端 |
+| `GOOGLE_MAPS_CACHE_PATH` | 系统临时目录中的 `livesetlist-google-maps.sqlite3`；同一服务的所有 worker 使用同一个可写文件 |
 
-配置不填密钥也能使用首期低频查询。网络或底图失败时保留手工坐标／地址入口；离线时区仍可独立工作。共享缓存不可写时在线解析返回 unavailable，不绕开限流继续请求。
+本地真实配置放在被忽略的 `infra/maps/.env.maps`，样例提交为 `infra/maps/.env.maps.example`；远程配置放在 `/etc/livesetlist/backend.env`。任一 Google Key 缺失或 Google 服务失败时明确显示不可用，只保留手工坐标／地址和离线时区，不切换其他地图或地理服务。
 
 ## 首期不纳入
 
-三套地图 SDK 同时接入、自动批量关联 POI、自动识别搬迁、自动新增行政地区、路线规划、用户实时定位、地图聚合统计、全球离线瓦片，以及既有 Live 的时区重写。
+Apple／高德交互地图、自动批量关联 POI、普通地图点的隐式 Nearby Search、自动识别搬迁、自动新增行政地区、路线规划、用户实时定位、地图聚合统计，以及既有 Live 的时区重写。

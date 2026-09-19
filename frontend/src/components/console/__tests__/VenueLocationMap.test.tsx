@@ -1,52 +1,80 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { VenueLocationMap } from "../VenueLocationMap";
+import { resetGoogleMapSession } from "../googleMapsSession";
 
 const fake = vi.hoisted(() => {
   const handlers: Record<string, (event?: unknown) => void> = {};
-  const map = { setView: vi.fn(), remove: vi.fn(), invalidateSize: vi.fn(), getBounds: () => ({ contains: () => true }), getZoom: () => 16,
-    on: vi.fn((event: string, handler: (event?: unknown) => void) => { handlers[event] = handler; }) };
-  const marker = { addTo: vi.fn(), setLatLng: vi.fn(), remove: vi.fn(), dragging: { enable: vi.fn(), disable: vi.fn() },
-    on: vi.fn((event: string, handler: (event?: unknown) => void) => { handlers[event] = handler; }),
-    getLatLng: () => ({ wrap: () => ({ lat: 35.12345678, lng: -179.98765432 }) }) };
-  marker.addTo.mockReturnValue(marker);
-  const tile = { on: vi.fn(), addTo: vi.fn() }; tile.on.mockReturnValue(tile);
-  return { handlers, map, marker, tile, makeMarker: vi.fn(() => marker), makeMap: vi.fn(() => map) };
+  const map = {
+    addListener: vi.fn((name: string, handler: (event?: unknown) => void) => {
+      handlers[`map:${name}`] = handler;
+      return { remove: vi.fn() };
+    }),
+    getBounds: () => ({ contains: () => true }),
+    getZoom: () => 16,
+    setCenter: vi.fn(),
+    setZoom: vi.fn(),
+  };
+  const marker = {
+    addListener: vi.fn((name: string, handler: () => void) => {
+      handlers[`marker:${name}`] = handler;
+      return { remove: vi.fn() };
+    }),
+    getPosition: () => ({ lat: () => 35.12345678, lng: () => -179.98765432 }),
+    setDraggable: vi.fn(),
+    setMap: vi.fn(),
+    setPosition: vi.fn(),
+  };
+  return { handlers, map, marker, makeMap: vi.fn(() => map), makeMarker: vi.fn(() => marker) };
 });
-vi.mock("leaflet", () => ({ map: fake.makeMap, marker: fake.makeMarker, tileLayer: () => fake.tile, divIcon: vi.fn() }));
-const config = { tile_url: "https://tile.test/{z}/{x}/{y}", attribution: "OSM", geocoding: true, timezone: true };
-beforeEach(() => { vi.clearAllMocks(); Object.keys(fake.handlers).forEach(key => delete fake.handlers[key]); });
 
-// 测试点：地图中心不等于已选坐标，点选和拖动传递六位 WGS84；禁用和卸载正确清理。
-test("click and drag emit a draft point and respect disabled state", async () => {
+const config = { google_maps_browser_api_key: "browser-key", geocoding: true, timezone: true };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  Object.keys(fake.handlers).forEach(key => delete fake.handlers[key]);
+  window.google = {
+    maps: {
+      Map: fake.makeMap,
+      Marker: fake.makeMarker,
+      event: { trigger: vi.fn() },
+    },
+  } as unknown as NonNullable<typeof window.google>;
+});
+afterEach(() => {
+  resetGoogleMapSession();
+  delete window.google;
+});
+
+// 测试点：普通地图点击和标记拖动输出六位 WGS84，Google POI 点击只交付 Place ID。
+test("map point, POI and drag events use the expected selection paths", async () => {
   const onPoint = vi.fn();
-  const view = render(<VenueLocationMap config={config} point={null} disabled={false} onPoint={onPoint} />);
-  await waitFor(() => expect(fake.handlers.click).toBeDefined());
-  expect(onPoint).not.toHaveBeenCalled();
+  const onPlaceId = vi.fn();
+  const view = render(<VenueLocationMap config={config} point={null} disabled={false} onPoint={onPoint} onPlaceId={onPlaceId} />);
+  await waitFor(() => expect(fake.handlers["map:click"]).toBeDefined());
   expect(screen.getByText(/尚未选点/)).toBeInTheDocument();
-  act(() => fake.handlers.click({ latlng: { lat: 35.12345678, wrap: () => ({ lng: -179.98765432 }) } }));
+  act(() => fake.handlers["map:click"]({ latLng: { lat: () => 35.12345678, lng: () => -179.98765432 } }));
   expect(onPoint).toHaveBeenLastCalledWith({ latitude: 35.123457, longitude: -179.987654 });
-  view.rerender(<VenueLocationMap config={config} point={{ latitude: 35, longitude: 139 }} disabled={false} onPoint={onPoint} />);
-  await waitFor(() => expect(fake.handlers.dragend).toBeDefined());
-  act(() => fake.handlers.dragend());
-  expect(onPoint).toHaveBeenCalledTimes(2);
-  view.rerender(<VenueLocationMap config={config} point={{ latitude: 35, longitude: 139 }} disabled={true} onPoint={onPoint} />);
-  act(() => fake.handlers.dragend());
-  expect(onPoint).toHaveBeenCalledTimes(2);
-  expect(fake.marker.dragging.disable).toHaveBeenCalled();
-  view.unmount();
-  expect(fake.map.remove).toHaveBeenCalledTimes(1);
+  const stop = vi.fn();
+  act(() => fake.handlers["map:click"]({ placeId: "place-1", stop }));
+  expect(onPlaceId).toHaveBeenCalledWith("place-1");
+  expect(stop).toHaveBeenCalled();
+
+  view.rerender(<VenueLocationMap config={config} point={{ latitude: 35, longitude: 139 }} disabled={false}
+    onPoint={onPoint} onPlaceId={onPlaceId} />);
+  await waitFor(() => expect(fake.handlers["marker:dragend"]).toBeDefined());
+  act(() => fake.handlers["marker:dragend"]());
+  expect(onPoint).toHaveBeenLastCalledWith({ latitude: 35.123457, longitude: -179.987654 });
 });
 
-// 测试点：手工坐标同步标记，极区坐标保持原值并隐藏无法显示的标记。
-test("manual input moves the marker and polar coordinates remain unchanged", async () => {
-  const onPoint = vi.fn();
-  const view = render(<VenueLocationMap config={config} point={{ latitude: 35, longitude: 139 }} disabled={false} onPoint={onPoint} />);
-  await waitFor(() => expect(fake.makeMarker).toHaveBeenCalled());
-  view.rerender(<VenueLocationMap config={config} point={{ latitude: 40, longitude: -74 }} disabled={false} onPoint={onPoint} />);
-  expect(fake.marker.setLatLng).toHaveBeenCalledWith([40, -74]);
-  view.rerender(<VenueLocationMap config={config} point={{ latitude: 89, longitude: 20 }} disabled={false} onPoint={onPoint} />);
-  expect(screen.getByText(/已保留输入坐标/)).toBeInTheDocument();
-  expect(fake.marker.remove).toHaveBeenCalled();
-  expect(onPoint).not.toHaveBeenCalled();
+// 测试点：组件收起后地图实例停放复用，重新展开不创建第二个 Dynamic Maps 实例。
+test("unmount and remount reuse one Google map instance", async () => {
+  const props = { config, point: null, disabled: false, onPoint: vi.fn(), onPlaceId: vi.fn() };
+  const first = render(<VenueLocationMap {...props} />);
+  await waitFor(() => expect(fake.makeMap).toHaveBeenCalledTimes(1));
+  first.unmount();
+  const second = render(<VenueLocationMap {...props} />);
+  await waitFor(() => expect(screen.getByRole("region", { name: "场馆位置地图" })).toBeInTheDocument());
+  expect(fake.makeMap).toHaveBeenCalledTimes(1);
+  second.unmount();
 });

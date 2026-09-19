@@ -1,11 +1,7 @@
 import json
-from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
-from urllib.error import HTTPError
-from email.message import Message
 
 import pytest
-from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app import geocoding
@@ -15,8 +11,8 @@ from app.timezone_lookup import lookup_timezone
 
 @pytest.fixture(autouse=True)
 def isolated_cache(tmp_path, monkeypatch):
-    monkeypatch.setenv("VENUE_GEOCODING_CACHE_PATH", str(tmp_path / "geocoding.sqlite3"))
-    monkeypatch.setenv("VENUE_GEOCODING_URL", "https://nominatim.openstreetmap.org")
+    monkeypatch.setenv("GOOGLE_MAPS_CACHE_PATH", str(tmp_path / "google-maps.sqlite3"))
+    monkeypatch.setenv("GOOGLE_MAPS_SERVER_API_KEY", "server-key")
 
 
 # 测试点：真实离线边界覆盖多地区、日期变更线与海洋，无网络或固定偏移兜底。
@@ -56,63 +52,59 @@ def provider_response(items):
     return response
 
 
-# 测试点：合法查询缓存复用、非法候选被过滤，搜索不会默选或写业务数据。
+# 测试点：Google Text Search 只保留完整地点，复用本地缓存并输出 Place ID 与官方链接。
 def test_search_cache_and_malformed_results():
-    items = [{"lat": "35", "lon": "139", "display_name": "東京都", "name": "Hall", "address": {"country_code": "jp", "state": "東京都"}},
-             {"lat": "nan", "lon": "139", "display_name": "invalid"}]
-    with patch("app.geocoding.urlopen", return_value=provider_response(items)) as network:
-        first = geocoding.geocode(query="Hall")
-        second = geocoding.geocode(query="Hall")
+    payload = {"places": [
+        {"id": "place-1", "displayName": {"text": "Hall"}, "formattedAddress": "東京都 1-1",
+         "location": {"latitude": 35, "longitude": 139}, "googleMapsUri": "https://maps.google.com/?cid=1",
+         "addressComponents": [{"longText": "日本", "shortText": "JP", "types": ["country"]},
+                               {"longText": "東京都", "shortText": "東京都", "types": ["administrative_area_level_1"]}]},
+        {"id": "bad", "displayName": {"text": "Bad"}, "formattedAddress": "Bad",
+         "location": {"latitude": "nan", "longitude": 139}},
+    ]}
+    with patch("app.geocoding.urlopen", return_value=provider_response(payload)) as network:
+        first = geocoding.geocode(query="Hall", country_code="JP")
+        second = geocoding.geocode(query="Hall", country_code="JP")
     assert first == second
     assert network.call_count == 1
     assert len(first["items"]) == 1
     assert first["items"][0]["country_code"] == "JP"
-    assert first["items"][0]["locality_name"] is None
+    assert first["items"][0]["provider_place_id"] == "place-1"
+    assert first["items"][0]["provider_url"] == "https://maps.google.com/?cid=1"
 
 
-# 测试点：独立连接并发共享同一查询额度，而非每个线程／worker 各自放行。
-def test_shared_rate_gate():
-    def reserve(index):
-        try:
-            geocoding._reserve("service", str(index))
-            return 200
-        except HTTPException as exc:
-            return exc.status_code
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(reserve, range(2)))
-    assert sorted(results) == [200, 429]
-
-
-# 测试点：上游限流延续至共享节流器，后续请求不继续冲击上游。
-def test_upstream_rate_limit():
-    headers = Message(); headers["Retry-After"] = "30"
-    with patch("app.geocoding.urlopen", side_effect=HTTPError("url", 429, "limit", headers, None)):
-        with pytest.raises(HTTPException) as caught:
-            geocoding.geocode(query="Hall")
-    assert caught.value.status_code == 429
-    with pytest.raises(HTTPException):
-        geocoding._reserve(geocoding.service_url(), "different query")
-
-
-# 测试点：过大或无效响应与无结果分开，服务失败仍允许手工填写。
-@pytest.mark.parametrize("body", [b"x" * (geocoding.MAX_BYTES + 1), b"not json", b"42"], ids=["oversized", "invalid-json", "scalar"])
+# 测试点：过大、无效或标量响应返回 unavailable，仍允许管理员手工填写。
+@pytest.mark.parametrize("body", [b"x" * (geocoding.MAX_BYTES + 1), b"not json", b"42"],
+                         ids=["oversized", "invalid-json", "scalar"])
 def test_bad_response_is_unavailable(body):
-    response = MagicMock(); response.__enter__.return_value.read.return_value = body
+    response = MagicMock()
+    response.__enter__.return_value.read.return_value = body
     with patch("app.geocoding.urlopen", return_value=response):
         assert geocoding.geocode(query="Hall")["status"] == "unavailable"
 
 
-# 测试点：逆地理无结果和国家级地址均可返回，不伪造门牌或城市。
-def test_reverse_empty_and_country_shape():
-    with patch("app.geocoding._query", return_value={}):
-        assert geocoding.geocode(latitude=0, longitude=0)["status"] == "not_found"
-    with patch("app.geocoding._query", return_value={"lat": 22.3, "lon": 114.1, "display_name": "香港", "address": {"country_code": "hk"}}):
-        result = geocoding.geocode(latitude=22.3, longitude=114.1)
-    assert result["items"][0]["locality_name"] is None
-
-
-# 测试点：非两位国家代码不会被截断成另一个有效国家并参与地区匹配。
-def test_country_code_is_not_truncated():
-    with patch("app.geocoding._query", return_value={"lat": 35, "lon": 139, "display_name": "Hall", "address": {"country_code": "jpn"}}):
+# 测试点：逆地理只返回地址与行政区，不把普通坐标伪装成 Google Place 关联。
+def test_reverse_address_has_no_place_link():
+    payload = {"results": [{
+        "formatted_address": "日本、東京都",
+        "geometry": {"location": {"lat": 35, "lng": 139}},
+        "address_components": [{"long_name": "日本", "short_name": "JP", "types": ["country"]}],
+    }]}
+    with patch("app.geocoding._request_json", return_value=payload):
         result = geocoding.geocode(latitude=35, longitude=139)
-    assert result["items"][0]["country_code"] is None
+    assert result["items"][0]["country_code"] == "JP"
+    assert result["items"][0]["provider_place_id"] is None
+    assert result["items"][0]["provider_url"] is None
+
+
+# 测试点：POI Place ID 详情解析返回保存所需的名称、地址、坐标和 Google Maps URI。
+def test_place_details_returns_complete_google_place():
+    payload = {
+        "id": "place-1", "displayName": {"text": "Test Hall"}, "formattedAddress": "1 Main St",
+        "location": {"latitude": 35, "longitude": 139}, "googleMapsUri": "https://maps.google.com/?cid=1",
+    }
+    with patch("app.geocoding._request_json", return_value=payload):
+        result = geocoding.place_details("place-1")
+    assert result["status"] == "ready"
+    assert result["items"][0]["name"] == "Test Hall"
+    assert result["items"][0]["provider_place_id"] == "place-1"
