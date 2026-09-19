@@ -329,7 +329,7 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
-  // 测试点：歌曲仅提供管理入口；场地后的地区管理为独立资料入口。
+  // 测试点：歌曲仅提供管理入口；场地后的新增地区为独立资料入口。
   test("控制台导航支持按资料类型切换", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel initialMode="live_create" />);
@@ -340,15 +340,17 @@ describe("ConsoleInsertPanel", () => {
     expect(within(content).getByRole("tab", { name: "歌曲管理" })).toHaveTextContent("管理");
     expect(within(content).queryByRole("tab", { name: "新增歌曲" })).not.toBeInTheDocument();
     expect(within(content).getAllByRole("tab").map((tab) => tab.getAttribute("aria-label"))).toEqual([
-      "新增演出", "演出管理", "新增歌单", "歌单管理", "歌曲管理", "巡演管理", "活动组管理", "乐队管理", "新增场地", "场地管理", "地区（管理）",
+      "新增演出", "演出管理", "新增歌单", "歌单管理", "歌曲管理", "巡演管理", "活动组管理", "乐队管理", "新增场地", "场地管理", "新增地区",
     ]);
 
     await user.click(within(content).getByRole("tab", { name: "场地管理" }));
     expect(within(content).getByRole("tab", { name: "场地管理" })).toHaveAttribute("aria-selected", "true");
 
-    await user.click(within(content).getByRole("tab", { name: "地区（管理）" }));
-    expect(within(content).getByRole("tab", { name: "地区（管理）" })).toHaveAttribute("aria-selected", "true");
-    expect(await screen.findByRole("region", { name: "地区管理" })).toBeInTheDocument();
+    await user.click(within(content).getByRole("tab", { name: "新增地区" }));
+    expect(within(content).getByRole("tab", { name: "新增地区" })).toHaveAttribute("aria-selected", "true");
+    expect(within(content).getByRole("tab", { name: "新增地区" })).toHaveTextContent("新增");
+    expect(within(content).getByRole("tab", { name: "新增地区" })).not.toHaveTextContent("管理");
+    expect(await screen.findByRole("region", { name: "新增地区" })).toBeInTheDocument();
 
     expect(screen.queryByRole("navigation", { name: "控制台工具" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "地理质量" })).not.toBeInTheDocument();
