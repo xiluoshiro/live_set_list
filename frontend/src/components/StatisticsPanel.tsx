@@ -86,7 +86,7 @@ export function StatisticsPanel(props: StatisticsPanelProps) {
           <article><strong>{data.overview.live_count}</strong><span>Live</span></article>
           <article><strong>{data.overview.song_count}</strong><span>演唱歌曲</span></article>
           <article><strong>{data.overview.band_count}</strong><span>参与乐队</span></article>
-          <article><strong>{data.overview.venue_count}</strong><span>场地</span></article>
+          <article><strong>{data.overview.venue_count}</strong><span>场馆</span></article>
         </div>
         <div className="statistics-grid">
           {filters.year ? <section className="statistics-card"><h2>{filters.year} 年收录情况</h2><ul className="statistics-dimension-list"><li><span>Setlist 覆盖</span><strong>{setlistCoverage}%（{data.overview.setlist_live_count} / {data.overview.live_count}）</strong></li><li><span>当年首场</span><strong>{data.overview.earliest_live_date ?? "-"}</strong></li><li><span>当年末场</span><strong>{data.overview.latest_live_date ?? "-"}</strong></li></ul></section> : <section className="statistics-card">

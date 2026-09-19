@@ -1,6 +1,6 @@
 ---
 name: 资料修正
-about: 报告 Live、乐队、场地、歌曲或 setlist 资料错误
+about: 报告 Live、乐队、场馆、歌曲或 setlist 资料错误
 title: "[Data] "
 labels: data
 assignees: ''
@@ -8,7 +8,7 @@ assignees: ''
 
 ## 资料对象
 
-- 类型：<!-- Live / 活动组 / 巡演 / 乐队 / 阵容 / 歌曲 / 场地 / setlist / 其他 -->
+- 类型：<!-- Live / 活动组 / 巡演 / 乐队 / 阵容 / 歌曲 / 场馆 / setlist / 其他 -->
 - 对象名称或页面链接：
 - 对象 ID（如果页面或 API 中可见）：
 - 发生日期（如适用）：

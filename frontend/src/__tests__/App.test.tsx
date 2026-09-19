@@ -233,7 +233,7 @@ function makePerformanceGroupDetailResponse(): PerformanceGroupDetailResponse {
     live_count: 2,
     display_type: "multi_day",
     bands: [{ band_id: 1, band_name: "Band 1", band_abbr: "B1" }],
-    venues: ["测试场地"],
+    venues: ["测试场馆"],
     lives: [
       {
         live_id: 801,
@@ -241,7 +241,7 @@ function makePerformanceGroupDetailResponse(): PerformanceGroupDetailResponse {
         live_title: "示例多日 Live DAY 1",
         live_type: "oneman",
         start_time: "18:00:00+09:00",
-        venue: "测试场地",
+        venue: "测试场馆",
         bands: [1],
         url: null,
         is_favorite: false,
@@ -253,7 +253,7 @@ function makePerformanceGroupDetailResponse(): PerformanceGroupDetailResponse {
         live_title: "示例多日 Live DAY 2",
         live_type: "oneman",
         start_time: "18:00:00+09:00",
-        venue: "测试场地",
+        venue: "测试场馆",
         bands: [1],
         url: null,
         is_favorite: false,
@@ -274,7 +274,7 @@ function makeDetailResponse(params: {
     live_date: "2026-03-28",
     live_title: `示例 Live 名称 ${params.liveId}`,
     live_type: "oneman",
-    venue: "测试场地",
+    venue: "测试场馆",
     opening_time: "17:00:00+08:00",
     start_time: "18:00:00+09:00",
     bands: [1, 2],
@@ -674,7 +674,7 @@ describe("App", () => {
   });
 
   test("首页数据概览展示真实指标数据", async () => {
-    // 测试点：首页指标卡片应展示 Live/乐队/歌曲/场地四项真实数据。
+    // 测试点：首页指标卡片应展示 Live/乐队/歌曲/场馆四项真实数据。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -684,7 +684,7 @@ describe("App", () => {
     expect(within(metrics).getByText("已收录 Live")).toBeInTheDocument();
     expect(within(metrics).getByText("乐队")).toBeInTheDocument();
     expect(within(metrics).getByText("歌曲")).toBeInTheDocument();
-    expect(within(metrics).getByText("场地")).toBeInTheDocument();
+    expect(within(metrics).getByText("场馆")).toBeInTheDocument();
     expect(within(metrics).getByText("17")).toBeInTheDocument();
     expect(within(metrics).getAllByText("3")).toHaveLength(2);
     expect(screen.queryByText("最新 Live 日期")).not.toBeInTheDocument();
@@ -1174,7 +1174,7 @@ describe("App", () => {
           live_count: 2,
           display_type: "multi_day",
           bands: [{ band_id: 1, band_name: "Band 1", band_abbr: "B1" }],
-          venues: ["测试场地"],
+          venues: ["测试场馆"],
         },
       }],
       pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
@@ -1204,7 +1204,7 @@ describe("App", () => {
           live_count: 2,
           display_type: "single_day_multi_show",
           bands: [{ band_id: 1, band_name: "Band 1", band_abbr: "B1" }],
-          venues: ["测试场地"],
+          venues: ["测试场馆"],
         },
       }],
       pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
@@ -1238,7 +1238,7 @@ describe("App", () => {
           live_count: 3,
           display_type: "multi_day",
           bands: [{ band_id: 1, band_name: "Band 1", band_abbr: "B1" }],
-          venues: ["测试场地"],
+          venues: ["测试场馆"],
         },
       }],
       pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
@@ -1796,7 +1796,7 @@ describe("App", () => {
     expect(screen.getByText("场馆")).toBeInTheDocument();
     expect(screen.getByText("17:00 (CST)")).toBeInTheDocument();
     expect(screen.getByText("18:00 (JST)")).toBeInTheDocument();
-    expect(screen.getByText("测试场地")).toBeInTheDocument();
+    expect(screen.getByText("测试场馆")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/1");
     expect(screen.getByText("曲目 1")).toBeInTheDocument();
     expect(getLiveDetailMock).toHaveBeenCalledWith(1);

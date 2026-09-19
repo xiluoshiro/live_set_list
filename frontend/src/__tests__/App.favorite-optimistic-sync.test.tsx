@@ -168,7 +168,7 @@ function makeDetailResponse(params: { liveId: number; rowCount?: number }): Live
     live_date: "2026-03-28",
     live_title: `示例 Live 名称 ${params.liveId}`,
     live_type: "oneman",
-    venue: "测试场地",
+    venue: "测试场馆",
     opening_time: "17:00:00+08:00",
     start_time: "18:00:00+09:00",
     bands: [1, 2],

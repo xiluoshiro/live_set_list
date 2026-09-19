@@ -45,10 +45,10 @@
 
 | # | 问题 | 精修设计对应条目 |
 |---|------|------|
-| F5 | 首页指标仍为 3 卡且 `350 / 90` 合并显示歌曲/场地；"最近更新"实际是最新 Live 日期，命名误导 | 3.2 / 7.2（应拆 4 卡并改名"最新 Live 日期"） |
+| F5 | 首页指标仍为 3 卡且 `350 / 90` 合并显示歌曲/场馆；"最近更新"实际是最新 Live 日期，命名误导 | 3.2 / 7.2（应拆 4 卡并改名"最新 Live 日期"） |
 | F6 | 移动端指标卡单列纵向堆叠，3 张高卡拉长首屏 | 3.1 / 7.2（手机应固定两列） |
 | F7 | 首页首屏标题仍为站点名，未改为任务导向的"查找 Live、曲目与出演记录"；搜索按钮为灰色次要样式，不是首屏主操作 | 7.2 |
-| F8 | 详情页元数据日期/开场/开演靠左、场地/类型甩到最右，分散两端；"返回"仍是危险色关闭式 `✕` | 3.1 / 3.4 / 7.6（应改为左箭头 + 返回语义、元数据响应式网格） |
+| F8 | 详情页元数据日期/开场/开演靠左、场馆/类型甩到最右，分散两端；"返回"仍是危险色关闭式 `✕` | 3.1 / 3.4 / 7.6（应改为左箭头 + 返回语义、元数据响应式网格） |
 | F9 | 浅色各页大面积粉色背景渐变，粉色同时承担背景、链接、按钮、选中态，主次偏弱 | 5.1（基础背景改中性浅灰蓝 `#f7f8fc`，粉色收敛为点缀） |
 | F10 | 视图切换（卡片/表格）是 PageTitle 右侧的单个 30×28px 字符图标按钮（`▦` / `☷`），发现性差，移动端同样不明显 | 7.3 工具栏统一时可一并处理 |
 
@@ -132,7 +132,7 @@ python scripts/run_checks.py functional
 
 ### 令牌与首页／详情结构
 
-- **F5** `HomeDashboard.tsx` 3 卡→4 卡（Live/乐队/歌曲/场地，stats 已含 `band_count` 无需改 API）；`latest_live_date` 从"最近更新"卡改为概览下方独立"最新 Live 日期"行。
+- **F5** `HomeDashboard.tsx` 3 卡→4 卡（Live/乐队/歌曲/场馆，stats 已含 `band_count` 无需改 API）；`latest_live_date` 从"最近更新"卡改为概览下方独立"最新 Live 日期"行。
 - **F6** `home-dashboard.css` `.home-metrics` 4 列；≤900px 与 ≤620px 固定 2 列。
 - **F7** 首屏标题 `BanG Dream! Live 资料库`→`查找 Live、曲目与出演记录`（品牌名保留顶栏 `site-title`）；`.home-search-row button` 由灰次样式改主操作（粉底白字 + hover 用 `--accent-primary-hover`）。
 - **F8** `LiveDetailPage`/`PerformanceGroupDetailPage`/`TourDetailPage` 三处返回按钮 `✕`→`←`、去危险色；`detail-modal.css` `.detail-meta-line` flex→响应式 grid（`auto-fit minmax(140px,1fr)`），去掉 `.detail-inline-item-venue` 的 `margin-left:auto` 分散。返回按钮样式见下方“返回按钮与查询卡片”。

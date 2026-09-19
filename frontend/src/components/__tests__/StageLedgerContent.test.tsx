@@ -153,8 +153,8 @@ describe("StageLedgerContent", () => {
     expect(await screen.findByRole("button", { name: "选择日本武道館的地图" })).toBeInTheDocument();
   });
 
-  // 测试点：线上和未公开场地只显示文本，不提供无意义的详情或地图入口。
-  test("非实体场地不提供详情和地图入口", () => {
+  // 测试点：线上和未公开场馆只显示文本，不提供无意义的详情或地图入口。
+  test("非实体场馆不提供详情和地图入口", () => {
     renderStage(makeDetail({ venue_kind: "online", venue: "Online Streaming" }), { onOpenVenue: vi.fn() });
 
     expect(screen.getByText("Online Streaming")).toBeInTheDocument();
@@ -326,12 +326,12 @@ describe("StageLedgerContent", () => {
     // 测试点：cancelled 路径只展示可核对的状态资料，不渲染可误解为已发生的演出流程；正文固定为“本场演出已取消。”，原因以小字展示，且不再出现小字“取消”。
     const onToggleFavorite = vi.fn();
     renderStage(
-      makeDetail({ event_status: "cancelled", status_note: "因场地原因取消" }),
+      makeDetail({ event_status: "cancelled", status_note: "因场馆原因取消" }),
       { canFavorite: true, onToggleFavorite },
     );
 
     expect(screen.getByRole("heading", { name: "本场演出已取消。" })).toBeInTheDocument();
-    expect(screen.getByText("取消原因：因场地原因取消")).toBeInTheDocument();
+    expect(screen.getByText("取消原因：因场馆原因取消")).toBeInTheDocument();
     expect(screen.queryByText("取消")).not.toBeInTheDocument();
     expect(screen.queryByText("Song One")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument();

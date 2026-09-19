@@ -105,7 +105,7 @@ describe("VenueAdminSection", () => {
     apiMocks.getConsoleTimezones.mockResolvedValue(["Asia/Tokyo"]);
   });
 
-  // 测试点：场地管理只读取当前分页，并提供搜索和翻页入口，避免一次加载全部 Venue。
+  // 测试点：场馆管理只读取当前分页，并提供搜索和翻页入口，避免一次加载全部 Venue。
   test("loads a searchable paginated Venue selector", async () => {
     const user = userEvent.setup();
     renderSection();
@@ -116,10 +116,10 @@ describe("VenueAdminSection", () => {
     const history = await screen.findByRole("table", { name: "Venue 历史名称" });
     expect(history).toHaveTextContent("First Hall");
     expect(within(history).queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("搜索场地")).toBeInTheDocument();
-    expect(screen.getByText(/共 2 个场地/)).toBeInTheDocument();
+    expect(screen.getByLabelText("搜索场馆")).toBeInTheDocument();
+    expect(screen.getByText(/共 2 个场馆/)).toBeInTheDocument();
     expect(apiMocks.getConsoleVenuePage).toHaveBeenCalledWith("", 1, 20);
-    await user.type(screen.getByLabelText("搜索场地"), "First");
+    await user.type(screen.getByLabelText("搜索场馆"), "First");
     await user.click(screen.getByRole("button", { name: "查询" }));
     await waitFor(() => expect(apiMocks.getConsoleVenuePage).toHaveBeenLastCalledWith("First", 1, 20));
   });
@@ -137,7 +137,7 @@ describe("VenueAdminSection", () => {
     expect(apiMocks.getConsoleVenue).toHaveBeenLastCalledWith(2);
   });
 
-  // 测试点：新增场地是独立页面，确认前不写入，提交后刷新其它场地候选数据。
+  // 测试点：新增场馆是独立页面，确认前不写入，提交后刷新其它场馆候选数据。
   test("creates only after confirmation in the create variant", async () => {
     const user = userEvent.setup();
     apiMocks.createConsoleVenue.mockResolvedValue({ ok: true, item: { venue_id: 3, venue_name: "Third Hall" } });
@@ -145,14 +145,14 @@ describe("VenueAdminSection", () => {
     const onVenuesChanged = vi.fn().mockResolvedValue(undefined);
     renderSection(onMessage, onVenuesChanged, "create");
 
-    const createBlock = screen.getByRole("region", { name: "新增场地" });
+    const createBlock = screen.getByRole("region", { name: "新增场馆" });
     if (!createBlock) throw new Error("missing create block");
     await user.type(within(createBlock).getByLabelText("名称"), "Third Hall");
     await user.selectOptions(within(createBlock).getByLabelText("类型"), "undisclosed");
     await user.click(within(createBlock).getByRole("button", { name: "提交插入" }));
     expect(apiMocks.createConsoleVenue).not.toHaveBeenCalled();
-    const dialog = screen.getByRole("dialog", { name: "确认新增场地" });
-    expect(within(dialog).getByRole("table", { name: "新增场地确认" })).toHaveTextContent("未公开");
+    const dialog = screen.getByRole("dialog", { name: "确认新增场馆" });
+    expect(within(dialog).getByRole("table", { name: "新增场馆确认" })).toHaveTextContent("未公开");
     await user.click(within(dialog).getByRole("button", { name: "提交插入" }));
 
     await waitFor(() => expect(apiMocks.createConsoleVenue).toHaveBeenCalledWith("Third Hall", "csrf-token", "undisclosed", expect.objectContaining({ locality_id: null, address: null })));
@@ -168,13 +168,13 @@ describe("VenueAdminSection", () => {
     renderSection();
     await screen.findByRole("table", { name: "Venue 历史名称" });
 
-    const kindBlock = screen.getByRole("heading", { name: "当前场地资料" }).closest(".tour-admin-block") as HTMLElement | null;
+    const kindBlock = screen.getByRole("heading", { name: "当前场馆资料" }).closest(".tour-admin-block") as HTMLElement | null;
     if (!kindBlock) throw new Error("missing kind block");
     await user.selectOptions(within(kindBlock).getByLabelText("类型"), "online");
     await user.click(within(kindBlock).getByRole("button", { name: "保存修改" }));
     expect(apiMocks.updateConsoleVenueKind).not.toHaveBeenCalled();
-    let dialog = screen.getByRole("dialog", { name: "确认修改场地类型" });
-    expect(within(dialog).getByRole("table", { name: "场地类型变化确认" })).toHaveTextContent("实体场馆");
+    let dialog = screen.getByRole("dialog", { name: "确认修改场馆类型" });
+    expect(within(dialog).getByRole("table", { name: "场馆类型变化确认" })).toHaveTextContent("实体场馆");
     await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
     await waitFor(() => expect(apiMocks.updateConsoleVenueKind).toHaveBeenCalledWith(1, "online", "csrf-token"));
 

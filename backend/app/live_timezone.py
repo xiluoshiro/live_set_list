@@ -48,10 +48,10 @@ def normalize_live_times(cur: Any, *, live_date: date, venue_id: int | None,
                          announced_locality_id: int | None, offset: str | None,
                          opening_time: str | None, start_time: str | None) -> tuple[str | None, str | None]:
     if venue_id is not None and announced_locality_id is not None:
-        raise HTTPException(422, "已选择场地时不能另外指定地区")
+        raise HTTPException(422, "已选择场馆时不能另外指定地区")
     if venue_id is None:
         if opening_time is not None or start_time is not None:
-            raise HTTPException(422, "未选择场地时不能填写开场或开演时间")
+            raise HTTPException(422, "未选择场馆时不能填写开场或开演时间")
         if offset is not None:
             raise HTTPException(422, "仅 ONLINE 演出可以填写固定偏移")
         if announced_locality_id is not None:
@@ -62,12 +62,12 @@ def normalize_live_times(cur: Any, *, live_date: date, venue_id: int | None,
     cur.execute("SELECT venue_kind, timezone_id FROM venue_list WHERE id=%s AND merged_into_venue_id IS NULL", (venue_id,))
     row = cur.fetchone()
     if row is None:
-        raise HTTPException(422, "场地不存在或已合并")
+        raise HTTPException(422, "场馆不存在或已合并")
     kind, zone = row
     if kind != "online" and not zone:
-        raise HTTPException(422, "请先填写场地自身时区")
+        raise HTTPException(422, "请先填写场馆自身时区")
     if kind != "online" and offset is not None:
-        raise HTTPException(422, "非 ONLINE 演出使用场地自身时区")
+        raise HTTPException(422, "非 ONLINE 演出使用场馆自身时区")
     try:
         fixed = parse_offset(offset) if offset is not None else None
         if kind == "online" and (opening_time is not None or start_time is not None) and fixed is None:

@@ -216,8 +216,8 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
 
   const confirmation: VenueConfirmation | null = confirmationKind === "kind" && detail
       ? {
-          title: "确认修改场地类型",
-          ariaLabel: "场地类型变化确认",
+          title: "确认修改场馆类型",
+          ariaLabel: "场馆类型变化确认",
           rows: [["Venue", `#${detail.venue_id} ${detail.venue_name}`], ["原类型", KIND_LABELS[detail.venue_kind]], ["新类型", KIND_LABELS[kindDraft]]],
           confirmLabel: "保存修改",
           submit: submitKind,
@@ -253,14 +253,14 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
           : null;
 
   return (
-    <section className="tour-admin-section" aria-label={variant === "create" ? "新增场地" : "场地管理"}>
+    <section className="tour-admin-section" aria-label={variant === "create" ? "新增场馆" : "场馆管理"}>
       {variant === "edit" && <>
       <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar">
         <span className="live-management-label">已有 Venue</span>
         <input
           id="venue-admin-query"
           className="venue-query-input live-management-primary-control"
-          aria-label="搜索场地"
+          aria-label="搜索场馆"
           value={venueQuery}
           onChange={(event) => setVenueQuery(event.target.value)}
           onKeyDown={(event) => { if (event.key === "Enter") void loadVenuePage(venueQuery.trim(), 1); }}
@@ -280,7 +280,7 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
         </select>
         <div className="tour-candidate-pager">
           <button type="button" className="console-ghost-btn" disabled={loading || venuePage <= 1} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage - 1)}>上一页</button>
-          <span>第 {venuePage} / {Math.max(1, venueTotalPages)} 页，共 {venueTotal} 个场地</span>
+          <span>第 {venuePage} / {Math.max(1, venueTotalPages)} 页，共 {venueTotal} 个场馆</span>
           <button type="button" className="console-ghost-btn" disabled={loading || venuePage >= venueTotalPages} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage + 1)}>下一页</button>
         </div>
       </div>
@@ -329,7 +329,7 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
           </div>
 
           <div className="tour-admin-block">
-            <h3>当前场地资料</h3>
+            <h3>当前场馆资料</h3>
             <p className="console-admin-hint">#{detail.venue_id} {detail.venue_name}；共引用 {detail.live_count} 场 Live。</p>
             <div className="tour-admin-fields">
               <label>类型<select value={kindDraft} onChange={(event) => setKindDraft(event.target.value as ConsoleVenueDetail["venue_kind"])}>

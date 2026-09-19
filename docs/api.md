@@ -56,13 +56,13 @@
 - `GET /api/catalog/tours/{tour_id}/statistics/comparison`
   - 按需比较同一巡演内任意两场已有 Setlist 的场次，匿名可用
 - `GET /api/catalog/search`
-  - 公共资料库搜索，匿名可用，按 Live、乐队 / 艺人、歌曲、场地分组返回结果
+  - 公共资料库搜索，匿名可用，按 Live、乐队 / 艺人、歌曲、场馆分组返回结果
 - `GET /api/catalog/bands`
   - 公共乐队浏览列表，匿名可用
 - `GET /api/catalog/bands/{band_id}/lives`
   - 按乐队浏览相关 Live，匿名可用，登录时会附带收藏状态
 - `GET /api/catalog/stats`
-  - 首页和筛选器使用的 Live / 乐队 / 歌曲 / 场地总数、最新 Live 日期与可用年份
+  - 首页和筛选器使用的 Live / 乐队 / 歌曲 / 场馆总数、最新 Live 日期与可用年份
 - `GET /api/catalog/statistics`
   - 公共统计页接口；统一支持全部 / 当前用户收藏范围，以及年份、乐队和 Live 类型筛选
 - `GET /api/console/songs`
@@ -80,7 +80,7 @@
 - `GET /api/console/bands/{band_id}/transition-live-candidates`
   - `editor+` 按日期查询该 Band 可绑定的既有交接 Live；最终保存显式 `live_id`
 - `GET /api/console/venues`
-  - `editor+` 查询控制台场地候选
+  - `editor+` 查询控制台场馆候选
 - `GET /api/console/lives`
   - `editor+` 按标题或 ID 分页查询全部可编辑 Live，并可用 `live_type`、`has_setlist` 筛选
 - `GET /api/console/lives/{live_id}`
@@ -92,7 +92,7 @@
 - `POST /api/console/songs:batch`
   - 批量新增歌曲，一次写入多条，单项冲突不影响其他项继续写入
 - `POST /api/console/venues`
-  - `editor+` 新增场地
+  - `editor+` 新增场馆
 - `POST /api/console/lives`
   - `editor+` 新增 Live；`live_type` 必填，值为稳定 code
 - `PUT /api/console/lives/{live_id}`
@@ -104,7 +104,7 @@
 - `PUT /api/console/lives/{live_id}/setlist`
   - `editor+` 以请求中的完整行集替换指定 Live 的既有 Setlist
 - `GET /api/console/tours/live-candidates`
-  - `editor+` 按 Live 标题或 ID 分页查询尚未关联任何巡演的场次候选，并返回场地
+  - `editor+` 按 Live 标题或 ID 分页查询尚未关联任何巡演的场次候选，并返回场馆
 - `GET /api/console/tours/{tour_id}`
   - `editor+` 获取巡演标题、显式参与乐队和完整场次关系，供控制台编辑
 - `POST /api/console/tours`
@@ -146,7 +146,7 @@
 
 - `page_size` 当前只允许 `15` 或 `20`
 - `without_setlist=true` 时，仅返回状态非“已取消”且尚无 `live_setlist` 数据的 Live，并在数据库分页前优先排列非 `event` 类型；控制台“新增 Setlist”候选使用该筛选
-- `q` 会 trim；空字符串等同于未传，最大长度为 `255`，匹配 Live 标题、场地、歌曲、乐队名和乐队缩写
+- `q` 会 trim；空字符串等同于未传，最大长度为 `255`，匹配 Live 标题、场馆、歌曲、乐队名和乐队缩写
 - `year` 范围为 `1900..2100`
 - `live_type` 只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
 - Live 列表项、收藏列表项、乐队 Live、catalog 搜索 Live、单详情和批量详情都会返回 `tour` 与 `performance_group` 反向引用；未归属时为 `null`，已归属时分别返回 `{tour_id, tour_title}` 与 `{group_id, group_title}`
@@ -187,10 +187,10 @@
 - 无 Setlist 时，单条与批量详情的 `bands/band_names` 会回退 `default_band_ids`，与列表有效 Band 规则一致
 - `event_attendees` 只在 `live_type=event` 时返回内容；每项包含 `band_id/band_name/mode/members`
 - `mode=full|partial` 不持久化；按固化基础阵容做成员集合比较，新建活动上下文统一使用当前开放阵容
-- 详情返回 `event_status/date_phase/status_note/was_rescheduled`；`schedule_history` 只包含正式改期前的快照，前端仅展示实际变化的标题、日期、时间或场地，不包含资料修正
+- 详情返回 `event_status/date_phase/status_note/was_rescheduled`；`schedule_history` 只包含正式改期前的快照，前端仅展示实际变化的标题、日期、时间或场馆，不包含资料修正
 
-- `opening_timezone_label/start_timezone_label` 由后端根据场地 IANA 时区和对应演出瞬间生成；无 IANA 或该项时间未公布时为 `null`。前端无标签时沿用原固定偏移映射（如 `+09:00 → JST`），未知偏移显示 `UTC±HH:MM`。
-- 公开排期历史的 `previous_opening_timezone_label/previous_start_timezone_label` 按历史场地和历史时刻计算，不持久化这些显示标签。
+- `opening_timezone_label/start_timezone_label` 由后端根据场馆 IANA 时区和对应演出瞬间生成；无 IANA 或该项时间未公布时为 `null`。前端无标签时沿用原固定偏移映射（如 `+09:00 → JST`），未知偏移显示 `UTC±HH:MM`。
+- 公开排期历史的 `previous_opening_timezone_label/previous_start_timezone_label` 按历史场馆和历史时刻计算，不持久化这些显示标签。
 
 ### 3. `POST /api/lives/details:batch`
 
@@ -235,12 +235,12 @@
   - `q` 最大长度为 `255`
   - `limit` 范围是 `1..20`，默认 `8`
   - 文本查询使用 `ILIKE`，并转义 `%`、`_`、`\`
-  - Live 分组会匹配 Live 标题、场地名、歌曲名、乐队名和乐队缩写
+  - Live 分组会匹配 Live 标题、场馆名、歌曲名、乐队名和乐队缩写
   - 乐队分组匹配 `band_name` 或 `band_abbr`
   - 歌曲分组匹配 `song_name`
-  - 场地分组匹配 `venue`
+  - 场馆分组匹配 `venue`
   - Live 结果按 `live_date DESC, id DESC` 排序
-  - 乐队、歌曲、场地分组优先按关联 Live 数降序排序
+  - 乐队、歌曲、场馆分组优先按关联 Live 数降序排序
   - 乐队结果额外返回当前开放阵容的 `band_members`；`live_count` 与 Live 列表统一读取 `effective_live_bands`
 - `GET /api/catalog/bands`
   - `limit` 范围是 `1..100`，默认 `20`
@@ -267,7 +267,7 @@
 - `GET /api/catalog/performance-groups/{group_id}`
   - 只对至少两场的有效活动组返回详情；不存在或无效组返回 `404`
   - 子 Live 按 `live_date ASC, start_time ASC, live_id ASC` 返回
-  - 返回动态 `day_count/live_count/display_type`、参与乐队、场地和每场 Live 的当前用户收藏状态
+  - 返回动态 `day_count/live_count/display_type`、参与乐队、场馆和每场 Live 的当前用户收藏状态
   - 活动组本身没有收藏字段；前端在详情中继续逐场收藏
 - `GET /api/catalog/tours`
   - `page_size` 当前只允许 `15` 或 `20`，超过最后一页会钳制到最后一页
@@ -319,7 +319,7 @@
 - 文本查询使用 `ILIKE`，并转义 `%`、`_`、`\`
 - 歌曲查询仅从名称开头向右匹配，不匹配名称中段或末段；同时按 `config/song_lookup_punctuation_groups.json` 对常见等价标点做查询归一化，并忽略这些标点前后的空白。含内部等价标点的拉丁词与相邻日文之间的空白也会忽略，普通词间空格仍参与匹配。名称精确匹配结果排在前面，再按 `song_name, id` 排序
 - 乐队查询匹配 `band_name` 或 `band_abbr`
-- 场地查询匹配 `venue`
+- 场馆查询匹配 `venue`
 
 ### 7. 控制台写接口
 
@@ -354,7 +354,7 @@
   - 写入 `venue_list(venue)`，`id` 由 sequence 生成
 - `POST /api/console/lives`
   - 可选择已核验的 `venue_id`，或在场馆未公布时提交 `announced_locality_id`；未选择场馆时开场、开演必须为空；ONLINE 有时间时提交固定偏移 `timezone`
-  - 后端按场馆自身 IANA 与日期解析实体／未公开场地时间；ONLINE 只接受固定 UTC 偏移，偏移随 `timetz` 保存，不保存来源或独立时区快照
+  - 后端按场馆自身 IANA 与日期解析实体／未公开场馆时间；ONLINE 只接受固定 UTC 偏移，偏移随 `timetz` 保存，不保存来源或独立时区快照
   - `opening_time` / `start_time` 接受 `HH:mm` 或 `HH:mm:ss`；夏令时重复或不存在的当地钟点返回 422，不接受重复次数输入
   - `live_type` 必填，只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
   - `default_band_ids` 可选，最多 100 项；后端要求每项为已存在的正数 `band_attrs.id`，并去重、升序后写入

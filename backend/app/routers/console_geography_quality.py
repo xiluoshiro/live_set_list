@@ -47,7 +47,7 @@ QUALITY_CTE = f"""
                 ('missing_locality', base.locality_id IS NULL, '实体 Venue 尚未登记所在地'),
                 ('missing_address', base.address IS NULL OR btrim(base.address) = '', '实体 Venue 尚未登记公开门牌地址'),
                 ('missing_coordinates', base.latitude IS NULL, '实体 Venue 尚未登记 WGS84 坐标'),
-                ('missing_timezone', base.timezone_id IS NULL, '场地未登记 IANA 时区；请补全后录入演出'),
+                ('missing_timezone', base.timezone_id IS NULL, '场馆未登记 IANA 时区；请补全后录入演出'),
                 ('zero_coordinates', base.latitude = 0 AND base.longitude = 0, '坐标为 (0, 0)，需要人工核对')
         ) AS issue(category, matches, detail)
         WHERE issue.matches

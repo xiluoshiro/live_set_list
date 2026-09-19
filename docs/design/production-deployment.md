@@ -345,7 +345,7 @@ VITE_API_BASE_URL=https://api.<domain>
 
 - [ ] `https://<domain>` 可打开首页。
 - [ ] 首页统计卡片加载成功。
-- [ ] 搜索可返回 Live、乐队、歌曲、场地结果。
+- [ ] 搜索可返回 Live、乐队、歌曲、场馆结果。
 - [ ] Live 详情页可打开。
 - [ ] 登录成功后 cookie 带 `Secure` 和 `HttpOnly`。
 - [ ] 收藏新增和取消成功。

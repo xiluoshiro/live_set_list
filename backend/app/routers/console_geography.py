@@ -151,8 +151,12 @@ def _validate(cur: Any, row: dict[str, Any], payload: LocationWrite) -> str | No
     )):
         raise HTTPException(422, "未公开具体场馆可保存地区和时区，不保存门牌、坐标或地图关联")
     _locality(cur, payload.locality_id)
+    if row["locality_id"] is not None and payload.locality_id is None:
+        raise HTTPException(422, "已确定地区的场馆不能清空地区")
+    if row["venue_kind"] == "physical" and not payload.address:
+        raise HTTPException(422, "实体场馆必须填写公开门牌地址")
     if row["venue_kind"] != "online" and not payload.timezone_id:
-        raise HTTPException(422, "场地必须填写自身 IANA 时区")
+        raise HTTPException(422, "场馆必须填写自身 IANA 时区")
     return payload.timezone_id
 
 

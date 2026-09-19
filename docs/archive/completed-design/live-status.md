@@ -192,7 +192,7 @@ CREATE INDEX live_schedule_history_live_id_changed_at_idx
     ON public.live_schedule_history (live_id, changed_at, id);
 ```
 
-每次正式改期插入“改期前快照”。当前值始终读取 `live_attrs`。多次正式改期会依次保存每个旧版本，可以按 `changed_at, id` 还原排期变化；公开详情逐次比较前后快照，只展示实际变化的标题、日期、时间或场地。
+每次正式改期插入“改期前快照”。当前值始终读取 `live_attrs`。多次正式改期会依次保存每个旧版本，可以按 `changed_at, id` 还原排期变化；公开详情逐次比较前后快照，只展示实际变化的标题、日期、时间或场馆。
 
 迁移同时补齐现有数据库角色的目标权限、对象 owner 和序列权限；不得改变 `flyway_schema_history` 的 owner。
 

@@ -4,7 +4,7 @@
 
 ## 文档定位
 
-本文只定义 Venue 独立管理、历史名称、Live 场地名称固化、重复 Venue 合并，以及现有查询链路迁移的技术方案。
+本文只定义 Venue 独立管理、历史名称、Live 场馆名称固化、重复 Venue 合并，以及现有查询链路迁移的技术方案。
 
 后续地理信息扩展见 [Venue 所在地、多地图链接与 Live 自动时区设计](venue-location-and-timezone.md)。本文“明确不做”中的地址、坐标和地图属于原首期边界；地理资料框架、Live 自动时区、首批实体 Venue 回填、公共 Venue 详情及 Live 地图入口现已实现，地图搜索／点选和平台 POI 批量关联仍待后续。
 
@@ -14,9 +14,9 @@
 
 - 文档状态：V28、V29、运行数据人工整理与应用层首期实现均已完成并部署；后续地理与时区扩展已推进至 V31。
 - 当前仓库最新 migration 为 `V31__add_live_timezone_snapshots.sql`。
-- `live_attrs.venue_id` 和 `live_schedule_history.previous_venue_id` 已允许 `NULL`，表示场地尚未公布；不得为此创建“未定”Venue。
+- `live_attrs.venue_id` 和 `live_schedule_history.previous_venue_id` 已允许 `NULL`，表示场馆尚未公布；不得为此创建“未定”Venue。
 - V28 在兼容字段 `venue_list.venue` 之外增加 Venue 类型、合并指向和独立名称版本表。
-- 同一物理场地的正式更名保持同一个 `venue_id`；搬迁到不同地址或新建替代场馆时创建新的 `venue_id`。
+- 同一物理场馆的正式更名保持同一个 `venue_id`；搬迁到不同地址或新建替代场馆时创建新的 `venue_id`。
 - Live 展示其录入时明确绑定的名称版本，不随 Venue 当前名称变化。
 - 拼写或资料错误属于受审计修正；真实更名必须追加名称版本，不能覆盖旧版本。
 - 重复 Venue 通过显式合并处理，不根据名称、日期或相似度自动合并。
@@ -68,10 +68,10 @@ live_schedule_history
 
 当前所有读取路径都通过 `venue_id` 联接 `venue_list.venue`。因此直接修改 `venue_list.venue` 会同时改变：
 
-- 所有历史 Live 的场地展示。
-- 巡演和活动组内的历史场地展示。
-- 正式改期记录中的旧场地展示。
-- Catalog 场地名称及搜索结果。
+- 所有历史 Live 的场馆展示。
+- 巡演和活动组内的历史场馆展示。
+- 正式改期记录中的旧场馆展示。
+- Catalog 场馆名称及搜索结果。
 
 这使“资料修正”和“场馆真实更名”无法区分，也无法准确表达一场 Live 当时使用的名称。
 
@@ -82,18 +82,18 @@ live_schedule_history
 - `POST /api/console/venues` 只接受一个 `venue_name`，没有详情、修改、更名或合并接口。
 - Venue 仍附属于 Live 录入区域，没有独立维护入口。
 
-候选查询必须分页，不能以固定 100 条上限假设场地总量。
+候选查询必须分页，不能以固定 100 条上限假设场馆总量。
 
 ### V27 的影响
 
-V27 允许 Live 的场地为空。新结构必须满足：
+V27 允许 Live 的场馆为空。新结构必须满足：
 
 ```text
 venue_id IS NULL
 => venue_name_version_id IS NULL
 ```
 
-场地公布后，Live 更新操作一次性写入 `venue_id + venue_name_version_id`。取消或改回未公布状态时，两者也必须一起清空。
+场馆公布后，Live 更新操作一次性写入 `venue_id + venue_name_version_id`。取消或改回未公布状态时，两者也必须一起清空。
 
 ## 核心模型
 
@@ -143,8 +143,8 @@ undisclosed
 
 规则：
 
-- `physical`：普通实体场地。
-- `online`：无单一实体场地的线上 Live。
+- `physical`：普通实体场馆。
+- `online`：无单一实体场馆的线上 Live。
 - `undisclosed`：主办方只公开了“某所”等模糊位置。
 - 真正“尚未公布”使用 `live_attrs.venue_id = NULL`，不是 `undisclosed` Venue。
 - `merged_into_venue_id` 非空表示该行是已合并来源，普通候选查询不再返回它。
@@ -214,7 +214,7 @@ ALTER TABLE public.live_attrs
 
 `MATCH FULL` 保证：
 
-- 两列同时为 `NULL`，表示场地未公布；或者
+- 两列同时为 `NULL`，表示场馆未公布；或者
 - 两列同时非空，且名称版本确实属于所选 Venue。
 
 不能只把 `venue_name_version_id` 设为普通外键，否则可能把 Venue A 和 Venue B 的名称版本错误组合。
@@ -479,10 +479,10 @@ Venue管理
 - 初次进入不再把最多 100 条结果当作完整全集。
 - 空查询返回常用 Venue；输入后走服务端搜索。
 - 候选显示当前名称；历史名称命中时附带“曾用名命中”。
-- 场地未公布时直接选择“未公布”，两项 ID 都保存为 `NULL`。
+- 场馆未公布时直接选择“未公布”，两项 ID 都保存为 `NULL`。
 - 选择 Venue 后加载名称版本，并按 Live 日期给出推荐。
 - 快捷新增调用与 Venue 管理页相同的创建 API，成功后返回 Live 表单并自动选中。
-- 新增前展示相似正式名称候选，降低重复创建风险，但不自动阻止确认为不同实体的场地。
+- 新增前展示相似正式名称候选，降低重复创建风险，但不自动阻止确认为不同实体的场馆。
 
 ## 公共读取、搜索与统计
 
@@ -505,7 +505,7 @@ Venue管理
 - Venue 去重继续按 `venue_id`，更名不增加 Venue 数量。
 - 合并后统计使用目标 `venue_id`，来源行不再单独计数。
 - 现有公开 `venue_count` 在首期保持返回字段和口径兼容。
-- `venue_kind` 为后续拆分实体 Venue、Online 和未公开场地统计提供依据，但本期不强制改变前端统计文案。
+- `venue_kind` 为后续拆分实体 Venue、Online 和未公开场馆统计提供依据，但本期不强制改变前端统计文案。
 
 ## 迁移与实现流程
 
@@ -607,7 +607,7 @@ V29 migration 在执行前断言：
 - 创建 Venue 会原子创建初始名称版本并写审计。
 - 资料修正和正式更名具有不同审计动作。
 - Live 日期变化不会静默改变名称版本。
-- 场地未公布时允许两个 ID 同时为空。
+- 场馆未公布时允许两个 ID 同时为空。
 - 普通 editor 不能执行 Venue 合并，admin 可以。
 
 ### 前端
@@ -624,7 +624,7 @@ V29 migration 在执行前断言：
 1. 同一 Venue 从旧名改为新名，旧 Live 仍显示旧名，新 Live 显示新名，统计只计一个 Venue。
 2. 修正旧名称的错字，引用该版本的历史 Live 同步显示修正结果。
 3. 录入历史 Live 时可以显式选择历史名称版本。
-4. 场地未公布的 Live 保持两个 Venue 字段为空，公布后一次更新为有效组合。
+4. 场馆未公布的 Live 保持两个 Venue 字段为空，公布后一次更新为有效组合。
 5. 重复 Venue 合并后，Live 和改期历史全部指向目标实体及正确名称版本。
 6. 名称相似但实际不同的 Hall 不会被自动合并。
 

@@ -16,7 +16,7 @@ vi.mock("../../../auth/AuthProvider", () => ({ useAuth: () => ({ csrfToken: "csr
 
 const city = { id: 5, country_code: "JP", admin_area: "東京都", locality_name: "検証市", timezone_id: "Asia/Tokyo", area_level: "locality" as const, state_token: "1".repeat(64) };
 const location: VenueLocation = {
-  venue_id: 1, locality: city, address: null, latitude: null, longitude: null,
+  venue_id: 1, locality: city, address: "Saved address", latitude: null, longitude: null,
   coordinate_system: "WGS84", timezone_id: "Asia/Tokyo",
   state_token: "2".repeat(64), location_verified_at: null,
   map_links: (["google", "apple", "amap"] as const).map(provider => ({
@@ -43,13 +43,13 @@ async function openPanel(onOpenLive?: (liveId: number) => void) {
 test("online venues do not advertise a physical venue timezone fallback", async () => {
   render(<VenueLocationPanel venueId={1} venueName="Online" venueKind="online" />);
   expect(await screen.findByText(/活动时间基准由每场 Live 单独维护/)).toBeInTheDocument();
-  expect(screen.queryByText(/场地 IANA 时区：|使用默认 UTC/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/场馆 IANA 时区：|使用默认 UTC/)).not.toBeInTheDocument();
 });
 
 // 测试点：所在地与地图直接加载且不再折叠，地区时区与缺失坐标如实展示，单个坐标不能提交。
 test("loads directly and validates paired coordinates", async () => {
   const user = await openPanel();
-  expect(screen.getByText(/场地 IANA 时区：Asia\/Tokyo/)).toBeInTheDocument();
+  expect(screen.getByText(/场馆 IANA 时区：Asia\/Tokyo/)).toBeInTheDocument();
   expect(screen.getAllByText("暂无坐标")).toHaveLength(3);
   await user.type(screen.getByLabelText("纬度（WGS84）"), "0");
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
@@ -115,7 +115,7 @@ test("limits undisclosed venues to the published locality", async () => {
   expect(screen.getByText(/登记已公布地区和自身时区/)).toBeInTheDocument();
 });
 
-// 测试点：场地资料只选择既有地区；地区资料的登记和纠错在独立的地区管理入口处理。
+// 测试点：场馆资料只选择既有地区；地区资料的登记和纠错在独立的地区管理入口处理。
 test("only selects existing localities for the Venue", async () => {
   await openPanel();
   expect(screen.queryByRole("button", { name: "登记已核验地区" })).not.toBeInTheDocument();
@@ -131,6 +131,7 @@ test("previews and confirms a state-bound correction, retaining failed input", a
   }));
   api.saveConsoleVenueLocation.mockRejectedValueOnce(new Error("资料已更新"))
     .mockResolvedValueOnce({ ...location, address: "New address", state_token: "3".repeat(64) });
+  await user.clear(screen.getByLabelText("公开门牌地址"));
   await user.type(screen.getByLabelText("公开门牌地址"), "New address");
   await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
   let dialog = await screen.findByRole("dialog", { name: "确认所在地修改" });
@@ -145,7 +146,7 @@ test("previews and confirms a state-bound correction, retaining failed input", a
   expect(api.saveConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({ expected_state_token: "2".repeat(64), address: "New address" }), "csrf");
 });
 
-// 测试点：场地 IANA 时区变更只更新场地位置，确认框不再创建 Live 时区复核任务。
+// 测试点：场馆 IANA 时区变更只更新场馆位置，确认框不再创建 Live 时区复核任务。
 test("updates venue timezone without a live review workflow", async () => {
   const noLocalityLocation = {
     ...location, locality: null, } satisfies VenueLocation;
@@ -234,4 +235,28 @@ test("ignores an old venue response after unmount", async () => {
   await waitFor(() => expect(screen.getByLabelText("公开门牌地址")).toHaveValue("Second"));
   resolveOld({ ...location, address: "Old response" });
   await waitFor(() => expect(screen.getByLabelText("公开门牌地址")).toHaveValue("Second"));
+});
+
+// 测试点：已确定地区不能清空，实体场馆地址清空或只填空格时不能保存。
+test("requires physical address and keeps established locality", async () => {
+  const user = await openPanel();
+  expect(screen.getByRole("option", { name: "未填写" })).toBeDisabled();
+  const address = screen.getByLabelText("公开门牌地址");
+  expect(address).toBeRequired();
+  await user.clear(address);
+  await user.type(address, "   ");
+  expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
+  expect(api.previewConsoleVenueLocation).not.toHaveBeenCalled();
+  await user.type(address, "Corrected address");
+  expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeEnabled();
+});
+
+// 测试点：未公开和线上场馆不要求填写实体地址。
+test.each(["undisclosed", "online"])("does not require address for %s venues", async venueKind => {
+  api.getConsoleVenueLocation.mockResolvedValue({ ...location, address: null });
+  render(<VenueLocationPanel venueId={1} venueName="Venue" venueKind={venueKind} />);
+  const address = await screen.findByLabelText("公开门牌地址");
+  expect(address).toBeDisabled();
+  expect(address).not.toBeRequired();
+  expect(screen.queryByText("实体场馆必须填写公开门牌地址。")).not.toBeInTheDocument();
 });

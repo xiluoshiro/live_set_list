@@ -37,7 +37,7 @@ def test_removed_timezone_columns(integration_admin_connection):
     assert not columns.intersection({"timezone_id","timezone_source","timezone_offset_minutes","timezone_source_revision","opening_time_fold","start_time_fold"})
 
 
-# 测试点：单条与批量详情都使用当前/历史各自的场地和时刻，未公布时间不生成标签。
+# 测试点：单条与批量详情都使用当前/历史各自的场馆和时刻，未公布时间不生成标签。
 @pytest.mark.parametrize("batch", [False, True])
 def test_detail_timezone_labels_use_each_venue_and_instant(integration_test_client, integration_admin_connection, batch):
     with integration_admin_connection.cursor() as cur:

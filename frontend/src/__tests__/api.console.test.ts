@@ -111,7 +111,7 @@ describe("console lookup api", () => {
     }));
   });
 
-  // 测试点：场地候选查询在空关键词时应走默认候选列表，不发送空 q。
+  // 测试点：场馆候选查询在空关键词时应走默认候选列表，不发送空 q。
   test("getConsoleVenues 空 q 时只发送 limit 参数", async () => {
     fetchMock.mockResolvedValueOnce(
       makeJsonResponse({
@@ -126,7 +126,7 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/console/venues?limit=20");
   });
 
-  // 测试点：新增场地封装应调用 Venue 管理写接口，并传递类型与 CSRF header。
+  // 测试点：新增场馆封装应调用 Venue 管理写接口，并传递类型与 CSRF header。
   test("createConsoleVenue 会携带 CSRF 写入 venue", async () => {
     fetchMock.mockResolvedValueOnce(
       makeJsonResponse({

@@ -970,7 +970,7 @@ def get_lives(
     page: int = Query(default=1, ge=1, description="页码，从 1 开始。"),
     page_size: int = Query(default=20, description="每页条数，当前仅允许 15 或 20。"),
     without_setlist: bool = Query(default=False, description="是否仅返回尚无 setlist 数据的 Live。"),
-    q: str | None = Query(default=None, max_length=255, description="匹配 Live、乐队、歌曲或场地的关键词。"),
+    q: str | None = Query(default=None, max_length=255, description="匹配 Live、乐队、歌曲或场馆的关键词。"),
     year: int | None = Query(default=None, ge=1900, le=2100, description="Live 年份。"),
     live_type: Literal["oneman", "taiban", "multi_act", "festival", "event", "other"] | None = Query(
         default=None,

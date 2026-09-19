@@ -163,7 +163,7 @@ function makeDetailResponse(liveId: number): LiveDetailResponse {
     live_date: "2026-03-01",
     live_title: `示例 Live 名称 ${liveId}`,
     live_type: "oneman",
-    venue: "测试场地",
+    venue: "测试场馆",
     opening_time: "17:00:00+08:00",
     start_time: "18:00:00+09:00",
     bands: [1, 2],

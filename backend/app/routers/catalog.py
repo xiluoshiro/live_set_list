@@ -292,7 +292,7 @@ LIMIT %s OFFSET %s
     "/search",
     response_model=CatalogSearchResponse,
     summary="公共资料库搜索",
-    description="按 Live 标题、乐队、歌曲和场地搜索公开资料库。",
+    description="按 Live 标题、乐队、歌曲和场馆搜索公开资料库。",
     responses={
         400: {"model": ErrorResponse, "description": "业务参数错误"},
         422: {"model": ValidationErrorResponse, "description": "查询参数验证失败"},

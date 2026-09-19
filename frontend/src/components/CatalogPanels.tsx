@@ -88,7 +88,7 @@ function SearchForm({ query, onSearch }: { query: string; onSearch: (query: stri
           type="search"
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          placeholder="Live、乐队、歌曲、场地"
+          placeholder="Live、乐队、歌曲、场馆"
         />
         <button type="submit" className="primary-btn" disabled={!normalizedValue}>
           搜索
@@ -154,13 +154,13 @@ export function SearchResultsPanel({
   return (
     <div className="catalog-panel">
       <div className="catalog-panel-head">
-        <PageTitle kicker="Search" title="搜索结果" description="按 Live、乐队、歌曲和场地分组展示。" />
+        <PageTitle kicker="Search" title="搜索结果" description="按 Live、乐队、歌曲和场馆分组展示。" />
       </div>
       <SearchForm query={query} onSearch={onSearch} />
       {error ? (
         <ContentState kind="error" title="搜索失败" description={error} layout="cards" />
       ) : loading ? (
-        <ContentState kind="loading" title="搜索中..." description="正在查询 Live、乐队、歌曲和场地。" layout="cards" />
+        <ContentState kind="loading" title="搜索中..." description="正在查询 Live、乐队、歌曲和场馆。" layout="cards" />
       ) : result && !hasAnyResult ? (
         <ContentState
           kind="empty"
@@ -220,7 +220,7 @@ export function SearchResultsPanel({
           </section>
 
           <section className="catalog-section" aria-labelledby="catalog-venue-results">
-            <h3 id="catalog-venue-results">场地</h3>
+            <h3 id="catalog-venue-results">场馆</h3>
             {result?.venues.length ? (
               <ul className="catalog-entity-list">
                 {result.venues.map((venue) => (
@@ -231,7 +231,7 @@ export function SearchResultsPanel({
                 ))}
               </ul>
             ) : (
-              <ContentState kind="empty" title="没有匹配的场地。" layout="rows" compact />
+              <ContentState kind="empty" title="没有匹配的场馆。" layout="rows" compact />
             )}
           </section>
         </div>

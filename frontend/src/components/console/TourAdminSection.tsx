@@ -442,7 +442,7 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
               <col className="tour-candidate-col-venue" />
               <col className="tour-candidate-col-action" />
             </colgroup>
-            <thead><tr><th>日期</th><th>Live</th><th>场地</th><th>操作</th></tr></thead>
+            <thead><tr><th>日期</th><th>Live</th><th>场馆</th><th>操作</th></tr></thead>
             <tbody>
               {candidates.map((candidate) => {
                 const alreadyAdded = stops.some((stop) => stop.live_id === candidate.live_id);
@@ -468,7 +468,7 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
         <h3>已选场次（{stops.length}）</h3>
         <div className="console-table-wrap">
           <table className="console-admin-table tour-stop-table" aria-label="已选场次">
-            <thead><tr><th>日期</th><th>Live</th><th>场地</th><th>操作</th></tr></thead>
+            <thead><tr><th>日期</th><th>Live</th><th>场馆</th><th>操作</th></tr></thead>
             <tbody>
               {stops.map((stop) => (
                 <tr key={stop.live_id}>

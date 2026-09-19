@@ -392,7 +392,7 @@ export function PerformanceGroupAdminSection({
                 <th>日期</th>
                 <th>开演</th>
                 <th>Live</th>
-                <th>场地</th>
+                <th>场馆</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -473,7 +473,7 @@ export function PerformanceGroupAdminSection({
                 <th>日期</th>
                 <th>开演</th>
                 <th>Live</th>
-                <th>场地</th>
+                <th>场馆</th>
                 <th>操作</th>
               </tr>
             </thead>
