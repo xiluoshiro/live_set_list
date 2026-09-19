@@ -166,7 +166,7 @@ def geocode(*, query: str | None = None, country_code: str | None = None,
         if query is not None:
             body: dict[str, Any] = {"textQuery": query, "maxResultCount": 5}
             if country_code:
-                body["includedRegionCodes"] = [country_code.lower()]
+                body["regionCode"] = country_code.lower()
             data = _request_json(
                 "https://places.googleapis.com/v1/places:searchText", method="POST", body=body,
                 field_mask="places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri,places.addressComponents",

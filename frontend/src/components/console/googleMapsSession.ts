@@ -41,6 +41,9 @@ let onPoint: ((point: LocationPoint) => void) | null = null;
 let onPlaceId: ((placeId: string) => void) | null = null;
 let disabled = false;
 
+export const DEFAULT_GOOGLE_MAP_POINT: LocationPoint = { latitude: 35.68518, longitude: 139.7528 };
+const DEFAULT_GOOGLE_MAP_ZOOM = 12;
+
 function loadGoogleMaps(apiKey: string): Promise<MapsApi> {
   if (window.google?.maps) return Promise.resolve(window.google.maps);
   if (loader) {
@@ -95,8 +98,9 @@ export async function attachGoogleMap(container: HTMLDivElement, apiKey: string,
   container.appendChild(surface);
   const maps = await loadGoogleMaps(apiKey);
   if (!map) {
-    map = new maps.Map(surface, { center: { lat: 25, lng: 110 }, zoom: 3, scrollwheel: false,
-      clickableIcons: true, mapTypeControl: false, streetViewControl: false });
+    map = new maps.Map(surface, { center: toGooglePoint(DEFAULT_GOOGLE_MAP_POINT), zoom: DEFAULT_GOOGLE_MAP_ZOOM, scrollwheel: false,
+      clickableIcons: true, cameraControl: false, zoomControl: true, fullscreenControl: true,
+      mapTypeControl: false, streetViewControl: false });
     listeners.push(map.addListener("click", event => {
       if (disabled) return;
       if (event.placeId) {
@@ -133,8 +137,13 @@ export function updateGoogleMap(point: LocationPoint | null, isDisabled: boolean
     marker.setPosition(toGooglePoint(point));
     marker.setDraggable(!isDisabled);
   }
+  if (point.latitude === DEFAULT_GOOGLE_MAP_POINT.latitude && point.longitude === DEFAULT_GOOGLE_MAP_POINT.longitude) {
+    map.setCenter(toGooglePoint(point));
+    map.setZoom(DEFAULT_GOOGLE_MAP_ZOOM);
+    return;
+  }
   const bounds = map.getBounds();
-  if (!bounds?.contains(toGooglePoint(point)) || (map.getZoom() ?? 0) < 12) {
+  if (!bounds?.contains(toGooglePoint(point)) || (map.getZoom() ?? 0) < 14) {
     map.setCenter(toGooglePoint(point));
     map.setZoom(16);
   }

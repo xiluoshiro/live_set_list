@@ -2,7 +2,8 @@ import { useState } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { VenueLocationPicker } from "../VenueLocationPicker";
-import type { LocationPoint, LocationResolution } from "../../../api";
+import { DEFAULT_GOOGLE_MAP_POINT } from "../googleMapsSession";
+import type { GeoLocality, LocationPoint, LocationResolution } from "../../../api";
 
 const api = vi.hoisted(() => ({ getGeographyCapabilities: vi.fn(), resolveGeography: vi.fn(), resolveGooglePlace: vi.fn(), searchGeography: vi.fn() }));
 vi.mock("../../../api", () => api);
@@ -16,15 +17,17 @@ function Harness({ initialTimezone = "" }: { initialTimezone?: string }) {
   const [point, setPoint] = useState<LocationPoint | null>(null);
   const [timezone, setTimezone] = useState(initialTimezone);
   const [address, setAddress] = useState("原地址");
+  const [locality, setLocality] = useState<GeoLocality | null>(null);
   const [googlePlace, setGooglePlace] = useState("");
   const [review, setReview] = useState(false);
   return <><input aria-label="当前时区" value={timezone} onChange={e => setTimezone(e.target.value)} />
     <input aria-label="当前地址" value={address} onChange={e => setAddress(e.target.value)} />
     <button disabled={review}>模拟保存</button>
     <output aria-label="Google Place">{googlePlace}</output>
+    <output aria-label="当前地区">{locality?.id ?? ""}</output>
     <VenueLocationPicker venueId={1} venueName="Hall" csrf="csrf" disabled={false} point={point} savedPoint={null}
-      timezone={timezone} address={address} locality={null} onPoint={setPoint} onTimezone={setTimezone}
-      onAddress={setAddress} onLocality={vi.fn()} onGooglePlace={place => setGooglePlace(place?.provider_place_id ?? "")} onReview={setReview} />
+      timezone={timezone} address={address} locality={locality} onPoint={setPoint} onTimezone={setTimezone}
+      onAddress={setAddress} onLocality={setLocality} onGooglePlace={place => setGooglePlace(place?.provider_place_id ?? "")} onReview={setReview} />
   </>;
 }
 function resolved(point: LocationPoint, id: string, zone = "Asia/Tokyo"): LocationResolution {
@@ -38,6 +41,15 @@ beforeEach(() => {
     items: [{ name: "Google Hall", address: "Google address", latitude: 35.1, longitude: 139.1, country_code: "JP",
       admin_area: "東京都", locality_name: null, provider_place_id: "place-1",
       provider_url: "https://www.google.com/maps/search/?api=1&query_place_id=place-1" }] });
+});
+
+// 测试点：新建场馆打开地图时直接采用东京默认草稿点，已有场馆不被默认点覆盖。
+test("new venue starts from the Tokyo default point", async () => {
+  const onPoint = vi.fn();
+  render(<VenueLocationPicker venueName="" csrf="csrf" disabled={false} point={null} savedPoint={null}
+    timezone="Asia/Tokyo" address="" locality={null} onPoint={onPoint} onTimezone={vi.fn()}
+    onAddress={vi.fn()} onLocality={vi.fn()} onName={vi.fn()} onGooglePlace={vi.fn()} onReview={vi.fn()} />);
+  await waitFor(() => expect(onPoint).toHaveBeenCalledWith(DEFAULT_GOOGLE_MAP_POINT));
 });
 
 // 测试点：地图配置失败结束加载提示，不阻止手工维护。
@@ -57,10 +69,11 @@ test("search without saved coordinates and fill an empty timezone", async () => 
   render(<Harness />);
   await waitFor(() => expect(screen.getByRole("button", { name: "搜索位置" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "搜索位置" }));
-  await screen.findByRole("button", { name: "选择此位置" });
+  const candidate = await screen.findByRole("button", { name: /Hall.*address/ });
   expect(api.resolveGeography).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "选择此位置" }));
+  fireEvent.click(candidate);
   await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue("Asia/Tokyo"));
+  expect(screen.getByText("已匹配 Google 地点")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "模拟保存" })).toBeEnabled();
 });
 
@@ -79,7 +92,7 @@ test("resolved timezone replaces an existing timezone", async () => {
   render(<Harness initialTimezone="America/New_York" />);
   fireEvent.click(await screen.findByRole("button", { name: "测试点选" }));
   await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue("Asia/Tokyo"));
-  expect(screen.getByText("已按位置设置时区：Asia/Tokyo")).toBeInTheDocument();
+  expect(screen.getByText("Asia/Tokyo")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "采用建议时区" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "保留当前时区" })).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getByRole("button", { name: "模拟保存" })).toBeEnabled());
@@ -104,8 +117,8 @@ test("late response cannot overwrite a newer point", async () => {
   expect(screen.getByLabelText("当前时区")).toHaveValue("America/New_York");
 });
 
-// 测试点：地址查询期间的手工编辑不被覆盖，没有地区匹配时不自动登记地区。
-test("address suggestions cannot overwrite an intervening edit", async () => {
+// 测试点：地图选点会自动解析地址，但查询期间的手工编辑不会被晚到结果覆盖。
+test("map point resolves address without overwriting an intervening edit", async () => {
   let finish: ((value: LocationResolution) => void) | undefined;
   let requestId = "";
   api.resolveGeography.mockImplementation((point: LocationPoint, parts: string, id: string) => {
@@ -115,16 +128,32 @@ test("address suggestions cannot overwrite an intervening edit", async () => {
   render(<Harness />);
   fireEvent.click(await screen.findByRole("button", { name: "测试点选" }));
   await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue("Asia/Tokyo"));
-  fireEvent.click(screen.getByRole("button", { name: "解析此位置" }));
   fireEvent.change(screen.getByLabelText("当前地址"), { target: { value: "手工纠正" } });
   await act(async () => finish?.({ ...resolved({ latitude: 35, longitude: 139 }, requestId), address: {
     status: "ready", message: null, attribution: "Google Maps", attribution_url: "https://maps.google.com/",
     items: [{ name: "Hall", address: "附近地址", latitude: 35, longitude: 139, country_code: "JP", admin_area: null,
       locality_name: null, provider_place_id: null, provider_url: null }],
   } }));
-  expect(screen.getByRole("button", { name: "采用地址建议" })).toBeDisabled();
-  expect(screen.getByText(/不会自动新增地区/)).toBeInTheDocument();
   expect(screen.getByLabelText("当前地址")).toHaveValue("手工纠正");
+  expect(screen.queryByRole("button", { name: "解析此位置" })).not.toBeInTheDocument();
+});
+
+// 测试点：地图选点解析成功后直接采用地址和最匹配的已登记地区，不增加确认步骤。
+test("map point automatically fills address and locality", async () => {
+  api.resolveGeography.mockImplementation((point: LocationPoint, parts: string, id: string) => Promise.resolve(parts === "timezone" ? resolved(point, id) : {
+    ...resolved(point, id),
+    address: { status: "ready", message: null, attribution: "Google Maps", attribution_url: "https://maps.google.com/", items: [{
+      name: "Hall", address: "東京都千代田区千代田1-1", latitude: 35, longitude: 139, country_code: "JP",
+      admin_area: "東京都", locality_name: "千代田区", provider_place_id: null, provider_url: null,
+    }] },
+    localities: [{ id: 18, country_code: "JP", admin_area: "東京都", locality_name: "千代田区", area_level: "locality", state_token: "token" }],
+  }));
+  render(<Harness />);
+  fireEvent.click(await screen.findByRole("button", { name: "测试点选" }));
+  await waitFor(() => expect(screen.getByLabelText("当前地址")).toHaveValue("東京都千代田区千代田1-1"));
+  expect(screen.getByLabelText("当前地区")).toHaveTextContent("18");
+  expect(screen.getByText("地址与地区已自动解析")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /采用/ })).not.toBeInTheDocument();
 });
 
 // 测试点：清空或复位后放弃自动填充的旧时区，组件卸载取消在途请求。

@@ -255,7 +255,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
             savedPoint={data.latitude !== null && data.longitude !== null ? { latitude: data.latitude, longitude: data.longitude } : null}
             onPoint={point => { setLatitude(point ? String(point.latitude) : ""); setLongitude(point ? String(point.longitude) : ""); }}
             onTimezone={setTimezone} onAddress={setAddress} onLocality={setSelectedCity}
-            onGooglePlace={setGooglePlace} onReview={setMapReview} />}
+            onGooglePlace={setGooglePlace} onReview={setMapReview} onDone={() => setMapOpen(false)} />}
         </>}
         <div className="console-submit-row">
           <button className="console-submit-btn" type="button" disabled={busy || mapReview || !dirty || invalidCoordinates || (venueKind !== "online" && !timezone)} onClick={() => void preview()}>保存修改</button>
