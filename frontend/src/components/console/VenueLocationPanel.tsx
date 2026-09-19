@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  createConsoleLocality, deleteConsoleVenueMapLink, getConsoleLocalities,
-  getConsoleTimezones, getConsoleVenueLocation, previewConsoleLocality, previewConsoleVenueLocation,
-  saveConsoleLocality, saveConsoleVenueLocation, saveConsoleVenueMapLink, searchConsoleVenueMapCandidates,
-  type GeoLocality, type GeoLocalityCreate, type GeoLocalityPage, type GooglePlaceDraft, type MapCandidate,
+  deleteConsoleVenueMapLink, getConsoleLocalities, getConsoleTimezones, getConsoleVenueLocation,
+  previewConsoleVenueLocation, saveConsoleVenueLocation, saveConsoleVenueMapLink, searchConsoleVenueMapCandidates,
+  type GeoLocality, type GeoLocalityPage, type GooglePlaceDraft, type MapCandidate,
   type MapCandidateSearch, type MapProvider, type MapSearchProvider,
   type VenueLocation, type VenueLocationWrite,
 } from "../../api";
@@ -13,9 +12,6 @@ import { VenueLocationPicker } from "./VenueLocationPicker";
 
 const PROVIDERS: Record<MapProvider, string> = { google: "Google Maps", apple: "Apple Maps", amap: "高德地图" };
 const EDITABLE_PROVIDERS: MapSearchProvider[] = ["apple", "amap"];
-const AREA_LEVELS: Record<GeoLocality["area_level"], string> = {
-  country: "国家／地区", admin_area: "一级行政区", locality: "城市",
-};
 const FIELD_LABELS: Record<string, string> = {
   locality_id: "已公布地区", address: "公开门牌地址", coordinates: "WGS84 坐标",
   timezone_id: "场馆精确时区",
@@ -54,11 +50,6 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
   const [mapOpen, setMapOpen] = useState(false);
   const [mapReview, setMapReview] = useState(false);
   const [googlePlace, setGooglePlace] = useState<GooglePlaceDraft | null>(null);
-  const [localityEditorMode, setLocalityEditorMode] = useState<"create" | "edit" | null>(null);
-  const [areaLevel, setAreaLevel] = useState<GeoLocality["area_level"]>("locality");
-  const [country, setCountry] = useState("");
-  const [region, setRegion] = useState("");
-  const [cityName, setCityName] = useState("");
   const [provider, setProvider] = useState<MapSearchProvider>("apple");
   const [mapQuery, setMapQuery] = useState(venueName);
   const [mapSearch, setMapSearch] = useState<MapCandidateSearch | null>(null);
@@ -102,23 +93,6 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
     if (alive.current) { setCities(result); setSearchedQuery(query); }
   });
   const options = [...new Map([...cities.items, ...(selectedCity ? [selectedCity] : [])].map(city => [city.id, city])).values()];
-  const openLocalityEditor = (mode: "create" | "edit") => {
-    if (mode === "edit" && selectedCity) {
-      setAreaLevel(selectedCity.area_level); setCountry(selectedCity.country_code);
-      setRegion(selectedCity.admin_area ?? ""); setCityName(selectedCity.locality_name ?? "");
-    } else {
-    }
-    setLocalityEditorMode(mode);
-  };
-  const localityPayload: GeoLocalityCreate = {
-    country_code: country,
-    admin_area: areaLevel === "country" ? null : region.trim() || null,
-    locality_name: areaLevel === "locality" ? cityName.trim() || null : null,
-    area_level: areaLevel,
-  };
-  const localityDraftValid = /^[A-Z]{2}$/.test(country)
-    && (areaLevel !== "admin_area" || !!region.trim())
-    && (areaLevel !== "locality" || !!cityName.trim());
   const nullableNumber = (value: string) => value.trim() === "" ? null : Number(value);
   const invalidCoordinates = (latitude.trim() === "") !== (longitude.trim() === "")
     || (latitude.trim() !== "" && (!Number.isFinite(Number(latitude)) || Math.abs(Number(latitude)) > 90))
@@ -190,54 +164,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
           <span>共 {cities.total} 个地区 · 第 {cities.page} / {Math.max(1, Math.ceil(cities.total / cities.page_size))} 页</span>
           <button className="console-ghost-btn" type="button" disabled={busy || cities.page <= 1} onClick={() => void searchCities(searchedQuery, cities.page - 1)}>上一页地区</button>
           <button className="console-ghost-btn" type="button" disabled={busy || cities.page * cities.page_size >= cities.total} onClick={() => void searchCities(searchedQuery, cities.page + 1)}>下一页地区</button>
-          <button className="console-ghost-btn" type="button" disabled={busy} onClick={() => localityEditorMode === "create" ? setLocalityEditorMode(null) : openLocalityEditor("create")}>{localityEditorMode === "create" ? "收起地区登记" : "登记已核验地区"}</button>
-          <button className="console-ghost-btn" type="button" disabled={busy || !selectedCity} onClick={() => localityEditorMode === "edit" ? setLocalityEditorMode(null) : openLocalityEditor("edit")}>{localityEditorMode === "edit" ? "收起地区修改" : "修改已选地区"}</button>
-        </div>
-        {localityEditorMode && <div className="tour-admin-block">
-          <h3>{localityEditorMode === "create" ? "登记已核验地区" : "修改已选地区"}</h3>
-          <div className="tour-admin-fields">
-            <label>地区层级<select aria-label="地区层级" value={areaLevel} disabled={busy} onChange={e => setAreaLevel(e.target.value as GeoLocality["area_level"])}>
-              {Object.entries(AREA_LEVELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select></label>
-            <label>国家／地区代码<input maxLength={2} value={country} disabled={busy} placeholder="JP" onChange={e => setCountry(e.target.value.toUpperCase())} /></label>
-            <label>都道府县／省／州<input value={region} disabled={busy || areaLevel === "country"} onChange={e => setRegion(e.target.value)} /></label>
-            <label>城市名称<input value={cityName} disabled={busy || areaLevel !== "locality"} onChange={e => setCityName(e.target.value)} /></label>
           </div>
-          <p className="console-admin-hint">先查询已有地区，避免重复登记。</p>
-          <button className="console-submit-btn" type="button" disabled={busy || !localityDraftValid} onClick={() => {
-            setMessage("");
-            const rows: ReadonlyArray<readonly [string, ReactNode]> = [
-              ["层级", AREA_LEVELS[areaLevel]], ["国家／地区", country],
-              ["行政区", localityPayload.admin_area ?? "未填写"],
-              ["城市", localityPayload.locality_name ?? "未填写"],
-            ];
-            if (localityEditorMode === "create") {
-              setConfirmation({ title: "确认登记地区", rows, confirmLabel: "提交插入", run: async () => {
-                const created = await createConsoleLocality(localityPayload, auth.csrfToken ?? "");
-                if (alive.current) { setSelectedCity(created); setLocalityEditorMode(null); setMessage("地区已登记并选中；请检查并保存场馆所在地。"); }
-              } });
-              return;
-            }
-            if (!selectedCity) return;
-            void perform(async () => {
-              const update = { ...localityPayload, expected_state_token: selectedCity.state_token };
-              const result = await previewConsoleLocality(selectedCity.id, update);
-              if (!alive.current) return;
-              setConfirmation({ title: "确认地区资料修改", rows: [
-                ["原地区", cityLabel(result.before)], ["新地区", cityLabel({ ...result.before, ...result.after })],
-                ["引用 Venue", result.venue_count],
-                ["关联 Live", result.live_count],
-              ], run: async () => {
-                await saveConsoleLocality(selectedCity.id, result.after, auth.csrfToken ?? "");
-                const refreshed = await getConsoleVenueLocation(venueId);
-                if (alive.current) {
-                  apply(refreshed); setLocalityEditorMode(null);
-                  setMessage("地区已保存；关联 Live 的已存时间偏移不随本次资料修改而变动。");
-                }
-              } });
-            });
-          }}>{localityEditorMode === "create" ? "提交插入" : "预览修改"}</button>
-        </div>}
         <div className="tour-admin-fields">
           <label>公开门牌地址<input value={address} disabled={busy || !physical} onChange={e => setAddress(e.target.value)} /></label>
           <label>场馆精确时区<select aria-label="场馆精确时区" value={timezone} disabled={busy || venueKind === "online"} onChange={e => setTimezone(e.target.value)}>{zoneOptions}</select></label>

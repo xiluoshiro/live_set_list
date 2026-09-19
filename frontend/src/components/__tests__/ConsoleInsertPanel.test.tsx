@@ -329,7 +329,7 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
-  // 测试点：歌曲仅提供管理入口，场地管理入口可以切换到对应页面。
+  // 测试点：歌曲仅提供管理入口；场地后的地区管理为独立资料入口。
   test("控制台导航支持按资料类型切换", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel initialMode="live_create" />);
@@ -342,6 +342,10 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(within(content).getByRole("tab", { name: "场地管理" }));
     expect(within(content).getByRole("tab", { name: "场地管理" })).toHaveAttribute("aria-selected", "true");
+
+    await user.click(within(content).getByRole("tab", { name: "地区（管理）" }));
+    expect(within(content).getByRole("tab", { name: "地区（管理）" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("region", { name: "地区管理" })).toBeInTheDocument();
 
     expect(screen.queryByRole("navigation", { name: "控制台工具" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "地理质量" })).not.toBeInTheDocument();
