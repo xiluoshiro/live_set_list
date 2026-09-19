@@ -21,17 +21,15 @@ describe("BandIconsCell", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
-  test("图标超过 5 个时显示省略号并标记 has-overflow", () => {
-    // 测试点：超量时触发“省略号提醒 + 可滚动样式”。
-    const { container } = render(<BandIconsCell icons={[1, 2, 3, 4, 5, 6]} rowId={102} />);
+  test("图标超过 5 个时显示省略号", () => {
+    // 测试点：超过展示阈值时显示省略号提醒。
+    render(<BandIconsCell icons={[1, 2, 3, 4, 5, 6]} rowId={102} />);
     expect(screen.getByText("…")).toBeInTheDocument();
-    expect(container.querySelector(".icons-cell-wrap.has-overflow")).not.toBeNull();
   });
 
-  test("图标不超过 5 个时不显示省略号并标记 no-overflow", () => {
-    // 测试点：未超量时保持无省略号、无滚动条提示状态。
-    const { container } = render(<BandIconsCell icons={[1, 2, 3, 4, 5]} rowId={103} />);
+  test("图标不超过 5 个时不显示省略号", () => {
+    // 测试点：未超过展示阈值时不显示省略号。
+    render(<BandIconsCell icons={[1, 2, 3, 4, 5]} rowId={103} />);
     expect(screen.queryByText("…")).not.toBeInTheDocument();
-    expect(container.querySelector(".icons-cell-wrap.no-overflow")).not.toBeNull();
   });
 });

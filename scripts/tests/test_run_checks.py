@@ -176,20 +176,33 @@ def test_backend_integration_groups_restore_seed_once(monkeypatch):
     assert restore_calls == [True]
 
 
-# 测试点：迁移后的五个脚本测试只由 scripts 组收集，backend 不得重复收集。
-def test_script_tests_belong_only_to_scripts_group():
-    names = {
-        "test_apply_remote_sql.py", "test_sync_production_db.py", "test_run_dev.py",
-        "test_run_checks.py", "test_production_assets.py",
-    }
-    assert {p.name for p in (ROOT / "scripts/tests").glob("test_*.py")} == names
-    assert not names.intersection(p.name for p in (ROOT / "backend/tests/unit").glob("test_*.py"))
+# 测试点：scripts 按目录收集任意新测试，backend 只收集自身测试目录。
+def test_script_tests_belong_only_to_scripts_group(monkeypatch, tmp_path):
+    scripts_dir = tmp_path / "scripts"
+    scripts_tests = scripts_dir / "tests"
+    backend_dir = tmp_path / "backend"
+    backend_tests = backend_dir / "tests" / "unit"
+    scripts_tests.mkdir(parents=True)
+    backend_tests.mkdir(parents=True)
+    for name in ("test_new_tool.py", "test_another_tool.py"):
+        (scripts_tests / name).write_text("def test_ok(): pass", encoding="utf-8")
+    (backend_tests / "test_endpoint.py").write_text("def test_ok(): pass", encoding="utf-8")
+    python_path = backend_dir / ".venv" / ("Scripts/python.exe" if run_checks.os.name == "nt" else "bin/python")
+    python_path.parent.mkdir(parents=True)
+    python_path.touch()
+    monkeypatch.setattr(run_checks, "ROOT", tmp_path)
+    monkeypatch.setattr(run_checks, "SCRIPTS_DIR", scripts_dir)
+    monkeypatch.setattr(run_checks, "BACKEND_DIR", backend_dir)
+
     steps, failures = run_checks.build_scripts_steps()
     assert failures == []
-    assert [step[1] for step in steps] == ["mypy", "pytest scripts/tests"]
-    assert steps[0][2][-1] == "scripts/mypy.ini"
-    assert steps[1][2] == [str(run_checks.backend_python()), "-m", "pytest", str(ROOT / "scripts/tests"), "-q"]
-    assert all(step[3] == ROOT for step in steps)
+    pytest_commands = [command for _, _, command, _, _ in steps if "pytest" in command]
+    assert len(pytest_commands) == 1
+    assert str(scripts_tests) in pytest_commands[0]
+    backend_steps, failures = run_checks.build_backend_steps("unit")
+    assert failures == []
+    collected = [Path(command[command.index("pytest") + 2]) for _, _, command, _, _ in backend_steps if "pytest" in command]
+    assert collected == [Path("tests/unit/test_endpoint.py")]
 
 
 # 测试点：scripts 入口执行语法及测试步骤，任何一步失败均影响总退出码。

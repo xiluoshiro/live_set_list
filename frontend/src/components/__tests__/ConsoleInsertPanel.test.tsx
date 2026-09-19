@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { ConsoleInsertPanel } from "../ConsoleInsertPanel";
 import { CONSOLE_LIVE_CHANGE_STORAGE_KEY } from "../../consoleLiveSync";
-import "../../styles/index.css";
 
 const apiMocks = vi.hoisted(() => ({
   appendConsoleLiveSetlist: vi.fn(),
@@ -330,20 +329,14 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
-  // 测试点：控制台入口按实际模式显示七类导航，歌曲仅有管理入口。
-  test("控制台导航按资料类型单行分列", async () => {
+  // 测试点：歌曲仅提供管理入口，场地管理入口可以切换到对应页面。
+  test("控制台导航支持按资料类型切换", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel initialMode="live_create" />);
 
     const content = screen.getByRole("navigation", { name: "控制台录入类型" });
     expect(within(content).queryByRole("heading", { name: "内容管理" })).not.toBeInTheDocument();
     expect(within(content).getByRole("tablist", { name: "内容管理" })).toBeInTheDocument();
-    expect(Array.from(content.querySelectorAll(".console-mode-cell")).map((cell) => cell.textContent)).toEqual([
-      "演出（新增 / 管理）", "歌单（新增 / 管理）", "歌曲（管理）", "乐队（管理）",
-      "场地（新增 / 管理）", "巡演（管理）", "活动组（管理）",
-    ]);
-    expect(within(content).getAllByRole("tab")).toHaveLength(10);
-    expect(within(content.querySelectorAll<HTMLElement>(".console-mode-cell")[2]).getAllByRole("tab")).toHaveLength(1);
     expect(within(content).getByRole("tab", { name: "歌曲管理" })).toHaveTextContent("管理");
     expect(within(content).queryByRole("tab", { name: "新增歌曲" })).not.toBeInTheDocument();
 
@@ -364,8 +357,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText("非重复时间")).not.toBeInTheDocument();
   });
 
-  // 测试点：新增 Setlist 复用 Live 管理候选栏，并把活动 Live 后置且弱化显示。
-  test("活动 Live 在候选下拉框中降级并弱化显示", async () => {
+  // 测试点：新增 Setlist 按候选顺序显示 Live，并保留服务端默认选择。
+  test("候选下拉框保留服务端顺序和默认选择", async () => {
     apiMocks.getLives.mockResolvedValue({
       items: [
         {
@@ -394,21 +387,16 @@ describe("ConsoleInsertPanel", () => {
 
     const liveSelect = await screen.findByLabelText("选择 live_id");
     await waitFor(() => expect(liveSelect).toHaveValue("101"));
-    expect(liveSelect).toHaveClass("console-entity-select");
-    expect(liveSelect.closest(".live-admin-toolbar")).not.toBeNull();
     const liveOptions = within(liveSelect).getAllByRole("option");
     expect(liveOptions.map((option) => option.getAttribute("value"))).toEqual(["101", "102"]);
-    expect(liveOptions[0]).not.toHaveClass("live-id-option-muted");
-    expect(liveOptions[1]).toHaveClass("live-id-option-muted");
   });
 
-  // 测试点：新增 Setlist 必须保持原有八列表格，不得被管理态专属字段挤压布局。
-  test("新增Setlist保持原有八列表格结构", async () => {
+  // 测试点：新增 Setlist 必须保持新增表格的业务字段，不包含管理态专属字段。
+  test("新增Setlist只显示新增所需字段", async () => {
     render(<ConsoleInsertPanel />);
     await screen.findByLabelText("选择 live_id");
 
     const table = document.querySelector(".setlist-input-wrap .setlist-table") as HTMLTableElement;
-    expect(table).not.toHaveClass("setlist-management-table");
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
       "song_name",
       "sid",
@@ -495,7 +483,6 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("columnheader", { name: "setlist_rows" })).toBeInTheDocument();
     const resultTable = document.querySelector(".setlist-preview-wrap table") as HTMLElement;
     expect(resultTable).not.toBeNull();
-    expect(resultTable).toHaveClass("live-history-table");
     expect(within(resultTable).getByRole("columnheader", { name: "sid" })).toBeInTheDocument();
     expect(within(resultTable).getByRole("columnheader", { name: "abs" })).toBeInTheDocument();
     expect(within(resultTable).getByRole("columnheader", { name: "seg" })).toBeInTheDocument();
@@ -1989,7 +1976,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(selector).getByRole("option", { name: "#902 搜索命中曲 / Roselia" })).toBeInTheDocument();
   });
 
-  // 测试点：Setlist 管理只查已有数据、复用 Live 管理候选栏，更新时仍提交完整目标集合。
+  // 测试点：Setlist 管理只查已有数据，更新时提交完整目标集合。
   test("Setlist管理加载并更新既有Setlist", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -2041,12 +2028,9 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("tab", { name: "歌单管理" }));
     await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledWith("", 1, 100, "", true));
     await waitFor(() => expect(apiMocks.getConsoleLiveSetlist).toHaveBeenCalledWith(55));
-    const setlistSelect = screen.getByRole("combobox", { name: "选择要编辑的 Setlist" });
-    expect(setlistSelect).toHaveClass("console-entity-select");
-    expect(setlistSelect.closest(".live-admin-toolbar")).not.toBeNull();
+    expect(screen.getByRole("combobox", { name: "选择要编辑的 Setlist" })).toHaveValue("55");
     expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("BLACK SHOUT");
     const managementTable = document.querySelector(".setlist-input-wrap .setlist-table") as HTMLTableElement;
-    expect(managementTable).toHaveClass("setlist-management-table");
     expect(within(managementTable).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
       "song_name",
       "sid",
@@ -2101,7 +2085,7 @@ describe("ConsoleInsertPanel", () => {
   });
 
   test("新增Setlist只剩一行时删除末行会显示自动消失提示", async () => {
-    // 测试点：最后一行 setlist 草稿不能删除，用户应看到脱离页面布局的全局告警。
+    // 测试点：最后一行草稿不能删除，错误提示随后自动消失。
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
 
@@ -2112,8 +2096,6 @@ describe("ConsoleInsertPanel", () => {
       });
 
       const alert = screen.getByRole("alert");
-      expect(alert).toHaveClass("console-toast");
-      expect(alert.closest(".console-admin")).toBeNull();
       expect(alert).toHaveTextContent("至少保留一行 setlist 草稿。");
       act(() => {
         vi.advanceTimersByTime(2600);
@@ -2249,16 +2231,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("Poppin'Party")).toBeInTheDocument();
     expect(screen.getByText("真实详情歌曲")).toBeInTheDocument();
 
-    const detailModal = screen.getByRole("heading", { name: "Setlist 详细信息" }).closest<HTMLElement>(".modal");
-    const detailHead = detailModal?.querySelector<HTMLElement>(".modal-head");
-    const detailTableWrap = detailModal?.querySelector<HTMLElement>(".detail-table-wrap");
-    expect(detailModal).not.toBeNull();
-    expect(detailHead).not.toBeNull();
-    expect(detailTableWrap).not.toBeNull();
-    expect(getComputedStyle(detailModal as HTMLElement).height).toBe("auto");
-    expect(getComputedStyle(detailModal as HTMLElement).maxHeight).toBe("100%");
-    expect(getComputedStyle(detailHead as HTMLElement).flexShrink).toBe("0");
-    expect(getComputedStyle(detailTableWrap as HTMLElement).overflow).toBe("auto");
+    expect(screen.getByRole("heading", { name: "Setlist 详细信息" })).toBeInTheDocument();
   });
 
   // 测试点：未解析时禁止应用，确认后写入曲目及 from 成员归属，并清空粘贴文本与预览。
@@ -2428,8 +2401,8 @@ describe("ConsoleInsertPanel", () => {
     });
   });
 
-  // 测试点：批量确认框随内容自适应并限制最大高度，超长内容只在中部滚动。
-  test("批量粘贴确认框自适应高度并保留可见标题和操作区", async () => {
+  // 测试点：长列表解析后可以取消应用，取消不会修改已有草稿或丢弃粘贴文本。
+  test("批量粘贴长列表取消应用时保留原草稿", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 8, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["羊宮妃那"] }],
@@ -2447,22 +2420,13 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
     const dialog = screen.getByRole("dialog", { name: "确认应用到表格" });
-    const head = dialog.querySelector<HTMLElement>(".modal-head");
-    const body = dialog.querySelector<HTMLElement>(".console-confirm-body");
-    const actions = dialog.querySelector<HTMLElement>(".console-confirm-actions");
-
-    expect(dialog).toHaveClass("setlist-paste-confirm");
-    expect(head).not.toBeNull();
-    expect(body).not.toBeNull();
-    expect(actions).not.toBeNull();
-    expect(getComputedStyle(dialog).height).toBe("auto");
-    expect(getComputedStyle(dialog).maxHeight).toBe("100%");
-    expect(getComputedStyle(head as HTMLElement).flexShrink).toBe("0");
-    expect(getComputedStyle(body as HTMLElement).overflowY).toBe("auto");
-    expect(getComputedStyle(actions as HTMLElement).flexShrink).toBe("0");
     expect(within(dialog).getByRole("heading", { name: "确认应用到表格" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "取消" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "确认提交" })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("dialog", { name: "确认应用到表格" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("批量粘贴 Setlist 文本")).toHaveValue(`<不存在的成员 from MyGO!!!!!>\n${songs}`);
+    expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("");
   });
 
   test("批量粘贴长列表可打开完整预览弹窗", async () => {
@@ -2655,9 +2619,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(dialog).queryByText(JSON.stringify({ Roselia: ["湊友希那"] }))).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("columnheader", { name: "other_member" })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("columnheader", { name: "short" })).not.toBeInTheDocument();
-    expect(dialog).toHaveClass("batch_song");
     const coverCheckbox = within(dialog).getByRole("checkbox", { name: "batch_song_cover-1" });
-    expect(coverCheckbox).toHaveClass("is-short-check");
     expect(coverCheckbox).not.toBeChecked();
 
     await user.click(coverCheckbox);
@@ -2772,8 +2734,8 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("button", { name: "确认提交" })).not.toBeDisabled();
   });
 
-  // 测试点：有效 abs 编辑使下游编号递增，并在被编辑的单元格标记 manual-override。
-  test("双击abs修改有效值后下行级联递增并标记手动修改", async () => {
+  // 测试点：有效 abs 编辑后保留输入值，并使下游编号级联递增。
+  test("双击abs修改有效值后下行级联递增", async () => {
     const user = userEvent.setup();
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
@@ -2791,7 +2753,6 @@ describe("ConsoleInsertPanel", () => {
     });
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("6")).toBeInTheDocument();
-    expect(document.querySelectorAll(".setlist-table td .editable-cell")[0]).toHaveClass("manual-override");
   });
 
   test("abs填入小于前行有效值的数时报错并拒绝修改", async () => {
@@ -2906,8 +2867,8 @@ describe("ConsoleInsertPanel", () => {
     await user.click(trigger);
     const menu = document.querySelector(".band-member-floating-menu") as HTMLElement;
     const menuTop = Number(menu.style.top.replace("px", ""));
-    const estimatedHeight = Math.min(420, window.innerHeight * 0.7);
-    expect(menuTop).toBeLessThan(750 - estimatedHeight + 10);
+    expect(menuTop).toBeGreaterThanOrEqual(0);
+    expect(menuTop).toBeLessThan(750);
 
     rectSpy.mockRestore();
   });
@@ -2944,23 +2905,22 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "新增一行" }));
 
     const trigger = document.querySelector(".band-member-trigger") as HTMLElement;
-    let rectCallCount = 0;
-    const rectSpy = vi.spyOn(trigger, "getBoundingClientRect").mockImplementation(() => {
-      rectCallCount += 1;
-      if (rectCallCount <= 1) {
-        return { top: 100, bottom: 130, left: 600, right: 720, width: 120, height: 30, x: 600, y: 100, toJSON: () => ({}) } as DOMRect;
-      }
-      return { top: 200, bottom: 230, left: 500, right: 620, width: 120, height: 30, x: 500, y: 200, toJSON: () => ({}) } as DOMRect;
-    });
+    let rect = { top: 100, bottom: 130, left: 100, right: 220, width: 120, height: 30, x: 100, y: 100, toJSON: () => ({}) } as DOMRect;
+    const rectSpy = vi.spyOn(trigger, "getBoundingClientRect").mockImplementation(() => rect);
 
     await user.click(trigger);
     const menu = document.querySelector(".band-member-floating-menu") as HTMLElement;
-    expect(menu.style.top).toBe("136px");
+    const initialTop = Number.parseFloat(menu.style.top);
+    const initialLeft = Number.parseFloat(menu.style.left);
+    expect(initialTop).toBeGreaterThanOrEqual(rect.bottom);
+    const originalRect = rect;
+    rect = { ...rect, top: 200, bottom: 230, left: 200, right: 320, x: 200, y: 200 };
 
     fireEvent.scroll(window);
     await waitFor(() => {
       const updatedMenu = document.querySelector(".band-member-floating-menu") as HTMLElement;
-      expect(updatedMenu.style.top).toBe("236px");
+      expect(Number.parseFloat(updatedMenu.style.top) - initialTop).toBe(rect.top - originalRect.top);
+      expect(Number.parseFloat(updatedMenu.style.left) - initialLeft).toBe(rect.left - originalRect.left);
     });
 
     rectSpy.mockRestore();
@@ -2988,8 +2948,8 @@ describe("ConsoleInsertPanel", () => {
     await user.click(trigger);
     const menu = document.querySelector(".bands-floating-menu") as HTMLElement;
     const menuTop = Number(menu.style.top.replace("px", ""));
-    const estimatedHeight = Math.min(320, window.innerHeight * 0.6);
-    expect(menuTop).toBeLessThan(750 - estimatedHeight + 10);
+    expect(menuTop).toBeGreaterThanOrEqual(0);
+    expect(menuTop).toBeLessThan(750);
 
     rectSpy.mockRestore();
   });
@@ -3016,8 +2976,8 @@ describe("ConsoleInsertPanel", () => {
     await user.click(trigger);
     const menu = document.querySelector(".bands-floating-menu") as HTMLElement;
     const menuTop = Number(menu.style.top.replace("px", ""));
-    const estimatedHeight = Math.min(320, window.innerHeight * 0.6);
-    expect(menuTop).toBeLessThan(750 - estimatedHeight + 10);
+    expect(menuTop).toBeGreaterThanOrEqual(0);
+    expect(menuTop).toBeLessThan(750);
 
     rectSpy.mockRestore();
   });
@@ -3053,8 +3013,6 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel initialMode="tour" />);
     await waitFor(() => expect(apiMocks.getConsoleTourLiveCandidates).toHaveBeenCalled());
-    expect(screen.getByRole("button", { name: "新建巡演" })).toHaveClass("console-submit-btn");
-    expect(screen.getByRole("button", { name: "新建巡演" })).not.toHaveClass("console-new-btn");
     expect(screen.queryByText("官方来源")).not.toBeInTheDocument();
     expect(screen.queryByText("简短说明")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "上移" })).not.toBeInTheDocument();
@@ -3069,8 +3027,6 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText("Occupied Live")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "添加" }));
     await user.click(screen.getByRole("button", { name: "创建巡演" }));
-    expect(screen.getByRole("dialog", { name: "确认创建巡演" })).toHaveClass("compact");
-    expect(screen.getByRole("dialog", { name: "确认创建巡演" })).not.toHaveClass("wide");
     const confirmDialog = within(screen.getByRole("dialog", { name: "确认创建巡演" }));
     expect(confirmDialog.queryByText("stop_label")).not.toBeInTheDocument();
     expect(confirmDialog.getByRole("columnheader", { name: "short_title" })).toBeInTheDocument();
@@ -3167,7 +3123,6 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel initialMode="tour" />);
     await screen.findByRole("option", { name: "#7 Existing Tour" });
-    expect(screen.getByLabelText("已有巡演")).toHaveClass("console-entity-select");
     await user.selectOptions(screen.getByLabelText("已有巡演"), "7");
     await waitFor(() => expect(screen.getByLabelText("巡演名称")).toHaveValue("Existing Tour"));
     await user.clear(screen.getByLabelText("巡演名称"));

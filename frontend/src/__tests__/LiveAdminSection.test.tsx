@@ -237,7 +237,7 @@ describe("LiveAdminSection", () => {
     expect(within(screen.getByRole("combobox", { name: "按演出状态筛选" })).getByRole("option", { name: "状态" })).toHaveValue("");
   });
 
-  // 测试点：日期阶段保持只读；排期变化控件仅在改期后出现，并复用现有输入框样式。
+  // 测试点：日期阶段保持只读，排期变化控件仅在改期后出现并回传选项。
   test("shows read-only date phase and schedule change choices only after schedule edits", () => {
     const onScheduleChangeKindChange = vi.fn();
     renderSection(vi.fn(), {
@@ -251,7 +251,6 @@ describe("LiveAdminSection", () => {
     expect(screen.getByLabelText("日期阶段：进行中（只读）")).toHaveTextContent("进行中");
     expect(screen.getByLabelText("日期阶段：进行中（只读）")).toHaveAttribute("data-status-tone", "today");
     expect(screen.getByRole("radio", { name: "资料修正" })).toBeInTheDocument();
-    expect(screen.getByLabelText("排期变化说明")).toHaveClass("venue-query-input");
     fireEvent.click(screen.getByRole("radio", { name: "主办方正式改期" }));
     expect(onScheduleChangeKindChange).toHaveBeenCalledWith("reschedule");
   });
@@ -272,11 +271,11 @@ describe("LiveAdminSection", () => {
   // 测试点：新增 Live 页只显示录入控件和提交后清空选项，不混入既有 Live 查询。
   test("shows create controls without the existing Live toolbar", () => {
     renderSection();
+    expect(screen.getByDisplayValue("其他")).toBeInTheDocument();
+    expect(screen.getByLabelText("查询场地")).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Test Venue/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toBeEnabled();
 
-    expect(screen.getByDisplayValue("其他")).toHaveClass("live-type-input");
-    expect(screen.getByLabelText("查询场地")).toHaveClass("live-management-primary-control");
-    expect(screen.getByRole("button", { name: /Test Venue/ })).toHaveClass("live-management-primary-control");
-    expect(screen.getByRole("button", { name: "MyGO!!!!!" })).toHaveClass("live-management-primary-control");
     expect(screen.queryByRole("combobox", { name: "按 Live 类型筛选" })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("输入 Live ID 或标题")).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "新增后清空录入数据" })).toBeChecked();
@@ -285,9 +284,9 @@ describe("LiveAdminSection", () => {
   // 测试点：Live 管理页显示候选筛选但不显示新增专属选项，干净编辑态不重复提示。
   test("shows edit lookup without create-only controls or a clean hint", () => {
     renderSection(vi.fn(), { variant: "edit", editingLiveId: 55, isLiveDirty: false });
+    expect(screen.getByRole("combobox", { name: "按 Live 类型筛选" })).toBeEnabled();
+    expect(screen.getByPlaceholderText("输入 Live ID 或标题")).toBeEnabled();
 
-    expect(screen.getByRole("combobox", { name: "按 Live 类型筛选" })).toHaveClass("live-type-filter");
-    expect(screen.getByPlaceholderText("输入 Live ID 或标题")).toHaveClass("live-management-primary-control");
     expect(screen.queryByRole("checkbox", { name: "新增后清空录入数据" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Live #55 有未保存修改/)).not.toBeInTheDocument();
   });

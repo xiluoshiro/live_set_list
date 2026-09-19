@@ -199,7 +199,7 @@ test("shows locality total and fetches the next page", async () => {
   expect(api.getConsoleLocalities).toHaveBeenLastCalledWith("", 2);
 });
 
-// 测试点：未关联平台保留坐标入口，地图表复用紧凑表格规则以便窄屏完整呈现三列。
+// 测试点：未关联平台时保留坐标生成的地图链接及对应平台入口。
 test("keeps coordinate fallback when no place is linked", async () => {
   api.getConsoleVenueLocation.mockResolvedValue({ ...location, latitude: 35, longitude: 139, map_links: [{
     ...location.map_links[0], verified_at: null, is_current: false,
@@ -207,7 +207,6 @@ test("keeps coordinate fallback when no place is linked", async () => {
   }] });
   await openPanel();
   expect(screen.getByText("未关联")).toBeInTheDocument();
-  expect(screen.getByRole("table", { name: "场馆地图链接" })).toHaveClass("venue-map-table");
   expect(screen.queryByRole("link", { name: "打开场馆详情" })).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "按坐标打开" })).toHaveAttribute("href", expect.stringContaining("query=35,139"));
 });

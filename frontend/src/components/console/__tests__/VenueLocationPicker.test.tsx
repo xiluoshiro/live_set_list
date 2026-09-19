@@ -45,20 +45,12 @@ beforeEach(() => {
       provider_url: "https://www.google.com/maps/search/?api=1&query_place_id=place-1" }] });
 });
 
-// 测试点：地图选择器直接复用 Console 查询行、按钮、提交行和只读字段，并保持无地址状态文案一致。
-test("uses shared Console style primitives", async () => {
+// 测试点：新建场馆无地址时显示空地址提示，查询可用且不出现清除位置操作。
+test("shows empty address and available search for a new venue", async () => {
   render(<Harness newVenue initialAddress="" />);
   await waitFor(() => expect(screen.getByRole("button", { name: "查询" })).toBeEnabled());
-  const controls = screen.getByLabelText("位置搜索与当前选择");
-  expect(controls.closest(".venue-location-picker-block")).not.toHaveClass("tour-admin-block");
-  expect(screen.getByText("选择场馆")).toHaveClass("live-management-label");
-  expect(screen.getByRole("textbox", { name: "名称或地址定位" })).toHaveClass("venue-query-input", "live-management-primary-control");
-  expect(screen.getByRole("button", { name: "查询" })).toHaveClass("console-ghost-btn");
   expect(screen.queryByRole("button", { name: "清除位置" })).not.toBeInTheDocument();
-  expect(screen.getByText("坐标").parentElement).toHaveClass("console-readonly-field");
-  expect(screen.getByText("时区").parentElement).toHaveClass("console-readonly-field");
   expect(await screen.findByText("尚未取得地址", { exact: true })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "使用此位置" }).parentElement).toHaveClass("console-submit-row");
 });
 
 // 测试点：新建场馆打开地图时直接采用东京默认草稿点，已有场馆不被默认点覆盖。

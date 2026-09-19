@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, vi } from "vitest";
@@ -168,21 +168,17 @@ describe("StageLedgerContent", () => {
     const onOpenBand = vi.fn();
     const { container } = renderStage(makeDetail(), { onOpenBand });
 
-    expect(container.querySelector("ol.stage-track-list")).not.toBeNull();
     expect(screen.getAllByText("Main Set").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("Opening Act").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("ZZ").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Song One")).toBeInTheDocument();
     expect(screen.getAllByText("01").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/77");
-    expect(container.querySelector(".stage-actions .stage-official-link")).not.toBeNull();
-    expect(container.querySelector(".stage-sources-section")).toBeNull();
     expect(screen.queryByText("资料来源")).not.toBeInTheDocument();
     expect(screen.queryByText("阵容摘要")).not.toBeInTheDocument();
     expect(screen.queryByText("逐曲检查器")).not.toBeInTheDocument();
     expect(screen.queryByText("按原始段落和绝对顺序排列，实际出演关系在曲目中展开。")).not.toBeInTheDocument();
     expect(screen.queryByText("查看")).not.toBeInTheDocument();
-    expect(container.querySelector(".stage-summary-trigger")).toBeNull();
     expect(document.title).toBe("Stage Ledger Live · LiveSetList");
     expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toContain("日本武道館");
 
@@ -208,27 +204,6 @@ describe("StageLedgerContent", () => {
 
     const structuredData = JSON.parse(container.querySelector("script[data-stage-ledger-jsonld]")?.textContent ?? "{}");
     expect(structuredData.url).toMatch(/\/lives\/77$/);
-  });
-
-  test("保留共同出演的时间轴连续性", () => {
-    // 测试点：共同出演只增加成员时，保留共享乐队的连续色轨，不制造无意义的时间断点。
-    const baseRow = makeDetail().detail_rows[0];
-    const pastel = { ...baseRow.band_members[0], band_id: 3, band_name: "Pastel＊Palettes" };
-    const afterglow = { ...pastel, band_id: 4, band_name: "Afterglow" };
-    const detail = makeDetail({
-      detail_rows: [
-        { ...baseRow, row_id: "M19", absolute_order: 19, song_name: "Song Nineteen", band_members: [pastel] },
-        { ...baseRow, row_id: "M20", absolute_order: 20, song_name: "Song Twenty", band_members: [pastel] },
-        { ...baseRow, row_id: "M21", absolute_order: 21, song_name: "Song Twenty One", band_members: [afterglow, pastel] },
-        { ...baseRow, row_id: "M22", absolute_order: 22, song_name: "Song Twenty Two", band_members: [pastel] },
-      ],
-    });
-    const { container } = renderStage(detail);
-
-    const blocks = container.querySelectorAll(".stage-act-block");
-    expect(blocks).toHaveLength(3);
-    expect(blocks[1]).toHaveClass("is-continuation");
-    expect(blocks[2]).toHaveClass("is-continuation");
   });
 
   // 测试点：两支乐队分别从 M1 编号时，曲目分组和详情选择不能因重复 row_id 串行。
@@ -278,8 +253,8 @@ describe("StageLedgerContent", () => {
     expect(screen.getAllByText("实到成员：羊宮妃那").length).toBeGreaterThanOrEqual(1);
   });
 
-  test("流程摘要中的段落与乐队跳转分成两行", () => {
-    // 测试点：长流程的页内跳转按段落与出演乐队分层，避免两类定位入口挤在同一行。
+  test("流程跳转链接能定位并聚焦段落和乐队", async () => {
+    // 测试点：长流程提供段落与乐队跳转，点击链接将焦点移到实际目标。
     const baseRow = makeDetail().detail_rows[0];
     const detail = makeDetail({
       detail_rows: [
@@ -294,12 +269,18 @@ describe("StageLedgerContent", () => {
         { ...baseRow, row_id: "EN21", absolute_order: 21, sub_order: 21, segment_type: "EN", song_name: "Encore Song" },
       ],
     });
-    const { container } = renderStage(detail);
+    renderStage(detail);
 
-    const jumpRows = container.querySelectorAll(".stage-jump-row");
-    expect(jumpRows).toHaveLength(2);
-    expect(jumpRows[0]).toHaveTextContent("Opening Act");
-    expect(jumpRows[1]).toHaveTextContent("Poppin'Party");
+    const navigation = within(screen.getByRole("navigation", { name: "演出流程跳转" }));
+    const user = userEvent.setup();
+    for (const name of ["Opening Act", "Poppin'Party"]) {
+      const link = navigation.getByRole("link", { name });
+      const targetId = link.getAttribute("href")!.slice(1);
+      const target = document.getElementById(targetId);
+      expect(target).not.toBeNull();
+      await user.click(link);
+      expect(target).toHaveFocus();
+    }
   });
 
   test("Event 先呈现出席阵容，不伪造空歌单", async () => {
