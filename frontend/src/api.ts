@@ -711,6 +711,14 @@ export const getConsoleTimezones = () => geographyRequest<string[]>("/timezones"
 
 export type GeographyCapabilities = { google_maps_browser_api_key: string; geocoding: boolean; timezone: boolean };
 export type LocationPoint = { latitude: number; longitude: number };
+export type GeocodingLanguageCode = "ja" | "zh-CN" | "zh-HK" | "zh-TW" | "en";
+export const geocodingLanguageForCountry = (countryCode: string | null): GeocodingLanguageCode => {
+  if (countryCode === "JP") return "ja";
+  if (countryCode === "CN") return "zh-CN";
+  if (countryCode === "HK" || countryCode === "MO") return "zh-HK";
+  if (countryCode === "TW") return "zh-TW";
+  return "en";
+};
 export type GooglePlaceDraft = { provider_place_id: string; provider_url: string; name: string };
 export type GeocodingCandidate = LocationPoint & {
   name: string; address: string; country_code: string | null; admin_area: string | null; locality_name: string | null;
@@ -725,11 +733,18 @@ export type LocationResolution = LocationPoint & {
 };
 export const getGeographyCapabilities = (signal?: AbortSignal) => geographyRequest<GeographyCapabilities>("/geography/capabilities", "GET", undefined, undefined, signal);
 export const searchGeography = (query: string, country_code: string | null, csrf: string, signal?: AbortSignal) =>
-  geographyRequest<GeocodingResult>("/geography/search", "POST", { query, country_code }, csrf, signal);
-export const resolveGooglePlace = (place_id: string, request_id: string, csrf: string, signal?: AbortSignal) =>
-  geographyRequest<GeocodingResult>("/geography/place", "POST", { place_id, request_id }, csrf, signal);
-export const resolveGeography = (point: LocationPoint, parts: "timezone" | "address", request_id: string, csrf: string, signal?: AbortSignal) =>
-  geographyRequest<LocationResolution>("/geography/resolve", "POST", { ...point, parts, request_id, coordinate_system: "WGS84" }, csrf, signal);
+  geographyRequest<GeocodingResult>("/geography/search", "POST", {
+    query, country_code, language_code: geocodingLanguageForCountry(country_code),
+  }, csrf, signal);
+export const resolveGooglePlace = (place_id: string, request_id: string, country_code: string | null, csrf: string, signal?: AbortSignal) =>
+  geographyRequest<GeocodingResult>("/geography/place", "POST", {
+    place_id, request_id, country_code, language_code: geocodingLanguageForCountry(country_code),
+  }, csrf, signal);
+export const resolveGeography = (point: LocationPoint, parts: "timezone" | "address", request_id: string,
+  country_code: string | null, csrf: string, signal?: AbortSignal) =>
+  geographyRequest<LocationResolution>("/geography/resolve", "POST", {
+    ...point, parts, request_id, country_code, language_code: geocodingLanguageForCountry(country_code), coordinate_system: "WGS84",
+  }, csrf, signal);
 export const getConsoleLocalities = (q = "", page = 1) => geographyRequest<GeoLocalityPage>(
   `/localities?${new URLSearchParams({ q, page: String(page), limit: "20" })}`,
 );

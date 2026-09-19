@@ -36,7 +36,7 @@ def test_timezone_failure_is_not_default_offset():
         assert lookup_timezone(35, 139)["timezone_id"] is None
 
 
-# 测试点：非法数字、经纬颠倒越界、非 WGS84 与额外字段无法进入解析接口。
+# 测试点：非法坐标、坐标系、语言代码与额外字段无法进入解析接口。
 def test_query_validation():
     for values in ({"latitude": 139, "longitude": 35}, {"latitude": float("nan"), "longitude": 3},
                    {"latitude": 35, "longitude": float("inf")}, {"latitude": 35, "longitude": 139, "coordinate_system": "GCJ02"}):
@@ -44,6 +44,8 @@ def test_query_validation():
             ResolveInput.model_validate({"parts": "timezone", "request_id": "draft", **values})
     with pytest.raises(ValidationError):
         SearchInput(query="x" * 201)
+    with pytest.raises(ValidationError):
+        SearchInput(query="Hall", language_code="zh-Hans")
 
 
 def provider_response(items):
@@ -52,7 +54,7 @@ def provider_response(items):
     return response
 
 
-# 测试点：Google Text Search 只保留完整地点，复用本地缓存并输出 Place ID 与官方链接。
+# 测试点：Google Text Search 携带地区和日语偏好，只保留完整地点并复用本地缓存。
 def test_search_cache_and_malformed_results():
     payload = {"places": [
         {"id": "place-1", "displayName": {"text": "Hall"}, "formattedAddress": "東京都 1-1",
@@ -63,13 +65,14 @@ def test_search_cache_and_malformed_results():
          "location": {"latitude": "nan", "longitude": 139}},
     ]}
     with patch("app.geocoding.urlopen", return_value=provider_response(payload)) as network:
-        first = geocoding.geocode(query="Hall", country_code="JP")
-        second = geocoding.geocode(query="Hall", country_code="JP")
+        first = geocoding.geocode(query="Hall", country_code="JP", language_code="ja")
+        second = geocoding.geocode(query="Hall", country_code="JP", language_code="ja")
     assert first == second
     assert network.call_count == 1
     # 测试点：国家提示使用 Text Search 支持的 regionCode 字段，避免 Google 因未知字段返回 400。
     request_body = json.loads(network.call_args.args[0].data)
     assert request_body["regionCode"] == "jp"
+    assert request_body["languageCode"] == "ja"
     assert "includedRegionCodes" not in request_body
     assert len(first["items"]) == 1
     assert first["items"][0]["country_code"] == "JP"
@@ -87,28 +90,31 @@ def test_bad_response_is_unavailable(body):
         assert geocoding.geocode(query="Hall")["status"] == "unavailable"
 
 
-# 测试点：逆地理只返回地址与行政区，不把普通坐标伪装成 Google Place 关联。
+# 测试点：逆地理携带目标语言，只返回地址与行政区且不伪装成 Google Place 关联。
 def test_reverse_address_has_no_place_link():
     payload = {"results": [{
         "formatted_address": "日本、東京都",
         "geometry": {"location": {"lat": 35, "lng": 139}},
         "address_components": [{"long_name": "日本", "short_name": "JP", "types": ["country"]}],
     }]}
-    with patch("app.geocoding._request_json", return_value=payload):
-        result = geocoding.geocode(latitude=35, longitude=139)
+    with patch("app.geocoding._request_json", return_value=payload) as request:
+        result = geocoding.geocode(latitude=35, longitude=139, language_code="ja")
+    assert "language=ja" in request.call_args.args[0]
     assert result["items"][0]["country_code"] == "JP"
     assert result["items"][0]["provider_place_id"] is None
     assert result["items"][0]["provider_url"] is None
 
 
-# 测试点：POI Place ID 详情解析返回保存所需的名称、地址、坐标和 Google Maps URI。
+# 测试点：POI 详情携带目标语言和地区，并返回保存所需的完整 Google Place 数据。
 def test_place_details_returns_complete_google_place():
     payload = {
         "id": "place-1", "displayName": {"text": "Test Hall"}, "formattedAddress": "1 Main St",
         "location": {"latitude": 35, "longitude": 139}, "googleMapsUri": "https://maps.google.com/?cid=1",
     }
-    with patch("app.geocoding._request_json", return_value=payload):
-        result = geocoding.place_details("place-1")
+    with patch("app.geocoding._request_json", return_value=payload) as request:
+        result = geocoding.place_details("place-1", language_code="zh-HK", country_code="HK")
+    assert "languageCode=zh-HK" in request.call_args.args[0]
+    assert "regionCode=HK" in request.call_args.args[0]
     assert result["status"] == "ready"
     assert result["items"][0]["name"] == "Test Hall"
     assert result["items"][0]["provider_place_id"] == "place-1"

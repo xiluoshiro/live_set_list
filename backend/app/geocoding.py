@@ -160,11 +160,11 @@ def _result(items: list[dict[str, Any]]) -> dict[str, Any]:
             "attribution": ATTRIBUTION, "attribution_url": ATTRIBUTION_URL}
 
 
-def geocode(*, query: str | None = None, country_code: str | None = None,
+def geocode(*, query: str | None = None, country_code: str | None = None, language_code: str = "en",
             latitude: float | None = None, longitude: float | None = None) -> dict[str, Any]:
     try:
         if query is not None:
-            body: dict[str, Any] = {"textQuery": query, "maxResultCount": 5}
+            body: dict[str, Any] = {"textQuery": query, "languageCode": language_code, "maxResultCount": 5}
             if country_code:
                 body["regionCode"] = country_code.lower()
             data = _request_json(
@@ -173,7 +173,7 @@ def geocode(*, query: str | None = None, country_code: str | None = None,
             )
             places = data.get("places", []) if isinstance(data, dict) else []
             return _result([candidate for item in places[:5] if (candidate := _place_candidate(item)) is not None])
-        params = urlencode({"latlng": f"{latitude},{longitude}", "key": server_api_key()})
+        params = urlencode({"latlng": f"{latitude},{longitude}", "language": language_code, "key": server_api_key()})
         data = _request_json(f"https://maps.googleapis.com/maps/api/geocode/json?{params}")
         results = data.get("results", []) if isinstance(data, dict) else []
         candidate = _geocode_candidate(results[0]) if results else None
@@ -183,10 +183,13 @@ def geocode(*, query: str | None = None, country_code: str | None = None,
                 "attribution": ATTRIBUTION, "attribution_url": ATTRIBUTION_URL}
 
 
-def place_details(place_id: str) -> dict[str, Any]:
+def place_details(place_id: str, *, language_code: str = "en", country_code: str | None = None) -> dict[str, Any]:
     try:
+        params = {"languageCode": language_code}
+        if country_code:
+            params["regionCode"] = country_code.upper()
         data = _request_json(
-            f"https://places.googleapis.com/v1/places/{quote(place_id, safe='')}",
+            f"https://places.googleapis.com/v1/places/{quote(place_id, safe='')}?{urlencode(params)}",
             field_mask="id,displayName,formattedAddress,location,googleMapsUri,addressComponents",
         )
         candidate = _place_candidate(data)

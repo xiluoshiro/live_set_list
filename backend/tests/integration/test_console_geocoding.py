@@ -28,12 +28,13 @@ def test_auth_and_search_contract(integration_test_client):
     assert client.get("/api/console/geography/capabilities").status_code == 403
     headers = login(client)
     assert client.get("/api/console/geography/capabilities").status_code == 200
-    assert client.post("/api/console/geography/search", json={"query": "Hall"}).status_code == 403
+    search_payload = {"query": "Hall", "country_code": "JP", "language_code": "ja"}
+    assert client.post("/api/console/geography/search", json=search_payload).status_code == 403
     with patch("app.routers.console_geocoding.geocode", return_value={"status": "not_found", "items": [], "message": None,
                "attribution": "Google Maps", "attribution_url": "https://maps.google.com/"}) as lookup:
-        result = client.post("/api/console/geography/search", json={"query": "Hall"}, headers=headers)
+        result = client.post("/api/console/geography/search", json=search_payload, headers=headers)
     assert result.status_code == 200, result.text
-    lookup.assert_called_once_with(query="Hall", country_code=None)
+    lookup.assert_called_once_with(query="Hall", country_code="JP", language_code="ja")
 
 
 # 测试点：地址和时区解析全程只读，国家级地区可匹配，不新增城市或修改排期。
@@ -43,16 +44,18 @@ def test_resolution_is_read_only(integration_test_client, integration_admin_conn
     with conn.cursor() as cur:
         cur.execute("INSERT INTO geo_localities(country_code,area_level) VALUES ('HK','country')")
     before = fingerprint(conn)
-    payload = {"latitude": 22.3, "longitude": 114.1, "request_id": "draft-1", "parts": "timezone"}
+    payload = {"latitude": 22.3, "longitude": 114.1, "request_id": "draft-1", "parts": "timezone",
+               "country_code": "HK", "language_code": "zh-HK"}
     result = client.post("/api/console/geography/resolve", headers=headers, json=payload)
     assert result.status_code == 200, result.text
     assert result.json()["timezone"]["timezone_id"] == "Asia/Hong_Kong"
     address = {"status": "ready", "message": None, "attribution": "Google Maps", "attribution_url": "https://maps.google.com/",
                "items": [{"name": "香港", "address": "香港", "latitude": 22.3, "longitude": 114.1,
                           "country_code": "HK", "admin_area": None, "locality_name": None}]}
-    with patch("app.routers.console_geocoding.geocode", return_value=address):
+    with patch("app.routers.console_geocoding.geocode", return_value=address) as lookup:
         result = client.post("/api/console/geography/resolve", headers=headers, json={**payload, "parts": "address"})
     assert result.status_code == 200, result.text
+    lookup.assert_called_once_with(latitude=22.3, longitude=114.1, country_code="HK", language_code="zh-HK")
     assert result.json()["localities"][0]["area_level"] == "country"
     assert result.json()["timezone"]["status"] == "not_requested"
     assert fingerprint(conn) == before
