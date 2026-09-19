@@ -243,7 +243,7 @@ CORS_ALLOW_ORIGINS=https://<domain>
 LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist
 ```
 
-Venue 地图候选搜索是可选能力。启用对应供应商时，在后端 secret 中按需增加下列变量；不要把 Key、Apple 私钥或 token 写入 release 包、前端变量或仓库。未配置的供应商仍可使用手工详情链接和 WGS84 坐标兜底。
+Venue 地图选择器固定使用 Google Maps。部署时必须配置一把浏览器 Key 和一把服务端 Key；两者都放在后端 secret 中，不写入 release 包或仓库。后端只会把浏览器 Key 返回给已登录的 Console 页面，但浏览器 Key 本身仍会出现在浏览器网络请求中，因此必须设置精确的 HTTP Referrer 和 API 限制。服务端 Key 不会返回前端，必须按服务器出口 IP 和所需 API 限制。
 
 ```powershell
 GOOGLE_MAPS_BROWSER_API_KEY=<browser-key-restricted-by-exact-console-origin>
@@ -253,8 +253,9 @@ APPLE_MAPS_SERVER_API_TOKEN=<short-lived-maps-access-token>
 AMAP_WEB_SERVICE_API_KEY=<web-service-key>
 ```
 
+`GOOGLE_MAPS_BROWSER_API_KEY` 只允许 Maps JavaScript API；`GOOGLE_MAPS_SERVER_API_KEY` 只允许 Places API (New) 和 Geocoding API。`GOOGLE_MAPS_CACHE_PATH` 所在目录必须由后端运行用户写入。Apple 和高德凭据只服务于各自独立的详情链接搜索，不参与地图渲染，也不是 Google Maps 的回退。
+
 Apple access token 有效期有限，部署方必须建立独立的安全刷新机制；没有该机制时不要在生产环境宣称 Apple 候选搜索可用。
-Google 候选列表的品牌标识及展示许可、三家供应商的真实接口响应和跨地区地点落点尚未验收；在完成这些检查前，以上变量仅是配置说明，不代表已获准在生产启用候选搜索。手工详情关联与坐标外链不依赖这些凭据。
 
 如果首次部署需要 bootstrap admin，可以短暂设置：
 

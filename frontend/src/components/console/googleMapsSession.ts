@@ -26,6 +26,7 @@ type MapsApi = {
 declare global {
   interface Window {
     google?: { maps: MapsApi };
+    __liveSetListGoogleMapsReady?: () => void;
   }
 }
 
@@ -48,12 +49,21 @@ function loadGoogleMaps(apiKey: string): Promise<MapsApi> {
   }
   loadedKey = apiKey;
   loader = new Promise<MapsApi>((resolve, reject) => {
+    const callbackName = "__liveSetListGoogleMapsReady";
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async&callback=${callbackName}`;
     script.async = true;
     script.dataset.liveSetListGoogleMaps = "true";
-    script.onload = () => window.google?.maps ? resolve(window.google.maps) : reject(new Error("Google Maps SDK 未初始化"));
-    script.onerror = () => reject(new Error("Google Maps SDK 加载失败"));
+    window[callbackName] = () => {
+      delete window[callbackName];
+      if (window.google?.maps) resolve(window.google.maps);
+      else reject(new Error("Google Maps SDK 未初始化"));
+    };
+    script.onerror = () => {
+      delete window[callbackName];
+      script.remove();
+      reject(new Error("Google Maps SDK 加载失败"));
+    };
     document.head.appendChild(script);
   }).catch(error => {
     loader = null;
