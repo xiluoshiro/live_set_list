@@ -44,6 +44,8 @@ beforeEach(() => {
 afterEach(() => {
   resetGoogleMapSession();
   delete window.google;
+  delete window.__liveSetListGoogleMapsReady;
+  document.querySelectorAll("script[data-live-set-list-google-maps]").forEach(script => script.remove());
 });
 
 // 测试点：普通地图点击和标记拖动输出六位 WGS84，Google POI 点击只交付 Place ID。
@@ -77,4 +79,32 @@ test("unmount and remount reuse one Google map instance", async () => {
   await waitFor(() => expect(screen.getByRole("region", { name: "场馆位置地图" })).toBeInTheDocument());
   expect(fake.makeMap).toHaveBeenCalledTimes(1);
   second.unmount();
+});
+
+// 测试点：loading=async 必须等待 Google callback，不能把 script load 事件当成 SDK 就绪。
+test("async SDK loading initializes the map from the Google callback", async () => {
+  resetGoogleMapSession();
+  delete window.google;
+  const props = { config, point: null, disabled: false, onPoint: vi.fn(), onPlaceId: vi.fn() };
+  render(<VenueLocationMap {...props} />);
+
+  const script = await waitFor(() => {
+    const element = document.querySelector("script[data-live-set-list-google-maps]");
+    expect(element).toBeInstanceOf(HTMLScriptElement);
+    return element as HTMLScriptElement;
+  });
+  expect(new URL(script.src).searchParams.get("callback")).toBe("__liveSetListGoogleMapsReady");
+  expect(fake.makeMap).not.toHaveBeenCalled();
+
+  window.google = {
+    maps: {
+      Map: fake.makeMap,
+      Marker: fake.makeMarker,
+      event: { trigger: vi.fn() },
+    },
+  } as unknown as NonNullable<typeof window.google>;
+  act(() => window.__liveSetListGoogleMapsReady?.());
+
+  await waitFor(() => expect(fake.makeMap).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText(/Google Maps 加载失败/)).not.toBeInTheDocument();
 });
