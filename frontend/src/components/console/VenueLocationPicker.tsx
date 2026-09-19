@@ -58,7 +58,7 @@ export function VenueLocationPicker(props: Props) {
     current.current.onReview(true);
     const point = props.point;
     const timer = setTimeout(() => {
-      void resolveGeography(point, "timezone", requestId, props.csrf, controller.signal).then(result => {
+      void resolveGeography(point, "timezone", requestId, props.locality?.country_code ?? null, props.csrf, controller.signal).then(result => {
         if (controller.signal.aborted || pointKey(current.current.point) !== key || pointKey(result) !== key || result.request_id !== requestId) return;
         setZone(result.timezone);
         const suggested = result.timezone.timezone_id;
@@ -103,7 +103,7 @@ export function VenueLocationPicker(props: Props) {
     const requestId = `place-${props.venueId ?? "new"}-${++generation.current}`;
     setQueryBusy(true); setMessage("");
     try {
-      const result = await resolveGooglePlace(placeId, requestId, props.csrf, controller.signal);
+      const result = await resolveGooglePlace(placeId, requestId, props.locality?.country_code ?? null, props.csrf, controller.signal);
       const candidate = result.items[0];
       if (!controller.signal.aborted && candidate) useCandidate(candidate);
       else if (!controller.signal.aborted) setMessage(result.message ?? "没有取得该 Google 地点的资料。");
@@ -124,7 +124,7 @@ export function VenueLocationPicker(props: Props) {
     const originalLocality = current.current.locality?.id ?? null;
     setAddressResolved(false); setMessage("");
     try {
-      const result = await resolveGeography(point, "address", requestId, props.csrf, controller.signal);
+      const result = await resolveGeography(point, "address", requestId, props.locality?.country_code ?? null, props.csrf, controller.signal);
       if (controller.signal.aborted || pointKey(current.current.point) !== requestedPoint || pointKey(result) !== requestedPoint || result.request_id !== requestId) return;
       const candidate = result.address?.items[0];
       if (candidate && current.current.address === originalAddress) current.current.onAddress(candidate.address);

@@ -102,7 +102,7 @@ test("POI click directly fills Google place data", async () => {
   await waitFor(() => expect(screen.getByLabelText("Google Place")).toHaveTextContent("place-1"));
   expect(screen.getByLabelText("当前地址")).toHaveValue("Google address");
   await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue("Asia/Tokyo"));
-  expect(api.resolveGooglePlace).toHaveBeenCalledWith("place-1", expect.stringMatching(/^place-1-/), "csrf", expect.any(AbortSignal));
+  expect(api.resolveGooglePlace).toHaveBeenCalledWith("place-1", expect.stringMatching(/^place-1-/), null, "csrf", expect.any(AbortSignal));
 });
 
 // 测试点：坐标解析成功后直接覆盖已有时区，不要求用户处理冲突提示。
@@ -127,7 +127,7 @@ test("late response cannot overwrite a newer point", async () => {
   render(<Harness />);
   fireEvent.click(await screen.findByRole("button", { name: "测试点选" }));
   await waitFor(() => expect(api.resolveGeography).toHaveBeenCalledTimes(1));
-  const signal = api.resolveGeography.mock.calls[0][4] as AbortSignal;
+  const signal = api.resolveGeography.mock.calls[0][5] as AbortSignal;
   fireEvent.click(screen.getByRole("button", { name: "测试拖动" }));
   await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue("America/New_York"));
   expect(signal.aborted).toBe(true);

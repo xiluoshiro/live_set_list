@@ -10,12 +10,22 @@ test("resolution propagates cancellation and CSRF", async () => {
   vi.stubGlobal("fetch", fetchMock);
   const { resolveGeography } = await import("../api");
   const controller = new AbortController();
-  const promise = resolveGeography({ latitude: 35, longitude: 139 }, "timezone", "draft-1", "csrf", controller.signal);
+  const promise = resolveGeography({ latitude: 35, longitude: 139 }, "timezone", "draft-1", "JP", "csrf", controller.signal);
   const rejection = expect(promise).rejects.toMatchObject({ name: "AbortError" });
   controller.abort();
   await rejection;
   expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ headers: expect.objectContaining({ "x-csrf-token": "csrf" }), method: "POST" }));
-  expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).coordinate_system).toBe("WGS84");
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual(expect.objectContaining({
+    coordinate_system: "WGS84", country_code: "JP", language_code: "ja",
+  }));
+});
+
+// 测试点：前端把日本、两种中文地区和其他国家稳定映射到约定的 Google 地址语言。
+test.each([
+  ["JP", "ja"], ["CN", "zh-CN"], ["HK", "zh-HK"], ["MO", "zh-HK"], ["TW", "zh-TW"], ["US", "en"], [null, "en"],
+])("maps country %s to geocoding language %s", async (countryCode, expected) => {
+  const { geocodingLanguageForCountry } = await import("../api");
+  expect(geocodingLanguageForCountry(countryCode)).toBe(expected);
 });
 
 // 测试点：Venue、地区和地图关联写入携带 CSRF 与数据状态令牌，影响预览保持只读请求。

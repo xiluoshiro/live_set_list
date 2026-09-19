@@ -24,14 +24,14 @@ def capabilities():
 def search(payload: SearchInput, request: Request,
            context: AuthSessionContext = Depends(get_current_auth_context)):
     assert_valid_csrf(request, context)
-    return geocode(query=payload.query, country_code=payload.country_code)
+    return geocode(query=payload.query, country_code=payload.country_code, language_code=payload.language_code)
 
 
 @router.post("/place", response_model=SearchResult)
 def resolve_place(payload: PlaceInput, request: Request,
                   context: AuthSessionContext = Depends(get_current_auth_context)):
     assert_valid_csrf(request, context)
-    return place_details(payload.place_id)
+    return place_details(payload.place_id, language_code=payload.language_code, country_code=payload.country_code)
 
 
 @router.post("/resolve", response_model=ResolveResult)
@@ -43,7 +43,8 @@ def resolve(payload: ResolveInput, request: Request,
     if payload.parts == "timezone":
         result["timezone"] = lookup_timezone(payload.latitude, payload.longitude)
     else:
-        address = geocode(latitude=payload.latitude, longitude=payload.longitude)
+        address = geocode(latitude=payload.latitude, longitude=payload.longitude,
+                          country_code=payload.country_code, language_code=payload.language_code)
         result["address"] = address
         if address["items"]:
             item = address["items"][0]
