@@ -314,12 +314,38 @@
 }
 
 .live-admin-status-fields label,
-.live-admin-readonly-field {
+.console-readonly-field {
   display: grid;
   gap: 6px;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 600;
+}
+
+.console-readonly-field {
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+}
+
+.console-readonly-field > span,
+.console-readonly-field > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-readonly-field > span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.console-readonly-field > strong {
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .live-admin-status-fields select,
@@ -337,10 +363,7 @@
 .live-admin-readonly-field {
   --live-admin-phase-bg: var(--live-status-past-bg);
   --live-admin-phase-text: var(--live-status-past-text);
-  min-height: 34px;
-  padding: 6px 9px;
   border: 1px solid color-mix(in srgb, var(--live-admin-phase-text) 32%, var(--border-soft));
-  border-radius: 7px;
   background: var(--live-admin-phase-bg);
 }
 
@@ -1246,13 +1269,13 @@
   line-height: 1.4;
 }
 
-.timezone-input-group:focus-within {
+.console-focus-group:focus-within {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
   box-shadow: 0 0 0 4px var(--accent-focus-ring);
 }
 
-.timezone-input-group > :focus-visible {
+.console-focus-group > :focus-visible {
   outline: none;
   box-shadow: none;
 }
@@ -1647,10 +1670,6 @@
 }
 .venue-location-picker-block {
   margin-top: 12px;
-  padding: 8px;
-  border: 1px solid var(--border-normal);
-  border-radius: 10px;
-  background: transparent;
 }
 
 .venue-location-picker-layout {
@@ -1660,7 +1679,6 @@
   min-height: 560px;
   overflow: hidden;
   border: 0;
-  border-radius: 7px;
   background: var(--surface-1);
 }
 
@@ -1674,107 +1692,34 @@
 }
 
 .venue-location-picker-head {
-  padding: 18px 22px;
+  padding: 14px 10px 8px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.venue-location-picker-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.venue-location-picker-title h3 {
-  margin: 0;
-  color: var(--text-heading);
-  font-size: 18px;
-  letter-spacing: -0.01em;
-}
-
 .venue-location-search {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-  align-items: center;
-  min-height: 46px;
-  overflow: hidden;
-  border: 1px solid var(--border-normal);
-  border-radius: 10px;
-  background: var(--surface-input);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  margin: 0;
+  flex-wrap: nowrap;
 }
 
-.venue-location-search:focus-within {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(233, 72, 125, 0.13);
+.venue-location-search > .live-management-label {
+  flex-basis: auto;
+  white-space: nowrap;
 }
 
-.venue-location-search > :focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
-.venue-location-search svg {
-  width: 18px;
-  height: 18px;
-  margin-left: 12px;
-  fill: none;
-  stroke: var(--text-muted);
-  stroke-linecap: round;
-  stroke-width: 1.8;
-}
-
-.venue-location-search input {
+.venue-location-search .live-management-primary-control {
+  flex: 1 1 0;
+  width: auto;
   min-width: 0;
-  height: 44px;
-  padding: 0 10px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--text-main);
-  font-size: 14px;
-}
-
-.venue-location-search button {
-  align-self: stretch;
-  padding: 0 14px;
-  border: 0;
-  border-left: 1px solid var(--border-subtle);
-  background: transparent;
-  color: var(--accent-primary);
-  font-size: 12px;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.venue-location-search button:disabled {
-  color: var(--text-muted);
-  cursor: default;
-  opacity: 0.6;
+  max-width: none;
 }
 
 .venue-location-results-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 22px 8px;
+  padding: 8px 10px 6px;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
-}
-
-.venue-location-results-head button {
-  padding: 3px 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.venue-location-results-head button:disabled {
-  cursor: default;
-  opacity: 0.5;
 }
 
 .venue-location-results {
@@ -1792,7 +1737,7 @@
   width: 100%;
   padding: 12px 11px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   background: transparent;
   color: inherit;
   text-align: left;
@@ -1815,7 +1760,7 @@
   width: 36px;
   height: 36px;
   place-items: center;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--surface-2);
   color: var(--text-secondary);
 }
@@ -1888,13 +1833,7 @@
 
 .venue-location-status {
   margin: 8px 12px;
-  color: var(--text-muted);
-  font-size: 12px;
   line-height: 1.5;
-}
-
-.venue-location-status.error {
-  color: var(--accent-danger);
 }
 
 .venue-location-selection {
@@ -1942,47 +1881,6 @@
   margin-top: 11px;
 }
 
-.venue-location-meta > div {
-  min-width: 0;
-  padding: 8px 9px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--surface-1);
-}
-
-.venue-location-meta span,
-.venue-location-meta strong {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.venue-location-meta span {
-  margin-bottom: 3px;
-  color: var(--text-muted);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.venue-location-meta strong {
-  color: var(--text-secondary);
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 10px;
-}
-
-.venue-location-actions {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.venue-location-actions button {
-  min-height: 40px;
-}
-
 .venue-location-picker-map {
   position: relative;
   min-width: 0;
@@ -2022,7 +1920,7 @@
   left: 16px;
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: rgba(16, 27, 43, 0.9);
   color: #fff;
   font-size: 12px;

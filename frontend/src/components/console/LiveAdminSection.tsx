@@ -458,7 +458,7 @@ export function LiveAdminSection({
                 <input type="time" aria-label="start_time" value={startTime} disabled={!startTimeAnnounced} onChange={(e) => onStartTimeChange(e.target.value)} />
               </td>
               <td>
-                <div className={`timezone-input-group${venueAnnounced ? " timezone-source-copy" : ""}`}>
+                <div className={`console-focus-group timezone-input-group${venueAnnounced ? " timezone-source-copy" : ""}`}>
                   {venueAnnounced ? (
                     <>
                       {selectedVenue?.venue_kind !== "online" && (
@@ -527,7 +527,7 @@ export function LiveAdminSection({
             </select>
           </label>
           <div
-            className="live-admin-readonly-field"
+            className="console-readonly-field live-admin-readonly-field"
             data-status-tone={datePhase}
             aria-label={`日期阶段：${DATE_PHASE_LABELS[datePhase]}（只读）`}
           >

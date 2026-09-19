@@ -13,10 +13,12 @@ vi.mock("../VenueLocationMap", () => ({ VenueLocationMap: ({ onPoint, onPlaceId 
   <button onClick={() => onPlaceId("place-1")}>测试POI</button>
 </> }));
 
-function Harness({ initialTimezone = "" }: { initialTimezone?: string }) {
+function Harness({ initialTimezone = "", initialAddress = "原地址", newVenue = false }: {
+  initialTimezone?: string; initialAddress?: string; newVenue?: boolean;
+}) {
   const [point, setPoint] = useState<LocationPoint | null>(null);
   const [timezone, setTimezone] = useState(initialTimezone);
-  const [address, setAddress] = useState("原地址");
+  const [address, setAddress] = useState(initialAddress);
   const [locality, setLocality] = useState<GeoLocality | null>(null);
   const [googlePlace, setGooglePlace] = useState("");
   const [review, setReview] = useState(false);
@@ -25,7 +27,7 @@ function Harness({ initialTimezone = "" }: { initialTimezone?: string }) {
     <button disabled={review}>模拟保存</button>
     <output aria-label="Google Place">{googlePlace}</output>
     <output aria-label="当前地区">{locality?.id ?? ""}</output>
-    <VenueLocationPicker venueId={1} venueName="Hall" csrf="csrf" disabled={false} point={point} savedPoint={null}
+    <VenueLocationPicker venueId={newVenue ? undefined : 1} venueName="Hall" csrf="csrf" disabled={false} point={point} savedPoint={null}
       timezone={timezone} address={address} locality={locality} onPoint={setPoint} onTimezone={setTimezone}
       onAddress={setAddress} onLocality={setLocality} onGooglePlace={place => setGooglePlace(place?.provider_place_id ?? "")} onReview={setReview} />
   </>;
@@ -41,6 +43,22 @@ beforeEach(() => {
     items: [{ name: "Google Hall", address: "Google address", latitude: 35.1, longitude: 139.1, country_code: "JP",
       admin_area: "東京都", locality_name: null, provider_place_id: "place-1",
       provider_url: "https://www.google.com/maps/search/?api=1&query_place_id=place-1" }] });
+});
+
+// 测试点：地图选择器直接复用 Console 查询行、按钮、提交行和只读字段，并保持无地址状态文案一致。
+test("uses shared Console style primitives", async () => {
+  render(<Harness newVenue initialAddress="" />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "查询" })).toBeEnabled());
+  const controls = screen.getByLabelText("位置搜索与当前选择");
+  expect(controls.closest(".venue-location-picker-block")).not.toHaveClass("tour-admin-block");
+  expect(screen.getByText("选择场馆")).toHaveClass("live-management-label");
+  expect(screen.getByRole("textbox", { name: "名称或地址定位" })).toHaveClass("venue-query-input", "live-management-primary-control");
+  expect(screen.getByRole("button", { name: "查询" })).toHaveClass("console-ghost-btn");
+  expect(screen.queryByRole("button", { name: "清除位置" })).not.toBeInTheDocument();
+  expect(screen.getByText("坐标").parentElement).toHaveClass("console-readonly-field");
+  expect(screen.getByText("时区").parentElement).toHaveClass("console-readonly-field");
+  expect(await screen.findByText("尚未取得地址", { exact: true })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "使用此位置" }).parentElement).toHaveClass("console-submit-row");
 });
 
 // 测试点：新建场馆打开地图时直接采用东京默认草稿点，已有场馆不被默认点覆盖。
@@ -67,8 +85,8 @@ test("search without saved coordinates and fill an empty timezone", async () => 
     items: [{ name: "Hall", address: "address", latitude: 35, longitude: 139, country_code: "JP", admin_area: null,
       locality_name: null, provider_place_id: "place-1", provider_url: "https://www.google.com/maps/search/?api=1&query_place_id=place-1" }] });
   render(<Harness />);
-  await waitFor(() => expect(screen.getByRole("button", { name: "搜索位置" })).toBeEnabled());
-  fireEvent.click(screen.getByRole("button", { name: "搜索位置" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "查询" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "查询" }));
   const candidate = await screen.findByRole("button", { name: /Hall.*address/ });
   expect(api.resolveGeography).not.toHaveBeenCalled();
   fireEvent.click(candidate);
@@ -161,7 +179,7 @@ test("reset invalidates an automatically filled timezone and unmount aborts", as
   const view = render(<Harness />);
   fireEvent.click(await screen.findByRole("button", { name: "测试点选" }));
   await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue("Asia/Tokyo"));
-  fireEvent.click(screen.getByRole("button", { name: "回到已保存位置" }));
+  fireEvent.click(screen.getByRole("button", { name: "复位" }));
   await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue(""));
   const signal = api.getGeographyCapabilities.mock.calls[0][0] as AbortSignal;
   view.unmount();

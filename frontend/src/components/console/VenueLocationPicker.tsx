@@ -16,10 +16,6 @@ type Props = {
 
 const pointKey = (point: LocationPoint | null) => point ? `${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}` : "";
 
-function SearchIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>;
-}
-
 function PinIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" /><circle cx="12" cy="10" r="2.2" /></svg>;
 }
@@ -151,27 +147,26 @@ export function VenueLocationPicker(props: Props) {
 
   const disabled = props.disabled || queryBusy;
   const selectedTitle = selectedPlace?.name || props.venueName.trim() || (props.point ? "地图选点" : "尚未选择位置");
-  const selectionState = selectedPlace ? "已匹配 Google 地点" : addressResolved ? "地址与地区已自动解析" : props.point ? "已选择地图位置" : "等待选择位置";
+  const selectionState = selectedPlace ? "已匹配 Google 地点" : addressResolved ? "地址与地区已自动解析"
+    : props.point ? (props.address.trim() ? "已选择地图位置" : "尚未取得地址") : "等待选择位置";
   const coordinates = props.point ? `${props.point.latitude.toFixed(6)}, ${props.point.longitude.toFixed(6)}` : "—";
   const timezoneLabel = zone?.timezone_id || props.timezone || "解析中";
   const resultCount = search?.items.length ?? 0;
 
-  return <div className="tour-admin-block venue-location-picker-block">
+  return <div className="venue-location-picker-block">
     <div className="venue-location-picker-layout">
       <aside className="venue-location-picker-controls" aria-label="位置搜索与当前选择">
         <div className="venue-location-picker-head">
-          <div className="venue-location-picker-title"><h3>选择场馆位置</h3></div>
-          <form className="venue-location-search" onSubmit={event => { event.preventDefault(); if (!disabled && config?.geocoding && query.trim().length >= 2) void find(); }}>
-            <SearchIcon />
-            <input aria-label="名称或地址定位" value={query} maxLength={200} disabled={disabled}
+          <form className="live-id-selector live-create-query-row venue-location-search" onSubmit={event => { event.preventDefault(); if (!disabled && config?.geocoding && query.trim().length >= 2) void find(); }}>
+            <label className="live-management-label" htmlFor="venue-location-query">选择场馆</label>
+            <input id="venue-location-query" className="venue-query-input live-management-primary-control" aria-label="名称或地址定位" value={query} maxLength={200} disabled={disabled}
               placeholder="搜索场馆名称或地址" onChange={event => { searchRequest.current?.abort(); setQueryBusy(false); setQuery(event.target.value); setSearch(null); }} />
-            <button type="submit" disabled={disabled || !config?.geocoding || query.trim().length < 2}>搜索位置</button>
+            <button type="submit" className="console-ghost-btn" disabled={disabled || !config?.geocoding || query.trim().length < 2}>查询</button>
           </form>
         </div>
 
         <div className="venue-location-results-head">
           <span>{search ? `搜索结果 · ${resultCount}` : "搜索结果"}</span>
-          <button type="button" disabled={props.disabled} onClick={resetPoint}>{props.venueId === undefined ? "清除位置" : "回到已保存位置"}</button>
         </div>
         <div className="venue-location-results">
           {search?.items.map((candidate, index) => {
@@ -185,8 +180,8 @@ export function VenueLocationPicker(props: Props) {
           })}
           {!search && <div className="venue-location-results-empty"><PinIcon /><strong>搜索地点</strong></div>}
           {search && !search.items.length && <div className="venue-location-results-empty"><strong>没有找到匹配地点</strong><span>{search.message ?? "请调整名称，或直接在地图上选择。"}</span></div>}
-          {queryBusy && <p className="venue-location-status" role="status">正在查询位置…</p>}
-          {message && <p className="venue-location-status error" role="alert">{message}</p>}
+          {queryBusy && <p className="console-admin-hint venue-location-status" role="status">正在查询位置…</p>}
+          {message && <p className="console-admin-hint console-admin-warning venue-location-status" role="alert">{message}</p>}
         </div>
 
         <div className="venue-location-selection">
@@ -194,10 +189,10 @@ export function VenueLocationPicker(props: Props) {
           <h4>{selectedTitle}</h4>
           <p>{props.address || (props.point ? "尚未取得地址，可在上方搜索或继续调整图钉。" : "选择后将在这里显示地址。")}</p>
           <div className="venue-location-meta">
-            <div><span>坐标</span><strong>{coordinates}</strong></div>
-            <div><span>时区</span><strong>{timezoneLabel}</strong></div>
+            <div className="console-readonly-field"><span>坐标</span><strong>{coordinates}</strong></div>
+            <div className="console-readonly-field"><span>时区</span><strong>{timezoneLabel}</strong></div>
           </div>
-          <div className="venue-location-actions">
+          <div className="console-submit-row">
             <button type="button" className="console-ghost-btn" disabled={props.disabled} onClick={resetPoint}>{props.venueId === undefined ? "清除" : "复位"}</button>
             <button type="button" className="console-submit-btn" disabled={props.disabled || !props.point || !props.timezone} onClick={props.onDone}>使用此位置</button>
           </div>
