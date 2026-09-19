@@ -42,7 +42,7 @@ test("configuration failure does not leave a permanent loading state", async () 
   expect(screen.getByRole("button", { name: "模拟保存" })).toBeEnabled();
 });
 
-// 测试点：无旧坐标可搜索，搜索不默选；点选后只预填空时区草稿。
+// 测试点：无旧坐标可搜索，搜索不默选；点选后自动设置坐标对应的时区。
 test("search without saved coordinates and fill an empty timezone", async () => {
   api.searchGeography.mockResolvedValue({ status: "ready", message: null, items: [{ name: "Hall", address: "address", latitude: 35, longitude: 139 }] });
   render(<Harness />);
@@ -55,14 +55,14 @@ test("search without saved coordinates and fill an empty timezone", async () => 
   expect(screen.getByRole("button", { name: "模拟保存" })).toBeEnabled();
 });
 
-// 测试点：已有时区不被解析覆盖，冲突须选择保留或采用后才能保存。
-test("existing timezone requires an explicit decision", async () => {
+// 测试点：坐标解析成功后直接覆盖已有时区，不要求用户处理冲突提示。
+test("resolved timezone replaces an existing timezone", async () => {
   render(<Harness initialTimezone="America/New_York" />);
   fireEvent.click(await screen.findByRole("button", { name: "测试点选" }));
-  await screen.findByRole("button", { name: "保留当前时区" });
-  expect(screen.getByLabelText("当前时区")).toHaveValue("America/New_York");
-  expect(screen.getByRole("button", { name: "模拟保存" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "保留当前时区" }));
+  await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue("Asia/Tokyo"));
+  expect(screen.getByText("已按位置设置时区：Asia/Tokyo")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "采用建议时区" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "保留当前时区" })).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getByRole("button", { name: "模拟保存" })).toBeEnabled());
 });
 
