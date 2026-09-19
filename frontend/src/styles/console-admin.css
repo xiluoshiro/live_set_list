@@ -1655,9 +1655,7 @@
   z-index: 0;
 }
 
-.venue-location-marker {
-  background: #1673c9;
-  border: 3px solid white;
-  border-radius: 50%;
-  box-shadow: 0 1px 5px #0008;
+.venue-location-map-surface {
+  width: 100%;
+  height: 100%;
 }

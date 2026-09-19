@@ -49,7 +49,8 @@ test("creates complete location after preview and retains selection across searc
   expect(api.createConsoleVenue).not.toHaveBeenCalled();
   await user.click(dialog.getByRole("button", { name: "提交插入" }));
   await waitFor(() => expect(api.createConsoleVenue).toHaveBeenCalledWith("New Hall", "csrf", "physical", {
-    locality_id: 1, address: "Tokyo address", latitude: 35.6, longitude: 139.7, timezone_id: "Asia/Tokyo", coordinate_system: "WGS84",
+    locality_id: 1, address: "Tokyo address", latitude: 35.6, longitude: 139.7, timezone_id: "Asia/Tokyo",
+    coordinate_system: "WGS84", google_place: null,
   }));
   expect(screen.getByLabelText("名称")).toHaveValue("");
   expect(screen.queryByRole("button", { name: "继续完善所在地与地图链接" })).not.toBeInTheDocument();

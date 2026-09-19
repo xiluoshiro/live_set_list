@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 
 from app.geography import place_url
 
-MapProviderName = Literal["google", "apple", "amap"]
+MapProviderName = Literal["apple", "amap"]
 ProviderStatus = Literal["ready", "not_configured", "unavailable"]
 
 
@@ -106,49 +106,6 @@ def _request_json(url: str, *, headers: dict[str, str], payload: dict[str, Any] 
     return value
 
 
-def _google_search(query: str, latitude: float, longitude: float, country_code: str | None) -> MapSearchResult:
-    key = os.getenv("GOOGLE_MAPS_PLACES_API_KEY", "").strip()
-    if not key:
-        return MapSearchResult("not_configured", "未配置 Google Places API Key，可继续手工关联", [])
-    language = "ja" if country_code == "JP" else "zh-CN" if country_code == "CN" else "en"
-    payload: dict[str, Any] = {
-        "textQuery": query,
-        "pageSize": 8,
-        "languageCode": language,
-        "locationBias": {"circle": {"center": {"latitude": latitude, "longitude": longitude}, "radius": 50_000.0}},
-    }
-    data = _request_json(
-        "https://places.googleapis.com/v1/places:searchText",
-        headers={
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": key,
-            "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location",
-        },
-        payload=payload,
-    )
-    candidates = []
-    for item in data.get("places", [])[:8]:
-        location = item.get("location") or {}
-        place_id = str(item.get("id") or "").strip()
-        name = str((item.get("displayName") or {}).get("text") or "").strip()
-        try:
-            item_latitude = float(location["latitude"])
-            item_longitude = float(location["longitude"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        if not place_id or not name:
-            continue
-        candidates.append(MapCandidate(
-            provider_place_id=place_id,
-            provider_url=place_url("google", place_id, query),
-            name=name,
-            address=str(item.get("formattedAddress") or ""),
-            latitude=round(item_latitude, 6), longitude=round(item_longitude, 6),
-            source_coordinate_system="WGS84",
-        ))
-    return MapSearchResult("ready", None, candidates)
-
-
 def _apple_search(query: str, latitude: float, longitude: float, country_code: str | None) -> MapSearchResult:
     token = os.getenv("APPLE_MAPS_SERVER_API_TOKEN", "").strip()
     if not token:
@@ -226,8 +183,6 @@ def _amap_search(query: str, country_code: str | None) -> MapSearchResult:
 def search_map_candidates(provider: MapProviderName, query: str, latitude: float, longitude: float,
                           country_code: str | None) -> MapSearchResult:
     try:
-        if provider == "google":
-            return _google_search(query, latitude, longitude, country_code)
         if provider == "apple":
             return _apple_search(query, latitude, longitude, country_code)
         return _amap_search(query, country_code)

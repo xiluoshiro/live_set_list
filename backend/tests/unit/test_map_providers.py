@@ -15,34 +15,6 @@ def test_gcj02_round_trip_keeps_wgs84_precision():
     assert restored_longitude == pytest.approx(longitude, abs=0.00001)
 
 
-# 测试点：供应商凭据未配置时返回可解释状态，不发网络请求也不阻塞手工关联。
-def test_unconfigured_provider_returns_fallback_status(monkeypatch):
-    monkeypatch.delenv("GOOGLE_MAPS_PLACES_API_KEY", raising=False)
-    monkeypatch.setattr(map_providers, "_request_json", lambda *_args, **_kwargs: pytest.fail("unexpected network request"))
-
-    result = map_providers.search_map_candidates("google", "Test Hall", 35.0, 139.0, "JP")
-
-    assert result.status == "not_configured"
-    assert result.candidates == []
-    assert "手工关联" in (result.message or "")
-
-
-# 测试点：Google 候选详情链接只持久化 Place ID 和本站查询词，不保存供应商返回的展示名称或链接。
-def test_google_candidate_uses_place_id_url_without_provider_content(monkeypatch):
-    monkeypatch.setenv("GOOGLE_MAPS_PLACES_API_KEY", "test-key")
-    monkeypatch.setattr(map_providers, "_request_json", lambda *_args, **_kwargs: {
-        "places": [{"id": "google-id", "displayName": {"text": "Provider Display Name"},
-                    "formattedAddress": "Provider Address", "location": {"latitude": 35, "longitude": 139}}],
-    })
-
-    result = map_providers.search_map_candidates("google", "Our Venue", 35, 139, "JP")
-
-    assert len(result.candidates) == 1
-    url = urlsplit(result.candidates[0].provider_url)
-    assert parse_qs(url.query) == {"api": ["1"], "query": ["Our Venue"], "query_place_id": ["google-id"]}
-    assert "Provider Display Name" not in result.candidates[0].provider_url
-
-
 # 测试点：Apple 搜索结果绑定地点 ID 详情页，不能退化为同坐标的普通搜索链接。
 def test_apple_candidate_uses_place_id_detail_url(monkeypatch):
     monkeypatch.setenv("APPLE_MAPS_SERVER_API_TOKEN", "test-token")

@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, Request
 from psycopg2.extras import RealDictCursor
 from app.auth import AuthSessionContext, assert_valid_csrf, get_current_auth_context, require_role
 from app.db import get_db_connection
-from app.geocoding import geocode, service_url
+from app.geocoding import geocode, place_details, server_api_key
 from app.routers.console_geography import _locality_view
-from app.schemas.geocoding import ResolveInput, ResolveResult, SearchInput, SearchResult
+from app.schemas.geocoding import PlaceInput, ResolveInput, ResolveResult, SearchInput, SearchResult
 from app.timezone_lookup import lookup_timezone
 
 router = APIRouter(prefix="/geography", dependencies=[Depends(require_role("editor"))])
@@ -16,10 +16,8 @@ router = APIRouter(prefix="/geography", dependencies=[Depends(require_role("edit
 
 @router.get("/capabilities")
 def capabilities():
-    tile = os.getenv("VENUE_MAP_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png")
-    return {"tile_url": tile if tile.startswith("https://") else "",
-            "attribution": os.getenv("VENUE_MAP_ATTRIBUTION", "© OpenStreetMap contributors"),
-            "geocoding": bool(service_url()), "timezone": find_spec("timezonefinder") is not None}
+    return {"google_maps_browser_api_key": os.getenv("GOOGLE_MAPS_BROWSER_API_KEY", "").strip(),
+            "geocoding": bool(server_api_key()), "timezone": find_spec("timezonefinder") is not None}
 
 
 @router.post("/search", response_model=SearchResult)
@@ -27,6 +25,13 @@ def search(payload: SearchInput, request: Request,
            context: AuthSessionContext = Depends(get_current_auth_context)):
     assert_valid_csrf(request, context)
     return geocode(query=payload.query, country_code=payload.country_code)
+
+
+@router.post("/place", response_model=SearchResult)
+def resolve_place(payload: PlaceInput, request: Request,
+                  context: AuthSessionContext = Depends(get_current_auth_context)):
+    assert_valid_csrf(request, context)
+    return place_details(payload.place_id)
 
 
 @router.post("/resolve", response_model=ResolveResult)

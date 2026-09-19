@@ -42,7 +42,10 @@ def test_create_venue_with_location_is_atomic(integration_test_client, integrati
     headers = login(client)
     locality = city(client, headers)
     location = {"locality_id": locality["id"], "address": "Tokyo address", "latitude": 35.6,
-                "longitude": 139.7, "timezone_id": "Asia/Tokyo"}
+                "longitude": 139.7, "timezone_id": "Asia/Tokyo",
+                "google_place": {"provider_place_id": "place-atomic",
+                                 "provider_url": "https://www.google.com/maps/search/?api=1&query_place_id=place-atomic",
+                                 "name": "Atomic New Hall"}}
     response = client.post("/api/console/venues", headers=headers,
                            json={"venue_name": "Atomic New Hall", "location": location})
     assert response.status_code == 201, response.text
@@ -52,6 +55,7 @@ def test_create_venue_with_location_is_atomic(integration_test_client, integrati
     assert saved.json()["locality"]["id"] == locality["id"]
     for key in ("address", "latitude", "longitude", "timezone_id"):
         assert saved.json()[key] == location[key]
+    assert next(link for link in saved.json()["map_links"] if link["provider"] == "google")["provider_place_id"] == "place-atomic"
     invalid = client.post("/api/console/venues", headers=headers, json={
         "venue_name": "Must Not Exist", "location": {**location, "locality_id": 99999999},
     })
@@ -243,12 +247,12 @@ def test_map_candidate_search_and_confirmed_audit(integration_test_client, integ
     headers = login(client)
     assert client.put("/api/console/venues/1/location", json=point(client), headers=headers).status_code == 200
     candidate = MapCandidate(
-        provider_place_id="candidate-place", provider_url="https://www.google.com/maps/place/candidate",
+        provider_place_id="candidate-place", provider_url="https://maps.apple.com/place?place-id=candidate-place",
         name="Candidate Hall", address="1 Candidate Street", latitude=35.6001, longitude=139.7001,
         source_coordinate_system="WGS84",
     )
     with patch("app.routers.console_geography.search_map_candidates", return_value=MapSearchResult("ready", None, [candidate])):
-        response = client.get("/api/console/venues/1/map-candidates?provider=google&q=Candidate")
+        response = client.get("/api/console/venues/1/map-candidates?provider=apple&q=Candidate")
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "ready"
@@ -257,11 +261,11 @@ def test_map_candidate_search_and_confirmed_audit(integration_test_client, integ
 
     selected = body["candidates"][0]
     saved = client.put("/api/console/venues/1/map-links", headers=headers, json={
-        "expected_state_token": token(client), "provider": "google",
+        "expected_state_token": token(client), "provider": "apple",
         "provider_place_id": selected["provider_place_id"], "provider_url": selected["provider_url"],
     })
     assert saved.status_code == 200, saved.text
-    assert saved.json()["map_links"][0]["is_current"] is True
+    assert next(link for link in saved.json()["map_links"] if link["provider"] == "apple")["is_current"] is True
     with integration_admin_connection.cursor() as cur:
         cur.execute("SELECT payload_json FROM audit_logs WHERE action='venue_map_link_update'")
         audit = cur.fetchone()[0]

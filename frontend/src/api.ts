@@ -636,6 +636,7 @@ export type GeoLocalityCreate = {
 export type GeoLocalityUpdate = GeoLocalityCreate & { expected_state_token: string };
 export type GeoLocalityPage = { items: GeoLocality[]; total: number; page: number; page_size: number };
 export type MapProvider = "google" | "apple" | "amap";
+export type MapSearchProvider = Exclude<MapProvider, "google">;
 export type VenueLocationWrite = {
   expected_state_token: string;
   locality_id: number | null;
@@ -644,6 +645,7 @@ export type VenueLocationWrite = {
   longitude: number | null;
   coordinate_system: "WGS84";
   timezone_id: string | null;
+  google_place: GooglePlaceDraft | null;
 };
 export type VenueMapLink = {
   provider: MapProvider;
@@ -707,9 +709,13 @@ async function geographyRequest<T>(path: string, method = "GET", payload?: unkno
 
 export const getConsoleTimezones = () => geographyRequest<string[]>("/timezones");
 
-export type GeographyCapabilities = { tile_url: string; attribution: string; geocoding: boolean; timezone: boolean };
+export type GeographyCapabilities = { google_maps_browser_api_key: string; geocoding: boolean; timezone: boolean };
 export type LocationPoint = { latitude: number; longitude: number };
-export type GeocodingCandidate = LocationPoint & { name: string; address: string; country_code: string | null; admin_area: string | null; locality_name: string | null };
+export type GooglePlaceDraft = { provider_place_id: string; provider_url: string; name: string };
+export type GeocodingCandidate = LocationPoint & {
+  name: string; address: string; country_code: string | null; admin_area: string | null; locality_name: string | null;
+  provider_place_id: string | null; provider_url: string | null;
+};
 export type GeocodingResult = { status: "ready" | "not_found" | "unavailable"; items: GeocodingCandidate[]; message: string | null; attribution: string; attribution_url: string };
 export type LocationResolution = LocationPoint & {
   request_id: string;
@@ -720,6 +726,8 @@ export type LocationResolution = LocationPoint & {
 export const getGeographyCapabilities = (signal?: AbortSignal) => geographyRequest<GeographyCapabilities>("/geography/capabilities", "GET", undefined, undefined, signal);
 export const searchGeography = (query: string, country_code: string | null, csrf: string, signal?: AbortSignal) =>
   geographyRequest<GeocodingResult>("/geography/search", "POST", { query, country_code }, csrf, signal);
+export const resolveGooglePlace = (place_id: string, request_id: string, csrf: string, signal?: AbortSignal) =>
+  geographyRequest<GeocodingResult>("/geography/place", "POST", { place_id, request_id }, csrf, signal);
 export const resolveGeography = (point: LocationPoint, parts: "timezone" | "address", request_id: string, csrf: string, signal?: AbortSignal) =>
   geographyRequest<LocationResolution>("/geography/resolve", "POST", { ...point, parts, request_id, coordinate_system: "WGS84" }, csrf, signal);
 export const getConsoleLocalities = (q = "", page = 1) => geographyRequest<GeoLocalityPage>(
@@ -736,7 +744,7 @@ export const previewConsoleVenueLocation = (id: number, payload: VenueLocationWr
   geographyRequest<VenueLocationPreview>(`/venues/${id}/location-preview`, "POST", payload);
 export const saveConsoleVenueLocation = (id: number, payload: VenueLocationWrite, csrf: string) =>
   geographyRequest<VenueLocation>(`/venues/${id}/location`, "PUT", payload, csrf);
-export const searchConsoleVenueMapCandidates = (id: number, provider: MapProvider, query: string) =>
+export const searchConsoleVenueMapCandidates = (id: number, provider: MapSearchProvider, query: string) =>
   geographyRequest<MapCandidateSearch>(`/venues/${id}/map-candidates?${new URLSearchParams({ provider, q: query })}`);
 export const saveConsoleVenueMapLink = (
   id: number,

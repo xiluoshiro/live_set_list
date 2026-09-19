@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { getGeographyCapabilities, resolveGeography, searchGeography,
-  type GeographyCapabilities, type GeocodingResult, type GeoLocality, type LocationPoint, type LocationResolution } from "../../api";
+import { getGeographyCapabilities, resolveGeography, resolveGooglePlace, searchGeography,
+  type GeographyCapabilities, type GeocodingCandidate, type GeocodingResult, type GeoLocality,
+  type GooglePlaceDraft, type LocationPoint, type LocationResolution } from "../../api";
 import { VenueLocationMap } from "./VenueLocationMap";
 
 type Props = {
@@ -8,6 +9,7 @@ type Props = {
   point: LocationPoint | null; savedPoint: LocationPoint | null; timezone: string; address: string; locality: GeoLocality | null;
   onPoint: (point: LocationPoint | null) => void; onTimezone: (zone: string) => void;
   onAddress: (address: string) => void; onLocality: (locality: GeoLocality) => void;
+  onName?: (name: string) => void; onGooglePlace: (place: GooglePlaceDraft | null) => void;
   onReview: (required: boolean) => void;
 };
 const pointKey = (point: LocationPoint | null) => point ? `${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}` : "";
@@ -74,6 +76,30 @@ export function VenueLocationPicker(props: Props) {
     } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : String(error)); }
     finally { if (!controller.signal.aborted) setQueryBusy(false); }
   };
+  const useCandidate = (candidate: GeocodingCandidate) => {
+    props.onPoint(candidate);
+    props.onAddress(candidate.address);
+    if (candidate.provider_place_id && candidate.provider_url) {
+      props.onGooglePlace({ provider_place_id: candidate.provider_place_id, provider_url: candidate.provider_url, name: candidate.name });
+      if (!props.venueName.trim()) props.onName?.(candidate.name);
+    }
+  };
+  const choosePlace = async (placeId: string) => {
+    searchRequest.current?.abort();
+    const controller = new AbortController(); searchRequest.current = controller;
+    const requestId = `place-${props.venueId ?? "new"}-${++generation.current}`;
+    setQueryBusy(true); setMessage("");
+    try {
+      const result = await resolveGooglePlace(placeId, requestId, props.csrf, controller.signal);
+      const candidate = result.items[0];
+      if (!controller.signal.aborted && candidate) useCandidate(candidate);
+      else if (!controller.signal.aborted) setMessage(result.message ?? "没有取得该 Google 地点的资料。");
+    } catch (error) {
+      if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (!controller.signal.aborted) setQueryBusy(false);
+    }
+  };
   const parseAddress = async () => {
     if (!props.point) return;
     addressRequest.current?.abort();
@@ -100,10 +126,12 @@ export function VenueLocationPicker(props: Props) {
     </div>
     {search?.items.map((candidate, index) => <div key={`${candidate.latitude}-${candidate.longitude}-${index}`} className="console-admin-hint">
       <span>{candidate.name} · {candidate.address} </span>
-      <button type="button" className="console-ghost-btn" disabled={props.disabled} onClick={() => props.onPoint(candidate)}>选择此位置</button>
+      <button type="button" className="console-ghost-btn" disabled={props.disabled} onClick={() => useCandidate(candidate)}>选择此位置</button>
     </div>)}
-    {search && <p role="status">{search.message ?? (search.status === "not_found" ? "没有找到位置，请调整名称或手工选点。" : "请选择并核对位置，不会自动关联地图 POI。")}</p>}
-    {config ? <VenueLocationMap point={props.point} disabled={props.disabled} config={config} onPoint={props.onPoint} /> : <p role="status">{configFailed ? "地图暂不可用，可继续输入经纬度。" : "地图配置加载中；可继续输入经纬度。"}</p>}
+    {search && <p role="status">{search.message ?? (search.status === "not_found" ? "没有找到位置，请调整名称或手工选点。" : "选择 Google 地点后会回填名称、地址、坐标和场馆链接。")}</p>}
+    {config ? <VenueLocationMap point={props.point} disabled={props.disabled} config={config}
+      onPoint={point => { props.onGooglePlace(null); props.onPoint(point); }} onPlaceId={placeId => void choosePlace(placeId)} />
+      : <p role="status">{configFailed ? "地图暂不可用，可继续输入经纬度。" : "地图配置加载中；可继续输入经纬度。"}</p>}
     {zone && <p role="status">{zone.timezone_id ? `已按位置设置时区：${zone.timezone_id}` : zone.message ?? "时区待手工确认"}</p>}
     {resolution?.address && <p role="status">{resolution.address.message ?? (suggestion ? "以下为附近地址建议，请核对门牌和地区。" : "未找到地址，可手工填写。")}</p>}
     {suggestion && <div className="console-admin-hint"><span>{suggestion.address} </span>
@@ -115,7 +143,7 @@ export function VenueLocationPicker(props: Props) {
       <button type="button" className="console-ghost-btn" disabled={props.disabled || (props.locality?.id ?? null) !== localityAtRequest.current} onClick={() => props.onLocality(locality)}>采用已有地区</button>
     </div>)}
     {suggestion && !resolution?.localities.length && <p className="console-admin-hint">没有匹配的已登记地区，请在上方手工选择；不会自动新增地区。</p>}
-    {(search || resolution?.address) && <p className="console-admin-hint"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></p>}
+    {(search || resolution?.address) && <p className="console-admin-hint"><a href="https://maps.google.com/" target="_blank" rel="noopener noreferrer">Google Maps</a></p>}
     {queryBusy && <p role="status">正在查询位置…</p>}
     {message && <p role="alert">{message}</p>}
   </div>;
