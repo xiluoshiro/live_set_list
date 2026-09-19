@@ -114,11 +114,11 @@ const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; labe
   { title: "演出", create: { value: "live_create", label: "新增演出" }, manage: { value: "live_edit", label: "演出管理" } },
   { title: "歌单", create: { value: "setlist", label: "新增歌单" }, manage: { value: "setlist_edit", label: "歌单管理" } },
   { title: "歌曲", manage: { value: "song", label: "歌曲管理" } },
+  { title: "巡演", manage: { value: "tour", label: "巡演管理" } },
+  { title: "活动组", manage: { value: "performance_group", label: "活动组管理" } },
   { title: "乐队", manage: { value: "band", label: "乐队管理" } },
   { title: "场地", create: { value: "venue_create", label: "新增场地" }, manage: { value: "venue", label: "场地管理" } },
   { title: "地区", manage: { value: "locality", label: "地区（管理）" } },
-  { title: "巡演", manage: { value: "tour", label: "巡演管理" } },
-  { title: "活动组", manage: { value: "performance_group", label: "活动组管理" } },
 ];
 
 type SetlistConfirmRow = ConsoleLiveSetlistRowPayload & {
