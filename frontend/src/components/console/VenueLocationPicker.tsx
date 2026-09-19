@@ -3,6 +3,7 @@ import { getGeographyCapabilities, resolveGeography, resolveGooglePlace, searchG
   type GeographyCapabilities, type GeocodingCandidate, type GeocodingResult, type GeoLocality,
   type GooglePlaceDraft, type LocationPoint, type LocationResolution } from "../../api";
 import { VenueLocationMap } from "./VenueLocationMap";
+import { DEFAULT_GOOGLE_MAP_POINT } from "./googleMapsSession";
 
 type Props = {
   venueId?: number; venueName: string; csrf: string; disabled: boolean;
@@ -10,9 +11,18 @@ type Props = {
   onPoint: (point: LocationPoint | null) => void; onTimezone: (zone: string) => void;
   onAddress: (address: string) => void; onLocality: (locality: GeoLocality) => void;
   onName?: (name: string) => void; onGooglePlace: (place: GooglePlaceDraft | null) => void;
-  onReview: (required: boolean) => void;
+  onReview: (required: boolean) => void; onDone?: () => void;
 };
+
 const pointKey = (point: LocationPoint | null) => point ? `${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}` : "";
+
+function SearchIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>;
+}
+
+function PinIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" /><circle cx="12" cy="10" r="2.2" /></svg>;
+}
 
 export function VenueLocationPicker(props: Props) {
   const current = useRef(props); current.current = props;
@@ -20,18 +30,20 @@ export function VenueLocationPicker(props: Props) {
   const [configFailed, setConfigFailed] = useState(false);
   const [query, setQuery] = useState(props.venueName);
   const [search, setSearch] = useState<GeocodingResult | null>(null);
-  const [resolution, setResolution] = useState<LocationResolution | null>(null);
+  const [selectedPlace, setSelectedPlace] = useState<GooglePlaceDraft | null>(null);
   const [zone, setZone] = useState<LocationResolution["timezone"] | null>(null);
+  const [addressResolved, setAddressResolved] = useState(false);
   const [message, setMessage] = useState("");
   const [queryBusy, setQueryBusy] = useState(false);
   const autoZone = useRef<string | null>(null);
   const generation = useRef(0);
   const addressRequest = useRef<AbortController | null>(null);
   const searchRequest = useRef<AbortController | null>(null);
-  const addressAtRequest = useRef("");
-  const localityAtRequest = useRef<number | null>(null);
   const key = pointKey(props.point);
 
+  useEffect(() => {
+    if (props.venueId === undefined && !current.current.point) current.current.onPoint(DEFAULT_GOOGLE_MAP_POINT);
+  }, []);
   useEffect(() => {
     const controller = new AbortController();
     void getGeographyCapabilities(controller.signal).then(value => { if (!controller.signal.aborted) setConfig(value); }).catch(error => {
@@ -43,8 +55,7 @@ export function VenueLocationPicker(props: Props) {
   useEffect(() => {
     const controller = new AbortController();
     const requestId = `${props.venueId ?? "new"}-${++generation.current}`;
-    addressRequest.current?.abort(); setResolution(null); setZone(null); setMessage("");
-    setQueryBusy(false);
+    setZone(null); setMessage("");
     if (autoZone.current && current.current.timezone === autoZone.current) current.current.onTimezone("");
     autoZone.current = null;
     if (!props.point || !config?.timezone) { current.current.onReview(false); return () => controller.abort(); }
@@ -76,14 +87,20 @@ export function VenueLocationPicker(props: Props) {
     } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : String(error)); }
     finally { if (!controller.signal.aborted) setQueryBusy(false); }
   };
+
   const useCandidate = (candidate: GeocodingCandidate) => {
     props.onPoint(candidate);
     props.onAddress(candidate.address);
+    setAddressResolved(true);
     if (candidate.provider_place_id && candidate.provider_url) {
-      props.onGooglePlace({ provider_place_id: candidate.provider_place_id, provider_url: candidate.provider_url, name: candidate.name });
+      const place = { provider_place_id: candidate.provider_place_id, provider_url: candidate.provider_url, name: candidate.name };
+      setSelectedPlace(place); props.onGooglePlace(place);
       if (!props.venueName.trim()) props.onName?.(candidate.name);
+    } else {
+      setSelectedPlace(null); props.onGooglePlace(null);
     }
   };
+
   const choosePlace = async (placeId: string) => {
     searchRequest.current?.abort();
     const controller = new AbortController(); searchRequest.current = controller;
@@ -100,51 +117,98 @@ export function VenueLocationPicker(props: Props) {
       if (!controller.signal.aborted) setQueryBusy(false);
     }
   };
-  const parseAddress = async () => {
-    if (!props.point) return;
+
+  const resolveAddress = async (point: LocationPoint) => {
+    if (!config?.geocoding) return;
     addressRequest.current?.abort();
     const controller = new AbortController(); addressRequest.current = controller;
     const requestId = `address-${props.venueId ?? "new"}-${++generation.current}`;
-    const requestedPoint = key;
-    addressAtRequest.current = props.address; localityAtRequest.current = props.locality?.id ?? null;
-    setQueryBusy(true); setMessage(""); setResolution(null);
+    const requestedPoint = pointKey(point);
+    const originalAddress = current.current.address;
+    const originalLocality = current.current.locality?.id ?? null;
+    setAddressResolved(false); setMessage("");
     try {
-      const result = await resolveGeography(props.point, "address", requestId, props.csrf, controller.signal);
-      if (!controller.signal.aborted && pointKey(current.current.point) === requestedPoint && pointKey(result) === requestedPoint && result.request_id === requestId) setResolution(result);
+      const result = await resolveGeography(point, "address", requestId, props.csrf, controller.signal);
+      if (controller.signal.aborted || pointKey(current.current.point) !== requestedPoint || pointKey(result) !== requestedPoint || result.request_id !== requestId) return;
+      const candidate = result.address?.items[0];
+      if (candidate && current.current.address === originalAddress) current.current.onAddress(candidate.address);
+      if (result.localities[0] && (current.current.locality?.id ?? null) === originalLocality) current.current.onLocality(result.localities[0]);
+      setAddressResolved(Boolean(candidate));
+      if (!candidate && !current.current.address) setMessage(result.address?.message ?? "没有解析到附近地址，请手工填写。");
     } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : String(error)); }
-    finally { if (!controller.signal.aborted) setQueryBusy(false); }
   };
-  const suggestion = resolution?.address?.items[0];
+
+  const chooseMapPoint = (point: LocationPoint) => {
+    setSelectedPlace(null); props.onGooglePlace(null); props.onPoint(point);
+    void resolveAddress(point);
+  };
+
+  const resetPoint = () => {
+    addressRequest.current?.abort();
+    setSelectedPlace(null); setAddressResolved(false); setMessage("");
+    props.onGooglePlace(null); props.onPoint(props.savedPoint);
+  };
+
   const disabled = props.disabled || queryBusy;
-  return <div className="tour-admin-block">
-    <p className="console-admin-hint">点击地图或拖动标记调整草稿；确认保存前不会修改场馆。实际搬迁请新建 Venue。</p>
-    <div className="tour-admin-fields"><label>名称或地址定位<input value={query} maxLength={200} disabled={disabled} onChange={e => { searchRequest.current?.abort(); setQueryBusy(false); setQuery(e.target.value); setSearch(null); }} /></label></div>
-    <div className="console-submit-row">
-      <button type="button" className="console-ghost-btn" disabled={disabled || !config?.geocoding || query.trim().length < 2} onClick={() => void find()}>搜索位置</button>
-      <button type="button" className="console-ghost-btn" disabled={disabled || !props.point || !config?.geocoding} onClick={() => void parseAddress()}>解析此位置</button>
-      <button type="button" className="console-ghost-btn" disabled={props.disabled} onClick={() => props.onPoint(props.savedPoint)}>{props.venueId === undefined ? "清空草稿位置" : "回到已保存位置"}</button>
+  const selectedTitle = selectedPlace?.name || props.venueName.trim() || (props.point ? "地图选点" : "尚未选择位置");
+  const selectionState = selectedPlace ? "已匹配 Google 地点" : addressResolved ? "地址与地区已自动解析" : props.point ? "已选择地图位置" : "等待选择位置";
+  const coordinates = props.point ? `${props.point.latitude.toFixed(6)}, ${props.point.longitude.toFixed(6)}` : "—";
+  const timezoneLabel = zone?.timezone_id || props.timezone || "解析中";
+  const resultCount = search?.items.length ?? 0;
+
+  return <div className="tour-admin-block venue-location-picker-block">
+    <div className="venue-location-picker-layout">
+      <aside className="venue-location-picker-controls" aria-label="位置搜索与当前选择">
+        <div className="venue-location-picker-head">
+          <div className="venue-location-picker-title"><h3>选择场馆位置</h3></div>
+          <form className="venue-location-search" onSubmit={event => { event.preventDefault(); if (!disabled && config?.geocoding && query.trim().length >= 2) void find(); }}>
+            <SearchIcon />
+            <input aria-label="名称或地址定位" value={query} maxLength={200} disabled={disabled}
+              placeholder="搜索场馆名称或地址" onChange={event => { searchRequest.current?.abort(); setQueryBusy(false); setQuery(event.target.value); setSearch(null); }} />
+            <button type="submit" disabled={disabled || !config?.geocoding || query.trim().length < 2}>搜索位置</button>
+          </form>
+        </div>
+
+        <div className="venue-location-results-head">
+          <span>{search ? `搜索结果 · ${resultCount}` : "搜索结果"}</span>
+          <button type="button" disabled={props.disabled} onClick={resetPoint}>{props.venueId === undefined ? "清除位置" : "回到已保存位置"}</button>
+        </div>
+        <div className="venue-location-results">
+          {search?.items.map((candidate, index) => {
+            const active = pointKey(candidate) === key;
+            return <button type="button" key={`${candidate.latitude}-${candidate.longitude}-${index}`}
+              className={`venue-location-result${active ? " active" : ""}`} disabled={props.disabled} onClick={() => useCandidate(candidate)}>
+              <span className="venue-location-place-icon"><PinIcon /></span>
+              <span className="venue-location-result-copy"><strong>{candidate.name}</strong><small>{candidate.address}</small></span>
+              <span className="venue-location-chevron" aria-hidden="true">›</span>
+            </button>;
+          })}
+          {!search && <div className="venue-location-results-empty"><PinIcon /><strong>搜索地点</strong></div>}
+          {search && !search.items.length && <div className="venue-location-results-empty"><strong>没有找到匹配地点</strong><span>{search.message ?? "请调整名称，或直接在地图上选择。"}</span></div>}
+          {queryBusy && <p className="venue-location-status" role="status">正在查询位置…</p>}
+          {message && <p className="venue-location-status error" role="alert">{message}</p>}
+        </div>
+
+        <div className="venue-location-selection">
+          <div className="venue-location-selection-label"><span aria-hidden="true" />{selectionState}</div>
+          <h4>{selectedTitle}</h4>
+          <p>{props.address || (props.point ? "尚未取得地址，可在上方搜索或继续调整图钉。" : "选择后将在这里显示地址。")}</p>
+          <div className="venue-location-meta">
+            <div><span>坐标</span><strong>{coordinates}</strong></div>
+            <div><span>时区</span><strong>{timezoneLabel}</strong></div>
+          </div>
+          <div className="venue-location-actions">
+            <button type="button" className="console-ghost-btn" disabled={props.disabled} onClick={resetPoint}>{props.venueId === undefined ? "清除" : "复位"}</button>
+            <button type="button" className="console-submit-btn" disabled={props.disabled || !props.point || !props.timezone} onClick={props.onDone}>使用此位置</button>
+          </div>
+        </div>
+      </aside>
+
+      <div className="venue-location-picker-map">
+        {config ? <VenueLocationMap point={props.point} disabled={props.disabled} config={config}
+          onPoint={chooseMapPoint} onPlaceId={placeId => void choosePlace(placeId)} />
+          : <div className="venue-location-map-loading" role="status">{configFailed ? "地图暂不可用，可继续输入经纬度。" : "地图配置加载中…"}</div>}
+      </div>
     </div>
-    {search?.items.map((candidate, index) => <div key={`${candidate.latitude}-${candidate.longitude}-${index}`} className="console-admin-hint">
-      <span>{candidate.name} · {candidate.address} </span>
-      <button type="button" className="console-ghost-btn" disabled={props.disabled} onClick={() => useCandidate(candidate)}>选择此位置</button>
-    </div>)}
-    {search && <p role="status">{search.message ?? (search.status === "not_found" ? "没有找到位置，请调整名称或手工选点。" : "选择 Google 地点后会回填名称、地址、坐标和场馆链接。")}</p>}
-    {config ? <VenueLocationMap point={props.point} disabled={props.disabled} config={config}
-      onPoint={point => { props.onGooglePlace(null); props.onPoint(point); }} onPlaceId={placeId => void choosePlace(placeId)} />
-      : <p role="status">{configFailed ? "地图暂不可用，可继续输入经纬度。" : "地图配置加载中；可继续输入经纬度。"}</p>}
-    {zone && <p role="status">{zone.timezone_id ? `已按位置设置时区：${zone.timezone_id}` : zone.message ?? "时区待手工确认"}</p>}
-    {resolution?.address && <p role="status">{resolution.address.message ?? (suggestion ? "以下为附近地址建议，请核对门牌和地区。" : "未找到地址，可手工填写。")}</p>}
-    {suggestion && <div className="console-admin-hint"><span>{suggestion.address} </span>
-      <button type="button" className="console-ghost-btn" disabled={props.disabled || props.address !== addressAtRequest.current} onClick={() => props.onAddress(suggestion.address)}>采用地址建议</button>
-      {props.address !== addressAtRequest.current && <span> 地址已编辑，如需重新解析请点击“解析此位置”。</span>}
-    </div>}
-    {resolution?.localities.map(locality => <div key={locality.id} className="console-admin-hint">
-      <span>{[locality.country_code, locality.admin_area, locality.locality_name].filter(Boolean).join(" / ")} </span>
-      <button type="button" className="console-ghost-btn" disabled={props.disabled || (props.locality?.id ?? null) !== localityAtRequest.current} onClick={() => props.onLocality(locality)}>采用已有地区</button>
-    </div>)}
-    {suggestion && !resolution?.localities.length && <p className="console-admin-hint">没有匹配的已登记地区，请在上方手工选择；不会自动新增地区。</p>}
-    {(search || resolution?.address) && <p className="console-admin-hint"><a href="https://maps.google.com/" target="_blank" rel="noopener noreferrer">Google Maps</a></p>}
-    {queryBusy && <p role="status">正在查询位置…</p>}
-    {message && <p role="alert">{message}</p>}
   </div>;
 }

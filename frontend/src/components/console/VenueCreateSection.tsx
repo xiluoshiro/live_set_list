@@ -185,7 +185,7 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
           savedPoint={null} timezone={timezone} address={address} locality={locality}
           onPoint={point => { setLatitude(point ? String(point.latitude) : ""); setLongitude(point ? String(point.longitude) : ""); }}
           onTimezone={setTimezone} onAddress={setAddress} onLocality={setLocality} onName={setName}
-          onGooglePlace={setGooglePlace} onReview={setMapReview} />}
+          onGooglePlace={setGooglePlace} onReview={setMapReview} onDone={() => setMapOpen(false)} />}
     </div>
     {confirm && <div className="modal-mask" onClick={() => !submitting && setConfirm(false)}><div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="venue-create-confirm-title" onClick={e => e.stopPropagation()}>
       <div className="modal-head"><h2 id="venue-create-confirm-title">确认新增场地</h2></div>

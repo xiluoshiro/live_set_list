@@ -67,6 +67,10 @@ def test_search_cache_and_malformed_results():
         second = geocoding.geocode(query="Hall", country_code="JP")
     assert first == second
     assert network.call_count == 1
+    # 测试点：国家提示使用 Text Search 支持的 regionCode 字段，避免 Google 因未知字段返回 400。
+    request_body = json.loads(network.call_args.args[0].data)
+    assert request_body["regionCode"] == "jp"
+    assert "includedRegionCodes" not in request_body
     assert len(first["items"]) == 1
     assert first["items"][0]["country_code"] == "JP"
     assert first["items"][0]["provider_place_id"] == "place-1"

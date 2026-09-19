@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { VenueLocationMap } from "../VenueLocationMap";
-import { resetGoogleMapSession } from "../googleMapsSession";
+import { DEFAULT_GOOGLE_MAP_POINT, resetGoogleMapSession } from "../googleMapsSession";
 
 const fake = vi.hoisted(() => {
   const handlers: Record<string, (event?: unknown) => void> = {};
@@ -79,6 +79,21 @@ test("unmount and remount reuse one Google map instance", async () => {
   await waitFor(() => expect(screen.getByRole("region", { name: "场馆位置地图" })).toBeInTheDocument());
   expect(fake.makeMap).toHaveBeenCalledTimes(1);
   second.unmount();
+});
+
+// 测试点：首次地图视野以东京默认点为中心，并使用约十公里观察范围的缩放级别。
+test("initial map viewport uses the Tokyo default point and regional zoom", async () => {
+  render(<VenueLocationMap config={config} point={DEFAULT_GOOGLE_MAP_POINT} disabled={false}
+    onPoint={vi.fn()} onPlaceId={vi.fn()} />);
+  await waitFor(() => expect(fake.makeMap).toHaveBeenCalledTimes(1));
+  expect(fake.makeMap).toHaveBeenCalledWith(expect.any(HTMLDivElement), expect.objectContaining({
+    center: { lat: DEFAULT_GOOGLE_MAP_POINT.latitude, lng: DEFAULT_GOOGLE_MAP_POINT.longitude },
+    zoom: 12,
+    cameraControl: false,
+    zoomControl: true,
+    fullscreenControl: true,
+  }));
+  await waitFor(() => expect(fake.map.setZoom).toHaveBeenCalledWith(12));
 });
 
 // 测试点：loading=async 必须等待 Google callback，不能把 script load 事件当成 SDK 就绪。
