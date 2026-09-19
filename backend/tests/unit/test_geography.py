@@ -8,16 +8,13 @@ from app.geography import coordinate_url, place_url, resolve_local_time, validat
 from app.schemas.geography import LocationWrite, MapLinkWrite
 
 
-# 测试点：夏令时空缺钟点拒绝保存，重复钟点必须显式选择且得到不同 UTC 偏移。
+# 测试点：夏令时不存在和重复钟点均拒绝保存，不保留重复次数入口。
 def test_local_clock_rejects_gap_and_requires_fold():
     with pytest.raises(ValueError, match="不存在"):
         resolve_local_time(date(2024, 3, 10), time(2, 30), "America/New_York")
     with pytest.raises(ValueError, match="重复"):
         resolve_local_time(date(2024, 11, 3), time(1, 30), "America/New_York")
-    first = resolve_local_time(date(2024, 11, 3), time(1, 30), "America/New_York", 0)
-    second = resolve_local_time(date(2024, 11, 3), time(1, 30), "America/New_York", 1)
-    assert first.utcoffset() == timedelta(hours=-4)
-    assert second.utcoffset() == timedelta(hours=-5)
+
 
 
 # 测试点：普通日期依据指定 IANA 规则计算，非法时区和偏移字符串不作为时区名称接受。
@@ -36,7 +33,7 @@ def test_location_schema_validates_coordinate_contract():
     for fields in ({"latitude": 10}, {"latitude": 91, "longitude": 0},
                    {"latitude": float("nan"), "longitude": 0}, {"coordinate_system": "GCJ02"},
                    {"coordinate_basis": "center"}, {"verification_source": "official"},
-                   {"timezone_id": "Asia/Tokyo"}, {"address": 123}, {"timezone_id": 123}):
+                   {"address": 123}, {"timezone_id": 123}):
         with pytest.raises(ValidationError):
             LocationWrite.model_validate({"expected_state_token": "a" * 64, **fields})
 

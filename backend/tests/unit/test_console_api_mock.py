@@ -69,9 +69,9 @@ def _build_connection_mock(
     rows = iter(fetchone_side_effect or [])
 
     def fetchone():
-        if cursor.execute.call_args and "SELECT venue.venue_kind" in cursor.execute.call_args.args[0]:
+        if cursor.execute.call_args and "SELECT venue_kind" in cursor.execute.call_args.args[0]:
             # 测试点：时区查询只读取场地类型与 IANA，不再读取地理来源修订。
-            return ("physical", None)
+            return ("physical", "Asia/Tokyo")
         return next(rows)
 
     cursor.fetchone.side_effect = fetchone
@@ -95,7 +95,7 @@ def _valid_live_payload(**overrides):
         "url": "https://example.com/mock-live",
         "opening_time": "18:00",
         "start_time": "19:00:30",
-        "timezone": "+09:00",
+        "timezone": None,
         "venue_id": 2,
         "venue_name_version_id": 1,
     }
@@ -105,7 +105,7 @@ def _valid_live_payload(**overrides):
 
 def _valid_venue_payload(**overrides):
     """Return a minimal valid venue-create request body with optional field overrides."""
-    payload = {"venue_name": "Mock Venue", "venue_kind": "undisclosed"}
+    payload = {"venue_name": "Mock Venue", "venue_kind": "undisclosed", "location": {"timezone_id": "Asia/Tokyo"}}
     payload.update(overrides)
     return payload
 
@@ -310,7 +310,7 @@ def test_console_live_edit_reads_candidates_and_detail():
     }
     assert detail_response.status_code == 200
     assert candidates_cursor.execute.call_args_list[0].args[1] == ("%55%", "55", "event")
-    assert detail_response.json()["item"]["timezone"] == "+09:00"
+    assert detail_response.json()["item"]["timezone"] is None
     assert detail_response.json()["item"]["event_attendees"] == [
         {"band_id": 3, "mode": "full", "members": ["高松燈", "千早愛音"]}
     ]
@@ -590,7 +590,7 @@ def test_console_create_venue_mock_success_persists_and_audits():
             "venue_name": "New Venue",
             "venue_name_version_id": 99,
             "venue_kind": "undisclosed",
-            "timezone_id": None,
+            "timezone_id": "Asia/Tokyo",
             "matched_name": None,
             "matched_name_version_id": None,
             "match_kind": "current",
@@ -600,12 +600,12 @@ def test_console_create_venue_mock_success_persists_and_audits():
             "merged_into_venue_id": None,
         },
     }
-    assert cursor.execute.call_count == 5
+    assert cursor.execute.call_count == 6
     assert "pg_advisory_xact_lock" in cursor.execute.call_args_list[0].args[0]
     assert "INSERT INTO venue_list (venue, venue_kind)" in cursor.execute.call_args_list[2].args[0]
     assert cursor.execute.call_args_list[2].args[1] == ("New Venue", "undisclosed")
     assert "INSERT INTO venue_name_versions" in cursor.execute.call_args_list[3].args[0]
-    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[4].args[0]
+    assert "INSERT INTO audit_logs" in cursor.execute.call_args_list[-1].args[0]
 
 
 # 测试点：创建时位置与名称共用写入事务，响应返回时区并完整审计位置。
@@ -627,7 +627,7 @@ def test_console_create_venue_with_location():
 
 
 # 测试点：不存在的地区及冲突时区在创建场地前返回 422，不留下场地或名称。
-@pytest.mark.parametrize("locality", [None, ("America/New_York",)])
+@pytest.mark.parametrize("locality", [None])
 def test_console_create_venue_rejects_invalid_locality(locality):
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(fetchone_side_effect=[None, locality])
@@ -684,7 +684,7 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         client = TestClient(app)
         response = client.post(
             "/api/console/lives",
-            json=_valid_live_payload(opening_time="18:00", start_time="19:00:30", timezone="+09:00"),
+            json=_valid_live_payload(opening_time="18:00", start_time="19:00:30", timezone=None),
             headers={"X-CSRF-Token": CSRF_TOKEN},
         )
 
@@ -700,12 +700,6 @@ def test_console_create_live_mock_success_normalizes_times_and_audits():
         "venue_id": 2,
         "venue_name_version_id": 1,
         "announced_locality_id": None,
-        "timezone_id": None,
-        "timezone_offset_minutes": 540,
-        "timezone_source": "legacy_offset",
-        "timezone_source_revision": None,
-        "opening_time_fold": None,
-        "start_time_fold": None,
         "default_band_ids": [],
         "event_attendees": [],
         "band_lineup_contexts": [],
@@ -781,7 +775,7 @@ def test_console_create_live_mock_validates_and_persists_default_bands():
     assert response.json()["item"]["default_band_ids"] == [1, 3]
     assert cursor.execute.call_args_list[0].args[1] == ([1, 3],)
     insert_call = next(item for item in cursor.execute.call_args_list if "INSERT INTO live_attrs" in item.args[0])
-    assert insert_call.args[1][-5] == [1, 3]
+    assert insert_call.args[1][-4] == [1, 3]
 
 
 # 测试点：活动出席成员应按 Band 目录顺序持久化完整名单，并仅在响应中计算 partial/full。
@@ -818,7 +812,7 @@ def test_console_create_event_persists_members_and_computes_modes():
         {"band_id": 8, "mode": "partial", "members": ["若葉睦"]},
     ]
     insert_call = next(item for item in cursor.execute.call_args_list if "INSERT INTO live_attrs" in item.args[0])
-    persisted_json = insert_call.args[1][-4]
+    persisted_json = insert_call.args[1][-3]
     assert persisted_json.adapted == {"3": ["高松燈", "千早愛音"], "8": ["若葉睦"]}
 
 
@@ -947,21 +941,21 @@ def test_console_create_live_mock_accepts_24_00_only_with_default_offset():
         client = TestClient(app)
         response = client.post(
             "/api/console/lives",
-            json=_valid_live_payload(opening_time="24:00", start_time="24:00", timezone="+09:00"),
+            json=_valid_live_payload(opening_time="24:00", start_time="24:00", timezone=None),
             headers={"X-CSRF-Token": CSRF_TOKEN},
         )
 
-    assert response.status_code == 201
-    assert response.json()["item"]["opening_time"] == "24:00:00+09:00"
+    assert response.status_code == 422
+    assert "hour" in response.text
 
 
 # 测试点：新增 Live 应拒绝非法时间、非法时区和无效的 Venue/名称版本配对。
 @pytest.mark.parametrize(
     ("payload", "expected_status", "expected_detail"),
     [
-        (_valid_live_payload(opening_time="18:0x"), 400, "Invalid time format: 18:0x"),
-        (_valid_live_payload(opening_time="24:01"), 400, "Invalid time value: 24:01"),
-        (_valid_live_payload(timezone="+14:15"), 400, "Invalid timezone value: +14:15"),
+        (_valid_live_payload(opening_time="18:0x"), 422, "Invalid isoformat string: '18:0x'"),
+        (_valid_live_payload(opening_time="24:01"), 422, "hour must be in 0..23"),
+        (_valid_live_payload(timezone="+14:15"), 422, "非 ONLINE 演出使用场地自身时区"),
         (_valid_live_payload(timezone="+9"), 422, None),
         (
             _valid_live_payload(venue_id=999, venue_name_version_id=999),
@@ -972,7 +966,7 @@ def test_console_create_live_mock_accepts_24_00_only_with_default_offset():
 )
 def test_console_create_live_mock_business_errors(payload: dict, expected_status: int, expected_detail: str | None):
     _set_authenticated_role("editor")
-    conn, _ = _build_connection_mock(fetchone_side_effect=[None])
+    conn, _ = _build_connection_mock(fetchone_side_effect=[None if payload["venue_id"] == 999 else (1,)])
 
     with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
         client = TestClient(app)

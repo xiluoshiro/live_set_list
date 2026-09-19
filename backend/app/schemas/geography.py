@@ -16,18 +16,12 @@ class LocalityFields(BaseModel):
     country_code: str = Field(pattern=r"^[A-Z]{2}$")
     admin_area: str | None = Field(default=None, max_length=120)
     locality_name: str | None = Field(default=None, max_length=120)
-    timezone_id: str | None = Field(default=None, max_length=100)
     area_level: AreaLevel = "locality"
 
-    @field_validator("admin_area", "locality_name", "timezone_id", mode="before")
+    @field_validator("admin_area", "locality_name", mode="before")
     @classmethod
     def empty_to_none(cls, value: str | None) -> str | None:
         return (value.strip() or None) if isinstance(value, str) else value
-
-    @field_validator("timezone_id")
-    @classmethod
-    def valid_timezone(cls, value: str | None) -> str | None:
-        return validate_timezone(value) if value is not None else None
 
     @model_validator(mode="after")
     def valid_area_shape(self) -> Self:
@@ -53,7 +47,6 @@ class Locality(BaseModel):
     country_code: str
     admin_area: str | None
     locality_name: str | None
-    timezone_id: str | None
     area_level: AreaLevel
     state_token: str
 
@@ -88,8 +81,6 @@ class LocationFields(BaseModel):
     def paired_coordinates(self) -> Self:
         if (self.latitude is None) != (self.longitude is None):
             raise ValueError("经纬度必须同时填写或同时清空")
-        if self.timezone_id and self.latitude is None:
-            raise ValueError("场馆精确时区需要坐标；仅公布城市时请使用城市时区")
         if self.latitude is not None and self.longitude is not None:
             self.latitude = round(self.latitude, 6)
             self.longitude = round(self.longitude, 6)
@@ -160,8 +151,6 @@ class VenueLocation(BaseModel):
     longitude: float | None
     coordinate_system: Literal["WGS84"] = "WGS84"
     timezone_id: str | None
-    effective_timezone_id: str | None
-    timezone_source: Literal["venue", "locality"] | None
     state_token: str
     location_verified_at: datetime | None
     map_links: list[MapLink]
@@ -177,6 +166,5 @@ class LocalityPreview(BaseModel):
 class LocationPreview(BaseModel):
     before: VenueLocation
     after: LocationWrite
-    effective_timezone_id: str | None
     live_count: int
     changed_fields: list[str]

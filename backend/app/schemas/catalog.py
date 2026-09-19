@@ -56,6 +56,8 @@ class CatalogStatsResponse(BaseModel):
 
 
 class CatalogCalendarLiveItem(BaseModel):
+    calendar_date: date
+    opening_time: str | None = None
     live_id: int = Field(..., description="live_attrs.id")
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., description="Live title")

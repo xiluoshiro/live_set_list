@@ -26,11 +26,11 @@ TRUNCATE TABLE
     public.venue_list
 RESTART IDENTITY CASCADE;
 
-INSERT INTO public.venue_list (id, venue)
+INSERT INTO public.venue_list (id, venue, timezone_id)
 VALUES
-    (1, 'Shibuya WWW X'),
-    (2, 'Zepp Shinjuku'),
-    (24, '東京ガーデンシアター');
+    (1, 'Shibuya WWW X', 'Asia/Tokyo'),
+    (2, 'Zepp Shinjuku', 'Asia/Tokyo'),
+    (24, '東京ガーデンシアター', 'Asia/Tokyo');
 
 INSERT INTO public.venue_name_versions (venue_id, venue_name, valid_from, valid_to)
 SELECT id, venue, NULL, NULL

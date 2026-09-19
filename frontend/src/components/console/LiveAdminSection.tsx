@@ -14,6 +14,7 @@ import { formatLiveType } from "./constants";
 import type { BandOption, Position, VenueOption } from "./types";
 
 type LiveAdminSectionProps = {
+  clockError?: string;
   variant: "create" | "edit";
   liveDate: string;
   liveTitle: string;
@@ -31,9 +32,8 @@ type LiveAdminSectionProps = {
   openingTimeAnnounced?: boolean;
   startTimeAnnounced?: boolean;
   announcedLocalityId?: number | null;
-  explicitTimezoneId?: string | null;
-  localities?: Array<{ id: number; country_code: string; admin_area: string | null; locality_name: string | null; timezone_id: string | null }>;
-  timezoneOptions?: string[];
+  onlineOffset?: string | null;
+  localities?: Array<{ id: number; country_code: string; admin_area: string | null; locality_name: string | null }>;
   selectedVenueId: number;
   defaultBandIds: number[];
   defaultBandLineupContexts: Record<number, ConsoleLiveBandLineupContext>;
@@ -98,7 +98,7 @@ type LiveAdminSectionProps = {
   onOpeningTimeAnnouncedChange?: (announced: boolean) => void;
   onStartTimeAnnouncedChange?: (announced: boolean) => void;
   onAnnouncedLocalityChange?: (value: number | null) => void;
-  onExplicitTimezoneChange?: (value: string | null) => void;
+  onOnlineOffsetChange?: (value: string | null) => void;
   onVenueQueryTextChange: (value: string) => void;
   onLiveCandidateQueryChange: (value: string) => void;
   onLiveCandidateTypeChange: (value: string) => void;
@@ -120,6 +120,7 @@ type LiveAdminSectionProps = {
 };
 
 export function LiveAdminSection({
+  clockError = "",
   variant,
   liveDate,
   liveTitle,
@@ -137,9 +138,8 @@ export function LiveAdminSection({
   openingTimeAnnounced = true,
   startTimeAnnounced = true,
   announcedLocalityId = null,
-  explicitTimezoneId = null,
+  onlineOffset = null,
   localities = [],
-  timezoneOptions = [],
   selectedVenueId,
   defaultBandIds,
   defaultBandLineupContexts,
@@ -188,7 +188,7 @@ export function LiveAdminSection({
   onOpeningTimeAnnouncedChange = () => undefined,
   onStartTimeAnnouncedChange = () => undefined,
   onAnnouncedLocalityChange = () => undefined,
-  onExplicitTimezoneChange = () => undefined,
+  onOnlineOffsetChange = () => undefined,
   onVenueQueryTextChange,
   onLiveCandidateQueryChange,
   onLiveCandidateTypeChange,
@@ -462,10 +462,10 @@ export function LiveAdminSection({
                   {venueAnnounced ? (
                     <>
                       {selectedVenue?.venue_kind !== "online" && (
-                        <strong>{selectedVenue ? selectedVenue.timezone_id ?? "UTC+09:00" : "请选择场馆"}</strong>
+                        <strong>{selectedVenue ? selectedVenue.timezone_id ?? "请先补全场地时区" : "请选择场馆"}</strong>
                       )}
                       {selectedVenue && selectedVenue.venue_kind !== "online" && !selectedVenue.timezone_id && (
-                        <small>场馆未设置时区，使用默认 UTC+09:00</small>
+                        <small>场地未设置时区，不能录入演出</small>
                       )}
                     </>
                   ) : (
@@ -485,17 +485,17 @@ export function LiveAdminSection({
                       </select>
                     </label>
                   )}
-                  {!venueAnnounced && <strong>UTC+09:00</strong>}
+                  {!venueAnnounced && <small>未选择场地时，开场、开演须为未公布。</small>}
                   {venueAnnounced && selectedVenue?.venue_kind === "online" && (
                     <label>
-                      <span>线上活动时区</span>
+                      <span>线上活动 UTC 偏移</span>
                       <select
-                        aria-label="explicit timezone"
-                        value={explicitTimezoneId ?? ""}
-                        onChange={(e) => onExplicitTimezoneChange(e.target.value || null)}
+                        aria-label="online timezone offset"
+                        value={onlineOffset ?? ""}
+                        onChange={(e) => onOnlineOffsetChange(e.target.value || null)}
                       >
-                        <option value="">请选择线上活动时区</option>
-                        {timezoneOptions.map((timezoneId) => <option key={timezoneId} value={timezoneId}>{timezoneId}</option>)}
+                        <option value="">请选择线上活动 UTC 偏移</option>
+                        {Array.from({ length: 105 }, (_, index) => index * 15 - 720).map(minutes => { const absolute = Math.abs(minutes); const offset = `${minutes < 0 ? "-" : "+"}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`; return <option key={offset} value={offset}>UTC{offset}</option>; })}
                       </select>
                     </label>
                   )}
@@ -505,6 +505,7 @@ export function LiveAdminSection({
           </tbody>
         </table>
       </div>
+      {clockError && <p role="alert" className="console-admin-hint">{clockError}</p>}
 
       <div className="live-admin-state-grid">
         <section className="live-admin-status-section" aria-labelledby="live-admin-status-title">

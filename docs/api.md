@@ -189,6 +189,9 @@
 - `mode=full|partial` 不持久化；按固化基础阵容做成员集合比较，新建活动上下文统一使用当前开放阵容
 - 详情返回 `event_status/date_phase/status_note/was_rescheduled`；`schedule_history` 只包含正式改期前的快照，前端仅展示实际变化的标题、日期、时间或场地，不包含资料修正
 
+- `opening_timezone_label/start_timezone_label` 由后端根据场地 IANA 时区和对应演出瞬间生成；无 IANA 或该项时间未公布时为 `null`。前端无标签时沿用原固定偏移映射（如 `+09:00 → JST`），未知偏移显示 `UTC±HH:MM`。
+- 公开排期历史的 `previous_opening_timezone_label/previous_start_timezone_label` 按历史场地和历史时刻计算，不持久化这些显示标签。
+
 ### 3. `POST /api/lives/details:batch`
 
 这个接口的 schema 很直观，但业务行为有几个点需要补充：
@@ -350,9 +353,9 @@
 - `POST /api/console/venues`
   - 写入 `venue_list(venue)`，`id` 由 sequence 生成
 - `POST /api/console/lives`
-  - 可选择已核验的 `venue_id`，或在场馆未公布时提交 `announced_locality_id`；线上或完全未公布所在地时提交 `explicit_timezone_id`
-  - 后端从 Venue／城市或活动例外解析并保存 IANA `timezone_id` 与来源；`timezone` 仅为旧客户端兼容字段，不能作为新写入的时区依据
-  - `opening_time` / `start_time` 接受 `HH:mm` 或 `HH:mm:ss`；夏令时重复的钟点以 `opening_time_fold` / `start_time_fold` 的 `0|1` 指定首次或第二次出现，不存在的当地钟点返回 422
+  - 可选择已核验的 `venue_id`，或在场馆未公布时提交 `announced_locality_id`；未选择场馆时开场、开演必须为空；ONLINE 有时间时提交固定偏移 `timezone`
+  - 后端按场馆自身 IANA 与日期解析实体／未公开场地时间；ONLINE 只接受固定 UTC 偏移，偏移随 `timetz` 保存，不保存来源或独立时区快照
+  - `opening_time` / `start_time` 接受 `HH:mm` 或 `HH:mm:ss`；夏令时重复或不存在的当地钟点返回 422，不接受重复次数输入
   - `live_type` 必填，只允许 `oneman`、`taiban`、`multi_act`、`festival`、`event`、`other`
   - `default_band_ids` 可选，最多 100 项；后端要求每项为已存在的正数 `band_attrs.id`，并去重、升序后写入
   - `default_band_ids` 只在该 Live 尚无任何 setlist 行时作为列表 Band 使用
@@ -368,10 +371,10 @@
   - `has_setlist=true|false` 可按是否已有 Setlist 筛选，与其他条件按 AND 组合
   - `event_status` 可按人工状态精确筛选；候选同时返回 `event_status/date_phase`
 - `GET /api/console/lives/{live_id}`
-  - 返回完整可编辑字段、兼容 `timezone`、`announced_locality_id`、IANA `timezone_id`／来源／来源修订号、重复时间选择、默认 Band 的 `band_lineup_contexts` 和正式改期 `schedule_history`；活动出演成员的 `mode` 仍为计算值
+  - 返回完整可编辑字段、ONLINE 的固定偏移 `timezone`、`announced_locality_id`、默认 Band 的 `band_lineup_contexts` 和正式改期 `schedule_history`；活动出演成员的 `mode` 仍为计算值
 - `PUT /api/console/lives/{live_id}`
   - 基本字段与新增 Live 共用契约，不接受出演成员 `mode`；排期变化时额外要求 `schedule_change_kind=correction|reschedule`
-  - `reschedule` 会保存更新前的日期、开场、开演、Venue、已公布城市、IANA 时区、来源、兼容偏移和重复时间选择快照，`correction` 不写公开排期历史
+  - `reschedule` 会保存更新前的日期、开场、开演、Venue 和已公布地区；旧时间本身携带偏移，`correction` 不写公开排期历史
   - 正式改期可附 `schedule_change_note`；没有排期字段变化时不得提交改期类型
   - `status_note` 只在 `postponed/cancelled` 时保存，并显示在公开详情状态栏；`scheduled` 请求中的空白或遗留说明会归一化为 `null`
   - 使用行锁并在单一事务中校验、更新；无实际变化时不写审计日志
@@ -458,12 +461,14 @@
 以下接口位于 `/api/console`，要求 `editor+`。写入要求会话和 `X-CSRF-Token`，只读位置预览不写库。
 
 - `GET /localities?q=&page=1&limit=20`：城市搜索与总数；即使页码超出范围也保留总数。
-- `POST /localities`：登记城市，包含 `country_code`、可空 `admin_area`、`locality_name`、可空 IANA `timezone_id`。当前仅新增和查询。
+- `POST /localities`：登记城市，包含 `country_code`、可空 `admin_area`、`locality_name`。当前仅新增和查询。
 - `GET /timezones`：本地时区数据支持的 IANA 标识列表。
-- `GET /venues/{id}/location`：独立位置详情、有效时区来源和各地图的平台链接／坐标回退链接。
+- `GET /venues/{id}/location`：独立位置详情、场馆自身时区和各地图的平台链接／坐标回退链接。
 - `POST /venues/{id}/location-preview`：返回修改前后值、关联 Live 数及失效地图关联数，不修改排期。
-- `PUT /venues/{id}/location`：完整替换地理资料，要求 `expected_revision`；坐标仅接受 `coordinate_system=WGS84`。过期返回 409，坐标／时区冲突返回 422。
-- `PUT /venues/{id}/map-links`：确认 `provider`、地点 ID 或平台 HTTPS 详情链接，要求 `expected_revision`；Apple 必须提供详情 URL。
+- `PUT /venues/{id}/location`：完整替换地理资料，要求 `expected_state_token`；坐标仅接受 `coordinate_system=WGS84`。过期返回 409，非法坐标／时区返回 422。
+- `PUT /venues/{id}/map-links`：确认 `provider`、地点 ID 或平台 HTTPS 详情链接，要求 `expected_state_token`；Apple 必须提供详情 URL。
 - `DELETE /venues/{id}/map-links/{provider}?expected_revision=`：取消对应平台关联，保留场馆坐标并写审计。
 
-平台枚举为 `google`、`apple`、`amap`。关联前须有已确认坐标，位置修订后关联返回 `is_current=false`。本阶段不调用外部地图查询服务；Live 自动时区由已保存的 Venue／城市资料或明确的活动例外解析，不依赖地图在线调用。完整计划见 [地理资料设计](design/venue-location-and-timezone.md)。
+平台枚举为 `google`、`apple`、`amap`。关联前须有已确认坐标，位置修订后关联返回 `is_current=false`。本阶段不调用外部地图查询服务；Live 时间由场馆自身 IANA 或 ONLINE 固定偏移解析，不依赖地图在线调用。完整计划见 [地理资料设计](design/venue-location-and-timezone.md)。
+
+访问者日期规则见 [演出时区与访问者日期](design/live-timezone.md)。请求头 `X-Visitor-Timezone` 使用浏览器 IANA 时区；日历条目以 `calendar_date` 归组，`live_date` 保留公告日期。

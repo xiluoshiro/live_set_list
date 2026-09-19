@@ -6,6 +6,7 @@ from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled
 
 from app.main import app
+from app.live_status import visitor_date_sql, VISITOR_TODAY_SQL
 from app.routers.lives import (
     BATCH_LIVE_DETAIL_HEADERS_QUERY,
     BATCH_LIVE_DETAIL_ROWS_QUERY,
@@ -151,8 +152,8 @@ def test_get_lives_without_setlist_uses_filtered_pagination_queries():
     ]
     assert "l.event_status <> 'cancelled'" in LIVES_WITHOUT_SETLIST_COUNT_QUERY
     assert "l.event_status <> 'cancelled'" in LIVES_WITHOUT_SETLIST_PAGE_QUERY
-    assert "l.live_date <= CURRENT_DATE" in LIVES_WITHOUT_SETLIST_COUNT_QUERY
-    assert "l.live_date <= CURRENT_DATE" in LIVES_WITHOUT_SETLIST_PAGE_QUERY
+    assert f'{visitor_date_sql("l")} <= {VISITOR_TODAY_SQL}' in LIVES_WITHOUT_SETLIST_COUNT_QUERY
+    assert f'{visitor_date_sql("l")} <= {VISITOR_TODAY_SQL}' in LIVES_WITHOUT_SETLIST_PAGE_QUERY
     assert "ORDER BY (l.live_type = 'event') ASC" in LIVES_WITHOUT_SETLIST_PAGE_QUERY
 
 
@@ -295,8 +296,8 @@ def test_get_live_detail_success_maps_rows_and_rules():
         "2026-03-28",
         "Live 40",
         "武道馆",
-        "17:00",
-        "18:00",
+        "17:00:00+09:00",
+        "18:00:00+09:00",
         [1, 2],
         ["Poppin'Party", "Afterglow"],
         "https://example.com/live/40",
@@ -310,8 +311,6 @@ def test_get_live_detail_success_maps_rows_and_rules():
         None,
         [],
         9,
-        540,
-        "Asia/Tokyo",
         "physical",
     )
     detail_rows = [
@@ -358,8 +357,8 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert payload["venue"] == "武道馆"
     assert payload["venue_id"] == 9
     assert payload["venue_kind"] == "physical"
-    assert payload["opening_time"] == "17:00"
-    assert payload["start_time"] == "18:00"
+    assert payload["opening_time"] == "17:00:00+09:00"
+    assert payload["start_time"] == "18:00:00+09:00"
     assert payload["bands"] == [1, 2]
     assert payload["band_names"] == ["Poppin'Party", "Afterglow"]
     assert payload["url"] == "https://example.com/live/40"
@@ -412,7 +411,7 @@ def test_get_live_detail_success_maps_rows_and_rules():
 @pytest.mark.parametrize("mode", ["single", "batch"])
 def test_detail_entrypoints_isolate_duplicate_display_ids_by_setlist_id(mode):
     header_row = (
-        90, "2026-08-09", "Duplicate M1 Live", "Venue", "17:00", "18:00",
+        90, "2026-08-09", "Duplicate M1 Live", "Venue", "17:00:00+09:00", "18:00:00+09:00",
         [6, 8], ["RAISE A SUILEN", "MyGO!!!!!"], None, "festival", None, None, None, None,
     )
     detail_rows = [
@@ -448,8 +447,8 @@ def test_get_live_detail_handover_returns_full_plus_and_incoming_member():
         "2018-05-13",
         "Handover Live",
         "Venue",
-        "17:00",
-        "18:00",
+        "17:00:00+09:00",
+        "18:00:00+09:00",
         [4],
         ["Roselia"],
         None,
@@ -492,7 +491,7 @@ def test_get_live_detail_handover_returns_full_plus_and_incoming_member():
 # 测试点：handover 选择新阵容基准时，新成员计入正式阵容，仍出演的旧成员分类为 former。
 def test_get_live_detail_handover_can_use_next_lineup_as_baseline():
     header_row = (
-        42, "2018-05-13", "Handover Live", "Venue", "17:00", "18:00",
+        42, "2018-05-13", "Handover Live", "Venue", "17:00:00+09:00", "18:00:00+09:00",
         [4], ["Roselia"], None, "oneman", None, None, None, None,
     )
     performance_rows = [
@@ -525,8 +524,8 @@ def test_get_live_detail_event_uses_default_bands_and_computed_attendees():
         "2026-08-08",
         "Event Live",
         "活动会场",
-        "12:00",
-        "13:00",
+        "12:00:00+09:00",
+        "13:00:00+09:00",
         [3, 8],
         ["MyGO!!!!!", "Ave Mujica"],
         "https://example.com/live/88",
@@ -619,7 +618,7 @@ def test_get_live_detail_db_errors_log_context(exc, expected_status, expected_de
 @pytest.mark.parametrize("mode", ["single", "batch"])
 def test_detail_entrypoints_preserve_band_name_order(mode):
     header_row = (
-        88, "2026-03-28", "Live 88", "有明竞技场", "16:00", "17:00",
+        88, "2026-03-28", "Live 88", "有明竞技场", "16:00:00+09:00", "17:00:00+09:00",
         [30, 10, 20], ["Band10", "Band20", "Band30", "未映射A", "未映射B"],
         "https://example.com/live/88", "oneman", None, None, None, None,
     )
@@ -648,14 +647,14 @@ def test_detail_entrypoints_without_versioned_performances(
 ):
     url = f"https://example.com/live/66?{url_query}"
     header_row = (
-        66, "2026-04-01", "Live 66", venue, "00:00", "23:59",
+        66, "2026-04-01", "Live 66", venue, "00:00:00+09:00", "23:59:00+09:00",
         [3, 1, 3, 2], ["Band1", "Band2", "Band3", "未映射"],
         url, live_type, None, None, None, None,
     )
     payload = _request_detail_for_mode(mode, header_row, [detail_row])
     assert payload["venue"] == venue
-    assert payload["opening_time"] == "00:00"
-    assert payload["start_time"] == "23:59"
+    assert payload["opening_time"] == "00:00:00+09:00"
+    assert payload["start_time"] == "23:59:00+09:00"
     assert payload["url"] == url
     assert payload["bands"] == [1, 2, 3]
     assert payload["band_names"] == ["Band1", "Band2", "Band3", "未映射"]
@@ -668,8 +667,8 @@ def test_detail_entrypoints_without_versioned_performances(
 def test_get_live_details_batch_success_and_partial_missing():
     # 测试点：批量详情应去重保序，并按各自行成员隔离计算旧翻唱与跨乐队翻唱。
     header_rows = [
-        (1, "2026-03-28", "Live 1", "场地 1", "16:30", "17:30", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman", None, None, 7, "Group 7"),
-        (2, "2026-03-27", "Live 2", "场地 2", "17:00", "18:00", [2], ["Afterglow"], "https://example.com/live/2", "festival", None, None, None, None),
+        (1, "2026-03-28", "Live 1", "场地 1", "16:30:00+09:00", "17:30:00+09:00", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman", None, None, 7, "Group 7"),
+        (2, "2026-03-27", "Live 2", "场地 2", "17:00:00+09:00", "18:00:00+09:00", [2], ["Afterglow"], "https://example.com/live/2", "festival", None, None, None, None),
     ]
     detail_rows = [
         (
@@ -716,8 +715,8 @@ def test_get_live_details_batch_success_and_partial_missing():
 
     first_item = payload["items"][0]
     assert first_item["venue"] == "场地 2"
-    assert first_item["opening_time"] == "17:00"
-    assert first_item["start_time"] == "18:00"
+    assert first_item["opening_time"] == "17:00:00+09:00"
+    assert first_item["start_time"] == "18:00:00+09:00"
     assert first_item["url"] == "https://example.com/live/2"
     assert payload["items"][1]["performance_group"] == {"group_id": 7, "group_title": "Group 7"}
     assert first_item["detail_rows"][0]["comments"] == ["短版", "翻唱"]
@@ -777,7 +776,7 @@ def test_get_live_details_batch_all_missing_returns_empty_items():
 def test_get_live_details_batch_normalizes_other_members_without_legacy_band_data():
     # 测试点：批量接口只规范化 other_member，且不得从旧 Band JSON 合成出演。
     header_rows = [
-        (1, "2026-03-28", "Live 1", "场地 1", "16:30", "17:30", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman", None, None, None, None),
+        (1, "2026-03-28", "Live 1", "场地 1", "16:30:00+09:00", "17:30:00+09:00", [1], ["Poppin'Party"], "https://example.com/live/1", "oneman", None, None, None, None),
     ]
     detail_rows = [
         (

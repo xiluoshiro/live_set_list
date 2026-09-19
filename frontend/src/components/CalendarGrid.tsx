@@ -61,9 +61,9 @@ export function CalendarGrid({ monthKey, items, selectedDate, onSelect }: Calend
   const itemsByDate = useMemo(() => {
     const map = new Map<string, CatalogCalendarLiveItem[]>();
     items.forEach((item) => {
-      const list = map.get(item.live_date) ?? [];
+      const list = map.get(item.calendar_date) ?? [];
       list.push(item);
-      map.set(item.live_date, list);
+      map.set(item.calendar_date, list);
     });
     return map;
   }, [items]);

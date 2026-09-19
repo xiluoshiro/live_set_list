@@ -28,6 +28,7 @@ const apiMocks = vi.hoisted(() => ({
   createConsoleBand: vi.fn(),
   createConsoleBandLineupVersion: vi.fn(),
   getConsoleBandTransitionLiveCandidates: vi.fn(),
+  previewConsoleLiveClock: vi.fn().mockResolvedValue({ date_phase: "today" }),
   getConsoleLive: vi.fn(),
   getConsoleLiveCandidates: vi.fn(),
   getConsoleLocalities: vi.fn(),
@@ -67,6 +68,7 @@ vi.mock("../../api", () => ({
   createConsoleBand: apiMocks.createConsoleBand,
   createConsoleBandLineupVersion: apiMocks.createConsoleBandLineupVersion,
   getConsoleBandTransitionLiveCandidates: apiMocks.getConsoleBandTransitionLiveCandidates,
+  previewConsoleLiveClock: apiMocks.previewConsoleLiveClock,
   getConsoleLive: apiMocks.getConsoleLive,
   getConsoleLiveCandidates: apiMocks.getConsoleLiveCandidates,
   getConsoleLocalities: apiMocks.getConsoleLocalities,
@@ -123,6 +125,7 @@ function currentRoseliaHistory(bandId = 2) {
 
 describe("ConsoleInsertPanel", () => {
   beforeEach(() => {
+    apiMocks.previewConsoleLiveClock.mockReset().mockResolvedValue({ date_phase: "today" });
     apiMocks.appendConsoleLiveSetlist.mockReset();
     apiMocks.updateConsoleLiveSetlist.mockReset();
     apiMocks.getConsoleLiveSetlist.mockReset();
@@ -167,7 +170,7 @@ describe("ConsoleInsertPanel", () => {
         url: "https://example.com/event",
         opening_time: "09:00:00+09:00",
         start_time: "21:30:00+09:00",
-        timezone: "+09:00",
+        timezone: null,
         venue_id: 88,
         venue_name_version_id: 188,
         venue_name: "New Venue",
@@ -269,8 +272,17 @@ describe("ConsoleInsertPanel", () => {
     });
   });
 
-  // 测试点：切换场馆时实际时区及日期阶段同步变化，不使用日本默认值判断美国的今天。
-  test("venue selection updates timezone and local date phase", async () => {
+  test("空白表单不请求无效场地的时间预览", async () => {
+    // 测试点：初始及清空表单中的场地占位值不会触发不存在场地的错误提示。
+    render(<ConsoleInsertPanel initialMode="live_create" />);
+    await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalled());
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+    expect(apiMocks.previewConsoleLiveClock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  // 测试点：切换场馆显示自身时区，日期状态由访问者日期预览决定。
+  test("venue selection displays timezone without changing visitor date rules", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-15T02:00:00Z"));
     try {
@@ -287,7 +299,7 @@ describe("ConsoleInsertPanel", () => {
       await user.click(screen.getByRole("button", { name: "1 - Tokyo" }));
       await user.click(await screen.findByRole("radio", { name: "2 - New York" }));
       expect(screen.getByText("America/New_York")).toBeInTheDocument();
-      expect(document.querySelector(".live-admin-readonly-field")).toHaveAttribute("data-status-tone", "today");
+      expect(document.querySelector(".live-admin-readonly-field")).toHaveAttribute("data-status-tone", "past");
       expect(screen.queryByText(/场馆未设置/)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -513,7 +525,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("opening_time")).toHaveValue("18:00");
     await user.click(screen.getByLabelText("开场公布状态"));
     await user.click(screen.getByLabelText("开演公布状态"));
-    expect(screen.queryByLabelText("explicit timezone")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("online timezone offset")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     await user.click(screen.getByRole("button", { name: "确认提交" }));
 
@@ -522,7 +534,7 @@ describe("ConsoleInsertPanel", () => {
         venue_id: null,
         opening_time: null,
         start_time: null,
-        explicit_timezone_id: null,
+        timezone: null,
       }),
       "csrf-token",
     ));
@@ -1148,7 +1160,7 @@ describe("ConsoleInsertPanel", () => {
       live_id: 39, live_date: "2026-04-01", live_title: "Inserted Live", live_type: "oneman",
       url: "https://example.com/inserted", opening_time: null, start_time: "19:00:00-04:00",
       timezone_id: "America/New_York", timezone_offset_minutes: -240,
-      timezone_source: "venue", venue_id: 88, venue_name_version_id: 188,
+      venue_id: 88, venue_name_version_id: 188,
       default_band_ids: [3], event_attendees: [], event_status: "scheduled",
     } });
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -1189,9 +1201,7 @@ describe("ConsoleInsertPanel", () => {
         venue_id: 88,
         venue_name_version_id: 188,
         announced_locality_id: null,
-        explicit_timezone_id: null,
-        opening_time_fold: null,
-        start_time_fold: null,
+        timezone: null,
         default_band_ids: [3],
         event_attendees: [],
         band_lineup_contexts: [],
@@ -1202,7 +1212,7 @@ describe("ConsoleInsertPanel", () => {
     ));
     expect(screen.getByText("已新增Live #39（Inserted Live）")).toBeInTheDocument();
     expect(document.querySelector(".live-history-table tbody tr")?.textContent).toContain("39");
-    expect(document.querySelector(".live-history-table tbody tr")?.textContent).toContain("America/New_York");
+    expect(document.querySelector(".live-history-table tbody tr")?.textContent).toContain("UTC-04:00");
     expect(screen.getByLabelText("live_date")).toHaveValue(todayDate);
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("");
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
@@ -1360,7 +1370,7 @@ describe("ConsoleInsertPanel", () => {
         url: "https://example.com/unannounced",
         opening_time: null,
         start_time: null,
-        timezone: "+09:00",
+        timezone: null,
         venue_id: 88,
         venue_name_version_id: 188,
         venue_name: "New Venue",
@@ -1505,7 +1515,7 @@ describe("ConsoleInsertPanel", () => {
         url: "https://example.com/historical",
         opening_time: "18:00:00+09:00",
         start_time: "19:00:00+09:00",
-        timezone: "+09:00",
+        timezone: null,
         venue_id: 88,
         venue_name_version_id: 188,
         venue_name: "New Venue",

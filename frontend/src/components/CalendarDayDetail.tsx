@@ -16,30 +16,11 @@ type CalendarDayDetailProps = {
   onShowAll: () => void;
 };
 
-function formatStartTime(value: string | null, dateIso?: string): string {
-  if (!value) return "未公布";
-  const match = value.match(/^(\d{2}):(\d{2})(?::(\d{2}))?([+-])(\d{2}):(\d{2})$/);
-  if (match) {
-    const [, hour, minute, second, sign, zoneHour, zoneMinute] = match;
-    const zoneMinutes = Number(zoneHour) * 60 + Number(zoneMinute);
-    const offsetMinutes = sign === "-" ? -zoneMinutes : zoneMinutes;
-    let year = 2000;
-    let month = 0;
-    let day = 1;
-    if (dateIso) {
-      const [parsedYear, parsedMonth, parsedDay] = dateIso.split("-").map(Number);
-      year = parsedYear;
-      month = parsedMonth - 1;
-      day = parsedDay;
-    }
-    const utcMs =
-      Date.UTC(year, month, day, Number(hour), Number(minute), Number(second ?? 0)) -
-      offsetMinutes * 60000;
-    const local = new Date(utcMs);
-    return `${String(local.getHours()).padStart(2, "0")}:${String(local.getMinutes()).padStart(2, "0")}`;
-  }
-  const legacyMatch = value.match(/^(\d{2}:\d{2})/);
-  return legacyMatch ? legacyMatch[1] : value;
+function formatStartTime(value: string | null, dateIso: string): string {
+  if (!value || !/[+-]\d{2}:\d{2}$/.test(value)) return "未公布";
+  const local = new Date(`${dateIso}T${value}`);
+  if (Number.isNaN(local.getTime())) return "未公布";
+  return `${String(local.getHours()).padStart(2, "0")}:${String(local.getMinutes()).padStart(2, "0")}`;
 }
 
 function toHomeLiveRow(item: CatalogCalendarLiveItem): HomeLiveRow {
@@ -70,7 +51,7 @@ export function CalendarDayDetail({
   onShowAll,
 }: CalendarDayDetailProps) {
   const dayItems = useMemo(
-    () => items.filter((item) => item.live_date === selectedDate),
+    () => items.filter((item) => item.calendar_date === selectedDate),
     [items, selectedDate],
   );
   const { weekday, dateLabel } = formatDateHeading(selectedDate);
@@ -106,7 +87,7 @@ export function CalendarDayDetail({
                 aria-label={item.live_title}
                 onClick={() => onOpenLive(toHomeLiveRow(item))}
               >
-                <span className="event-time">{formatStartTime(item.start_time, item.live_date)}</span>
+                <span className="event-time">{formatStartTime(item.start_time ?? item.opening_time ?? null, item.live_date)}</span>
                 <span className="event-copy">
                   <strong className="event-title">{item.live_title}</strong>
                   {item.bands.length > 0 && (

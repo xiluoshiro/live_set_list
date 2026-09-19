@@ -45,7 +45,6 @@ function renderSection(
       openingTime="18:00"
       startTime="19:00"
       venueAnnounced={options.venueAnnounced ?? true}
-      timezoneOptions={["Asia/Tokyo"]}
       selectedVenueId={1}
       defaultBandIds={options.defaultBandIds ?? [3]}
       defaultBandLineupContexts={options.defaultBandLineupContexts ?? {}}
@@ -112,8 +111,8 @@ describe("LiveAdminSection", () => {
   // 测试点：场馆缺失时区时才提示默认值，实体场馆不能选择显式时区。
   test("keeps the timezone selector hidden for physical venues", () => {
     renderSection();
-    expect(screen.queryByLabelText("explicit timezone")).not.toBeInTheDocument();
-    expect(screen.getByText("场馆未设置时区，使用默认 UTC+09:00")).toBeInTheDocument();
+    expect(screen.queryByLabelText("online timezone offset")).not.toBeInTheDocument();
+    expect(screen.getByText("场地未设置时区，不能录入演出")).toBeInTheDocument();
   });
 
   // 测试点：新增和编辑都显示实际 IANA 时区，不显示静态来源文案或缺失提示。
@@ -126,7 +125,7 @@ describe("LiveAdminSection", () => {
   // 测试点：只有 online 场地可从 Live 表单选择主办方公布的活动时区。
   test("shows the timezone selector for online venues", () => {
     renderSection(vi.fn(), { venueKind: "online" });
-    expect(screen.getByLabelText("explicit timezone")).toBeInTheDocument();
+    expect(screen.getByLabelText("online timezone offset")).toBeInTheDocument();
   });
 
   // 测试点：默认 Band 下拉应允许多选正数 Band，并排除 band_id=0 占位项。

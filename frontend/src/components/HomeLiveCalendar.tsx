@@ -23,7 +23,7 @@ function chooseDefaultDate(
   items: CatalogCalendarLiveItem[],
   today: Date,
 ): string {
-  const dates = [...new Set(items.map((item) => item.live_date))].sort();
+  const dates = [...new Set(items.map((item) => item.calendar_date))].sort();
   if (dates.length === 0) {
     const todayIso = formatIsoDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
     return todayIso.startsWith(monthKey) ? todayIso : `${monthKey}-01`;

@@ -36,6 +36,7 @@ vi.mock("../api", () => ({
         {
           live_id: 1,
           live_date: `${month}-05`,
+          calendar_date: `${month}-05`,
           live_title: "示例 Live 名称 1",
           start_time: "18:00:00+09:00",
           bands: [1],

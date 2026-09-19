@@ -14,7 +14,7 @@ def login(client, role="editor"):
 
 def city(client, headers, timezone="Asia/Tokyo", name="検証市"):
     response = client.post("/api/console/localities", headers=headers, json={
-        "country_code": "JP", "admin_area": "東京都", "locality_name": name, "timezone_id": timezone,
+        "country_code": "JP", "admin_area": "東京都", "locality_name": name,
     })
     assert response.status_code == 201, response.text
     return response.json()
@@ -33,7 +33,7 @@ def point(client, locality_id=None):
 
 
 def verified(**values):
-    return values
+    return {"timezone_id": "Asia/Tokyo", **values}
 
 
 # 测试点：新增场地一次保存的位置可通过真实位置接口读回，错误地区不会留下半成品。
@@ -63,7 +63,7 @@ def test_create_venue_with_location_is_atomic(integration_test_client, integrati
         assert cur.fetchone()[0] == 0
 
 
-# 测试点：场馆查询和详情返回实际时区，无时间的 Live 也返回按演出日期解析的夏令时偏移。
+# 测试点：场馆查询和详情返回自身时区；已公布的 Live 钟点按演出日期解析夏令时偏移。
 @pytest.mark.parametrize(("live_date", "offset"), [("2026-01-15", -300), ("2026-07-15", -240)])
 def test_console_timezone_read_contract(integration_test_client, integration_admin_connection, live_date, offset):
     client = integration_test_client
@@ -78,13 +78,13 @@ def test_console_timezone_read_contract(integration_test_client, integration_adm
     assert next(item for item in page.json()["items"] if item["venue_id"] == 1)["timezone_id"] == "America/New_York"
     response = client.post("/api/console/lives", headers=headers, json={
         "live_date": live_date, "live_title": "Timezone contract", "live_type": "oneman",
-        "url": "https://example.com/timezone", "opening_time": None, "start_time": None,
+        "url": "https://example.com/timezone", "opening_time": "18:00", "start_time": "19:00",
         "venue_id": 1, "venue_name_version_id": detail.json()["venue_name_version_id"],
         "default_band_ids": [], "event_attendees": [],
     })
     assert response.status_code == 201, response.text
-    assert response.json()["item"]["timezone_id"] == "America/New_York"
-    assert response.json()["item"]["timezone_offset_minutes"] == offset
+    assert "timezone_id" not in response.json()["item"]
+    assert response.json()["item"]["start_time"].endswith("-05:00" if offset == -300 else "-04:00")
 
 
 # 测试点：国家和行政区级所在地缺少城市名时，默认列表、场馆位置与公开详情仍能返回。
@@ -100,9 +100,9 @@ def test_region_only_localities_remain_readable(integration_test_client, integra
     with integration_admin_connection.cursor() as cur:
         for country_code, admin_area, timezone_id, area_level in entries:
             cur.execute(
-                """INSERT INTO geo_localities (country_code, admin_area, locality_name, timezone_id, area_level)
-                   VALUES (%s, %s, NULL, %s, %s) RETURNING id""",
-                (country_code, admin_area, timezone_id, area_level),
+                """INSERT INTO geo_localities (country_code, admin_area, locality_name, area_level)
+                   VALUES (%s, %s, NULL, %s) RETURNING id""",
+                (country_code, admin_area, area_level),
             )
             locality_ids[country_code] = cur.fetchone()[0]
 
@@ -140,14 +140,14 @@ def test_location_preview_save_and_live_isolation(integration_test_client, integ
     payload = point(client, locality["id"])
     preview = client.post("/api/console/venues/1/location-preview", json=payload)
     assert preview.status_code == 200, preview.text
-    assert preview.json()["effective_timezone_id"] == "Asia/Tokyo"
+    assert preview.json()["after"]["timezone_id"] == "Asia/Tokyo"
     assert client.get("/api/console/venues/1/location").json()["latitude"] is None
     saved = client.put("/api/console/venues/1/location", json=payload, headers=headers)
     assert saved.status_code == 200, saved.text
     assert saved.json()["state_token"] != payload["expected_state_token"]
     assert "location_revision" not in saved.json()
     assert saved.json()["locality"]["id"] == locality["id"]
-    assert saved.json()["timezone_source"] == "venue"
+    assert saved.json()["timezone_id"] == "Asia/Tokyo"
     assert client.get("/api/console/venues/1/location").json() == saved.json()
     with integration_admin_connection.cursor() as cur:
         cur.execute("SELECT row_to_json(l) FROM live_attrs l WHERE venue_id=1 ORDER BY id")
@@ -176,7 +176,7 @@ def test_location_preview_counts_lives_without_timezone_reviews(integration_test
     )
     assert saved.status_code == 200, saved.text
     address_only = client.post("/api/console/venues/1/location-preview", json={
-        "expected_state_token": token(client), "locality_id": tokyo["id"], "address": "Updated address",
+        "expected_state_token": token(client), "locality_id": tokyo["id"], "timezone_id": "Asia/Tokyo", "address": "Updated address",
     })
     assert address_only.status_code == 200, address_only.text
     assert address_only.json()["live_count"] == 2
@@ -184,11 +184,10 @@ def test_location_preview_counts_lives_without_timezone_reviews(integration_test
 
     new_york_response = client.post("/api/console/localities", headers=headers, json={
         "country_code": "US", "admin_area": "New York", "locality_name": "New York",
-        "timezone_id": "America/New_York",
     })
     assert new_york_response.status_code == 201, new_york_response.text
     changed = client.post("/api/console/venues/1/location-preview", json={
-        "expected_state_token": token(client), "locality_id": new_york_response.json()["id"],
+        "expected_state_token": token(client), "locality_id": new_york_response.json()["id"], "timezone_id": "Asia/Tokyo",
     })
     assert changed.status_code == 200, changed.text
     body = changed.json()
@@ -198,85 +197,20 @@ def test_location_preview_counts_lives_without_timezone_reviews(integration_test
 
 # 测试点：地区纠错不修改 Venue 或地图，旧地区表单被拒绝且 Live 快照保持不变。
 def test_locality_correction_preserves_venue_and_maps(integration_test_client, integration_admin_connection):
-    client = integration_test_client
-    headers = login(client)
-    tokyo = city(client, headers)
-    duplicate = client.post("/api/console/localities", headers=headers, json={
-        "country_code": "JP", "admin_area": "東京都", "locality_name": "検証市",
-        "timezone_id": "Asia/Tokyo", "area_level": "locality",
-    })
-    assert duplicate.status_code == 409
-    admin_area = client.post("/api/console/localities", headers=headers, json={
-        "country_code": "JP", "admin_area": "沖縄県", "locality_name": None,
-        "timezone_id": "Asia/Tokyo", "area_level": "admin_area",
-    })
-    assert admin_area.status_code == 201, admin_area.text
-    assert admin_area.json()["locality_name"] is None
-    country = client.post("/api/console/localities", headers=headers, json={
-        "country_code": "HK", "admin_area": None, "locality_name": None,
-        "timezone_id": "Asia/Hong_Kong", "area_level": "country",
-    })
-    assert country.status_code == 201, country.text
-    invalid = client.post("/api/console/localities", headers=headers, json={
-        "country_code": "JP", "admin_area": None, "locality_name": None,
-        "timezone_id": "Asia/Tokyo", "area_level": "admin_area",
-    })
-    assert invalid.status_code == 422
-
-    location_payload = {
-        "expected_state_token": token(client), "locality_id": tokyo["id"], "address": "Test address",
-        "latitude": 35.6, "longitude": 139.7, "timezone_id": None, "coordinate_system": "WGS84",
-    }
-    saved_location = client.put("/api/console/venues/1/location", headers=headers, json=location_payload)
-    assert saved_location.status_code == 200, saved_location.text
-    assert "coordinate_basis" not in saved_location.json()
-    link = client.put("/api/console/venues/1/map-links", headers=headers, json={
-        "expected_state_token": token(client), "provider": "google", "provider_place_id": "verified-place",
-    })
-    assert link.status_code == 200, link.text
+    # 测试点：地区更名不修改场地时区及演出时间；旧令牌不能再次覆盖。
+    client=integration_test_client; headers=login(client); locality=city(client,headers)
+    assert client.put("/api/console/venues/1/location",headers=headers,json=point(client,locality["id"])).status_code==200
     with integration_admin_connection.cursor() as cur:
-        cur.execute(
-            """UPDATE live_attrs
-               SET timezone_id='Asia/Tokyo', timezone_source='venue', timezone_source_revision=2
-               WHERE id=1"""
-        )
-        cur.execute(
-            """UPDATE live_attrs
-               SET timezone_id='Asia/Tokyo', timezone_source='explicit', timezone_source_revision=NULL
-               WHERE id=41"""
-        )
-
-    update = {
-        "expected_state_token": tokyo["state_token"], "country_code": "JP", "admin_area": "東京都",
-        "locality_name": "検証市", "timezone_id": "America/New_York", "area_level": "locality",
-    }
-    preview = client.post(f"/api/console/localities/{tokyo['id']}/preview", json=update)
-    assert preview.status_code == 200, preview.text
-    body = preview.json()
-    assert body["venue_count"] == 1
-    assert "inherited_timezone_venue_count" not in body
-    assert body["live_count"] == 2
-    assert "invalidated_map_links" not in body
-    assert "timezone_review_lives" not in body
-
-    saved = client.put(f"/api/console/localities/{tokyo['id']}", headers=headers, json=update)
-    assert saved.status_code == 200, saved.text
-    assert saved.json()["state_token"] != tokyo["state_token"]
-    assert "revision" not in saved.json()
-    assert saved.json()["timezone_id"] == "America/New_York"
-    location = client.get("/api/console/venues/1/location").json()
-    assert "location_revision" not in location
-    assert location["effective_timezone_id"] is None
-    assert location["map_links"][0]["is_current"]
+        cur.execute("SELECT opening_time,start_time FROM live_attrs ORDER BY id"); before=cur.fetchall()
+    update={"expected_state_token":locality["state_token"],"country_code":"JP","admin_area":"東京都","locality_name":"改名地区","area_level":"locality"}
+    response=client.put(f"/api/console/localities/{locality['id']}",headers=headers,json=update)
+    assert response.status_code==200,response.text
+    assert "timezone_id" not in response.json()
+    assert client.get("/api/console/venues/1/location").json()["timezone_id"]=="Asia/Tokyo"
     with integration_admin_connection.cursor() as cur:
-        cur.execute("SELECT timezone_id, timezone_source_revision FROM live_attrs WHERE id=1")
-        assert cur.fetchone() == ("Asia/Tokyo", 2)
-        cur.execute("SELECT payload_json FROM audit_logs WHERE action='locality_update'")
-        audit = cur.fetchone()[0]
-        assert audit["before"]["timezone_id"] == "Asia/Tokyo"
-        assert audit["after"]["timezone_id"] == "America/New_York"
-        assert "timezone_review_live_ids" not in audit
-    assert client.put(f"/api/console/localities/{tokyo['id']}", headers=headers, json=update).status_code == 409
+        cur.execute("SELECT opening_time,start_time FROM live_attrs ORDER BY id"); assert cur.fetchall()==before
+    assert client.put(f"/api/console/localities/{locality['id']}",headers=headers,json=update).status_code==409
+
 
 
 # 测试点：坐标纠错保留已确认 POI，旧地图请求拒绝，显式取消才移除关联。
@@ -338,31 +272,16 @@ def test_map_candidate_search_and_confirmed_audit(integration_test_client, integ
 
 # 测试点：physical、undisclosed 与 online 使用不同位置范围，冲突时区和越界资料不能保存。
 def test_city_only_timezone_conflict_and_online_guard(integration_test_client):
-    client = integration_test_client
-    headers = login(client)
-    locality = city(client, headers)
-    response = client.put(
-        "/api/console/venues/1/location", headers=headers,
-        json=verified(expected_state_token=token(client), locality_id=locality["id"]),
-    )
-    assert response.status_code == 200, response.text
-    assert response.json()["latitude"] is None and response.json()["timezone_source"] is None
-    conflict = {**point(client, locality["id"]), "timezone_id": "America/New_York"}
-    assert client.put("/api/console/venues/1/location", json=conflict, headers=headers).status_code == 422
-    assert client.patch("/api/console/venues/1", json={"venue_kind": "undisclosed"}, headers=headers).status_code == 200
-    assert client.put(
-        "/api/console/venues/1/location", headers=headers,
-        json=verified(expected_state_token=token(client), locality_id=locality["id"], address="不应保存"),
-    ).status_code == 422
-    assert client.put("/api/console/venues/1/map-links", headers=headers, json={
-        "expected_state_token": token(client), "provider": "google", "provider_place_id": "not-allowed",
-    }).status_code == 422
-    assert client.patch("/api/console/venues/1", json={"venue_kind": "online"}, headers=headers).status_code == 409
-    assert client.put(
-        "/api/console/venues/1/location", json=verified(expected_state_token=token(client)), headers=headers,
-    ).status_code == 200
-    assert client.patch("/api/console/venues/1", json={"venue_kind": "online"}, headers=headers).status_code == 200
-    assert client.put("/api/console/venues/1/location", json=point(client), headers=headers).status_code == 422
+    # 测试点：未公开场地可无坐标但必须有自身时区，地区不限制场地时区。
+    client=integration_test_client; headers=login(client); locality=city(client,headers)
+    payload={"expected_state_token":token(client),"locality_id":locality["id"],"timezone_id":"America/New_York"}
+    response=client.put("/api/console/venues/1/location",headers=headers,json=payload)
+    assert response.status_code==200,response.text
+    assert response.json()["latitude"] is None and response.json()["timezone_id"]=="America/New_York"
+    created=client.post("/api/console/venues",headers=headers,json={"venue_name":"未公开测试场地","venue_kind":"undisclosed","location":{"timezone_id":"Asia/Tokyo"}})
+    assert created.status_code==201,created.text
+    assert client.post("/api/console/venues",headers=headers,json={"venue_name":"无时区场地","venue_kind":"undisclosed"}).status_code==422
+
 
 
 # 测试点：成对 WGS84 坐标可直接保存，已删除的核验字段会被严格拒绝。
@@ -370,7 +289,7 @@ def test_coordinates_need_no_verification_fields(integration_test_client):
     client = integration_test_client
     headers = login(client)
     plain_point = {
-        "expected_state_token": token(client), "latitude": 35.6, "longitude": 139.7,
+        "expected_state_token": token(client), "latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo",
     }
     response = client.put("/api/console/venues/1/location", json=plain_point, headers=headers)
     assert response.status_code == 200, response.text
@@ -398,7 +317,6 @@ def test_city_pagination_and_permissions(integration_test_client):
             "country_code": "JP",
             "admin_area": "東京都",
             "locality_name": "検証市",
-            "timezone_id": "Asia/Tokyo",
             "area_level": "locality",
         },
     ).status_code == 403
@@ -408,55 +326,33 @@ def test_city_pagination_and_permissions(integration_test_client):
     assert client.get("/api/console/timezones").status_code == 403
 
 
-# 测试点：场地 IANA 时区决定 Live 偏移，场地缺时区时退回固定 +09:00。
-def test_live_uses_venue_iana_or_default_offset(integration_test_client, integration_admin_connection):
-    client = integration_test_client
-    headers = login(client)
-    locality_response = client.post("/api/console/localities", headers=headers, json={
-        "country_code": "US", "admin_area": "New York", "locality_name": "New York", "timezone_id": "America/New_York",
-    })
-    assert locality_response.status_code == 201, locality_response.text
-    locality_id = locality_response.json()["id"]
-    saved = client.put("/api/console/venues/1/location", headers=headers, json={
-        "expected_state_token": token(client), "locality_id": locality_id, "latitude": 40.7,
-        "longitude": -74.0, "timezone_id": "America/New_York",
-    })
-    assert saved.status_code == 200, saved.text
+def test_live_uses_venue_iana_or_online_fixed_offset(integration_test_client, integration_admin_connection):
+    # 测试点：非线上继承场地，ONLINE 固定偏移；无场地时间和夏令时异常钟点拒绝。
+    client=integration_test_client; headers=login(client)
+    base={"live_date":"2026-07-22","live_title":"Timezone rules","live_type":"oneman","url":"https://example.com/tz","opening_time":"18:00","start_time":"19:00","venue_id":1,"venue_name_version_id":1}
     with integration_admin_connection.cursor() as cur:
-        cur.execute("SELECT id FROM venue_name_versions WHERE venue_id=1 AND valid_to IS NULL")
-        version_id = cur.fetchone()[0]
-    response = client.post("/api/console/lives", headers=headers, json={
-        "live_date": "2026-07-22", "live_title": "IANA Venue Live", "live_type": "oneman",
-        "url": "https://example.com/iana-venue", "opening_time": "18:00", "start_time": "19:00",
-        "venue_id": 1, "venue_name_version_id": version_id,
-    })
-    assert response.status_code == 201, response.text
-    item = response.json()["item"]
-    assert item["timezone_id"] == "America/New_York"
-    assert item["timezone_source"] == "venue"
-    assert item["opening_time"] == "18:00:00-04:00"
-    assert item["start_time"] == "19:00:00-04:00"
-    with integration_admin_connection.cursor() as cur:
-        cur.execute("SELECT timezone_id, timezone_source, timezone_offset_minutes, timezone_source_revision FROM live_attrs WHERE id=%s", (item["live_id"],))
-        assert cur.fetchone() == ("America/New_York", "venue", -240, None)
+        cur.execute("UPDATE venue_list SET timezone_id='America/New_York' WHERE id=1")
+    response=client.post("/api/console/lives",headers=headers,json=base)
+    assert response.status_code==201,response.text
+    assert response.json()["item"]["start_time"]=="19:00:00-04:00"
+    assert "timezone_source" not in response.json()["item"]
+    assert client.post("/api/console/lives",headers=headers,json={**base,"venue_id":None,"venue_name_version_id":None}).status_code==422
+    for kind in ("undisclosed","online"):
+        with integration_admin_connection.cursor() as cur:
+            cur.execute("INSERT INTO venue_list(venue,venue_kind,timezone_id) VALUES (%s,%s,%s) RETURNING id",(kind,kind,"Asia/Tokyo" if kind=="undisclosed" else None)); venue=cur.fetchone()[0]
+            cur.execute("INSERT INTO venue_name_versions(venue_id,venue_name) VALUES (%s,%s) RETURNING id",(venue,kind)); version=cur.fetchone()[0]
+        payload={**base,"venue_id":venue,"venue_name_version_id":version}
+        if kind=="online":
+            assert client.post("/api/console/lives",headers=headers,json=payload).status_code==422
+            payload["timezone"]="-03:30"
+        response=client.post("/api/console/lives",headers=headers,json=payload)
+        assert response.status_code==201,response.text
+        assert response.json()["item"]["start_time"].endswith("-03:30" if kind=="online" else "+09:00")
+    for day,clock in (("2026-03-08","02:30"),("2026-11-01","01:30")):
+        assert client.post("/api/console/lives",headers=headers,json={**base,"live_date":day,"start_time":clock}).status_code==422
+        # 测试点：旧 fold 字段不能绕过重复钟点的拒绝规则。
+        assert client.post("/api/console/lives",headers=headers,json={**base,"live_date":day,"start_time":clock,"start_time_fold":0}).status_code==422
 
-    fallback = client.post("/api/console/lives", headers=headers, json={
-        "live_date": "2026-07-22", "live_title": "Default Offset Live", "live_type": "oneman",
-        "url": "https://example.com/default-offset", "opening_time": "18:00", "start_time": "19:00",
-        "venue_id": None, "venue_name_version_id": None, "announced_locality_id": locality_id,
-    })
-    assert fallback.status_code == 201, fallback.text
-    assert fallback.json()["item"]["opening_time"] == "18:00:00+09:00"
-    with integration_admin_connection.cursor() as cur:
-        cur.execute("SELECT timezone_id, timezone_source, timezone_offset_minutes, timezone_source_revision FROM live_attrs WHERE id=%s", (fallback.json()["item"]["live_id"],))
-        assert cur.fetchone() == (None, "legacy_offset", 540, None)
-
-    forbidden = client.post("/api/console/lives", headers=headers, json={
-        "live_date": "2026-07-22", "live_title": "Forbidden Override", "live_type": "oneman",
-        "url": "https://example.com/forbidden", "opening_time": "18:00", "start_time": "19:00",
-        "venue_id": None, "venue_name_version_id": None, "explicit_timezone_id": "Asia/Tokyo",
-    })
-    assert forbidden.status_code == 422
 
 
 # 测试点：补录和逐项纠错不产生版本或使地图失效，仅正式更名新增名称历史，搬迁新建 Venue。
@@ -473,7 +369,7 @@ def test_corrections_keep_identity_and_only_rename_creates_version(integration_t
     })
     assert linked.status_code == 200, linked.text
     for change in ({"timezone_id": "America/New_York"}, {"address": "Corrected address"},
-                   {"latitude": 35.6001}, {"timezone_id": None}, {"timezone_id": "Asia/Tokyo"}):
+                   {"latitude": 35.6001}, {"timezone_id": "Asia/Tokyo"}):
         payload = {**payload, **change, "expected_state_token": token(client)}
         response = client.put("/api/console/venues/1/location", headers=headers, json=payload)
         assert response.status_code == 200, response.text
@@ -521,7 +417,7 @@ def test_locality_and_map_concurrency_without_versions(integration_test_client, 
         before = cur.fetchone()[0]
     changed = client.put(f"/api/console/localities/{locality['id']}", headers=headers, json={
         "expected_state_token": locality["state_token"], "country_code": "JP", "admin_area": "東京都",
-        "locality_name": "Corrected locality name", "timezone_id": "Asia/Tokyo",
+        "locality_name": "Corrected locality name",
     })
     assert changed.status_code == 200, changed.text
     with integration_admin_connection.cursor() as cur:

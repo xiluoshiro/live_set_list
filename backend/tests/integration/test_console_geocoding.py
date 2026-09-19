@@ -41,7 +41,7 @@ def test_resolution_is_read_only(integration_test_client, integration_admin_conn
     client, conn = integration_test_client, integration_admin_connection
     headers = login(client)
     with conn.cursor() as cur:
-        cur.execute("INSERT INTO geo_localities(country_code,area_level,timezone_id) VALUES ('HK','country','Asia/Hong_Kong')")
+        cur.execute("INSERT INTO geo_localities(country_code,area_level) VALUES ('HK','country')")
     before = fingerprint(conn)
     payload = {"latitude": 22.3, "longitude": 114.1, "request_id": "draft-1", "parts": "timezone"}
     result = client.post("/api/console/geography/resolve", headers=headers, json=payload)

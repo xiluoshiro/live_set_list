@@ -147,8 +147,8 @@ def test_get_catalog_calendar_returns_month_items_with_public_status():
             return cls(2026, 8, 5, 4, 0, tzinfo=timezone.utc)
 
     cursor.fetchall.return_value = [
-        (101, date(2026, 8, 4), "Past Live", [1, 2], time(18, 0, tzinfo=jst), "scheduled", True),
-        (102, date(2026, 8, 6), "Upcoming Live", [8], time(18, 30, tzinfo=jst), "cancelled", False),
+        (101, date(2026, 8, 4), "Past Live", [1, 2], time(18, 0, tzinfo=jst), "scheduled", True, None),
+        (102, date(2026, 8, 6), "Upcoming Live", [8], time(18, 30, tzinfo=jst), "cancelled", False, None),
     ]
 
     with patch("app.routers.catalog.get_db_connection", return_value=conn):
@@ -162,6 +162,8 @@ def test_get_catalog_calendar_returns_month_items_with_public_status():
     assert payload["items"][0] == {
         "live_id": 101,
         "live_date": "2026-08-04",
+        "calendar_date": "2026-08-04",
+        "opening_time": None,
         "live_title": "Past Live",
         "start_time": "18:00:00+09:00",
         "bands": [1, 2],

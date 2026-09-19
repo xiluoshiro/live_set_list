@@ -14,7 +14,7 @@ test("resolution propagates cancellation and CSRF", async () => {
   const rejection = expect(promise).rejects.toMatchObject({ name: "AbortError" });
   controller.abort();
   await rejection;
-  expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ headers: expect.objectContaining({ "X-CSRF-Token": "csrf" }), method: "POST" }));
+  expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ headers: expect.objectContaining({ "x-csrf-token": "csrf" }), method: "POST" }));
   expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).coordinate_system).toBe("WGS84");
 });
 
@@ -35,7 +35,7 @@ test("geography requests preserve write and concurrency contracts", async () => 
   expect(fetchMock.mock.calls[0][0]).toBe("/api/console/venues/7/location");
   expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
     method: "PUT", credentials: "include", body: JSON.stringify(payload),
-    headers: expect.objectContaining({ "X-CSRF-Token": "csrf-token" }),
+    headers: expect.objectContaining({ "x-csrf-token": "csrf-token" }),
   }));
   await deleteConsoleVenueMapLink(7, "apple", "3".repeat(64), "csrf-token");
   expect(fetchMock.mock.calls[1][0]).toBe(`/api/console/venues/7/map-links/apple?expected_state_token=${"3".repeat(64)}`);
@@ -54,7 +54,7 @@ test("geography requests preserve write and concurrency contracts", async () => 
   await saveConsoleLocality(9, locality, "csrf-token");
   expect(fetchMock.mock.calls[4][0]).toBe("/api/console/localities/9");
   expect(fetchMock.mock.calls[4][1]).toEqual(expect.objectContaining({
-    method: "PUT", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-token" }),
+    method: "PUT", headers: expect.objectContaining({ "x-csrf-token": "csrf-token" }),
   }));
   await getConsoleGeographyQuality("missing_timezone", "A & B", 3);
   const qualityUrl = new URL(fetchMock.mock.calls[5][0], "http://localhost");
@@ -77,6 +77,6 @@ test("geography requests preserve write and concurrency contracts", async () => 
   }, "3".repeat(64), "csrf-token");
   expect(fetchMock.mock.calls[7][0]).toBe("/api/console/venues/7/map-links");
   expect(fetchMock.mock.calls[7][1]).toEqual(expect.objectContaining({
-    method: "PUT", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-token" }),
+    method: "PUT", headers: expect.objectContaining({ "x-csrf-token": "csrf-token" }),
   }));
 });

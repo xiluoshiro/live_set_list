@@ -17,8 +17,7 @@ vi.mock("../../../auth/AuthProvider", () => ({ useAuth: () => ({ csrfToken: "csr
 const city = { id: 5, country_code: "JP", admin_area: "東京都", locality_name: "検証市", timezone_id: "Asia/Tokyo", area_level: "locality" as const, state_token: "1".repeat(64) };
 const location: VenueLocation = {
   venue_id: 1, locality: city, address: null, latitude: null, longitude: null,
-  coordinate_system: "WGS84", timezone_id: null,
-  effective_timezone_id: null, timezone_source: null,
+  coordinate_system: "WGS84", timezone_id: "Asia/Tokyo",
   state_token: "2".repeat(64), location_verified_at: null,
   map_links: (["google", "apple", "amap"] as const).map(provider => ({
     provider, provider_place_id: null, provider_url: null, verified_at: null,
@@ -50,7 +49,7 @@ test("online venues do not advertise a physical venue timezone fallback", async 
 // 测试点：所在地与地图直接加载且不再折叠，地区时区与缺失坐标如实展示，单个坐标不能提交。
 test("loads directly and validates paired coordinates", async () => {
   const user = await openPanel();
-  expect(screen.getByText(/场地 IANA 时区：未设置/)).toBeInTheDocument();
+  expect(screen.getByText(/场地 IANA 时区：Asia\/Tokyo/)).toBeInTheDocument();
   expect(screen.getAllByText("暂无坐标")).toHaveLength(3);
   await user.type(screen.getByLabelText("纬度（WGS84）"), "0");
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
@@ -65,7 +64,7 @@ test("removes a saved point without verification fields", async () => {
   });
   api.previewConsoleVenueLocation.mockImplementation((_id, after) => Promise.resolve({
     before: { ...location, latitude: 35, longitude: 139 },
-    after, effective_timezone_id: null, live_count: 0,
+    after, live_count: 0,
     changed_fields: ["coordinates"],
   }));
   const user = await openPanel();
@@ -96,8 +95,7 @@ test("loads region-only localities without a city name", async () => {
 // 测试点：完全没有所在地的 Venue 初次加载不应因 undefined/null 差异误报未保存修改。
 test("keeps an empty location pristine until the editor changes a field", async () => {
   api.getConsoleVenueLocation.mockResolvedValue({
-    ...location, locality: null, effective_timezone_id: null, timezone_source: null,
-  });
+    ...location, locality: null, });
   await openPanel();
 
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
@@ -112,9 +110,9 @@ test("limits undisclosed venues to the published locality", async () => {
   expect(screen.getByLabelText("已公布地区")).toBeEnabled();
   expect(screen.getByLabelText("公开门牌地址")).toBeDisabled();
   expect(screen.getByLabelText("纬度（WGS84）")).toBeDisabled();
-  expect(screen.getByLabelText("场馆精确时区")).toBeDisabled();
+  expect(screen.getByLabelText("场馆精确时区")).toBeEnabled();
   expect(screen.queryByRole("table", { name: "场馆地图链接" })).not.toBeInTheDocument();
-  expect(screen.getByText(/只登记主办方已公布的地区/)).toBeInTheDocument();
+  expect(screen.getByText(/登记已公布地区和自身时区/)).toBeInTheDocument();
 });
 
 // 测试点：地区纠错只展示引用数量，用数据状态令牌防止覆盖旧表单，不宣称地图失效。
@@ -126,7 +124,8 @@ test("previews and saves the selected locality", async () => {
   api.saveConsoleLocality.mockResolvedValue({ ...city, timezone_id: "America/New_York", state_token: "2".repeat(64) });
 
   await user.click(screen.getByRole("button", { name: "修改已选地区" }));
-  await user.selectOptions(screen.getByLabelText("地区时区"), "America/New_York");
+  await user.clear(screen.getByLabelText("城市名称"));
+  await user.type(screen.getByLabelText("城市名称"), "改名地区");
   await user.click(screen.getByRole("button", { name: "预览修改" }));
 
   const dialog = await screen.findByRole("dialog", { name: "确认地区资料修改" });
@@ -136,7 +135,7 @@ test("previews and saves the selected locality", async () => {
   expect(api.saveConsoleLocality).not.toHaveBeenCalled();
   await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
   await waitFor(() => expect(api.saveConsoleLocality).toHaveBeenCalledWith(
-    5, expect.objectContaining({ expected_state_token: "1".repeat(64), timezone_id: "America/New_York" }), "csrf",
+    5, expect.objectContaining({ expected_state_token: "1".repeat(64), locality_name: "改名地区" }), "csrf",
   ));
   expect(screen.getByRole("status")).toHaveTextContent("已存时间偏移不随本次资料修改而变动");
 });
@@ -145,7 +144,7 @@ test("previews and saves the selected locality", async () => {
 test("previews and confirms a state-bound correction, retaining failed input", async () => {
   const user = await openPanel();
   api.previewConsoleVenueLocation.mockImplementation((_id, after) => Promise.resolve({
-    before: location, after, effective_timezone_id: null, live_count: 4, changed_fields: ["address"],
+    before: location, after, live_count: 4, changed_fields: ["address"],
   }));
   api.saveConsoleVenueLocation.mockRejectedValueOnce(new Error("资料已更新"))
     .mockResolvedValueOnce({ ...location, address: "New address", state_token: "3".repeat(64) });
@@ -166,17 +165,15 @@ test("previews and confirms a state-bound correction, retaining failed input", a
 // 测试点：场地 IANA 时区变更只更新场地位置，确认框不再创建 Live 时区复核任务。
 test("updates venue timezone without a live review workflow", async () => {
   const noLocalityLocation = {
-    ...location, locality: null, effective_timezone_id: null, timezone_source: null,
-  } satisfies VenueLocation;
+    ...location, locality: null, } satisfies VenueLocation;
   api.getConsoleVenueLocation.mockResolvedValue(noLocalityLocation);
   const user = await openPanel();
   api.previewConsoleVenueLocation.mockImplementation((_id, after) => Promise.resolve({
-    before: noLocalityLocation, after, effective_timezone_id: "America/New_York", live_count: 4, changed_fields: ["coordinates", "timezone_id", "effective_timezone_id"],
+    before: noLocalityLocation, after, live_count: 4, changed_fields: ["coordinates", "timezone_id", "effective_timezone_id"],
   }));
   api.saveConsoleVenueLocation.mockResolvedValue({
     ...noLocalityLocation, latitude: 40.7, longitude: -74,
-    timezone_id: "America/New_York", effective_timezone_id: "America/New_York",
-    timezone_source: "venue", state_token: "3".repeat(64),
+    timezone_id: "America/New_York", state_token: "3".repeat(64),
   });
   await user.selectOptions(screen.getByLabelText("场馆精确时区"), "America/New_York");
   await user.type(screen.getByLabelText("纬度（WGS84）"), "40.7");

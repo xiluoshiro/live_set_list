@@ -19,7 +19,8 @@ from app.live_list_filters import (
     normalize_list_query,
 )
 from app.logging_config import get_logger
-from app.live_status import build_public_live_status
+from app.live_timezone import timezone_abbreviation
+from app.live_status import build_public_live_status, visitor_date_sql, VISITOR_TODAY_SQL
 from app.schemas import (
     ErrorResponse,
     LiveDetailBatchRequest,
@@ -106,8 +107,7 @@ SELECT
         SELECT 1 FROM live_schedule_history history
         WHERE history.live_id = l.id
     ) AS was_rescheduled,
-    l.timezone_offset_minutes,
-    l.timezone_id
+    l.opening_time
 FROM live_attrs l
 LEFT JOIN tour_lives tour_live
     ON tour_live.live_id = l.id
@@ -118,7 +118,7 @@ LEFT JOIN performance_group_lives pgl
 LEFT JOIN performance_group_attrs pg
     ON pg.id = pgl.group_id
 GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids,
-         l.start_time, l.event_status, l.timezone_offset_minutes, l.timezone_id, tour.id, tour.tour_title, pg.id, pg.group_title
+         l.start_time, l.event_status, l.opening_time, tour.id, tour.tour_title, pg.id, pg.group_title
 """
 
 LIVES_COUNT_QUERY = f"""
@@ -133,7 +133,7 @@ ORDER BY l.live_date DESC, l.id DESC
 LIMIT %s OFFSET %s
 """
 
-LIVES_WITHOUT_SETLIST_BASE_QUERY = """
+LIVES_WITHOUT_SETLIST_BASE_QUERY = f"""
 SELECT
     l.id,
     l.live_date,
@@ -151,8 +151,7 @@ SELECT
         SELECT 1 FROM live_schedule_history history
         WHERE history.live_id = l.id
     ) AS was_rescheduled,
-    l.timezone_offset_minutes,
-    l.timezone_id
+    l.opening_time
 FROM live_attrs l
 LEFT JOIN tour_lives tour_live
     ON tour_live.live_id = l.id
@@ -163,7 +162,7 @@ LEFT JOIN performance_group_lives pgl
 LEFT JOIN performance_group_attrs pg
     ON pg.id = pgl.group_id
 WHERE l.event_status <> 'cancelled'
-  AND l.live_date <= CURRENT_DATE
+  AND {visitor_date_sql("l")} <= {VISITOR_TODAY_SQL}
   AND NOT EXISTS (
       SELECT 1
       FROM live_setlist ls
@@ -225,10 +224,8 @@ SELECT
                     'previous_venue_id', history.previous_venue_id,
                     'previous_venue_name_version_id', history.previous_venue_name_version_id,
                     'previous_venue', history_version.venue_name,
+                    '_venue_timezone_id', history_venue.timezone_id,
                     'previous_announced_locality_id', history.previous_announced_locality_id,
-                    'previous_timezone_id', history.previous_timezone_id,
-                    'previous_timezone_source', history.previous_timezone_source,
-                    'previous_timezone_offset_minutes', history.previous_timezone_offset_minutes,
                     'changed_at', history.changed_at,
                     'note', history.note
                 )
@@ -243,9 +240,8 @@ SELECT
         '[]'::jsonb
     ) AS schedule_history,
     NULLIF(to_jsonb(l) ->> 'venue_id', '')::int AS venue_id,
-    l.timezone_offset_minutes,
-    l.timezone_id,
-    v.venue_kind
+    v.venue_kind,
+    v.timezone_id
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -327,10 +323,8 @@ SELECT
                     'previous_venue_id', history.previous_venue_id,
                     'previous_venue_name_version_id', history.previous_venue_name_version_id,
                     'previous_venue', history_version.venue_name,
+                    '_venue_timezone_id', history_venue.timezone_id,
                     'previous_announced_locality_id', history.previous_announced_locality_id,
-                    'previous_timezone_id', history.previous_timezone_id,
-                    'previous_timezone_source', history.previous_timezone_source,
-                    'previous_timezone_offset_minutes', history.previous_timezone_offset_minutes,
                     'changed_at', history.changed_at,
                     'note', history.note
                 )
@@ -345,9 +339,8 @@ SELECT
         '[]'::jsonb
     ) AS schedule_history,
     NULLIF(to_jsonb(l) ->> 'venue_id', '')::int AS venue_id,
-    l.timezone_offset_minutes,
-    l.timezone_id,
-    v.venue_kind
+    v.venue_kind,
+    v.timezone_id
 FROM live_attrs l
 LEFT JOIN venue_list v
     ON v.id = NULLIF(to_jsonb(l) ->> 'venue_id', '')::int
@@ -860,13 +853,19 @@ def _build_live_detail_payload(
     live_type = str(header_row[9])
     event_attendees_raw = header_row[14] if len(header_row) > 14 else []
     event_status = str(header_row[15]) if len(header_row) > 15 else "scheduled"
-    schedule_history = list(header_row[17] or []) if len(header_row) > 17 else []
+    schedule_history = [dict(item) for item in (header_row[17] or [])] if len(header_row) > 17 else []
+    venue_timezone = header_row[20] if len(header_row) > 20 else None
+    for history in schedule_history:
+        history_timezone = history.pop("_venue_timezone_id", None)
+        for field in ("opening", "start"):
+            history[f"previous_{field}_timezone_label"] = timezone_abbreviation(
+                history["previous_live_date"], history[f"previous_{field}_time"], history_timezone,
+            )
     public_status = build_public_live_status(
         event_status=event_status,
         live_date=header_row[1],
-        start_time=header_row[5] if len(header_row) > 15 else "00:00:00+00:00",
-        timezone_offset_minutes=int(header_row[19]) if len(header_row) > 19 and header_row[19] is not None else None,
-        timezone_id=str(header_row[20]) if len(header_row) > 20 and header_row[20] is not None else None,
+        start_time=header_row[5],
+        opening_time=header_row[4],
         was_rescheduled=bool(schedule_history),
     )
     return {
@@ -875,10 +874,12 @@ def _build_live_detail_payload(
         "live_title": str(header_row[2]),
         "live_type": live_type,
         "venue_id": header_row[18] if len(header_row) > 18 else None,
-        "venue_kind": header_row[21] if len(header_row) > 21 else None,
+        "venue_kind": header_row[19] if len(header_row) > 19 else None,
         "venue": header_row[3],
         "opening_time": header_row[4],
         "start_time": header_row[5],
+        "opening_timezone_label": timezone_abbreviation(header_row[1], header_row[4], venue_timezone),
+        "start_timezone_label": timezone_abbreviation(header_row[1], header_row[5], venue_timezone),
         "bands": bands,
         "band_names": _order_band_names_by_bands(bands, header_row[7], band_name_to_id),
         "url": header_row[8],
@@ -1072,9 +1073,8 @@ def get_lives(
             **build_public_live_status(
                 event_status=str(row[11]) if len(row) > 11 else "scheduled",
                 live_date=row[1],
-                start_time=row[10] if len(row) > 10 else "00:00:00+00:00",
-                timezone_offset_minutes=int(row[13]) if len(row) > 13 and row[13] is not None else None,
-                timezone_id=str(row[14]) if len(row) > 14 and row[14] is not None else None,
+                start_time=row[10] if len(row) > 10 else None,
+                opening_time=row[13] if len(row) > 13 else None,
                 was_rescheduled=bool(row[12]) if len(row) > 12 else False,
             ),
         }

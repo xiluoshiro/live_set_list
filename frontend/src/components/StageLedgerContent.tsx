@@ -91,6 +91,11 @@ const EXTRA_CATEGORY_LABELS: Record<string, string> = {
   support: "支援",
 };
 
+function canonicalSegmentType(value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, " ");
+  return SEGMENT_ALIASES[normalized] ?? normalized.toUpperCase();
+}
+
 const TIMEZONE_CODES: Record<string, string> = {
   "+00:00": "UTC",
   "+07:00": "ICT",
@@ -111,12 +116,7 @@ const TIMEZONE_CODES: Record<string, string> = {
   "+12:00": "NZST",
 };
 
-function canonicalSegmentType(value: string): string {
-  const normalized = value.trim().toLowerCase().replace(/\s+/g, " ");
-  return SEGMENT_ALIASES[normalized] ?? normalized.toUpperCase();
-}
-
-function formatTimedLabel(value: string | null | undefined): string {
+function formatTimedLabel(value: string | null | undefined, timezoneLabel?: string | null): string {
   const raw = value?.trim();
   if (!raw) return "未公布";
   const match = raw.match(/^(\d{2}:\d{2})(?::\d{2})?(?:([+-]\d{2})(?::?(\d{2}))?)?$/);
@@ -124,7 +124,7 @@ function formatTimedLabel(value: string | null | undefined): string {
   const [, timePart, offsetHour, offsetMinute] = match;
   if (!offsetHour) return timePart;
   const normalizedOffset = `${offsetHour}:${offsetMinute ?? "00"}`;
-  return `${timePart} (${TIMEZONE_CODES[normalizedOffset] ?? `UTC${normalizedOffset}`})`;
+  return `${timePart} (${timezoneLabel ?? TIMEZONE_CODES[normalizedOffset] ?? `UTC${normalizedOffset}`})`;
 }
 
 function getCanonicalPath(liveId: number): string {
@@ -251,16 +251,20 @@ function formatScheduleHistoryParts(
   const nextDate = nextHistory?.previous_live_date ?? detail.live_date;
   const nextOpeningTime = nextHistory?.previous_opening_time ?? detail.opening_time;
   const nextStartTime = nextHistory?.previous_start_time ?? detail.start_time;
+  const nextOpeningLabel = nextHistory?.previous_opening_time != null
+    ? nextHistory.previous_opening_timezone_label : detail.opening_timezone_label;
+  const nextStartLabel = nextHistory?.previous_start_time != null
+    ? nextHistory.previous_start_timezone_label : detail.start_timezone_label;
   const nextVenue = nextHistory?.previous_venue ?? detail.venue;
   if (history.previous_live_title && history.previous_live_title !== nextTitle) {
     parts.push(`名称 ${history.previous_live_title}`);
   }
   if (history.previous_live_date !== nextDate) parts.push(`日期 ${history.previous_live_date}`);
-  if (formatTimedLabel(history.previous_opening_time) !== formatTimedLabel(nextOpeningTime)) {
-    parts.push(`开场 ${formatTimedLabel(history.previous_opening_time)}`);
+  if (formatTimedLabel(history.previous_opening_time, history.previous_opening_timezone_label) !== formatTimedLabel(nextOpeningTime, nextOpeningLabel)) {
+    parts.push(`开场 ${formatTimedLabel(history.previous_opening_time, history.previous_opening_timezone_label)}`);
   }
-  if (formatTimedLabel(history.previous_start_time) !== formatTimedLabel(nextStartTime)) {
-    parts.push(`开演 ${formatTimedLabel(history.previous_start_time)}`);
+  if (formatTimedLabel(history.previous_start_time, history.previous_start_timezone_label) !== formatTimedLabel(nextStartTime, nextStartLabel)) {
+    parts.push(`开演 ${formatTimedLabel(history.previous_start_time, history.previous_start_timezone_label)}`);
   }
   if ((history.previous_venue ?? null) !== (nextVenue ?? null)) {
     parts.push(`场地 ${history.previous_venue ?? "未公布"}`);
@@ -806,8 +810,8 @@ export function StageLedgerContent({
           <div className="stage-masthead-side">
             <dl className="stage-schedule-list">
               <div className="stage-schedule-date"><dt>日期</dt><dd>{detailData.live_date}</dd></div>
-              <div className="stage-schedule-opening"><dt>开场</dt><dd>{formatTimedLabel(detailData.opening_time)}</dd></div>
-              <div className="stage-schedule-start"><dt>开演</dt><dd>{formatTimedLabel(detailData.start_time)}</dd></div>
+              <div className="stage-schedule-opening"><dt>开场</dt><dd>{formatTimedLabel(detailData.opening_time, detailData.opening_timezone_label)}</dd></div>
+              <div className="stage-schedule-start"><dt>开演</dt><dd>{formatTimedLabel(detailData.start_time, detailData.start_timezone_label)}</dd></div>
               <div className="stage-schedule-venue">
                 <dt>
                   {detailData.venue_kind === "physical" && detailData.venue_id && detailData.venue?.trim() ? (

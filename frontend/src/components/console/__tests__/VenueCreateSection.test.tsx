@@ -66,7 +66,7 @@ test("clears fields forbidden by venue kind", async () => {
   expect(within(screen.getByLabelText("类型")).getAllByRole("option").map(option => option.textContent)).toEqual(["实体场馆", "未公开"]);
   const dialog = await confirm(user);
   await user.click(dialog.getByRole("button", { name: "提交插入" }));
-  expect(api.createConsoleVenue).toHaveBeenCalledWith("New Hall", "csrf", "undisclosed", expect.objectContaining({ locality_id: 1, address: null, latitude: null, timezone_id: null }));
+  expect(api.createConsoleVenue).toHaveBeenCalledWith("New Hall", "csrf", "undisclosed", expect.objectContaining({ locality_id: 1, address: null, latitude: null, timezone_id: "Asia/Tokyo" }));
 });
 
 // 测试点：创建失败保留草稿并在确认框展示错误；候选刷新失败明确已创建，不能提示重试创建。
@@ -111,18 +111,18 @@ test("uses a single input row without venue management controls", async () => {
   expect(table.queryByText("地图选点组件")).not.toBeInTheDocument();
 });
 
-// 测试点：地区与场馆时区冲突必须阻止创建，修正后允许确认。
-test("blocks mismatched locality timezone", async () => {
+// 测试点：场馆时区独立于地区，允许填写不同 IANA。
+test("allows venue timezone independently of locality", async () => {
   const user = await setup();
   await user.type(screen.getByLabelText("纬度（WGS84）"), "0");
   await user.type(screen.getByLabelText("经度（WGS84）"), "0");
   await user.selectOptions(screen.getByLabelText("场馆精确时区"), "Asia/Shanghai");
-  expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "提交插入" })).toBeEnabled();
   await user.selectOptions(screen.getByLabelText("场馆精确时区"), "Asia/Tokyo");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeEnabled();
 });
 
-// 测试点：默认东京地区和时区；实体地址空白不能提交，切回实体与清空均恢复默认时区。
+// 测试点：默认东京地区和时区；实体地址空白不能提交，切换类型保留时区，清空恢复默认时区。
 test("defaults to Tokyo and requires a nonblank physical address", async () => {
   const user = await setup();
   expect(screen.getByLabelText("场馆精确时区")).toHaveValue("Asia/Tokyo");
@@ -133,10 +133,12 @@ test("defaults to Tokyo and requires a nonblank physical address", async () => {
   await user.clear(screen.getByLabelText("公开门牌地址"));
   await user.type(screen.getByLabelText("公开门牌地址"), "   ");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
+  await user.selectOptions(screen.getByLabelText("场馆精确时区"), "Asia/Shanghai");
   await user.selectOptions(screen.getByLabelText("类型"), "undisclosed");
   expect(screen.getByLabelText("公开门牌地址")).not.toBeRequired();
+  expect(screen.getByLabelText("场馆精确时区")).toBeEnabled();
   await user.selectOptions(screen.getByLabelText("类型"), "physical");
-  expect(screen.getByLabelText("场馆精确时区")).toHaveValue("Asia/Tokyo");
+  expect(screen.getByLabelText("场馆精确时区")).toHaveValue("Asia/Shanghai");
   await user.click(screen.getByRole("button", { name: "清空" }));
   expect(screen.getByLabelText("已公布地区")).toHaveTextContent("JP / 東京都");
   expect(screen.getByLabelText("场馆精确时区")).toHaveValue("Asia/Tokyo");

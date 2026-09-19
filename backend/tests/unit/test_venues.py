@@ -36,15 +36,13 @@ def test_get_venue_detail_resolves_canonical_venue_and_map_sources():
         "北の丸公園2-3",
         35.693317,
         139.749885,
-        None,
         "Asia/Tokyo",
-        3,
     )
     cursor.fetchone.side_effect = [header, (1,)]
     cursor.fetchall.side_effect = [
         [("日本武道館", "1964-10-03", None, True)],
         [("google", "ChIJ-current", None)],
-        [(51, "2026-08-01", "Test Live", "oneman", [1, 2], None, "scheduled", False, "18:00:00+09:00", 540, "Asia/Tokyo")],
+        [(51, "2026-08-01", "Test Live", "oneman", [1, 2], None, "scheduled", False, "18:00:00+09:00", "17:00:00+09:00")],
     ]
 
     with patch("app.routers.venues.get_db_connection", return_value=conn):
@@ -55,8 +53,8 @@ def test_get_venue_detail_resolves_canonical_venue_and_map_sources():
     assert payload["venue_id"] == 7
     assert payload["venue_name"] == "日本武道館"
     assert payload["address"] == "北の丸公園2-3"
-    assert payload["timezone_id"] is None
-    assert payload["timezone_source"] is None
+    assert payload["timezone_id"] == "Asia/Tokyo"
+    assert "timezone_source" not in payload
     assert payload["map_links"] == [
         {"provider": "google", "url": place_url("google", "ChIJ-current", "日本武道館"), "source": "place"},
         {"provider": "apple", "url": coordinate_url("apple", 35.693317, 139.749885, "日本武道館"), "source": "coordinates"},

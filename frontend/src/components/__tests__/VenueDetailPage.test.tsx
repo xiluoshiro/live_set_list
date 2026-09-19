@@ -36,7 +36,6 @@ function makeVenueDetail(): PublicVenueDetailResponse {
     latitude: 35.693317,
     longitude: 139.749885,
     timezone_id: "Asia/Tokyo",
-    timezone_source: "locality" as const,
     name_versions: [
       { venue_name: "日本武道館", valid_from: "1964-10-03", valid_to: null, is_current: true },
     ],

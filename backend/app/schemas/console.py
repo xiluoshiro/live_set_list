@@ -123,14 +123,14 @@ class ConsoleVenueCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_location_kind(self) -> "ConsoleVenueCreateRequest":
-        if self.venue_kind == "physical" and (self.location is None or not self.location.timezone_id):
-            raise ValueError("实体场馆必须填写已核验的 IANA 时区")
+        if self.location is None or not self.location.timezone_id:
+            raise ValueError("场地必须填写自身 IANA 时区")
         if self.venue_kind == "physical" and (self.location is None or not self.location.address):
             raise ValueError("实体场馆必须填写公开门牌地址")
         if self.location is not None:
             values = self.location.model_dump(exclude={"coordinate_system"})
-            if self.venue_kind == "undisclosed" and any(value is not None for key, value in values.items() if key != "locality_id"):
-                raise ValueError("未公开具体场馆只保存已公布地区")
+            if self.venue_kind == "undisclosed" and any(value is not None for key, value in values.items() if key not in {"locality_id", "timezone_id"}):
+                raise ValueError("未公开具体场馆只保存已公布地区和场地时区")
         return self
 
     @field_validator("venue_name")
@@ -264,11 +264,8 @@ class ConsoleLiveBaseRequest(BaseModel):
     url: str = Field(..., min_length=1, max_length=2048, description="Live URL")
     opening_time: str | None = Field(default=None, min_length=5, max_length=8, description="Opening time, or null when unannounced")
     start_time: str | None = Field(default=None, min_length=5, max_length=8, description="Start time, or null when unannounced")
-    timezone: str | None = Field(default=None, min_length=6, max_length=6, description="Deprecated compatibility input; only +09:00 is accepted")
+    timezone: str | None = Field(default=None, min_length=6, max_length=6, description="Fixed UTC offset for ONLINE Lives only")
     announced_locality_id: int | None = Field(default=None, ge=1, description="Published city when no Venue is announced")
-    explicit_timezone_id: str | None = Field(default=None, min_length=1, max_length=128, description="IANA timezone for online Live only")
-    opening_time_fold: Literal[0, 1] | None = Field(default=None, description="Occurrence selected for an ambiguous opening wall time")
-    start_time_fold: Literal[0, 1] | None = Field(default=None, description="Occurrence selected for an ambiguous start wall time")
     venue_id: int | None = Field(default=None, ge=1, description="venue_list.id, or null when unannounced")
     venue_name_version_id: int | None = Field(
         default=None,
@@ -330,8 +327,6 @@ class ConsoleLiveBaseRequest(BaseModel):
             raise ValueError("venue_id and venue_name_version_id must both be null or both be set")
         if self.venue_id is not None and self.announced_locality_id is not None:
             raise ValueError("announced_locality_id is only allowed when venue_id is null")
-        if self.explicit_timezone_id is not None:
-            self.explicit_timezone_id = self.explicit_timezone_id.strip() or None
         if self.event_status == "scheduled":
             self.status_note = None
         if self.live_type != "event" and self.event_attendees:
@@ -366,7 +361,6 @@ class ConsoleLiveUpdateRequest(ConsoleLiveBaseRequest):
 
 
 class ConsoleLiveItem(BaseModel):
-    timezone_offset_minutes: int | None = None
     live_id: int = Field(..., description="Created live ID")
     live_date: date = Field(..., description="Live date")
     live_title: str = Field(..., description="Live title")
@@ -377,13 +371,6 @@ class ConsoleLiveItem(BaseModel):
     venue_id: int | None = Field(default=None, description="venue_list.id")
     venue_name_version_id: int | None = Field(default=None, description="venue_name_versions.id")
     announced_locality_id: int | None = Field(default=None, description="Published city when no Venue is selected")
-    timezone_id: str | None = Field(default=None, description="Persisted IANA timezone snapshot")
-    timezone_source: Literal["venue", "locality", "explicit", "legacy_offset"] = Field(
-        default="legacy_offset", description="Source of the persisted timezone snapshot"
-    )
-    timezone_source_revision: int | None = Field(default=None, description="Source geography revision")
-    opening_time_fold: Literal[0, 1] | None = None
-    start_time_fold: Literal[0, 1] | None = None
     default_band_ids: list[int] = Field(..., description="Normalized fallback band_attrs IDs")
     event_attendees: list[ConsoleEventAttendee] = Field(
         default_factory=list,
@@ -423,7 +410,7 @@ class ConsoleLiveCandidatesResponse(BaseModel):
 
 
 class ConsoleLiveEditItem(ConsoleLiveItem):
-    timezone: str = Field(..., min_length=6, max_length=6, description="Compatibility UTC offset for the Live date")
+    timezone: str | None = Field(default=None, description="ONLINE fixed UTC offset, derived from announced times")
     venue_name: str | None = Field(default=None, description="Venue display name")
     schedule_history: list[LiveScheduleHistoryItem] = Field(default_factory=list)
     has_setlist: bool = Field(..., description="Whether this Live already has Setlist rows")

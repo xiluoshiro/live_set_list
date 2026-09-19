@@ -1,5 +1,7 @@
 # 首页 Live 日历改造设计
 
+日期归组与时区规则见 [演出时区与访问者日期](live-timezone.md)：按访问者实际日期筛选月份及日期，未知时间保留公布日期。
+
 ## 1. 文档定位
 
 本文定义 LiveSetList 首页公共发现区的改造方案：用可交互的“Live 日历”替换当前“最近收录”列表，并从首屏移除“个人与贡献”区域。
@@ -21,7 +23,7 @@
 
 1. 首页保留搜索、四项数据概览和“最新 Live 日期”。
 2. 删除“最近收录”标题及其六行 Live 列表，替换为整行宽度的“Live 日历”。
-3. 日历按 `live_date` 表达演出时间轴，不表达资料录入或编辑时间。
+3. 日历按 `calendar_date` 表达访问者的演出时间轴，不表达资料录入或编辑时间。
 4. 有 Live 的日期在单元格底部显示状态色轨，同时显示“n 场”；颜色不是唯一信息载体。
 5. 选中日期后，在同一区域展示当天 Live 的开始时间、标题、Band 图标和文字状态，并可进入详情。
 6. 从首页 DOM 中完整删除“个人与贡献”区，不为匿名用户、登录用户或编辑用户保留首屏占位。
@@ -259,6 +261,8 @@ GET /api/catalog/calendar?month=2026-08
     {
       "live_id": 123,
       "live_date": "2026-08-03",
+      "calendar_date": "2026-08-03",
+      "opening_time": null,
       "live_title": "MyGO!!!!! 8th LIVE",
       "start_time": "18:00:00+09:00",
       "bands": [8],
@@ -274,11 +278,11 @@ GET /api/catalog/calendar?month=2026-08
 
 ### 10.2 查询口径
 
-后端先将月份转换为左闭右开的日期范围：
+后端先按统一时区规则生成 `calendar_date`，再用月份的左闭右开范围筛选；不能先筛原始演出月份：
 
 ```sql
-WHERE l.live_date >= :month_start
-  AND l.live_date < :next_month_start
+WHERE calendar_date >= :month_start
+  AND calendar_date < :next_month_start
 ```
 
 约束：
@@ -288,14 +292,14 @@ WHERE l.live_date >= :month_start
 - 已取消和延期 Live 必须保留；日历本身就是公开状态的入口。
 - Band ID 使用现有 effective band 口径并去重排序。
 - 每条记录继续调用 `build_public_live_status`，`date_phase` 不由前端根据系统时区推断。
-- 结果按 `live_date ASC, start_time ASC NULLS LAST, live_id ASC` 稳定排序。
+- 结果按访问者日期、实际演出瞬间和 Live ID 稳定排序。
 - 查询使用公共只读连接，数据库错误和超时沿用 catalog 接口现有处理方式。
 
 ### 10.3 前端数据流
 
 建议新增：
 
-- `getCatalogCalendar(month)`：负责请求、响应类型和以月份为键的短期缓存。
+- `getCatalogCalendar(month)`：负责请求、响应类型和以访问者时区和月份为键的短期缓存。
 - `HomeLiveCalendar`：持有月份导航、选中日和状态聚合的页面组件。
 - `CalendarGrid`：负责日期格、键盘漫游和可访问名称。
 - `CalendarDayDetail`：负责选中日的 Live 行与空状态。

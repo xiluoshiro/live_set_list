@@ -1,6 +1,5 @@
-import re
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime, time
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
@@ -18,8 +17,7 @@ from app.band_history_write import (
     validate_lineup_contexts,
 )
 from app.db import get_write_db_connection
-from app.geography import resolve_local_time
-from app.live_timezone import ResolvedLiveTimezone, resolve_live_timezone
+from app.live_timezone import normalize_live_times, time_offset, serialize_time
 from app.logging_config import get_logger
 from app.live_status import build_public_live_status
 from app.schemas import ErrorResponse, ValidationErrorResponse
@@ -43,9 +41,6 @@ from app.schemas.console import (
 router = APIRouter()
 logger = get_logger(__name__)
 
-TIME_PATTERN = re.compile(r"^\d{2}:\d{2}(?::\d{2})?$")
-TIMEZONE_PATTERN = re.compile(r"^[+-]\d{2}:\d{2}$")
-SHORT_TIMEZONE_SUFFIX_PATTERN = re.compile(r"([+-]\d{2})$")
 
 
 def _write_console_audit_log(
@@ -70,114 +65,6 @@ def _write_console_audit_log(
 def _raise_business_error(status_code: int, message: str) -> None:
     """Raise a consistent HTTPException for console-side business validation failures."""
     raise HTTPException(status_code=status_code, detail=message)
-
-
-def _normalize_time_with_timezone(value: str, timezone: str) -> str:
-    """Combine a local clock time and UTC offset into the DB-ready time-with-timezone format."""
-    if not TIME_PATTERN.fullmatch(value):
-        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid time format: {value}")
-    hour, minute, *second_parts = (int(part) for part in value.split(":"))
-    second = second_parts[0] if second_parts else 0
-    if hour > 24 or minute > 59 or second > 59 or (hour == 24 and (minute != 0 or second != 0)):
-        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid time value: {value}")
-    if not TIMEZONE_PATTERN.fullmatch(timezone):
-        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid timezone format: {timezone}")
-    offset_sign = -1 if timezone.startswith("-") else 1
-    offset_hour, offset_minute = (int(part) for part in timezone[1:].split(":"))
-    offset_minutes = offset_sign * (offset_hour * 60 + offset_minute)
-    if offset_minute % 15 != 0 or offset_minutes < -12 * 60 or offset_minutes > 14 * 60:
-        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid timezone value: {timezone}")
-    normalized_time = value if len(value) == 8 else f"{value}:00"
-    return f"{normalized_time}{timezone}"
-
-
-def _timezone_offset_minutes(timezone: str) -> int:
-    """Validate an API UTC offset and return its signed minute value."""
-    if not TIMEZONE_PATTERN.fullmatch(timezone):
-        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid timezone format: {timezone}")
-    offset_sign = -1 if timezone.startswith("-") else 1
-    offset_hour, offset_minute = (int(part) for part in timezone[1:].split(":"))
-    offset_minutes = offset_sign * (offset_hour * 60 + offset_minute)
-    if offset_minute % 15 != 0 or offset_minutes < -12 * 60 or offset_minutes > 14 * 60:
-        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid timezone value: {timezone}")
-    return offset_minutes
-
-
-def _normalize_optional_time_with_timezone(value: str | None, timezone: str) -> str | None:
-    """Keep an unannounced time null while validating the shared UTC offset."""
-    _timezone_offset_minutes(timezone)
-    return None if value is None else _normalize_time_with_timezone(value, timezone)
-
-
-def _format_timezone_offset(offset_minutes: int) -> str:
-    sign = "+" if offset_minutes >= 0 else "-"
-    absolute = abs(offset_minutes)
-    return f"{sign}{absolute // 60:02d}:{absolute % 60:02d}"
-
-
-def _parse_wall_time(value: str) -> time:
-    if not TIME_PATTERN.fullmatch(value):
-        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid time format: {value}")
-    hour, minute, *second_parts = (int(part) for part in value.split(":"))
-    second = second_parts[0] if second_parts else 0
-    if hour > 23 or minute > 59 or second > 59:
-        _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Invalid time value: {value}")
-    return time(hour, minute, second)
-
-
-def _normalize_optional_time_for_timezone(
-    value: str | None,
-    *,
-    live_date: date,
-    resolved: ResolvedLiveTimezone,
-    fold: int | None,
-    legacy_offset_minutes: int,
-) -> str | None:
-    """Persist each announced wall time with the offset for its own IANA occurrence."""
-    if value is None:
-        return None
-    if resolved.timezone_id is None:
-        return _normalize_time_with_timezone(value, _format_timezone_offset(legacy_offset_minutes))
-    try:
-        local = resolve_local_time(live_date, _parse_wall_time(value), resolved.timezone_id, fold)
-    except ValueError as exc:
-        _raise_business_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
-    offset = local.utcoffset()
-    if offset is None:
-        _raise_business_error(status.HTTP_422_UNPROCESSABLE_ENTITY, "无法解析活动当地时间")
-    assert offset is not None
-    offset_minutes = int(offset.total_seconds() // 60)
-    return f"{local.time().replace(tzinfo=None).isoformat(timespec='seconds')}{_format_timezone_offset(offset_minutes)}"
-
-
-def _timezone_offset_for_live(
-    *,
-    live_date: date,
-    opening_time: str | None,
-    start_time: str | None,
-    resolved: ResolvedLiveTimezone,
-    legacy_offset_minutes: int,
-) -> int:
-    """Persist the Live's offset, deriving it from the Venue IANA zone when available."""
-    for value in (start_time, opening_time):
-        if value is not None:
-            return _timezone_offset_minutes(value[-6:])
-    if resolved.timezone_id is None:
-        return legacy_offset_minutes
-    noon = datetime.combine(live_date, time(12, 0))
-    try:
-        offset = resolve_local_time(live_date, noon.time(), resolved.timezone_id).utcoffset()
-    except ValueError as exc:
-        _raise_business_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
-    if offset is None:
-        _raise_business_error(status.HTTP_422_UNPROCESSABLE_ENTITY, "无法解析活动时区偏移")
-    assert offset is not None
-    return int(offset.total_seconds() // 60)
-
-
-def _normalize_persisted_time_with_timezone(value: Any) -> str:
-    """Normalize PostgreSQL JSON's whole-hour offset before field comparison."""
-    return SHORT_TIMEZONE_SUFFIX_PATTERN.sub(r"\1:00", str(value))
 
 
 def _normalize_segment_type(value: str) -> str:
@@ -427,11 +314,7 @@ def _build_live_mutation_item(
     normalized_event_attendees: list[dict[str, Any]],
     lineup_contexts: dict[int, PersistedLineupContext],
     venue_name_version_id: int | None,
-    resolved_timezone: ResolvedLiveTimezone,
-    timezone_offset_minutes: int,
     announced_locality_id: int | None,
-    opening_time_fold: int | None,
-    start_time_fold: int | None,
 ) -> dict[str, Any]:
     """Build the common normalized response item for Live create and update."""
     return {
@@ -445,12 +328,6 @@ def _build_live_mutation_item(
         "venue_id": payload.venue_id,
         "venue_name_version_id": venue_name_version_id,
         "announced_locality_id": announced_locality_id,
-        "timezone_id": resolved_timezone.timezone_id,
-        "timezone_offset_minutes": timezone_offset_minutes,
-        "timezone_source": resolved_timezone.timezone_source,
-        "timezone_source_revision": resolved_timezone.timezone_source_revision,
-        "opening_time_fold": opening_time_fold,
-        "start_time_fold": start_time_fold,
         "default_band_ids": payload.default_band_ids,
         "event_attendees": normalized_event_attendees,
         "band_lineup_contexts": _serialize_lineup_contexts(lineup_contexts),
@@ -460,8 +337,7 @@ def _build_live_mutation_item(
             event_status=payload.event_status,
             live_date=payload.live_date,
             start_time=start_time,
-            timezone_offset_minutes=timezone_offset_minutes,
-            timezone_id=resolved_timezone.timezone_id,
+            opening_time=opening_time,
             was_rescheduled=False,
         )["date_phase"],
     }
@@ -739,31 +615,11 @@ def create_live(
                     cur,
                     payload,
                 )
-                # Deprecated clients may send the fixed default, but cannot override Venue-derived offsets.
-                if payload.timezone is not None:
-                    _normalize_optional_time_with_timezone(payload.opening_time, payload.timezone)
-                    _normalize_optional_time_with_timezone(payload.start_time, payload.timezone)
-                    if payload.timezone != "+09:00":
-                        raise HTTPException(422, "只有线上 Live 可以指定活动时区；默认偏移为 +09:00")
                 venue_name_version_id = _resolve_venue_name_version(cur, payload)
-                resolved_timezone = resolve_live_timezone(
-                    cur,
-                    venue_id=payload.venue_id,
-                    announced_locality_id=payload.announced_locality_id,
-                    explicit_timezone_id=payload.explicit_timezone_id,
-                )
-                legacy_offset_minutes = 540
-                opening_time = _normalize_optional_time_for_timezone(
-                    payload.opening_time, live_date=payload.live_date, resolved=resolved_timezone,
-                    fold=payload.opening_time_fold, legacy_offset_minutes=legacy_offset_minutes,
-                )
-                start_time = _normalize_optional_time_for_timezone(
-                    payload.start_time, live_date=payload.live_date, resolved=resolved_timezone,
-                    fold=payload.start_time_fold, legacy_offset_minutes=legacy_offset_minutes,
-                )
-                timezone_offset_minutes = _timezone_offset_for_live(
-                    live_date=payload.live_date, opening_time=opening_time, start_time=start_time,
-                    resolved=resolved_timezone, legacy_offset_minutes=legacy_offset_minutes,
+                opening_time, start_time = normalize_live_times(
+                    cur, live_date=payload.live_date, venue_id=payload.venue_id,
+                    announced_locality_id=payload.announced_locality_id, offset=payload.timezone,
+                    opening_time=payload.opening_time, start_time=payload.start_time,
                 )
 
                 cur.execute(
@@ -779,18 +635,12 @@ def create_live(
                         venue_id,
                         venue_name_version_id,
                         announced_locality_id,
-                        timezone_id,
-                        timezone_source,
-                        timezone_source_revision,
-                        opening_time_fold,
-                        start_time_fold,
                         default_band_ids,
                         event_attendees,
                         event_status,
-                        status_note,
-                        timezone_offset_minutes
+                        status_note
                     )
-                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, false, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -803,16 +653,10 @@ def create_live(
                         payload.venue_id,
                         venue_name_version_id,
                         payload.announced_locality_id,
-                        resolved_timezone.timezone_id,
-                        resolved_timezone.timezone_source,
-                        resolved_timezone.timezone_source_revision,
-                        payload.opening_time_fold,
-                        payload.start_time_fold,
                         payload.default_band_ids,
                         Json(persisted_event_attendees),
                         payload.event_status,
                         payload.status_note,
-                        timezone_offset_minutes,
                     ),
                 )
                 created_row = cur.fetchone()
@@ -825,9 +669,6 @@ def create_live(
                     "venue_id": payload.venue_id,
                     "venue_name_version_id": venue_name_version_id,
                     "announced_locality_id": payload.announced_locality_id,
-                    "timezone_id": resolved_timezone.timezone_id,
-                    "timezone_source": resolved_timezone.timezone_source,
-                    "timezone_source_revision": resolved_timezone.timezone_source_revision,
                     "opening_time": opening_time,
                     "start_time": start_time,
                     "live_type": payload.live_type,
@@ -870,11 +711,7 @@ def create_live(
             normalized_event_attendees=normalized_event_attendees,
             lineup_contexts=lineup_contexts,
             venue_name_version_id=venue_name_version_id,
-            resolved_timezone=resolved_timezone,
-            timezone_offset_minutes=timezone_offset_minutes,
             announced_locality_id=payload.announced_locality_id,
-            opening_time_fold=payload.opening_time_fold,
-            start_time_fold=payload.start_time_fold,
         ),
     }
 
@@ -914,20 +751,14 @@ def update_live(
                 existing.setdefault("event_status", "scheduled")
                 existing.setdefault("status_note", None)
                 existing.setdefault("announced_locality_id", None)
-                existing.setdefault("timezone_id", None)
-                existing.setdefault("timezone_source", "legacy_offset")
-                existing.setdefault("timezone_source_revision", None)
-                existing.setdefault("opening_time_fold", None)
-                existing.setdefault("start_time_fold", None)
                 existing["opening_time"] = (
-                    _normalize_persisted_time_with_timezone(existing["opening_time"])
+                    serialize_time(existing["opening_time"])
                     if existing.get("opening_time") is not None else None
                 )
                 existing["start_time"] = (
-                    _normalize_persisted_time_with_timezone(existing["start_time"])
+                    serialize_time(existing["start_time"])
                     if existing.get("start_time") is not None else None
                 )
-                existing.setdefault("timezone_offset_minutes", 540)
                 cur.execute("SELECT 1 FROM live_setlist WHERE live_id = %s LIMIT 1", (live_id,))
                 has_setlist = cur.fetchone() is not None
                 existing_lineup_contexts = load_lineup_contexts(cur, live_id)
@@ -947,28 +778,20 @@ def update_live(
                         )
                     )
                 venue_name_version_id = _resolve_venue_name_version(cur, payload)
-                resolved_timezone = resolve_live_timezone(
-                    cur,
-                    venue_id=payload.venue_id,
-                    announced_locality_id=payload.announced_locality_id,
-                    explicit_timezone_id=payload.explicit_timezone_id,
-                    existing=existing,
+                opening_time, start_time = normalize_live_times(
+                    cur, live_date=payload.live_date, venue_id=payload.venue_id,
+                    announced_locality_id=payload.announced_locality_id, offset=payload.timezone,
+                    opening_time=payload.opening_time, start_time=payload.start_time,
                 )
-                if payload.timezone is not None and payload.timezone != "+09:00":
-                    raise HTTPException(422, "只有线上 Live 可以指定活动时区；默认偏移为 +09:00")
-                legacy_offset_minutes = 540
-                opening_time = _normalize_optional_time_for_timezone(
-                    payload.opening_time, live_date=payload.live_date, resolved=resolved_timezone,
-                    fold=payload.opening_time_fold, legacy_offset_minutes=legacy_offset_minutes,
+                same_schedule = (
+                    str(existing["live_date"]) == str(payload.live_date)
+                    and existing.get("venue_id") == payload.venue_id
+                    and all((str(existing[key])[:len(value)] if existing.get(key) and value else None) == (value if value else None)
+                            for key, value in (("opening_time", payload.opening_time), ("start_time", payload.start_time)))
+                    and (payload.timezone is None or payload.timezone == time_offset(existing.get("start_time") or existing.get("opening_time")))
                 )
-                start_time = _normalize_optional_time_for_timezone(
-                    payload.start_time, live_date=payload.live_date, resolved=resolved_timezone,
-                    fold=payload.start_time_fold, legacy_offset_minutes=legacy_offset_minutes,
-                )
-                timezone_offset_minutes = _timezone_offset_for_live(
-                    live_date=payload.live_date, opening_time=opening_time, start_time=start_time,
-                    resolved=resolved_timezone, legacy_offset_minutes=legacy_offset_minutes,
-                )
+                if same_schedule:
+                    opening_time, start_time = existing.get("opening_time"), existing.get("start_time")
                 existing["band_lineup_contexts"] = _serialize_lineup_contexts(existing_lineup_contexts)
                 target = {
                     "live_date": _format_date(payload.live_date),
@@ -980,17 +803,11 @@ def update_live(
                     "venue_id": payload.venue_id,
                     "venue_name_version_id": venue_name_version_id,
                     "announced_locality_id": payload.announced_locality_id,
-                    "timezone_id": resolved_timezone.timezone_id,
-                    "timezone_source": resolved_timezone.timezone_source,
-                    "timezone_source_revision": resolved_timezone.timezone_source_revision,
-                    "opening_time_fold": payload.opening_time_fold,
-                    "start_time_fold": payload.start_time_fold,
                     "default_band_ids": payload.default_band_ids,
                     "event_attendees": persisted_event_attendees,
                     "band_lineup_contexts": _serialize_lineup_contexts(lineup_contexts),
                     "event_status": payload.event_status,
                     "status_note": payload.status_note,
-                    "timezone_offset_minutes": timezone_offset_minutes,
                 }
                 changes = {
                     field: {"before": existing.get(field), "after": value}
@@ -998,9 +815,7 @@ def update_live(
                     if existing.get(field) != value
                 }
                 schedule_fields = {
-                    "live_date", "opening_time", "start_time", "venue_id", "venue_name_version_id",
-                    "announced_locality_id", "timezone_id", "timezone_source", "timezone_source_revision",
-                    "opening_time_fold", "start_time_fold", "timezone_offset_minutes",
+                    "live_date", "opening_time", "start_time", "venue_id", "venue_name_version_id", "announced_locality_id",
                 }
                 changed_schedule_fields = schedule_fields.intersection(changes)
                 announcement_only = bool(changed_schedule_fields) and all(
@@ -1032,16 +847,10 @@ def update_live(
                                 previous_venue_id,
                                 previous_venue_name_version_id,
                                 previous_announced_locality_id,
-                                previous_timezone_id,
-                                previous_timezone_source,
-                                previous_timezone_source_revision,
-                                previous_timezone_offset_minutes,
-                                previous_opening_time_fold,
-                                previous_start_time_fold,
                                 changed_by,
                                 note
                             )
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             """,
                             (
                                 live_id,
@@ -1052,12 +861,6 @@ def update_live(
                                 existing["venue_id"],
                                 existing.get("venue_name_version_id"),
                                 existing.get("announced_locality_id"),
-                                existing.get("timezone_id"),
-                                existing.get("timezone_source"),
-                                existing.get("timezone_source_revision"),
-                                existing.get("timezone_offset_minutes"),
-                                existing.get("opening_time_fold"),
-                                existing.get("start_time_fold"),
                                 context.user.id,
                                 payload.schedule_change_note,
                             ),
@@ -1075,16 +878,10 @@ def update_live(
                             venue_id = %s,
                             venue_name_version_id = %s,
                             announced_locality_id = %s,
-                            timezone_id = %s,
-                            timezone_source = %s,
-                            timezone_source_revision = %s,
-                            opening_time_fold = %s,
-                            start_time_fold = %s,
                             default_band_ids = %s,
                             event_attendees = %s,
                             event_status = %s,
-                            status_note = %s,
-                            timezone_offset_minutes = %s
+                            status_note = %s
                         WHERE id = %s
                         """,
                         (
@@ -1097,16 +894,10 @@ def update_live(
                             payload.venue_id,
                             venue_name_version_id,
                             payload.announced_locality_id,
-                            resolved_timezone.timezone_id,
-                            resolved_timezone.timezone_source,
-                            resolved_timezone.timezone_source_revision,
-                            payload.opening_time_fold,
-                            payload.start_time_fold,
                             payload.default_band_ids,
                             Json(persisted_event_attendees),
                             payload.event_status,
                             payload.status_note,
-                            timezone_offset_minutes,
                             live_id,
                         ),
                     )
@@ -1147,11 +938,7 @@ def update_live(
             normalized_event_attendees=normalized_event_attendees,
             lineup_contexts=lineup_contexts,
             venue_name_version_id=venue_name_version_id,
-            resolved_timezone=resolved_timezone,
-            timezone_offset_minutes=timezone_offset_minutes,
             announced_locality_id=payload.announced_locality_id,
-            opening_time_fold=payload.opening_time_fold,
-            start_time_fold=payload.start_time_fold,
         ),
     }
 
