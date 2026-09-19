@@ -20,7 +20,6 @@ export function VenueLocationPicker(props: Props) {
   const [search, setSearch] = useState<GeocodingResult | null>(null);
   const [resolution, setResolution] = useState<LocationResolution | null>(null);
   const [zone, setZone] = useState<LocationResolution["timezone"] | null>(null);
-  const [zoneReviewed, setZoneReviewed] = useState(false);
   const [message, setMessage] = useState("");
   const [queryBusy, setQueryBusy] = useState(false);
   const autoZone = useRef<string | null>(null);
@@ -42,7 +41,7 @@ export function VenueLocationPicker(props: Props) {
   useEffect(() => {
     const controller = new AbortController();
     const requestId = `${props.venueId ?? "new"}-${++generation.current}`;
-    addressRequest.current?.abort(); setResolution(null); setZone(null); setZoneReviewed(false); setMessage("");
+    addressRequest.current?.abort(); setResolution(null); setZone(null); setMessage("");
     setQueryBusy(false);
     if (autoZone.current && current.current.timezone === autoZone.current) current.current.onTimezone("");
     autoZone.current = null;
@@ -54,17 +53,16 @@ export function VenueLocationPicker(props: Props) {
         if (controller.signal.aborted || pointKey(current.current.point) !== key || pointKey(result) !== key || result.request_id !== requestId) return;
         setZone(result.timezone);
         const suggested = result.timezone.timezone_id;
-        if (result.timezone.status === "ready" && suggested && !current.current.timezone) {
-          autoZone.current = suggested; current.current.onTimezone(suggested); setZoneReviewed(true); current.current.onReview(false);
-        } else current.current.onReview(!!suggested && suggested !== current.current.timezone);
+        if (result.timezone.status === "ready" && suggested) {
+          autoZone.current = suggested; current.current.onTimezone(suggested);
+        }
+        current.current.onReview(false);
       }).catch(error => {
         if (!controller.signal.aborted) { setMessage(error instanceof Error ? error.message : String(error)); current.current.onReview(false); }
       });
     }, 400);
     return () => { controller.abort(); clearTimeout(timer); };
   }, [key, props.venueId, props.csrf, config?.timezone]);
-  const zoneConflict = !!zone?.timezone_id && zone.timezone_id !== props.timezone && !zoneReviewed;
-  useEffect(() => { if (zone) props.onReview(zoneConflict); }, [zoneConflict, zone]);
 
   const find = async () => {
     searchRequest.current?.abort();
@@ -106,11 +104,7 @@ export function VenueLocationPicker(props: Props) {
     </div>)}
     {search && <p role="status">{search.message ?? (search.status === "not_found" ? "没有找到位置，请调整名称或手工选点。" : "请选择并核对位置，不会自动关联地图 POI。")}</p>}
     {config ? <VenueLocationMap point={props.point} disabled={props.disabled} config={config} onPoint={props.onPoint} /> : <p role="status">{configFailed ? "地图暂不可用，可继续输入经纬度。" : "地图配置加载中；可继续输入经纬度。"}</p>}
-    {zone && <p role="status">{zone.timezone_id ? `位置时区建议：${zone.timezone_id}` : zone.message ?? "时区待手工确认"}</p>}
-    {zoneConflict && <div className="console-submit-row"><span>当前时区 {props.timezone} 与建议不同，请核对。</span>
-      <button type="button" className="console-ghost-btn" disabled={props.disabled} onClick={() => { props.onTimezone(zone!.timezone_id!); setZoneReviewed(true); }}>采用建议时区</button>
-      <button type="button" className="console-ghost-btn" disabled={props.disabled} onClick={() => setZoneReviewed(true)}>保留当前时区</button>
-    </div>}
+    {zone && <p role="status">{zone.timezone_id ? `已按位置设置时区：${zone.timezone_id}` : zone.message ?? "时区待手工确认"}</p>}
     {resolution?.address && <p role="status">{resolution.address.message ?? (suggestion ? "以下为附近地址建议，请核对门牌和地区。" : "未找到地址，可手工填写。")}</p>}
     {suggestion && <div className="console-admin-hint"><span>{suggestion.address} </span>
       <button type="button" className="console-ghost-btn" disabled={props.disabled || props.address !== addressAtRequest.current} onClick={() => props.onAddress(suggestion.address)}>采用地址建议</button>
