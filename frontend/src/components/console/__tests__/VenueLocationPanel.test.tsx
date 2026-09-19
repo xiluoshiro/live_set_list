@@ -115,29 +115,12 @@ test("limits undisclosed venues to the published locality", async () => {
   expect(screen.getByText(/登记已公布地区和自身时区/)).toBeInTheDocument();
 });
 
-// 测试点：地区纠错只展示引用数量，用数据状态令牌防止覆盖旧表单，不宣称地图失效。
-test("previews and saves the selected locality", async () => {
-  const user = await openPanel();
-  api.previewConsoleLocality.mockImplementation((_id, after) => Promise.resolve({
-    before: city, after, venue_count: 2, live_count: 4,
-    }));
-  api.saveConsoleLocality.mockResolvedValue({ ...city, timezone_id: "America/New_York", state_token: "2".repeat(64) });
-
-  await user.click(screen.getByRole("button", { name: "修改已选地区" }));
-  await user.clear(screen.getByLabelText("城市名称"));
-  await user.type(screen.getByLabelText("城市名称"), "改名地区");
-  await user.click(screen.getByRole("button", { name: "预览修改" }));
-
-  const dialog = await screen.findByRole("dialog", { name: "确认地区资料修改" });
-  expect(dialog).toHaveTextContent("引用 Venue2");
-  expect(dialog).not.toHaveTextContent("需重新核对的地图关联");
-  expect(dialog).toHaveTextContent("关联 Live4");
-  expect(api.saveConsoleLocality).not.toHaveBeenCalled();
-  await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
-  await waitFor(() => expect(api.saveConsoleLocality).toHaveBeenCalledWith(
-    5, expect.objectContaining({ expected_state_token: "1".repeat(64), locality_name: "改名地区" }), "csrf",
-  ));
-  expect(screen.getByRole("status")).toHaveTextContent("已存时间偏移不随本次资料修改而变动");
+// 测试点：场地资料只选择既有地区；地区资料的登记和纠错在独立的地区管理入口处理。
+test("only selects existing localities for the Venue", async () => {
+  await openPanel();
+  expect(screen.queryByRole("button", { name: "登记已核验地区" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "修改已选地区" })).not.toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "已公布地区" })).toBeInTheDocument();
 });
 
 // 测试点：保存前必须预览，使用预览快照和数据状态令牌提交；失败保留确认框及编辑内容。

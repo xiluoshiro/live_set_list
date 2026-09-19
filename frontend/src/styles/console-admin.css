@@ -16,13 +16,13 @@
 
 .console-mode-scroll {
   max-width: 100%;
-  overflow-x: auto;
 }
 
 .console-mode-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 125px);
-  width: max-content;
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
@@ -31,6 +31,7 @@
 
 .console-mode-cell {
   display: flex;
+  flex: 0 0 125px;
   flex-direction: column;
   align-items: center;
   justify-content: center;

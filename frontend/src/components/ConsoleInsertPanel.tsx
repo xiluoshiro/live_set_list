@@ -56,6 +56,7 @@ import { PerformanceGroupAdminSection } from "./console/PerformanceGroupAdminSec
 import { TourAdminSection } from "./console/TourAdminSection";
 import { GeographyQualitySection } from "./console/GeographyQualitySection";
 import { VenueAdminSection } from "./console/VenueAdminSection";
+import { LocalityAdminSection } from "./console/LocalityAdminSection";
 import {
   UpdateDiffTable,
   type UpdateChange,
@@ -115,6 +116,7 @@ const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; labe
   { title: "歌曲", manage: { value: "song", label: "歌曲管理" } },
   { title: "乐队", manage: { value: "band", label: "乐队管理" } },
   { title: "场地", create: { value: "venue_create", label: "新增场地" }, manage: { value: "venue", label: "场地管理" } },
+  { title: "地区", manage: { value: "locality", label: "地区（管理）" } },
   { title: "巡演", manage: { value: "tour", label: "巡演管理" } },
   { title: "活动组", manage: { value: "performance_group", label: "活动组管理" } },
 ];
@@ -3117,7 +3119,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         </div>
       )}
       <section className="console-admin">
-      <PageTitle kicker="Console" title="控制台" description="录入和维护演出、歌单、歌曲、乐队、场地与巡演资料。" />
+      <PageTitle kicker="Console" title="控制台" />
       {message && <p className="console-admin-hint" role="status" aria-live="polite">{message}</p>}
 
       <nav className="console-mode-nav" aria-label="控制台录入类型">
@@ -3378,6 +3380,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           initialVenueId={mode === "venue" ? qualityTargetVenueId : null}
         />
       )}
+
+      {mode === "locality" && <LocalityAdminSection onMessage={setMessage} />}
 
       {mode === "tour" && (
         <TourAdminSection bands={bands} onMessage={setMessage} onTourDataChanged={onLiveDataChanged} />
