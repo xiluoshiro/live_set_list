@@ -2,7 +2,6 @@ import { useState } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { VenueLocationPicker } from "../VenueLocationPicker";
-import { DEFAULT_GOOGLE_MAP_POINT } from "../googleMapsSession";
 import type { GeoLocality, LocationPoint, LocationResolution } from "../../../api";
 
 const api = vi.hoisted(() => ({ getGeographyCapabilities: vi.fn(), resolveGeography: vi.fn(), resolveGooglePlace: vi.fn(), searchGeography: vi.fn() }));
@@ -45,21 +44,25 @@ beforeEach(() => {
       provider_url: "https://www.google.com/maps/search/?api=1&query_place_id=place-1" }] });
 });
 
-// 测试点：新建场馆无地址时显示空地址提示，查询可用且不出现清除位置操作。
+// 测试点：新建场馆无地址且未选点时显示等待选择提示，查询可用且不出现清除位置操作。
 test("shows empty address and available search for a new venue", async () => {
   render(<Harness newVenue initialAddress="" />);
   await waitFor(() => expect(screen.getByRole("button", { name: "查询" })).toBeEnabled());
   expect(screen.queryByRole("button", { name: "清除位置" })).not.toBeInTheDocument();
-  expect(await screen.findByText("尚未取得地址", { exact: true })).toBeInTheDocument();
+  expect(screen.getByText("选择后将在这里显示地址。", { exact: true })).toBeInTheDocument();
 });
 
-// 测试点：新建场馆打开地图时直接采用东京默认草稿点，已有场馆不被默认点覆盖。
-test("new venue starts from the Tokyo default point", async () => {
+// 测试点：新建场馆的默认地图镜头不会被当作真实选点或触发坐标解析。
+test("new venue keeps its location empty until the user selects a point", async () => {
   const onPoint = vi.fn();
   render(<VenueLocationPicker venueName="" csrf="csrf" disabled={false} point={null} savedPoint={null}
     timezone="Asia/Tokyo" address="" locality={null} onPoint={onPoint} onTimezone={vi.fn()}
     onAddress={vi.fn()} onLocality={vi.fn()} onName={vi.fn()} onGooglePlace={vi.fn()} onReview={vi.fn()} />);
-  await waitFor(() => expect(onPoint).toHaveBeenCalledWith(DEFAULT_GOOGLE_MAP_POINT));
+  await waitFor(() => expect(api.getGeographyCapabilities).toHaveBeenCalled());
+  expect(onPoint).not.toHaveBeenCalled();
+  expect(api.resolveGeography).not.toHaveBeenCalled();
+  expect(screen.getByText("等待选择位置")).toBeInTheDocument();
+  expect(screen.getByText("—")).toBeInTheDocument();
 });
 
 // 测试点：地图配置失败结束加载提示，不阻止手工维护。
