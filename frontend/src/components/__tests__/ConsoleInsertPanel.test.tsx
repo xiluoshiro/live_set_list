@@ -339,6 +339,9 @@ describe("ConsoleInsertPanel", () => {
     expect(within(content).getByRole("tablist", { name: "内容管理" })).toBeInTheDocument();
     expect(within(content).getByRole("tab", { name: "歌曲管理" })).toHaveTextContent("管理");
     expect(within(content).queryByRole("tab", { name: "新增歌曲" })).not.toBeInTheDocument();
+    expect(within(content).getAllByRole("tab").map((tab) => tab.getAttribute("aria-label"))).toEqual([
+      "新增演出", "演出管理", "新增歌单", "歌单管理", "歌曲管理", "巡演管理", "活动组管理", "乐队管理", "新增场地", "场地管理", "地区（管理）",
+    ]);
 
     await user.click(within(content).getByRole("tab", { name: "场地管理" }));
     expect(within(content).getByRole("tab", { name: "场地管理" })).toHaveAttribute("aria-selected", "true");
