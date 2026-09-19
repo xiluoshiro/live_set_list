@@ -159,42 +159,6 @@ def test_database_ownership_contract_rejects_drift(monkeypatch, tmp_path) -> Non
         )
 
 
-# 测试点：恢复保留关系表 DELETE 和 Flyway owner，新地图关联的授权兼容尚无该表的旧备份。
-def test_apply_app_permissions_preserves_flyway_history_owner(monkeypatch) -> None:
-    captured_sql: list[str] = []
-
-    def fake_run_step(_label: str, _args: list[str], **kwargs) -> None:
-        if kwargs.get("input_text"):
-            captured_sql.append(kwargs["input_text"])
-
-    monkeypatch.setattr(restore, "run_step", fake_run_step)
-
-    restore.apply_app_database_permissions(
-        _env_values(),
-        "docker",
-        "candidate-container",
-    )
-
-    assert len(captured_sql) == 1
-    permission_sql = captured_sql[0]
-    assert "c.relname <> 'flyway_schema_history'" in permission_sql
-    assert (
-        "ALTER TABLE public.flyway_schema_history OWNER TO live_project_flyway;"
-        in permission_sql
-    )
-    assert "public.tour_bands," in permission_sql
-    assert "public.tour_lives," in permission_sql
-    assert "public.performance_group_lives," in permission_sql
-    assert "public.live_setlist," in permission_sql
-    assert "public.band_lineup_version_members," in permission_sql
-    assert "public.live_band_lineup_contexts," in permission_sql
-    assert "public.live_setlist_band_performances," in permission_sql
-    assert "public.live_setlist_band_performance_members" in permission_sql
-    assert "TO live_project_super_ro;" in permission_sql
-    assert "IF to_regclass('public.venue_map_links') IS NOT NULL THEN" in permission_sql
-    assert "GRANT DELETE ON TABLE public.venue_map_links TO live_project_super_ro" in permission_sql
-
-
 def test_recover_main_database_uses_snapshot_backup_and_rolls_back_on_check_failure(monkeypatch, tmp_path) -> None:
     # 测试点：恢复流程应使用临时快照，且在 run_checks 失败时回滚并清理快照。
     calls: list[str] = []

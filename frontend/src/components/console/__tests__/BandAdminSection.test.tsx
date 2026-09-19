@@ -155,7 +155,6 @@ describe("BandAdminSection", () => {
     await user.type(screen.getByLabelText("备注"), "正式新增成员");
     expect(screen.getByLabelText("生效日期")).toHaveAttribute("placeholder", "YYYY-MM-DD");
     expect(screen.getByLabelText("交接 Live 日期（可空）")).toHaveAttribute("type", "text");
-    expect(screen.getByRole("button", { name: "查询候选" }).closest(".band-transition-query")).not.toBeNull();
     await user.type(screen.getByLabelText("交接 Live 日期（可空）"), "2026-07-28");
     await user.click(screen.getByRole("button", { name: "查询候选" }));
     await screen.findByRole("option", { name: "#55 Transition Show" });

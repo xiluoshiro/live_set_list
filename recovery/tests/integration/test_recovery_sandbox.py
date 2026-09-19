@@ -26,6 +26,7 @@ class SandboxContext:
 
 
 CONSOLE_DELETABLE_TABLES = (
+    "venue_map_links",
     "band_lineup_version_members",
     "live_band_lineup_contexts",
     "live_setlist",
@@ -393,7 +394,9 @@ def test_manual_backup_generates_real_dump_and_validates_with_pg_restore(sandbox
         sandbox_context.docker_cmd,
         sandbox_context.container_name,
         "live_statistic",
-        "INSERT INTO public.venue_list (id, venue) VALUES (101, 'Sandbox Hall');",
+        """INSERT INTO public.venue_list (id, venue) VALUES (101, 'Sandbox Hall');
+        INSERT INTO public.venue_name_versions (id, venue_id, venue_name)
+        VALUES (101, 101, 'Sandbox Hall');""",
     )
 
     backup_path = backup.create_app_backup(
@@ -485,20 +488,22 @@ def test_candidate_container_can_boot_from_external_volume_and_rollback_to_forma
 
 
 def test_restore_backup_on_candidate_container_runs_flyway_and_restores_data(sandbox_context: SandboxContext) -> None:
-    # 测试点：真实恢复后运行时角色必须满足完整权限矩阵，并能原子替换阵容上下文。
+    # 测试点：当前名称版本和阵容数据备份恢复后，运行时角色满足权限矩阵并能原子替换阵容上下文。
     _psql(
         sandbox_context.docker_cmd,
         sandbox_context.container_name,
         "live_statistic",
-        "INSERT INTO public.venue_list (id, venue) VALUES (101, 'Sandbox Hall');",
+        """INSERT INTO public.venue_list (id, venue) VALUES (101, 'Sandbox Hall');
+        INSERT INTO public.venue_name_versions (id, venue_id, venue_name)
+        VALUES (101, 101, 'Sandbox Hall');""",
     )
     _psql(
         sandbox_context.docker_cmd,
         sandbox_context.container_name,
         "live_statistic",
         """
-        INSERT INTO public.band_attrs (id, band_abbr, band_name, band_members)
-        VALUES (101, 'sandbox', 'Sandbox Band', ARRAY['Before', 'After']);
+        INSERT INTO public.band_attrs (id, band_abbr, band_name)
+        VALUES (101, 'sandbox', 'Sandbox Band');
 
         INSERT INTO public.live_attrs (
             id,
@@ -509,6 +514,7 @@ def test_restore_backup_on_candidate_container_runs_flyway_and_restores_data(san
             opening_time,
             start_time,
             venue_id,
+            venue_name_version_id,
             live_type
         )
         VALUES (
@@ -519,6 +525,7 @@ def test_restore_backup_on_candidate_container_runs_flyway_and_restores_data(san
             'https://example.test/sandbox-live',
             TIME WITH TIME ZONE '18:00:00+09',
             TIME WITH TIME ZONE '19:00:00+09',
+            101,
             101,
             'oneman'
         );
@@ -541,6 +548,9 @@ def test_restore_backup_on_candidate_container_runs_flyway_and_restores_data(san
             change_type
         )
         VALUES (101, 101, 1, 'Sandbox V1', DATE '2026-01-01', 'initial');
+
+        INSERT INTO public.band_lineup_version_members (lineup_version_id, member_name, display_order)
+        VALUES (101, 'Before', 1), (101, 'After', 2);
 
         INSERT INTO public.live_band_lineup_contexts (
             live_id,

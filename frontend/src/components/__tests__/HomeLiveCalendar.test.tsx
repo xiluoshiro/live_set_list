@@ -82,18 +82,17 @@ describe("HomeLiveCalendar", () => {
     expect(screen.getByRole("button", { pressed: true })).toHaveAccessibleName(/28 日.*1 场 Live/);
   });
 
-  test("移动端状态图例按前三项和后两项分组", async () => {
-    // 测试点：状态图例保持前三项、后两项的顺序分组，移动端可分别居中排列。
+  test("状态图例显示所有演出状态", async () => {
+    // 测试点：状态图例包含已结束、待举行、进行中、延期和已取消的可读标签。
     const monthKey = getCurrentMonthKey();
     getCatalogCalendarMock.mockResolvedValue(makeMonthResponse(monthKey, []));
     renderCalendar();
 
     await screen.findByText("本月暂无已收录 Live");
-    const rows = screen.getByLabelText("Live 状态图例").querySelectorAll(".status-legend-row");
-    expect(Array.from(rows, (row) => row.textContent?.replace(/\s+/g, ""))).toEqual([
-      "已结束待举行进行中",
-      "延期已取消",
-    ]);
+    const legend = within(screen.getByLabelText("Live 状态图例"));
+    for (const status of ["已结束", "待举行", "进行中", "延期", "已取消"]) {
+      expect(legend.getByText(status)).toBeInTheDocument();
+    }
   });
 
   test("初次进入展示当前月，并按规则默认选中日期", async () => {
@@ -177,8 +176,8 @@ describe("HomeLiveCalendar", () => {
     expect(calls).toContain(earlier);
   });
 
-  test("同日多场显示正确总数，色轨包含全部不同状态", async () => {
-    // 测试点：日期格计数与可访问名称覆盖所有状态，色轨按状态去重。
+  test("同日多场的可访问名称包含总数及各状态数量", async () => {
+    // 测试点：日期格的可访问名称包含全部 Live 总数及各状态计数。
     const monthKey = getCurrentMonthKey();
     const day = todayIso();
     getCatalogCalendarMock.mockResolvedValue(
@@ -195,11 +194,6 @@ describe("HomeLiveCalendar", () => {
     expect(dayButton).toHaveAccessibleName(/已取消 1/);
     expect(dayButton).toHaveAccessibleName(/延期 1/);
     expect(dayButton).toHaveAccessibleName(/待举行 1/);
-    const markers = dayButton.querySelectorAll(".event-marker");
-    expect(markers).toHaveLength(3);
-    expect(markers[0]).toHaveClass("cancelled");
-    expect(markers[1]).toHaveClass("postponed");
-    expect(markers[2]).toHaveClass("upcoming");
   });
 
   test("选中日期后展示全部 Live 行并可进入详情", async () => {

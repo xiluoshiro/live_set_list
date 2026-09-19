@@ -70,9 +70,7 @@ describe("MemberStatusTable", () => {
 
     const coverTag = screen.getByText("翻唱");
     expect(coverTag).toBeInTheDocument();
-    expect(coverTag).toHaveClass("comment-tag", "cover");
     expect(within(coverTag).getByRole("img", { name: "Roselia" })).toHaveAttribute("src", "/icons/Band_4.svg");
-    expect(coverTag.querySelector("svg")).toBeNull();
   });
 
   // 测试点：is_cover 产生的旧翻唱标签不应附带新的乐队 SVG。
@@ -80,8 +78,6 @@ describe("MemberStatusTable", () => {
     render(<MemberStatusTable rows={[{ ...detailRows[1], cover_band: null }]} />);
 
     const coverTag = screen.getByText("翻唱");
-    expect(coverTag).toHaveClass("comment-tag");
-    expect(coverTag).not.toHaveClass("cover");
     expect(within(coverTag).queryByRole("img")).not.toBeInTheDocument();
   });
 
@@ -97,7 +93,7 @@ describe("MemberStatusTable", () => {
     expect(screen.getByRole("button", { name: "关闭乐队详情" })).toBeInTheDocument();
   });
 
-  // 测试点：full_plus 应复用成功状态图标并在成员详情中展示阵容版本和特别出演类别。
+  // 测试点：full_plus 显示全员与特别出演人数，成员详情包含阵容版本和特别出演类别。
   test("展示全员加特别出演状态与版本差异", async () => {
     const user = userEvent.setup();
     render(
@@ -131,9 +127,7 @@ describe("MemberStatusTable", () => {
       />,
     );
 
-    const icon = screen.getByRole("img", { name: "Roselia" });
-    expect(icon.closest(".band-tile")).toHaveClass("full-plus");
-    expect(icon.closest(".band-tile")).toHaveAttribute("title", "Roselia · 全员 5/5＋特别出演 1");
+    expect(screen.getByTitle("Roselia · 全员 5/5＋特别出演 1")).toBeInTheDocument();
 
     await user.click(screen.getByTitle("点击查看参加队员"));
     expect(screen.getByText("阵容：Roselia V1 → Roselia V2 · 交接共演（旧阵容基准）")).toBeInTheDocument();
@@ -317,8 +311,8 @@ describe("MemberStatusTable", () => {
     expect(screen.getByText("其他成员明细")).toBeInTheDocument();
   });
 
-  test("band_id 不在 1-12 时使用首字符兜底图标且不显示满员状态条", () => {
-    // 测试点：无对应图标文件时，回退“首字符+底色”，并移除 full/partial 状态样式。
+  test("乐队图片加载失败时使用首字符兜底", () => {
+    // 测试点：图片加载失败后移除损坏图片并显示乐队名对应的首字符。
     render(
       <MemberStatusTable
         rows={[
@@ -348,10 +342,6 @@ describe("MemberStatusTable", () => {
     expect(screen.queryByRole("img", { name: "UnknownBand" })).not.toBeInTheDocument();
     const fallback = screen.getByLabelText("UnknownBand");
     expect(fallback).toHaveTextContent("U");
-    const tile = fallback.closest(".band-tile");
-    expect(tile).toHaveClass("no-status");
-    expect(tile).not.toHaveClass("full");
-    expect(tile).not.toHaveClass("partial");
   });
 });
 

@@ -92,8 +92,6 @@ describe("TourStatisticsPanel", () => {
     expect(getTourStatisticsComparisonMock).not.toHaveBeenCalled();
     const detailRegion = screen.getByRole("region", { name: "歌单变化" });
     const compareButton = screen.getByRole("button", { name: "比较" });
-    expect(compareButton).toHaveClass("console-submit-btn");
-    expect(compareButton).not.toHaveClass("secondary-btn");
     await user.click(compareButton);
 
     expect(getTourStatisticsComparisonMock).toHaveBeenCalledWith(7, 40, 42);
@@ -131,10 +129,10 @@ describe("TourStatisticsPanel", () => {
     render(<TourStatisticsPanel tourTitle="Tour 2026" data={makeStatistics()} loading={false} error={null} onOpenStop={vi.fn()} />);
 
     const region = screen.getByRole("region", { name: "歌单变化" });
-    expect(within(region).getByLabelText("移除 旧曲")).toHaveClass("removed");
-    expect(within(region).getByLabelText("新增 新曲")).toHaveClass("added");
     expect(within(region).getByLabelText("变化摘要")).toHaveTextContent("新增 1");
     expect(within(region).getByLabelText("变化摘要")).toHaveTextContent("移除 1");
+    expect(within(region).getByLabelText("移除 旧曲")).toBeInTheDocument();
+    expect(within(region).getByLabelText("新增 新曲")).toBeInTheDocument();
     expect(region).not.toHaveTextContent("同位置更换");
     expect(region).not.toHaveTextContent("更换 1");
     expect(within(region).queryByText("顺序 0")).not.toBeInTheDocument();

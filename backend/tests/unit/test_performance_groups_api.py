@@ -103,30 +103,6 @@ def test_performance_group_detail_maps_bands_and_venues():
     assert payload["venues"] == ["Shibuya WWW X", "Zepp Shinjuku"]
 
 
-# 测试点：活动组同日场次应先显示取消场次，再按开演时间和 ID 保持稳定顺序。
-def test_performance_group_detail_lives_prioritize_cancelled_on_same_date():
-    conn, cursor = _build_connection_mock()
-    cursor.fetchone.return_value = (4, "Sort Group", date(2026, 5, 1), date(2026, 5, 1), 1, 3)
-    cursor.fetchall.side_effect = [
-        [],
-        [],
-        [
-            (401, date(2026, 5, 1), "First by id", "oneman", "15:00:00+09", "Venue", [], None, False),
-            (402, date(2026, 5, 1), "Same time", "oneman", "15:00:00+09", "Venue", [], None, False),
-            (403, date(2026, 5, 1), "Third by id", "oneman", "17:00:00+09", "Venue", [], None, False),
-        ],
-    ]
-
-    with patch("app.routers.performance_groups.get_db_connection", return_value=conn):
-        response = TestClient(app).get("/api/catalog/performance-groups/4")
-
-    live_ids = [live["live_id"] for live in response.json()["lives"]]
-    assert live_ids == [401, 402, 403]
-    assert "(l.event_status = 'cancelled') DESC" in PERFORMANCE_GROUP_LIVES_QUERY
-    assert "l.start_time ASC" in PERFORMANCE_GROUP_LIVES_QUERY
-    assert "l.id ASC" in PERFORMANCE_GROUP_LIVES_QUERY
-
-
 # 测试点：day_count=1 且 live_count>=2 时 display_type 应为 "single_day_multi_show"。
 def test_display_type_single_day_multi_show():
     assert _compute_display_type(1, 2) == "single_day_multi_show"

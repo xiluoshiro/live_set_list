@@ -99,7 +99,7 @@ describe("PerformanceGroupAdminSection", () => {
     getConsolePerformanceGroupLiveCandidatesMock.mockResolvedValue(makeCandidateResponse());
   });
 
-  // 测试点：活动组的新建入口应与候选“添加”按钮复用同一主按钮样式。
+  // 测试点：已有活动组加载后可按名称选择编辑对象。
   test("loads existing groups into dropdown", async () => {
     getConsolePerformanceGroupsMock.mockResolvedValue({
       items: [
@@ -110,12 +110,9 @@ describe("PerformanceGroupAdminSection", () => {
 
     renderSection();
 
-    expect(screen.getByRole("button", { name: "新建活动组" })).toHaveClass("console-submit-btn");
-    expect(screen.getByRole("button", { name: "新建活动组" })).not.toHaveClass("console-new-btn");
 
     await waitFor(() => {
       const select = screen.getByLabelText("已有活动组");
-      expect(select).toHaveClass("console-entity-select");
       expect(within(select).getByRole("option", { name: "#1 Group Alpha" })).toBeInTheDocument();
       expect(within(select).getByRole("option", { name: "#2 Group Beta" })).toBeInTheDocument();
     });

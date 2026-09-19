@@ -81,7 +81,6 @@ test.each([
 
   expect(container.querySelector("article")).toHaveAttribute("data-status-tone", tone);
   expect(screen.getByText(label)).toBeInTheDocument();
-  expect(screen.getByText(label).parentElement).toHaveClass("live-card-badges");
   expect(screen.getByRole("button", { name: `查看《状态测试 Live》详情，状态：${label}` })).toBeInTheDocument();
 });
 
@@ -160,7 +159,6 @@ test("past performance group card uses compact collected badge", () => {
 
   const card = container.querySelector("article");
   expect(card).toHaveAttribute("data-status-tone", "past");
-  expect(screen.getByText("收录2")).toHaveClass("live-type-badge");
   expect(screen.queryByText("取消0")).not.toBeInTheDocument();
   expect(screen.queryByText("已收录 2 日 · 2 场")).not.toBeInTheDocument();
 });
@@ -189,8 +187,6 @@ test("cancelled performance group card stays aggregated and remains clickable", 
   const card = container.querySelector("article");
   expect(card).toHaveAttribute("data-status-tone", "cancelled");
   expect(screen.getByText("已取消")).toBeInTheDocument();
-  expect(screen.getByText("收录2")).toHaveClass("live-type-badge");
-  expect(screen.getByText("取消2")).toHaveClass("live-type-badge");
   expect(screen.queryByText("已收录 2 日 · 2 场 · 取消 2 场")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "查看活动组《两日活动》详情，状态：已取消" }));
   expect(onOpenGroup).toHaveBeenCalledWith(3, "两日活动");

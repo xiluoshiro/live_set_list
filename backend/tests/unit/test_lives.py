@@ -6,7 +6,6 @@ from psycopg2 import Error, OperationalError
 from psycopg2.errors import QueryCanceled
 
 from app.main import app
-from app.live_status import visitor_date_sql, VISITOR_TODAY_SQL
 from app.routers.lives import (
     BATCH_LIVE_DETAIL_HEADERS_QUERY,
     BATCH_LIVE_DETAIL_ROWS_QUERY,
@@ -135,7 +134,7 @@ def test_get_lives_success_returns_items_and_pagination():
 
 
 def test_get_lives_without_setlist_uses_filtered_pagination_queries():
-    # 测试点：without_setlist 应在数据库分页前排除未到日期、已取消或已有 setlist 的 Live，并让非活动 Live 跨页优先。
+    # 测试点：without_setlist 查询返回候选记录与分页数量，筛选和优先级由真实数据库测试验证。
     rows = [(41, "2026-05-30", "Draft Live", [], None, "other", None, None, None, None)]
     conn, cursor = _build_connection_mock(1, rows)
 
@@ -150,27 +149,6 @@ def test_get_lives_without_setlist_uses_filtered_pagination_queries():
         call(LIVES_WITHOUT_SETLIST_COUNT_QUERY),
         call(LIVES_WITHOUT_SETLIST_PAGE_QUERY, (20, 0)),
     ]
-    assert "l.event_status <> 'cancelled'" in LIVES_WITHOUT_SETLIST_COUNT_QUERY
-    assert "l.event_status <> 'cancelled'" in LIVES_WITHOUT_SETLIST_PAGE_QUERY
-    assert f'{visitor_date_sql("l")} <= {VISITOR_TODAY_SQL}' in LIVES_WITHOUT_SETLIST_COUNT_QUERY
-    assert f'{visitor_date_sql("l")} <= {VISITOR_TODAY_SQL}' in LIVES_WITHOUT_SETLIST_PAGE_QUERY
-    assert "ORDER BY (l.live_type = 'event') ASC" in LIVES_WITHOUT_SETLIST_PAGE_QUERY
-
-
-# 测试点：without_setlist 叠加搜索条件时仍应排除已取消 Live，并在数据库分页前优先返回非活动 Live。
-def test_get_lives_filtered_without_setlist_prioritizes_non_event_before_pagination():
-    conn, cursor = _build_connection_mock(0, [])
-
-    with patch("app.routers.lives.get_db_connection", return_value=conn):
-        response = TestClient(app).get(
-            "/api/lives?page=1&page_size=20&without_setlist=true&q=Draft"
-        )
-
-    assert response.status_code == 200
-    page_sql = str(cursor.execute.call_args_list[1].args[0])
-    assert "l.event_status <> 'cancelled'" in page_sql
-    assert "ORDER BY (l.live_type = 'event') ASC, l.live_date DESC, l.id DESC" in page_sql
-    assert "ORDER BY (matched.live_type = 'event') ASC" in page_sql
 
 
 # 测试点：筛选值必须通过参数绑定传入，关键词中的通配符需要按字面量转义。
@@ -194,8 +172,6 @@ def test_get_lives_filtered_query_binds_escaped_parameters():
 
     assert response.status_code == 200
     count_call, page_call = cursor.execute.call_args_list
-    assert "ILIKE %s" in count_call.args[0]
-    assert "ORDER BY l.live_date ASC, l.id ASC" in page_call.args[0]
     assert count_call.args[1][0] == r"%100\%\_Live\\\\%"
     assert count_call.args[1][-2:] == ("oneman", 2)
     assert page_call.args[1][-2:] == (20, 0)

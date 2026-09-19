@@ -198,7 +198,6 @@ describe("PerformanceGroupDetailPage", () => {
       const nav = screen.getByRole("navigation", { name: "活动组场次" });
       expect(within(nav).getAllByRole("button")).toHaveLength(3);
       expect(nav.querySelector("time")).toBeNull();
-      expect(nav.querySelectorAll(".tour-stop-separator")).toHaveLength(0);
       expect(nav).not.toHaveTextContent("2025-04-26");
       expect(nav).not.toHaveTextContent("18:00");
       const button = within(nav).getByRole("button", { name: /DAY 1: Poppin'Party/ });

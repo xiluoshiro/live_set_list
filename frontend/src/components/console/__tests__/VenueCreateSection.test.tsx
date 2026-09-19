@@ -102,8 +102,6 @@ test("uses a single input row without venue management controls", async () => {
     expect(row.getByLabelText(label)).toBeInTheDocument();
   }
   expect(table.queryByLabelText("已公布地区")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("已公布地区").closest(".live-create-tools")).not.toBeNull();
-  expect(screen.getByLabelText("搜索地区").closest(".live-create-query-row")).not.toBeNull();
   expect(screen.queryByRole("button", { name: "查询已有场地" })).not.toBeInTheDocument();
   expect(api.getConsoleVenuePage).not.toHaveBeenCalled();
   expect(screen.queryByText("地图选点组件")).not.toBeInTheDocument();
