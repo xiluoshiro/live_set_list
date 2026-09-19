@@ -95,25 +95,23 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
   const invalidCoordinates = (latitude.trim() === "") !== (longitude.trim() === "")
     || (!!latitude.trim() && (!Number.isFinite(Number(latitude)) || Math.abs(Number(latitude)) > 90))
     || (!!longitude.trim() && (!Number.isFinite(Number(longitude)) || Math.abs(Number(longitude)) > 180));
-  const zoneConflict = physical && !!timezone && !!locality?.timezone_id && timezone !== locality.timezone_id;
   const validation = !name.trim() ? "请填写场地名称。"
     : physical && !address.trim() ? "实体场馆必须填写公开门牌地址。"
-    : physical && !timezone ? "实体场馆必须选择已核验的 IANA 时区。"
+    : !timezone ? "场地必须选择 IANA 时区。"
     : physical && invalidCoordinates ? "请同时填写有效经纬度，或同时清空（纬度 −90～90，经度 −180～180）。"
-    : physical && timezone && !latitude.trim() ? "填写场馆精确时区前，请先核对坐标。"
-    : zoneConflict ? "场馆时区与所选地区时区不一致，请核对。"
     : mapReview ? "请先核对地图解析的时区。" : "";
   const location: Omit<VenueLocationWrite, "expected_state_token"> = {
     locality_id: locality?.id ?? null,
     address: physical ? address.trim() || null : null,
     latitude: physical && latitude.trim() ? Number(latitude) : null,
     longitude: physical && longitude.trim() ? Number(longitude) : null,
-    timezone_id: physical ? timezone || null : null, coordinate_system: "WGS84",
+    timezone_id: timezone || null, coordinate_system: "WGS84",
   };
   const options = [...new Map([...cities, ...(locality ? [locality] : [])].map(item => [item.id, item])).values()];
   const rows: [string, string][] = [["名称", name.trim()], ["类型", KINDS[kind]]];
   rows.push(["已公布地区", locality ? localityLabel(locality) : "未填写"]);
-  if (physical) rows.push(["公开门牌地址", location.address ?? "未填写"], ["WGS84 坐标", location.latitude === null ? "未填写" : `${location.latitude}, ${location.longitude}`], ["场馆精确时区", timezone]);
+  rows.push(["场馆精确时区", timezone]);
+  if (physical) rows.push(["公开门牌地址", location.address ?? "未填写"], ["WGS84 坐标", location.latitude === null ? "未填写" : `${location.latitude}, ${location.longitude}`]);
 
   const submit = async () => {
     if (validation || submittingRef.current) return;
@@ -160,17 +158,16 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
             <td><input aria-label="名称" placeholder="请输入场地名称" maxLength={255} value={name} disabled={submitting} onChange={e => setName(e.target.value)} /></td>
             <td><select aria-label="类型" value={kind} disabled={submitting} onChange={e => {
               const next = e.target.value as keyof typeof KINDS; setKind(next);
-              if (next === "physical") setTimezone(DEFAULT_TIMEZONE);
-              if (next !== "physical") { setAddress(""); setLatitude(""); setLongitude(""); setTimezone(""); setMapOpen(false); setMapReview(false); }
+              if (next !== "physical") { setAddress(""); setLatitude(""); setLongitude(""); setMapOpen(false); setMapReview(false); }
             }}>{Object.entries(KINDS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
             <td><input aria-label="公开门牌地址" required={physical} placeholder={physical ? "请输入地址（必填）" : "不适用"} maxLength={500} value={address} disabled={submitting || !physical} onChange={e => setAddress(e.target.value)} /></td>
             <td><input aria-label="纬度（WGS84）" inputMode="decimal" value={latitude} disabled={submitting || !physical} onChange={e => setLatitude(e.target.value)} /></td>
             <td><input aria-label="经度（WGS84）" inputMode="decimal" value={longitude} disabled={submitting || !physical} onChange={e => setLongitude(e.target.value)} /></td>
-            <td><select aria-label="场馆精确时区" value={timezone} disabled={submitting || loading || !physical} onChange={e => setTimezone(e.target.value)}><option value="" disabled={physical}>{physical ? "请选择时区（必填）" : "不适用"}</option>{[...new Set([...zones, ...(timezone ? [timezone] : [])])].map(zone => <option key={zone}>{zone}</option>)}</select></td>
+            <td><select aria-label="场馆精确时区" value={timezone} disabled={submitting || loading} onChange={e => setTimezone(e.target.value)}><option value="" disabled>请选择时区（必填）</option>{[...new Set([...zones, ...(timezone ? [timezone] : [])])].map(zone => <option key={zone}>{zone}</option>)}</select></td>
           </tr></tbody>
         </table>
       </div>
-      {kind === "undisclosed" && <p className="console-admin-hint">未公开具体场馆时，仅填写已公布地区。</p>}
+      {kind === "undisclosed" && <p className="console-admin-hint">未公开具体场馆时，填写已公布地区及场馆精确时区。</p>}
       {validation && name.trim() && <p className="console-admin-hint" role="status">{validation}</p>}
       {message && <p role="status" className="console-admin-hint">{message}</p>}
       <div className="console-submit-row live-admin-insert-row venue-create-actions">

@@ -30,8 +30,7 @@ SELECT
     venue.address,
     venue.latitude,
     venue.longitude,
-    venue.timezone_id,
-    locality.timezone_id
+    venue.timezone_id
 FROM venue_list requested
 JOIN venue_list venue
   ON venue.id = COALESCE(requested.merged_into_venue_id, requested.id)
@@ -71,8 +70,7 @@ SELECT
     live.event_status,
     EXISTS (SELECT 1 FROM live_schedule_history history WHERE history.live_id = live.id),
     live.start_time,
-    live.timezone_offset_minutes,
-    live.timezone_id
+    live.opening_time
 FROM live_attrs live
 WHERE live.venue_id = %s
 ORDER BY live.live_date DESC, live.start_time DESC NULLS LAST, live.id DESC
@@ -192,7 +190,6 @@ def get_venue_detail(
     locality = None
     if header[5] is not None:
         locality = {"country_code": header[5], "admin_area": header[6], "locality_name": header[7]}
-    effective_timezone = header[11]
     return {
         "venue_id": int(header[2]),
         "venue_name": str(header[3]),
@@ -201,8 +198,7 @@ def get_venue_detail(
         "address": header[8],
         "latitude": header[9],
         "longitude": header[10],
-        "timezone_id": effective_timezone,
-        "timezone_source": "venue" if header[11] else None,
+        "timezone_id": header[11],
         "name_versions": [
             {"venue_name": row[0], "valid_from": row[1], "valid_to": row[2], "is_current": bool(row[3])}
             for row in name_rows
@@ -220,8 +216,7 @@ def get_venue_detail(
                     event_status=str(row[6]),
                     live_date=row[1],
                     start_time=row[8],
-                    timezone_offset_minutes=int(row[9]) if row[9] is not None else None,
-                    timezone_id=str(row[10]) if row[10] is not None else None,
+                    opening_time=row[9],
                     was_rescheduled=bool(row[7]),
                 ),
             }

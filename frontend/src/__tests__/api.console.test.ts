@@ -106,7 +106,7 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
       credentials: "include",
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      headers: expect.objectContaining({ "content-type": "application/json", "x-csrf-token": "csrf-token" }),
       body: JSON.stringify(requestPayload),
     }));
   });
@@ -143,7 +143,7 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
       credentials: "include",
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      headers: expect.objectContaining({ "content-type": "application/json", "x-csrf-token": "csrf-token" }),
       body: JSON.stringify({ venue_name: "New Venue", venue_kind: "physical" }),
     }));
   });
@@ -166,7 +166,7 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
       credentials: "include",
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      headers: expect.objectContaining({ "content-type": "application/json", "x-csrf-token": "csrf-token" }),
       body: JSON.stringify(requestPayload),
     }));
   });
@@ -185,7 +185,7 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs/903");
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
       method: "PUT",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      headers: expect.objectContaining({ "content-type": "application/json", "x-csrf-token": "csrf-token" }),
       body: JSON.stringify(requestPayload),
     }));
   });
@@ -293,7 +293,7 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
       credentials: "include",
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      headers: expect.objectContaining({ "content-type": "application/json", "x-csrf-token": "csrf-token" }),
       body: JSON.stringify(requestPayload),
     }));
   });
@@ -328,7 +328,7 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[2][0]).toBe("/api/console/lives/55");
     expect(fetchMock.mock.calls[2][1]).toEqual(expect.objectContaining({
       method: "PUT",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      headers: expect.objectContaining({ "content-type": "application/json", "x-csrf-token": "csrf-token" }),
       body: JSON.stringify(requestPayload),
     }));
   });
@@ -375,7 +375,7 @@ describe("console lookup api", () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
       credentials: "include",
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+      headers: expect.objectContaining({ "content-type": "application/json", "x-csrf-token": "csrf-token" }),
       body: JSON.stringify({
         setlist_rows: [{
           song_id: 901,

@@ -102,6 +102,33 @@ describe("StageLedgerContent", () => {
     window.history.replaceState(null, "", "/");
   });
 
+  // 测试点：后端 IANA 标签优先于同偏移的旧映射，开场与开演分别显示。
+  test("使用后端生成的时区缩写", () => {
+    renderStage(makeDetail({ opening_timezone_label: "KST", start_timezone_label: "KST" }));
+    expect(screen.getByText("17:00 (KST)")).toBeInTheDocument();
+    expect(screen.getByText("18:00 (KST)")).toBeInTheDocument();
+    expect(screen.queryByText("18:00 (JST)")).not.toBeInTheDocument();
+  });
+
+  // 测试点：无 IANA 标签时恢复旧偏移映射，未收录偏移仍保留 UTC 格式。
+  test("只有固定偏移时沿用原映射", () => {
+    renderStage(makeDetail({ opening_timezone_label: null, start_timezone_label: null,
+      start_time: "18:00:00+05:45" }));
+    expect(screen.getByText("17:00 (JST)")).toBeInTheDocument();
+    expect(screen.getByText("18:00 (UTC+05:45)")).toBeInTheDocument();
+  });
+
+  // 测试点：改期历史采用该次历史的缩写，不能套用当前演出标签。
+  test("改期记录显示历史时区缩写", () => {
+    renderStage(makeDetail({ opening_timezone_label: "JST", start_timezone_label: "JST",
+      schedule_history: [{ previous_live_title: null, previous_live_date: "2026-07-01",
+        previous_opening_time: "17:00:00-04:00", previous_start_time: "18:00:00-04:00",
+        previous_opening_timezone_label: "EDT", previous_start_timezone_label: "EDT",
+        previous_venue_id: 2, previous_venue_name_version_id: 2, previous_venue: "New York",
+        changed_at: "2026-07-02T00:00:00Z", note: null }] }));
+    expect(screen.getByText(/开场 17:00 \(EDT\).*开演 18:00 \(EDT\)/)).toBeInTheDocument();
+  });
+
   // 测试点：公开详情的场馆、开场和开演空值必须逐项显示“未公布”。
   test("排期字段为空时显示未公布", () => {
     renderStage(makeDetail({ venue_id: null, venue: null, opening_time: null, start_time: null }));

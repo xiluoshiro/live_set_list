@@ -88,6 +88,7 @@ vi.mock("../api", () => ({
   getConsoleLocalities: vi.fn().mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0 }),
   getConsoleTimezones: vi.fn().mockResolvedValue(["Asia/Tokyo"]),
   getConsoleLiveCandidates: vi.fn().mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 }),
+  previewConsoleLiveClock: vi.fn().mockResolvedValue({ date_phase: "today" }),
   getConsoleLive: vi.fn(),
   updateConsoleLive: vi.fn(),
   ApiError: class ApiError extends Error {
@@ -194,6 +195,7 @@ function makeCalendarResponse(params: {
       return {
         live_id: id,
         live_date: liveDate,
+        calendar_date: liveDate,
         live_title: `示例 Live 名称 ${id}`,
         start_time: "18:00:00+09:00",
         bands: [1, 2],
@@ -313,7 +315,6 @@ function makeVenueDetailResponse(): PublicVenueDetailResponse {
     latitude: 35.693317,
     longitude: 139.749885,
     timezone_id: "Asia/Tokyo",
-    timezone_source: "locality",
     name_versions: [{ venue_name: "日本武道館", valid_from: "1964-10-03", valid_to: null, is_current: true }],
     map_links: [{ provider: "google", url: "https://maps.example/google", source: "place" }],
     lives: [],
@@ -1859,7 +1860,7 @@ describe("App", () => {
   });
 
   test("详情页呈现 Stage Ledger 结构与连续歌单", async () => {
-    // 测试点：详情页应呈现 Stage Ledger 的流程、官方网页入口与永久链接，而不是旧成员表格。
+    // 测试点：详情页保留流程、官方网页及永久链接，并沿用无 IANA 时的 CST/JST 偏移映射。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );

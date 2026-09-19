@@ -31,7 +31,7 @@ class LiveItem(BaseModel):
         default=None, description='Performance group reference when this live belongs to an activity group'
     )
     event_status: EventStatus = Field(..., description="Persisted event status")
-    date_phase: DatePhase = Field(..., description="Date phase computed in the Live UTC offset")
+    date_phase: DatePhase = Field(..., description="Date phase in the visitor timezone")
     was_rescheduled: bool = Field(..., description="Whether a formal schedule history row exists")
 
 
@@ -40,13 +40,12 @@ class LiveScheduleHistoryItem(BaseModel):
     previous_live_date: date
     previous_opening_time: str | None
     previous_start_time: str | None
+    previous_opening_timezone_label: str | None = None
+    previous_start_timezone_label: str | None = None
     previous_venue_id: int | None
     previous_venue_name_version_id: int | None = None
     previous_venue: str | None = None
     previous_announced_locality_id: int | None = None
-    previous_timezone_id: str | None = None
-    previous_timezone_source: Literal["venue", "locality", "explicit", "legacy_offset"] | None = None
-    previous_timezone_offset_minutes: int | None = None
     changed_at: datetime
     note: str | None = None
 
@@ -142,6 +141,8 @@ class LiveDetailResponse(BaseModel):
     venue: str | None = Field(default=None, description='Venue name')
     opening_time: str | None = Field(default=None, description='Opening time')
     start_time: str | None = Field(default=None, description='Start time')
+    opening_timezone_label: str | None = Field(default=None, description="Venue IANA abbreviation at opening time; null uses the fixed-offset display mapping")
+    start_timezone_label: str | None = Field(default=None, description="Venue IANA abbreviation at start time; null uses the fixed-offset display mapping")
     bands: list[int] = Field(..., description='Deduplicated band IDs sorted ascending')
     band_names: list[str] = Field(..., description='Band names ordered by display rules')
     url: str | None = Field(default=None, description='Live URL from live_attrs.url')
@@ -155,7 +156,7 @@ class LiveDetailResponse(BaseModel):
         description='Event-only attendance grouped by Band; empty for non-event Lives',
     )
     event_status: EventStatus = Field(..., description="Persisted event status")
-    date_phase: DatePhase = Field(..., description="Date phase computed in the Live UTC offset")
+    date_phase: DatePhase = Field(..., description="Date phase in the visitor timezone")
     status_note: str | None = Field(default=None, description="Explanation for postponed or cancelled Lives")
     was_rescheduled: bool = Field(..., description="Whether a formal schedule history row exists")
     schedule_history: list[LiveScheduleHistoryItem] = Field(

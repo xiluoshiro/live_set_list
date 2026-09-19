@@ -11,7 +11,7 @@ from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set
 from app.live_list_filters import effective_band_ids_sql
 from app.logging_config import get_logger
-from app.live_status import build_public_live_status
+from app.live_status import build_public_live_status, visitor_date_sql, visitor_live_date
 from app.schemas import (
     CatalogBandListResponse,
     CatalogBandLivesResponse,
@@ -54,9 +54,8 @@ def _live_item_from_row(row: tuple[Any, ...], favorite_live_ids: set[int]) -> di
     status = build_public_live_status(
         event_status=str(row[11]) if len(row) > 11 else "scheduled",
         live_date=row[1],
-        start_time=row[10] if len(row) > 10 else "00:00:00+00:00",
-        timezone_offset_minutes=int(row[13]) if len(row) > 13 and row[13] is not None else None,
-        timezone_id=str(row[14]) if len(row) > 14 and row[14] is not None else None,
+        start_time=row[10] if len(row) > 10 else None,
+        opening_time=row[13] if len(row) > 13 else None,
         was_rescheduled=bool(row[12]) if len(row) > 12 else False,
     )
     return {
@@ -117,8 +116,7 @@ live_rows AS (
             SELECT 1 FROM live_schedule_history history
             WHERE history.live_id = l.id
         ) AS was_rescheduled,
-        l.timezone_offset_minutes,
-        l.timezone_id
+        l.opening_time
     FROM live_attrs l
     JOIN matched_live_ids m
         ON m.id = l.id
@@ -134,12 +132,12 @@ live_rows AS (
         ON effective.live_id = l.id
     LEFT JOIN current_band_versions b
         ON b.band_id = effective.band_id
-    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, l.start_time, l.event_status, l.timezone_offset_minutes, l.timezone_id,
+    GROUP BY l.id, l.live_date, l.live_title, l.url, l.live_type, l.start_time, l.event_status, l.opening_time,
              tour.id, tour.tour_title, pg.id, pg.group_title
 )
 SELECT (SELECT COUNT(*) FROM matched_live_ids) AS live_total,
        id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title,
-       performance_group_id, group_title, start_time, event_status, was_rescheduled, timezone_offset_minutes, timezone_id
+       performance_group_id, group_title, start_time, event_status, was_rescheduled, opening_time
 FROM live_rows
 ORDER BY live_date DESC, id DESC
 LIMIT %s
@@ -267,8 +265,7 @@ live_rows AS (
             SELECT 1 FROM live_schedule_history history
             WHERE history.live_id = l.id
         ) AS was_rescheduled,
-        l.timezone_offset_minutes,
-        l.timezone_id
+        l.opening_time
     FROM live_attrs l
     JOIN matched_live_ids m
         ON m.id = l.id
@@ -281,10 +278,10 @@ live_rows AS (
     LEFT JOIN performance_group_attrs pg
         ON pg.id = pgl.group_id
     GROUP BY l.id, l.live_date, l.live_title, l.default_band_ids, l.url, l.live_type,
-             l.start_time, l.event_status, l.timezone_offset_minutes, l.timezone_id, tour.id, tour.tour_title, pg.id, pg.group_title
+             l.start_time, l.event_status, l.opening_time, tour.id, tour.tour_title, pg.id, pg.group_title
 )
 SELECT id, live_date, live_title, band_ids, url, live_type, tour_id, tour_title,
-       performance_group_id, group_title, start_time, event_status, was_rescheduled, timezone_offset_minutes, timezone_id
+       performance_group_id, group_title, start_time, event_status, was_rescheduled, opening_time
 FROM live_rows
 ORDER BY live_date DESC, id DESC
 LIMIT %s OFFSET %s
@@ -549,12 +546,11 @@ SELECT
         SELECT 1 FROM live_schedule_history history
         WHERE history.live_id = l.id
     ) AS was_rescheduled,
-    l.timezone_offset_minutes,
-    l.timezone_id
+    l.opening_time
 FROM live_attrs l
-WHERE l.live_date >= %(month_start)s
-  AND l.live_date < %(next_month_start)s
-ORDER BY l.live_date ASC, l.start_time ASC NULLS LAST, l.id ASC
+WHERE {visitor_date_sql("l")} >= %(month_start)s
+  AND {visitor_date_sql("l")} < %(next_month_start)s
+ORDER BY {visitor_date_sql("l")} ASC, (l.live_date + COALESCE(l.start_time, l.opening_time)) ASC NULLS LAST, l.id ASC
 """
 
 
@@ -562,7 +558,7 @@ ORDER BY l.live_date ASC, l.start_time ASC NULLS LAST, l.id ASC
     "/calendar",
     response_model=CatalogCalendarResponse,
     summary="公共 Live 日历",
-    description="返回指定自然月内全部 Live 的日历条目，按演出日期、开始时间和 Live ID 稳定排序。",
+    description="返回访问者时区下指定自然月内全部 Live，按实际日期、演出瞬间和 Live ID 排序。",
     responses={
         422: {"model": ValidationErrorResponse, "description": "查询参数验证失败"},
         500: {"model": ErrorResponse, "description": "数据库一般错误"},
@@ -607,14 +603,15 @@ def get_catalog_calendar(
             event_status=str(row[5]),
             live_date=row[1],
             start_time=row[4],
-            timezone_offset_minutes=int(row[7]) if len(row) > 7 and row[7] is not None else None,
-            timezone_id=str(row[8]) if len(row) > 8 and row[8] is not None else None,
+            opening_time=row[7] if len(row) > 7 else None,
             was_rescheduled=bool(row[6]),
         )
         items.append(
             {
                 "live_id": int(row[0]),
                 "live_date": row[1],
+                "calendar_date": visitor_live_date(row[1], row[4], row[7]),
+                "opening_time": str(row[7]) if row[7] is not None else None,
                 "live_title": row[2],
                 "start_time": str(row[4]) if row[4] is not None else None,
                 "bands": list(row[3] or []),

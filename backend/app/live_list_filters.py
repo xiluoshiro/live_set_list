@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
+from app.live_status import visitor_date_sql, VISITOR_TODAY_SQL
+
 
 LiveType = Literal["oneman", "taiban", "multi_act", "festival", "event", "other"]
 LiveListSort = Literal["date_desc", "date_asc"]
@@ -124,6 +126,7 @@ def build_live_where(filters: LiveListFilters) -> tuple[str, list[object]]:
         params.append(filters.venue_id)
 
     if filters.without_setlist:
+        conditions.append(f'{visitor_date_sql("l")} <= {VISITOR_TODAY_SQL}')
         conditions.append(
             """
             l.event_status <> 'cancelled'
@@ -191,7 +194,7 @@ def build_filtered_live_queries(
                     SELECT 1 FROM live_schedule_history history
                     WHERE history.live_id = l.id
                 ) AS was_rescheduled,
-                l.timezone_offset_minutes
+                l.opening_time
             FROM live_attrs l
             {favorite_join}
             LEFT JOIN tour_lives tour_live
@@ -220,7 +223,7 @@ def build_filtered_live_queries(
             matched.start_time,
             matched.event_status,
             matched.was_rescheduled,
-            matched.timezone_offset_minutes
+            matched.opening_time
         FROM matched_lives matched
         GROUP BY
             matched.id,
@@ -236,7 +239,7 @@ def build_filtered_live_queries(
             matched.start_time,
             matched.event_status,
             matched.was_rescheduled,
-            matched.timezone_offset_minutes
+            matched.opening_time
         ORDER BY {result_order_sql}
     """
     return count_query, matched_params, page_query, matched_params

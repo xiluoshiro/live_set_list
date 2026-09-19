@@ -22,11 +22,11 @@ def validate_timezone(value: str) -> str:
     return value
 
 
-def resolve_local_time(day: date, clock: time, timezone_id: str, fold: int | None = None) -> datetime:
-    """Reject gaps and require an explicit occurrence for ambiguous wall times."""
+def resolve_local_time(day: date, clock: time, timezone_id: str) -> datetime:
+    """Reject nonexistent and ambiguous wall times."""
     zone = ZoneInfo(validate_timezone(timezone_id))
-    if clock.tzinfo is not None or fold not in (None, 0, 1):
-        raise ValueError("需要不含偏移的当地时间和有效的重复时间选择")
+    if clock.tzinfo is not None:
+        raise ValueError("需要不含偏移的当地时间")
     wall = datetime.combine(day, clock)
     candidates = []
     for occurrence in (0, 1):
@@ -36,13 +36,8 @@ def resolve_local_time(day: date, clock: time, timezone_id: str, fold: int | Non
             candidates.append(candidate)
     if not candidates:
         raise ValueError("当地时间因夏令时跳时而不存在")
-    if len(candidates) > 1 and fold is None:
-        raise ValueError("当地时间重复，请选择第一次或第二次")
-    if fold is not None:
-        for candidate in candidates:
-            if candidate.fold == fold:
-                return candidate
-        raise ValueError("该当地时间没有所选的重复次数")
+    if len(candidates) > 1:
+        raise ValueError("当地时间因夏令时重复，不能录入该钟点")
     return candidates[0]
 
 

@@ -109,7 +109,6 @@ def _locality_impact(cur: Any, locality_id: int) -> dict[str, Any]:
 
 def _read(cur: Any, row: dict[str, Any]) -> dict[str, Any]:
     locality = _locality(cur, row["locality_id"])
-    effective = row["timezone_id"]
     cur.execute("SELECT * FROM venue_map_links WHERE venue_id = %s ORDER BY provider", (row["id"],))
     stored = {item["provider"]: item for item in cur.fetchall()}
     links = []
@@ -132,8 +131,6 @@ def _read(cur: Any, row: dict[str, Any]) -> dict[str, Any]:
         "venue_id": row["id"], "locality": locality, "address": row["address"],
         "latitude": row["latitude"], "longitude": row["longitude"],
         "timezone_id": row["timezone_id"],
-        "effective_timezone_id": effective,
-        "timezone_source": "venue" if effective else None,
         "state_token": _state_token({"venue": {key: value for key, value in row.items() if key != "location_revision"},
                                     "locality": locality, "maps": stored}),
         "location_verified_at": row["location_verified_at"],
@@ -150,13 +147,12 @@ def _validate(cur: Any, row: dict[str, Any], payload: LocationWrite) -> str | No
     )):
         raise HTTPException(422, "线上场馆不保存实体位置，请在活动中指定时间基准")
     if row["venue_kind"] == "undisclosed" and any(value is not None for value in (
-        payload.address, payload.latitude, payload.longitude, payload.timezone_id,
+        payload.address, payload.latitude, payload.longitude,
     )):
-        raise HTTPException(422, "未公开具体场馆只保存已公布地区，不保存门牌、坐标、精确时区或地图关联")
-    locality = _locality(cur, payload.locality_id)
-    city_zone = locality["timezone_id"] if locality else None
-    if payload.timezone_id and city_zone and payload.timezone_id != city_zone:
-        raise HTTPException(422, "场馆时区与城市时区不一致，请先核对所在地资料")
+        raise HTTPException(422, "未公开具体场馆可保存地区和时区，不保存门牌、坐标或地图关联")
+    _locality(cur, payload.locality_id)
+    if row["venue_kind"] != "online" and not payload.timezone_id:
+        raise HTTPException(422, "场地必须填写自身 IANA 时区")
     return payload.timezone_id
 
 
@@ -209,9 +205,9 @@ def create_locality(payload: LocalityCreate, request: Request,
         with get_write_db_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             _ensure_unique_locality(cur, payload)
             cur.execute(
-                """INSERT INTO geo_localities (country_code, admin_area, locality_name, timezone_id, area_level)
-                   VALUES (%s,%s,%s,%s,%s) RETURNING *""",
-                (payload.country_code, payload.admin_area, payload.locality_name, payload.timezone_id, payload.area_level),
+                """INSERT INTO geo_localities (country_code, admin_area, locality_name, area_level)
+                   VALUES (%s,%s,%s,%s) RETURNING *""",
+                (payload.country_code, payload.admin_area, payload.locality_name, payload.area_level),
             )
             row = _locality_view(dict(cur.fetchone()))
             _audit(cur, context, "locality_create", "locality", row["id"], payload.model_dump())
@@ -257,9 +253,9 @@ def save_locality(locality_id: int, payload: LocalityUpdate, request: Request,
             before = Locality.model_validate(row).model_dump(mode="json")
             cur.execute(
                 """UPDATE geo_localities
-                   SET country_code=%s, admin_area=%s, locality_name=%s, timezone_id=%s, area_level=%s
+                   SET country_code=%s, admin_area=%s, locality_name=%s, area_level=%s
                    WHERE id=%s RETURNING *""",
-                (payload.country_code, payload.admin_area, payload.locality_name, payload.timezone_id,
+                (payload.country_code, payload.admin_area, payload.locality_name,
                  payload.area_level, locality_id),
             )
             updated = _locality_view(dict(cur.fetchone()))
@@ -289,14 +285,12 @@ def preview_location(venue_id: int, payload: LocationWrite):
     try:
         with get_db_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             row = _venue(cur, venue_id)
-            effective = _validate(cur, row, payload)
+            _validate(cur, row, payload)
             before = _read(cur, row)
             cur.execute("SELECT COUNT(*) FROM live_attrs WHERE venue_id = %s", (venue_id,))
             live_count = cur.fetchone()["count"]
             changed_fields = _changed_fields(row, payload)
-            if before["effective_timezone_id"] != effective:
-                changed_fields.append("effective_timezone_id")
-            return {"before": before, "after": payload, "effective_timezone_id": effective,
+            return {"before": before, "after": payload,
                     "live_count": live_count,
                     "changed_fields": changed_fields}
     except Error as exc:

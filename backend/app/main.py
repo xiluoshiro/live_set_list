@@ -1,4 +1,10 @@
-﻿from collections.abc import AsyncIterator
+from app.live_status import visitor_timezone
+from app.geography import validate_timezone
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from time import perf_counter
 
@@ -107,6 +113,21 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def visitor_clock(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        try:
+            zone = validate_timezone(request.headers.get("X-Visitor-Timezone", "UTC"))
+        except ValueError:
+            return JSONResponse({"detail": "Invalid visitor timezone"}, status_code=422)
+        token = visitor_timezone.set(zone)
+        try:
+            response = await call_next(request)
+            vary = response.headers.get("Vary", "")
+            response.headers["Vary"] = ", ".join(filter(None, [vary, "X-Visitor-Timezone"]))
+            return response
+        finally:
+            visitor_timezone.reset(token)
 
     app.middleware("http")(log_api_requests)
     app.get(

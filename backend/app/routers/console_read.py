@@ -1,4 +1,4 @@
-import re
+from datetime import date
 from math import ceil
 from typing import Any, Literal
 
@@ -9,7 +9,8 @@ from psycopg2.errors import QueryCanceled
 from app.auth import require_role
 from app.db import get_db_connection
 from app.logging_config import get_logger
-from app.live_status import build_public_live_status
+from app.live_status import build_public_live_status, visitor_date_sql, VISITOR_TODAY_SQL
+from app.live_timezone import time_offset, normalize_live_times, serialize_time
 from app.schemas import ErrorResponse, ValidationErrorResponse
 from app.schemas.auth import AuthErrorResponse
 from app.schemas.console import (
@@ -29,7 +30,6 @@ from app.song_lookup import (
 router = APIRouter()
 logger = get_logger(__name__)
 
-TIMEZONE_SUFFIX_PATTERN = re.compile(r"([+-]\d{2})(?::?(\d{2}))?$")
 
 CONSOLE_EVENT_ATTENDEES_SQL = """
 CASE
@@ -101,28 +101,6 @@ def _build_prefix_lookup_pattern(value: str) -> str:
 def _build_exact_lookup_pattern(value: str) -> str:
     """Build a safe exact ILIKE pattern for ordering exact lookup hits first."""
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def _normalize_timetz_text(value: Any) -> str | None:
-    """Return a stable timetz string and its explicit UTC offset for the edit form."""
-    if value is None:
-        return None
-    raw = str(value)
-    match = TIMEZONE_SUFFIX_PATTERN.search(raw)
-    if match is None:
-        return raw
-    timezone = f"{match.group(1)}:{match.group(2) or '00'}"
-    local_time = raw[: match.start()]
-    if len(local_time) == 5:
-        local_time = f"{local_time}:00"
-    return f"{local_time}{timezone}"
-
-
-def _format_timezone_offset(offset_minutes: int) -> str:
-    """Format a persisted fixed UTC offset for the console form."""
-    sign = "+" if offset_minutes >= 0 else "-"
-    absolute = abs(offset_minutes)
-    return f"{sign}{absolute // 60:02d}:{absolute % 60:02d}"
 
 
 def _missing_schedule_fields(venue_id: Any, opening_time: Any, start_time: Any) -> list[str]:
@@ -212,7 +190,8 @@ def list_editable_lives(
         params.append(event_status)
     complete_sql = "l.venue_id IS NOT NULL AND l.opening_time IS NOT NULL AND l.start_time IS NOT NULL"
     incomplete_sql = f"NOT ({complete_sql})"
-    local_today_sql = "(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' + make_interval(mins => l.timezone_offset_minutes))::date"
+    local_today_sql = VISITOR_TODAY_SQL
+    local_date_sql = visitor_date_sql("l")
     if schedule_complete is True:
         conditions.append(complete_sql)
     elif schedule_complete is False:
@@ -222,7 +201,7 @@ def list_editable_lives(
     elif schedule_attention is not None:
         phase_operator = {"upcoming": ">", "today": "=", "overdue": "<"}[schedule_attention]
         conditions.append(
-            f"{incomplete_sql} AND l.event_status = 'scheduled' AND l.live_date {phase_operator} {local_today_sql}"
+            f"{incomplete_sql} AND l.event_status = 'scheduled' AND {local_date_sql} {phase_operator} {local_today_sql}"
         )
     where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     try:
@@ -236,9 +215,9 @@ def list_editable_lives(
                 cur.execute(
                     f"""
                     SELECT
-                        COUNT(*) FILTER (WHERE l.live_date > {local_today_sql}),
-                        COUNT(*) FILTER (WHERE l.live_date = {local_today_sql}),
-                        COUNT(*) FILTER (WHERE l.live_date < {local_today_sql})
+                        COUNT(*) FILTER (WHERE {local_date_sql} > {local_today_sql}),
+                        COUNT(*) FILTER (WHERE {local_date_sql} = {local_today_sql}),
+                        COUNT(*) FILTER (WHERE {local_date_sql} < {local_today_sql})
                     FROM live_attrs l
                     WHERE l.event_status = 'scheduled' AND {incomplete_sql}
                     """
@@ -246,10 +225,10 @@ def list_editable_lives(
                 attention_row = cur.fetchone() or (0, 0, 0)
                 attention_order_sql = (
                     f"CASE WHEN l.event_status = 'scheduled' AND {incomplete_sql} THEN "
-                    f"CASE WHEN l.live_date = {local_today_sql} THEN 0 "
-                    f"WHEN l.live_date < {local_today_sql} THEN 1 ELSE 2 END ELSE 3 END, "
-                    f"CASE WHEN l.live_date < {local_today_sql} THEN l.live_date END DESC, "
-                    f"CASE WHEN l.live_date > {local_today_sql} THEN l.live_date END ASC, "
+                    f"CASE WHEN {local_date_sql} = {local_today_sql} THEN 0 "
+                    f"WHEN {local_date_sql} < {local_today_sql} THEN 1 ELSE 2 END ELSE 3 END, "
+                    f"CASE WHEN {local_date_sql} < {local_today_sql} THEN l.live_date END DESC, "
+                    f"CASE WHEN {local_date_sql} > {local_today_sql} THEN l.live_date END ASC, "
                     "l.live_date ASC, l.id ASC"
                     if schedule_complete is False or schedule_attention is not None
                     else "l.live_date DESC, l.id DESC"
@@ -258,8 +237,7 @@ def list_editable_lives(
                     f"""
                     SELECT l.id, l.live_date, l.live_title, l.live_type,
                            venue_version.venue_name,
-                           l.start_time, l.event_status, l.opening_time, l.venue_id,
-                           l.timezone_offset_minutes, l.timezone_id
+                           l.start_time, l.event_status, l.opening_time, l.venue_id
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     LEFT JOIN venue_name_versions venue_version
@@ -298,8 +276,7 @@ def list_editable_lives(
                     event_status=str(row[6]),
                     live_date=row[1],
                     start_time=row[5],
-                    timezone_offset_minutes=int(row[9]),
-                    timezone_id=str(row[10]) if row[10] is not None else None,
+                    opening_time=row[7],
                     was_rescheduled=False,
                 ),
                 _missing_schedule_fields(row[8], row[7], row[5]),
@@ -367,9 +344,6 @@ def get_editable_live(
                                         'previous_venue_name_version_id', history.previous_venue_name_version_id,
                                         'previous_venue', history_version.venue_name,
                                         'previous_announced_locality_id', history.previous_announced_locality_id,
-                                        'previous_timezone_id', history.previous_timezone_id,
-                                        'previous_timezone_source', history.previous_timezone_source,
-                                        'previous_timezone_offset_minutes', history.previous_timezone_offset_minutes,
                                         'changed_at', history.changed_at,
                                         'note', history.note
                                     )
@@ -403,13 +377,7 @@ def get_editable_live(
                             ),
                             '[]'::jsonb
                         ) AS band_lineup_contexts,
-                        l.timezone_offset_minutes,
-                        l.announced_locality_id,
-                        l.timezone_id,
-                        l.timezone_source,
-                        l.timezone_source_revision,
-                        l.opening_time_fold,
-                        l.start_time_fold
+                        l.announced_locality_id, v.venue_kind
                     FROM live_attrs l
                     LEFT JOIN venue_list v ON v.id = l.venue_id
                     LEFT JOIN venue_name_versions venue_version
@@ -432,9 +400,9 @@ def get_editable_live(
         raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
     if row is None:
         raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
-    opening_time = _normalize_timetz_text(row[5])
-    start_time = _normalize_timetz_text(row[6])
-    timezone = _format_timezone_offset(int(row[17]))
+    opening_time = serialize_time(row[5])
+    start_time = serialize_time(row[6])
+    timezone = time_offset(start_time or opening_time) if row[18] == "online" else None
     return {
         "item": {
             "live_id": int(row[0]),
@@ -445,15 +413,9 @@ def get_editable_live(
             "opening_time": opening_time,
             "start_time": start_time,
             "timezone": timezone,
-            "timezone_offset_minutes": int(row[17]),
             "venue_id": int(row[7]) if row[7] is not None else None,
             "venue_name_version_id": int(row[8]) if row[8] is not None else None,
-            "announced_locality_id": int(row[18]) if row[18] is not None else None,
-            "timezone_id": str(row[19]) if row[19] is not None else None,
-            "timezone_source": str(row[20]),
-            "timezone_source_revision": int(row[21]) if row[21] is not None else None,
-            "opening_time_fold": int(row[22]) if row[22] is not None else None,
-            "start_time_fold": int(row[23]) if row[23] is not None else None,
+            "announced_locality_id": int(row[17]) if row[17] is not None else None,
             "venue_name": str(row[9]) if row[9] is not None else None,
             "default_band_ids": list(row[10] or []),
             "event_attendees": _normalize_console_event_attendees(row[11]),
@@ -463,8 +425,7 @@ def get_editable_live(
                 event_status=str(row[12]),
                 live_date=row[1],
                 start_time=row[6],
-                timezone_offset_minutes=int(row[17]),
-                timezone_id=str(row[19]) if row[19] is not None else None,
+                opening_time=row[5],
                 was_rescheduled=bool(row[14]),
             )["date_phase"],
             "schedule_history": list(row[14] or []),
@@ -876,3 +837,15 @@ def list_bands(
     }
 
 # Venue routes live in console_venues.py so their management lifecycle stays isolated.
+
+
+@router.get("/live-clock", summary="演出当地时间与访问者日期预览")
+def preview_live_clock(live_date: date, venue_id: int | None = None,
+                       opening_time: str | None = None, start_time: str | None = None,
+                       timezone: str | None = None):
+    with get_db_connection() as conn, conn.cursor() as cur:
+        opening, start = normalize_live_times(cur, live_date=live_date, venue_id=venue_id,
+                                             announced_locality_id=None, offset=timezone,
+                                             opening_time=opening_time, start_time=start_time)
+    return build_public_live_status(event_status="scheduled", live_date=live_date,
+                                    opening_time=opening, start_time=start, was_rescheduled=False)

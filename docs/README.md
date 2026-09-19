@@ -21,8 +21,9 @@
 - [演出活动组聚合实现设计](design/performance-group-aggregation.md)：统一支持多日 Live、单日午场 / 晚场、演出资料列表聚合和完整收藏聚合。
 - [乐队改名与历史阵容实现设计](design/band-name-and-lineup-history.md)：同一 Band 身份下的历史名称、不可变阵容版本、同场交接共演、逐曲出演和控制台适配。
 - [Venue 独立管理与历史名称实现设计](design/venue-management.md)：稳定 Venue 身份、正式名称版本、Live 名称固化、分页管理与重复项合并。
-- [Venue 所在地、多地图链接与 Live 自动时区设计](design/venue-location-and-timezone.md)：名称定位、统一坐标、多平台场馆链接、城市时区与活动时区例外、历史兼容和实施步骤。
-- [Live 状态与日期阶段实现设计](archive/completed-design/live-status.md)：人工状态、按 Live 时区计算的日期阶段、正式改期历史与资料修正边界。
+- [演出时区与访问者日期](design/live-timezone.md)：场地 IANA 时区、ONLINE 固定偏移、时间录入约束与访问者日历归组。
+- [Venue 所在地、多地图链接与 Live 自动时区设计](design/venue-location-and-timezone.md)：名称定位、统一坐标、多平台场馆链接与场地自身时区。
+- [Live 状态与日期阶段实现设计](archive/completed-design/live-status.md)：人工状态、正式改期历史与资料修正边界；日期阶段以现行时区设计为准。
 - [公共端 UI 精修](design/public-ui-refresh.md)
 - [E2E 测试设计](design/e2e.md)
 
@@ -33,6 +34,7 @@
 - [数据库备份恢复](../recovery/README.md)
 - [生产服务器模板](../infra/production/README.md)
 - [前端全局样式覆盖缺口](fails/frontend-global-style-coverage-gap.md)
+- [未经确认扩大重构范围](fails/unauthorized-scope-expansion.md)
 - [本地一键启动 npm 路径与冒烟漏检回溯](fails/local-dev-startup-npm-smoke-gap-2026-09-16.md)
 - [React 列表 key 碰撞复盘](fails/react-list-key-collision.md)
 - [Flyway 踩坑指南](fails/flyway-pitfalls.md)

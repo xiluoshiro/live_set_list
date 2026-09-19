@@ -1,3 +1,4 @@
+from app.live_status import visitor_timezone
 import os
 from pathlib import Path
 
@@ -23,7 +24,7 @@ def _get_db_setting(name: str, fallback_name: str, default: str) -> str:
 def _build_connection(*, user: str, password: str):
     connect_timeout_seconds = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))
     statement_timeout_ms = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "10000"))
-    return psycopg2.connect(
+    conn = psycopg2.connect(
         host=_get_db_setting("DB_HOST", "POSTGRES_HOST", "localhost"),
         port=int(_get_db_setting("DB_PORT", "POSTGRES_PORT", "5432")),
         dbname=_get_db_setting("DB_NAME", "APP_DB", "live_statistic"),
@@ -32,6 +33,10 @@ def _build_connection(*, user: str, password: str):
         connect_timeout=connect_timeout_seconds,
         options=f"-c statement_timeout={statement_timeout_ms}",
     )
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT set_config('app.visitor_timezone', %s, false)", (visitor_timezone.get(),))
+    return conn
 
 
 def get_db_connection():

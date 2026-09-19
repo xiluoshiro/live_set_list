@@ -16,8 +16,8 @@ def test_geography_quality_counts_and_actionable_items(integration_test_client, 
     login(client)
     with integration_admin_connection.cursor() as cur:
         cur.execute(
-            """INSERT INTO geo_localities (country_code, admin_area, locality_name, timezone_id, area_level)
-               VALUES ('JP', '東京都', '品質市', 'Asia/Tokyo', 'locality') RETURNING id"""
+            """INSERT INTO geo_localities (country_code, admin_area, locality_name, area_level)
+               VALUES ('JP', '東京都', '品質市', 'locality') RETURNING id"""
         )
         locality_id = cur.fetchone()[0]
         cur.execute(

@@ -668,6 +668,7 @@ def test_catalog_performances_groups_by_status_then_time(
         response = integration_test_client.get(
             "/api/catalog/performances",
             params={"scope": "all", "page": 1, "page_size": 20, "q": "StatusProbe", "sort": sort},
+            headers={"X-Visitor-Timezone": "Asia/Tokyo"},
         )
         assert response.status_code == 200, response.text
         assert response.json()["pagination"]["total"] == 5

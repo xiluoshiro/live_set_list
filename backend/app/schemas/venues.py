@@ -60,7 +60,6 @@ class PublicVenueDetailResponse(PublicVenueMapsResponse):
     latitude: float | None = None
     longitude: float | None = None
     timezone_id: str | None = None
-    timezone_source: Literal["venue", "locality"] | None = None
     name_versions: list[PublicVenueNameVersion]
     lives: list[PublicVenueLiveItem]
     pagination: PublicVenuePagination

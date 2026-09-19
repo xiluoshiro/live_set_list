@@ -353,12 +353,10 @@ def create_venue(
                 _ensure_name_available(cur, payload.venue_name)
                 location = payload.location
                 if location is not None and location.locality_id is not None:
-                    cur.execute("SELECT timezone_id FROM geo_localities WHERE id = %s FOR SHARE", (location.locality_id,))
+                    cur.execute("SELECT id FROM geo_localities WHERE id = %s FOR SHARE", (location.locality_id,))
                     locality = cur.fetchone()
                     if locality is None:
                         raise HTTPException(422, "地区不存在，请重新选择")
-                    if location.timezone_id and locality[0] and location.timezone_id != locality[0]:
-                        raise HTTPException(422, "场馆时区与地区时区不一致，请先核对所在地资料")
                 cur.execute(
                     "INSERT INTO venue_list (venue, venue_kind) VALUES (%s, %s) RETURNING id",
                     (payload.venue_name, payload.venue_kind),
@@ -428,6 +426,10 @@ def update_venue(
                     )
                     if cur.fetchone() is not None:
                         raise HTTPException(status_code=409, detail="请先清空实体所在地资料，再改为线上场馆")
+                else:
+                    cur.execute("SELECT timezone_id FROM venue_list WHERE id=%s", (venue_id,))
+                    if not cur.fetchone()[0]:
+                        raise HTTPException(status_code=422, detail="场地必须填写自身 IANA 时区")
                 cur.execute("UPDATE venue_list SET venue_kind = %s WHERE id = %s", (payload.venue_kind, venue_id))
                 _write_audit(cur, user_id=context.user.id, action="venue_update", venue_id=venue_id, payload={"venue_kind": payload.venue_kind})
                 return _load_detail(cur, venue_id)

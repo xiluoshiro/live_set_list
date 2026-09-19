@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-type FormatStartTime = (value: string | null, dateIso?: string) => string;
+type FormatStartTime = (value: string | null, dateIso: string) => string;
 
 async function loadFormatStartTime(timezone: string): Promise<FormatStartTime> {
   vi.stubEnv("TZ", timezone);
@@ -24,7 +24,7 @@ describe("formatStartTime 时区转换", () => {
     { caseName: "用户时区 +08:00 下，负偏移 -05:00 的场次跨日换算为 08:00", timezone: "Asia/Shanghai", date: "2026-08-06", input: "19:00:00-05:00", expected: "08:00" },
     // 测试点：12:00-03:30（UTC 15:30）在 +08:00 应显示 23:30，验证非整点偏移换算。
     { caseName: "用户时区 +08:00 下，半小时偏移 -03:30 的场次显示为 23:30", timezone: "Asia/Shanghai", date: "2026-08-06", input: "12:00:00-03:30", expected: "23:30" },
-    // 测试点：HH:MM+HH:MM 无秒格式应同 HH:MM:SS 一样换算，验证正则的秒数可选项。
+    // 测试点：HH:MM+HH:MM 无秒格式应同 HH:MM:SS 一样换算，验证标准 ISO 日期解析。
     { caseName: "无秒数的紧凑格式同样解析", timezone: "Asia/Shanghai", date: "2026-08-06", input: "19:00+09:00", expected: "18:00" },
     // 测试点：夏令时月份 12:00 UTC 在纽约应显示 08:00，验证 DST 规则生效。
     { caseName: "America/New_York 夏季（EDT，UTC-4）的 UTC 场次显示为 08:00", timezone: "America/New_York", date: "2026-08-06", input: "12:00:00+00:00", expected: "08:00" },
@@ -43,13 +43,13 @@ describe("formatStartTime 时区转换", () => {
   it("null 返回未公布", async () => {
     // 测试点：无开演时间时应显示占位文案而非崩溃，验证空值回退。
     const formatStartTime = await loadFormatStartTime("Asia/Shanghai");
-    expect(formatStartTime(null)).toBe("未公布");
+    expect(formatStartTime(null, "2026-08-06")).toBe("未公布");
   });
 
-  it("无偏移或畸形字符串回退原解析逻辑", async () => {
-    // 测试点：后端异常数据（无偏移或不可解析）应按原逻辑截取或原样返回，保证展示不中断。
+  it("无偏移或畸形字符串不猜测当地时间", async () => {
+    // 测试点：异常时间不按访问者本地时间误解析，也不在页面上展示 NaN。
     const formatStartTime = await loadFormatStartTime("Asia/Shanghai");
-    expect(formatStartTime("19:00", "2026-08-06")).toBe("19:00");
-    expect(formatStartTime("not-a-time", "2026-08-06")).toBe("not-a-time");
+    expect(formatStartTime("19:00", "2026-08-06")).toBe("未公布");
+    expect(formatStartTime("not-a-time", "2026-08-06")).toBe("未公布");
   });
 });

@@ -24,7 +24,6 @@ def test_public_venue_detail_reads_location_maps_and_lives(integration_test_clie
             "country_code": "JP",
             "admin_area": "東京都",
             "locality_name": "千代田区",
-            "timezone_id": "Asia/Tokyo",
         },
     )
     assert locality.status_code == 201, locality.text
@@ -57,7 +56,6 @@ def test_public_venue_detail_reads_location_maps_and_lives(integration_test_clie
     assert payload["address"] == "北の丸公園2-3"
     assert payload["locality"] == {"country_code": "JP", "admin_area": "東京都", "locality_name": "千代田区"}
     assert payload["timezone_id"] == "Asia/Tokyo"
-    assert payload["timezone_source"] == "venue"
     assert payload["map_links"][0]["provider"] == "google"
     assert payload["map_links"][0]["source"] == "place"
     assert "query_place_id=verified-place" in payload["map_links"][0]["url"]

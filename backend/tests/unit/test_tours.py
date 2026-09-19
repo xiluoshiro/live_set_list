@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, call, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.live_status import visitor_date_sql, VISITOR_TODAY_SQL
 from app.routers.tours import (
     TOUR_DETAIL_BANDS_QUERY,
     TOUR_DETAIL_HEADER_QUERY,
@@ -71,8 +72,8 @@ def test_get_tours_returns_public_summaries():
     ]
     assert "END ASC,\n                boundary_live.live_date DESC, boundary_live.start_time DESC, t.id DESC" in page_query
     assert "ORDER BY summary.status_rank ASC, summary.end_date DESC, summary.end_time DESC, summary.tour_id DESC" in page_query
-    assert "WHEN CURRENT_DATE < tour_stats.start_date THEN 0" in page_query
-    assert "WHEN CURRENT_DATE < MIN(l.live_date) THEN 0" in page_query
+    assert f"WHEN {VISITOR_TODAY_SQL} < tour_stats.start_date THEN 0" in page_query
+    assert f'WHEN {VISITOR_TODAY_SQL} < MIN({visitor_date_sql("l")}) THEN 0' in page_query
 
 
 # 测试点：巡演升序筛选必须参数化，并按第一场日期、开演时间、ID 排序。

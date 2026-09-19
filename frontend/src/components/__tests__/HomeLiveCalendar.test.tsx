@@ -33,6 +33,7 @@ function makeItem(overrides: Partial<CatalogCalendarLiveItem>): CatalogCalendarL
     date_phase: "upcoming",
     was_rescheduled: false,
     ...overrides,
+    calendar_date: overrides.calendar_date ?? overrides.live_date ?? "2026-08-12",
   };
 }
 
@@ -70,6 +71,17 @@ function renderCalendar() {
 }
 
 describe("HomeLiveCalendar", () => {
+  test("跨月演出使用访问者日期选择日历格子和详情", async () => {
+    // 测试点：原日期在下个月时，默认选中、格子统计与详情仍使用本月实际日期。
+    const month = getCurrentMonthKey();
+    getCatalogCalendarMock.mockResolvedValue(makeMonthResponse(month, [makeItem({
+      live_date: `${shiftMonthKey(month, 1)}-01`, calendar_date: `${month}-28`, live_title: "跨月演出",
+    })]));
+    renderCalendar();
+    expect(await screen.findByRole("button", { name: /跨月演出/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { pressed: true })).toHaveAccessibleName(/28 日.*1 场 Live/);
+  });
+
   test("移动端状态图例按前三项和后两项分组", async () => {
     // 测试点：状态图例保持前三项、后两项的顺序分组，移动端可分别居中排列。
     const monthKey = getCurrentMonthKey();

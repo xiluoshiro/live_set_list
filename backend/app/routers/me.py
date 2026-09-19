@@ -48,8 +48,7 @@ SELECT
         SELECT 1 FROM live_schedule_history history
         WHERE history.live_id = l.id
     ) AS was_rescheduled,
-    l.timezone_offset_minutes,
-    l.timezone_id
+    l.opening_time
 FROM user_live_favorites f
 JOIN live_attrs l
     ON l.id = f.live_id
@@ -64,7 +63,7 @@ LEFT JOIN performance_group_attrs pg
     ON pg.id = pgl.group_id
 WHERE f.user_id = %s
 GROUP BY l.id, l.live_date, l.live_title, l.live_type, l.url, l.default_band_ids,
-         l.start_time, l.event_status, l.timezone_offset_minutes, l.timezone_id, tour.id, tour.tour_title, pg.id, pg.group_title
+         l.start_time, l.event_status, l.opening_time, tour.id, tour.tour_title, pg.id, pg.group_title
 """
 
 FAVORITE_LIVES_COUNT_QUERY = f"""
@@ -237,9 +236,8 @@ def get_my_favorite_lives(
             **build_public_live_status(
                 event_status=str(row[11]) if len(row) > 11 else "scheduled",
                 live_date=row[1],
-                start_time=row[10] if len(row) > 10 else "00:00:00+00:00",
-                timezone_offset_minutes=int(row[13]) if len(row) > 13 and row[13] is not None else None,
-                timezone_id=str(row[14]) if len(row) > 14 and row[14] is not None else None,
+                start_time=row[10] if len(row) > 10 else None,
+                opening_time=row[13] if len(row) > 13 else None,
                 was_rescheduled=bool(row[12]) if len(row) > 12 else False,
             ),
         }

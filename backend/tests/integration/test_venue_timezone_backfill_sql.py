@@ -12,6 +12,21 @@ SQL_01 = (SQL_DIR / "2026-09-18-01__backfill_venue_own_timezones.sql").read_text
 SQL_02 = (SQL_DIR / "2026-09-18-02__correct_initial_geography_revisions.sql").read_text(encoding="utf-8")
 
 
+# 测试点：历史回填脚本在其 V33 字段契约下执行，结束后恢复当前结构。
+@pytest.fixture(autouse=True)
+def legacy_backfill_columns(integration_admin_connection):
+    conn = integration_admin_connection
+    with conn.cursor() as cur:
+        cur.execute("ALTER TABLE live_attrs ADD COLUMN timezone_id text, ADD COLUMN timezone_source text, ADD COLUMN timezone_source_revision integer")
+        cur.execute("UPDATE venue_list SET timezone_id=NULL")
+    try:
+        yield
+    finally:
+        conn.rollback()
+        with conn.cursor() as cur:
+            cur.execute("ALTER TABLE live_attrs DROP COLUMN timezone_id, DROP COLUMN timezone_source, DROP COLUMN timezone_source_revision")
+
+
 def prepare_targets(conn):
     with (ROOT / "docs/design/venue-timezone-candidates-2026-09-18.csv").open(encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))

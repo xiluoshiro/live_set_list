@@ -129,6 +129,8 @@ export type CatalogStatsResponse = {
 export type CatalogCalendarLiveItem = {
   live_id: number;
   live_date: string;
+  calendar_date: string;
+  opening_time?: string | null;
   live_title: string;
   start_time: string | null;
   bands: number[];
@@ -210,6 +212,8 @@ export type LiveScheduleHistoryItem = {
   previous_live_date: string;
   previous_opening_time: string | null;
   previous_start_time: string | null;
+  previous_opening_timezone_label?: string | null;
+  previous_start_timezone_label?: string | null;
   previous_venue_id: number | null;
   previous_venue_name_version_id: number | null;
   previous_venue: string | null;
@@ -257,6 +261,8 @@ export type LiveDetailResponse = {
   venue: string | null;
   opening_time: string | null;
   start_time: string | null;
+  opening_timezone_label?: string | null;
+  start_timezone_label?: string | null;
   bands: number[];
   band_names: string[];
   url: string | null;
@@ -307,7 +313,6 @@ export type PublicVenueDetailResponse = PublicVenueMapsResponse & {
   latitude: number | null;
   longitude: number | null;
   timezone_id: string | null;
-  timezone_source: "venue" | "locality" | null;
   name_versions: Array<{
     venue_name: string;
     valid_from: string | null;
@@ -619,7 +624,6 @@ export type GeoLocality = {
   country_code: string;
   admin_area: string | null;
   locality_name: string | null;
-  timezone_id: string | null;
   area_level: "country" | "admin_area" | "locality";
   state_token: string;
 };
@@ -627,7 +631,6 @@ export type GeoLocalityCreate = {
   country_code: string;
   admin_area: string | null;
   locality_name: string | null;
-  timezone_id: string | null;
   area_level: "country" | "admin_area" | "locality";
 };
 export type GeoLocalityUpdate = GeoLocalityCreate & { expected_state_token: string };
@@ -675,8 +678,6 @@ export type VenueLocation = {
   longitude: number | null;
   coordinate_system: "WGS84";
   timezone_id: string | null;
-  effective_timezone_id: string | null;
-  timezone_source: "venue" | "locality" | null;
   state_token: string;
   location_verified_at: string | null;
   map_links: VenueMapLink[];
@@ -684,7 +685,6 @@ export type VenueLocation = {
 export type VenueLocationPreview = {
   before: VenueLocation;
   after: VenueLocationWrite;
-  effective_timezone_id: string | null;
   live_count: number;
   changed_fields: string[];
 };
@@ -819,14 +819,9 @@ export type ConsoleLiveUpsertPayload = {
   url: string;
   opening_time: string | null;
   start_time: string | null;
-  /** Deprecated fixed offset retained only when editing a legacy Live. */
-  timezone?: string;
+  /** Fixed UTC offset for ONLINE Lives with announced times. */
+  timezone?: string | null;
   announced_locality_id?: number | null;
-  explicit_timezone_id?: string | null;
-  opening_time_fold?: 0 | 1 | null;
-  start_time_fold?: 0 | 1 | null;
-  /** Read-only source returned by the edit endpoint; removed before writes. */
-  timezone_source?: "venue" | "locality" | "explicit" | "legacy_offset";
   venue_id: number | null;
   venue_name_version_id: number | null;
   default_band_ids: number[];
@@ -852,7 +847,6 @@ export type ConsoleEventAttendee = {
 };
 
 export type ConsoleLiveMutationItem = {
-  timezone_offset_minutes?: number | null;
   live_id: number;
   live_date: string;
   live_title: string;
@@ -863,11 +857,6 @@ export type ConsoleLiveMutationItem = {
   venue_id: number | null;
   venue_name_version_id: number | null;
   announced_locality_id?: number | null;
-  timezone_id?: string | null;
-  timezone_source?: "venue" | "locality" | "explicit" | "legacy_offset";
-  timezone_source_revision?: number | null;
-  opening_time_fold?: 0 | 1 | null;
-  start_time_fold?: 0 | 1 | null;
   default_band_ids: number[];
   event_attendees: ConsoleEventAttendee[];
   band_lineup_contexts?: ConsoleLiveBandLineupContext[];
@@ -1020,7 +1009,7 @@ export type ConsoleLiveCandidatesResponse = {
 
 export type ConsoleLiveEditResponse = {
   item: ConsoleLiveMutationItem & {
-    timezone: string;
+    timezone: string | null;
     venue_name: string | null;
     schedule_history?: LiveScheduleHistoryItem[];
     has_setlist?: boolean;
@@ -1216,9 +1205,12 @@ async function fetchWithTimeout(
     request_kind: requestKind,
   });
   try {
+    const headers = new Headers(init?.headers);
+    headers.set("X-Visitor-Timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
     const response = await fetch(input, {
       credentials: "include",
       ...init,
+      headers: Object.fromEntries(headers.entries()),
       signal: controller.signal,
     });
     const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
@@ -1742,7 +1734,7 @@ export async function getCatalogStats(): Promise<CatalogStatsResponse> {
 }
 
 function calendarCacheKey(month: string): string {
-  return `catalog_calendar:${month}`;
+  return `catalog_calendar:${Intl.DateTimeFormat().resolvedOptions().timeZone}:${month}`;
 }
 
 async function fetchCatalogCalendarRemote(month: string): Promise<CatalogCalendarResponse> {
@@ -1918,7 +1910,7 @@ export async function createConsoleLive(
       headers: jsonHeaders(csrfToken),
       body: JSON.stringify(
         Object.fromEntries(
-          Object.entries(payload).filter(([key]) => !["band_lineup_contexts", "timezone_source"].includes(key)),
+          Object.entries(payload).filter(([key]) => !["band_lineup_contexts"].includes(key)),
         ),
       ),
     },
@@ -2143,7 +2135,7 @@ export async function updateConsoleLive(
       headers: jsonHeaders(csrfToken),
       body: JSON.stringify(
         Object.fromEntries(
-          Object.entries(payload).filter(([key]) => !["band_lineup_contexts", "timezone_source"].includes(key)),
+          Object.entries(payload).filter(([key]) => !["band_lineup_contexts"].includes(key)),
         ),
       ),
     },
@@ -2373,4 +2365,12 @@ export async function getLiveDetailsBatch(liveIds: number[]): Promise<LiveDetail
     merged.missing_live_ids.push(...payload.missing_live_ids);
   }
   return merged;
+}
+
+
+export async function previewConsoleLiveClock(payload: Pick<ConsoleLiveCreatePayload, "live_date" | "venue_id" | "opening_time" | "start_time" | "timezone">, signal?: AbortSignal): Promise<{ date_phase: DatePhase }> {
+  const query = new URLSearchParams();
+  Object.entries(payload).forEach(([key, value]) => { if (value != null && value !== "") query.set(key, String(value)); });
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/live-clock?${query}`, { signal });
+  return expectJsonResponse<{ date_phase: DatePhase }>(response);
 }

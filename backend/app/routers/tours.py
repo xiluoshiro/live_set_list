@@ -10,7 +10,7 @@ from app.auth import AuthUser, get_current_user_optional
 from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set
 from app.logging_config import get_logger
-from app.live_status import build_public_live_status
+from app.live_status import build_public_live_status, visitor_date_sql, VISITOR_TODAY_SQL
 from app.schemas import (
     ErrorResponse,
     TourDetailResponse,
@@ -139,8 +139,8 @@ def _build_tour_list_queries(
             ) boundary_live ON true
             LEFT JOIN LATERAL (
                 SELECT
-                    MIN(l.live_date) AS start_date,
-                    MAX(l.live_date) AS end_date,
+                    MIN({visitor_date_sql("l")}) AS start_date,
+                    MAX({visitor_date_sql("l")}) AS end_date,
                     COUNT(*)::int AS collected_live_count,
                     COUNT(*) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count
                 FROM tour_lives stats_stop
@@ -152,8 +152,8 @@ def _build_tour_list_queries(
                 CASE
                     WHEN tour_stats.collected_live_count > 0
                          AND tour_stats.cancelled_live_count >= tour_stats.collected_live_count THEN 2
-                    WHEN CURRENT_DATE < tour_stats.start_date THEN 0
-                    WHEN CURRENT_DATE > tour_stats.end_date THEN 2
+                    WHEN {VISITOR_TODAY_SQL} < tour_stats.start_date THEN 0
+                    WHEN {VISITOR_TODAY_SQL} > tour_stats.end_date THEN 2
                     ELSE 1
                 END ASC,
                 boundary_live.live_date {sort_dir}, boundary_live.start_time {sort_dir}, t.id {sort_dir}
@@ -172,8 +172,8 @@ def _build_tour_list_queries(
                     LIMIT 1
                 ) AS url,
                 NULL::text AS description,
-                MIN(l.live_date) AS start_date,
-                MAX(l.live_date) AS end_date,
+                MIN({visitor_date_sql("l")}) AS start_date,
+                MAX({visitor_date_sql("l")}) AS end_date,
                 (array_agg(l.start_time ORDER BY l.live_date ASC, l.start_time ASC NULLS LAST, l.id ASC))[1] AS start_time,
                 (array_agg(l.start_time ORDER BY l.live_date DESC, l.start_time DESC NULLS LAST, l.id DESC))[1] AS end_time,
                 COUNT(*)::int AS collected_live_count,
@@ -181,8 +181,8 @@ def _build_tour_list_queries(
                 CASE
                     WHEN COUNT(*)::int > 0
                          AND COUNT(*) FILTER (WHERE l.event_status = 'cancelled')::int >= COUNT(*)::int THEN 2
-                    WHEN CURRENT_DATE < MIN(l.live_date) THEN 0
-                    WHEN CURRENT_DATE > MAX(l.live_date) THEN 2
+                    WHEN {VISITOR_TODAY_SQL} < MIN({visitor_date_sql("l")}) THEN 0
+                    WHEN {VISITOR_TODAY_SQL} > MAX({visitor_date_sql("l")}) THEN 2
                     ELSE 1
                 END AS status_rank,
                 COALESCE(
@@ -246,7 +246,7 @@ def _build_tour_list_queries(
     return count_query, params, page_query, params
 
 
-TOUR_DETAIL_HEADER_QUERY = """
+TOUR_DETAIL_HEADER_QUERY = f"""
 SELECT
     t.id,
     t.tour_title,
@@ -259,8 +259,8 @@ SELECT
         LIMIT 1
     ) AS url,
     NULL::text AS description,
-    MIN(l.live_date) AS start_date,
-    MAX(l.live_date) AS end_date,
+    MIN({visitor_date_sql("l")}) AS start_date,
+    MAX({visitor_date_sql("l")}) AS end_date,
     COUNT(*)::int AS collected_live_count,
     COUNT(*) FILTER (WHERE l.event_status = 'cancelled')::int AS cancelled_live_count,
     COALESCE(
@@ -296,7 +296,7 @@ FROM (
 ORDER BY selected.id
 """
 
-TOUR_DETAIL_STOPS_QUERY = """
+TOUR_DETAIL_STOPS_QUERY = f"""
 WITH stop_base AS (
     SELECT
         tl.stop_label,
@@ -318,15 +318,14 @@ WITH stop_base AS (
             SELECT 1 FROM live_schedule_history history
             WHERE history.live_id = l.id
         ) AS was_rescheduled,
-        l.timezone_offset_minutes,
-        l.timezone_id,
+        l.opening_time,
         CASE
             WHEN pgl.group_id IS NULL THEN (l.event_status = 'cancelled')
             ELSE BOOL_OR(l.event_status = 'cancelled') OVER (PARTITION BY pgl.group_id)
         END AS block_has_cancelled,
         CASE
-            WHEN pgl.group_id IS NULL THEN l.live_date
-            ELSE MIN(l.live_date) OVER (PARTITION BY pgl.group_id)
+            WHEN pgl.group_id IS NULL THEN {visitor_date_sql("l")}
+            ELSE MIN({visitor_date_sql("l")}) OVER (PARTITION BY pgl.group_id)
         END AS block_date,
         CASE
             WHEN pgl.group_id IS NULL THEN l.start_time
@@ -373,8 +372,7 @@ SELECT
     event_status,
     start_time,
     was_rescheduled,
-    timezone_offset_minutes,
-    timezone_id
+    opening_time
 FROM stop_base
 ORDER BY
     block_date,
@@ -850,9 +848,8 @@ def get_tour_detail(
                 **build_public_live_status(
                     event_status=str(row[10]) if len(row) > 10 else "scheduled",
                     live_date=row[3],
-                    start_time=row[11] if len(row) > 11 else "00:00:00+00:00",
-                    timezone_offset_minutes=int(row[13]) if len(row) > 13 and row[13] is not None else None,
-                    timezone_id=str(row[14]) if len(row) > 14 and row[14] is not None else None,
+                    start_time=row[11] if len(row) > 11 else None,
+                    opening_time=row[13] if len(row) > 13 else None,
                     was_rescheduled=bool(row[12]) if len(row) > 12 else False,
                 ),
             }
