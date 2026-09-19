@@ -81,9 +81,9 @@ test("unmount and remount reuse one Google map instance", async () => {
   second.unmount();
 });
 
-// 测试点：首次地图视野以东京默认点为中心，并使用约十公里观察范围的缩放级别。
-test("initial map viewport uses the Tokyo default point and regional zoom", async () => {
-  render(<VenueLocationMap config={config} point={DEFAULT_GOOGLE_MAP_POINT} disabled={false}
+// 测试点：未选点时地图以东京默认点初始化镜头，但不创建代表真实选择的标记。
+test("empty selection uses the Tokyo default viewport without a marker", async () => {
+  render(<VenueLocationMap config={config} point={null} disabled={false}
     onPoint={vi.fn()} onPlaceId={vi.fn()} />);
   await waitFor(() => expect(fake.makeMap).toHaveBeenCalledTimes(1));
   expect(fake.makeMap).toHaveBeenCalledWith(expect.any(HTMLDivElement), expect.objectContaining({
@@ -93,7 +93,8 @@ test("initial map viewport uses the Tokyo default point and regional zoom", asyn
     zoomControl: true,
     fullscreenControl: true,
   }));
-  await waitFor(() => expect(fake.map.setZoom).toHaveBeenCalledWith(12));
+  expect(fake.makeMarker).not.toHaveBeenCalled();
+  expect(screen.getByText(/尚未选点/)).toBeInTheDocument();
 });
 
 // 测试点：loading=async 必须等待 Google callback，不能把 script load 事件当成 SDK 就绪。

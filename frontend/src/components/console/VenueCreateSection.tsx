@@ -176,7 +176,7 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
         <label className="live-clear-after-create-option"><input type="checkbox" checked={clearAfter} disabled={submitting} onChange={e => setClearAfter(e.target.checked)} />新增成功后清空表单</label>
         {physical && <button type="button" className="console-ghost-btn" aria-expanded={mapOpen} disabled={submitting} onClick={() => {
           setMapOpen(!mapOpen);
-        }}>{mapOpen ? "收起选点地图" : "地图选点与自动解析"}</button>}
+        }}>{mapOpen ? "收起地图" : "地图选点"}</button>}
         <button type="button" className="console-ghost-btn" disabled={submitting} onClick={clear}>清空</button>
         <button type="button" className="console-submit-btn" disabled={submitting || !!validation} onClick={() => { setMessage(""); setConfirm(true); }}>提交插入</button>
       </div>

@@ -105,8 +105,9 @@ test("uses a single input row without venue management controls", async () => {
   expect(screen.queryByRole("button", { name: "查询已有场地" })).not.toBeInTheDocument();
   expect(api.getConsoleVenuePage).not.toHaveBeenCalled();
   expect(screen.queryByText("地图选点组件")).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "地图选点与自动解析" }));
+  await user.click(screen.getByRole("button", { name: "地图选点" }));
   expect(screen.getByText("地图选点组件")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "收起地图" })).toBeInTheDocument();
   expect(table.queryByText("地图选点组件")).not.toBeInTheDocument();
 });
 

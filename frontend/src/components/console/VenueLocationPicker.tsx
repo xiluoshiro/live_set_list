@@ -3,7 +3,6 @@ import { getGeographyCapabilities, resolveGeography, resolveGooglePlace, searchG
   type GeographyCapabilities, type GeocodingCandidate, type GeocodingResult, type GeoLocality,
   type GooglePlaceDraft, type LocationPoint, type LocationResolution } from "../../api";
 import { VenueLocationMap } from "./VenueLocationMap";
-import { DEFAULT_GOOGLE_MAP_POINT } from "./googleMapsSession";
 
 type Props = {
   venueId?: number; venueName: string; csrf: string; disabled: boolean;
@@ -37,9 +36,6 @@ export function VenueLocationPicker(props: Props) {
   const searchRequest = useRef<AbortController | null>(null);
   const key = pointKey(props.point);
 
-  useEffect(() => {
-    if (props.venueId === undefined && !current.current.point) current.current.onPoint(DEFAULT_GOOGLE_MAP_POINT);
-  }, []);
   useEffect(() => {
     const controller = new AbortController();
     void getGeographyCapabilities(controller.signal).then(value => { if (!controller.signal.aborted) setConfig(value); }).catch(error => {
