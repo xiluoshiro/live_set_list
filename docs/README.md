@@ -8,6 +8,7 @@
 - [数据库角色](db-roles.md)：运行时、迁移、测试和恢复所用 PostgreSQL 角色。
 - [产品需求与 TODO](product/homepage-community-database.md)：当前产品阶段、已完成能力和下一轮优先项。
 - [公共 Live 与收藏 Live 统计需求](product/public-statistics.md)：当前 S1 口径、全部 / 收藏通用统计、按乐队划分的年度歌曲排行、久未演唱和后续歌曲生命周期方向。
+- [歌曲资料与专辑关联需求](product/song-details-and-albums.md)：歌曲资料宽版左列表右详情、固定翻唱基准、成员 ID、逐条歌单计数、分阶段回填、专辑与特殊版本方案；业务功能尚未实现。
 - [巡演聚合产品需求](product/tour-aggregation.md)：巡演与单场 Live 的产品边界、用户页面、资料口径、阶段范围和验收标准。
 - [Flyway 落地说明](design/flyway.md)：仓库 migration、角色和日常迁移流程；当前仓库已到 V23。
 - [生产部署设计](design/production-deployment.md)：目标架构、安全边界和未完成的运维项。
