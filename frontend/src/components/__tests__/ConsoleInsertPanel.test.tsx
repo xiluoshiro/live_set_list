@@ -1444,7 +1444,7 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live"));
 
     fireEvent.change(screen.getByLabelText("opening_time"), { target: { value: "10:00" } });
-    await user.click(screen.getByRole("radio", { name: "资料修正" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "本次排期变化" }), "correction");
     await user.type(screen.getByLabelText("排期变化说明"), "不应残留的说明");
     fireEvent.change(screen.getByLabelText("opening_time"), { target: { value: "09:00" } });
     expect(screen.queryByLabelText("排期变化说明")).not.toBeInTheDocument();
@@ -1476,13 +1476,12 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live"));
 
     fireEvent.change(screen.getByLabelText("opening_time"), { target: { value: "10:00" } });
-    await user.click(screen.getByRole("radio", { name: "资料修正" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "本次排期变化" }), "correction");
     fireEvent.change(screen.getByLabelText("opening_time"), { target: { value: "09:00" } });
-    expect(screen.queryByRole("radio", { name: "资料修正" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "本次排期变化" })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("start_time"), { target: { value: "22:00" } });
-    expect(screen.getByRole("radio", { name: "资料修正" })).not.toBeChecked();
-    expect(screen.getByRole("radio", { name: "主办方正式改期" })).not.toBeChecked();
+    expect(screen.getByRole("combobox", { name: "本次排期变化" })).toHaveValue("");
     expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
   });
 

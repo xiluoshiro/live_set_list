@@ -535,6 +535,31 @@ export function LiveAdminSection({
             <strong>{DATE_PHASE_LABELS[datePhase]}</strong>
             <small>按演出日期自动判断</small>
           </div>
+          {variant === "edit" && hasScheduleChanges && (
+            <>
+              <label>
+                <span>本次排期变化</span>
+                <select
+                  aria-label="本次排期变化"
+                  value={scheduleChangeKind ?? ""}
+                  onChange={(event) => onScheduleChangeKindChange(event.target.value as "correction" | "reschedule")}
+                >
+                  <option value="" disabled hidden />
+                  <option value="correction">资料修正</option>
+                  <option value="reschedule">正式改期</option>
+                </select>
+              </label>
+              <label>
+                <span>说明</span>
+                <input
+                  aria-label="排期变化说明"
+                  value={scheduleChangeNote}
+                  onChange={(event) => onScheduleChangeNoteChange(event.target.value)}
+                  placeholder="可选"
+                />
+              </label>
+            </>
+          )}
           {eventStatus !== "scheduled" && (
             <label className="live-admin-status-note">
               <span>{eventStatus === "cancelled" ? "取消说明" : "延期说明"}</span>
@@ -548,36 +573,6 @@ export function LiveAdminSection({
             </label>
           )}
         </div>
-        {variant === "edit" && hasScheduleChanges && (
-          <div className="live-schedule-change-editor">
-            <span className="live-management-label">本次排期变化</span>
-            <label>
-              <input
-                type="radio"
-                name="schedule-change-kind"
-                checked={scheduleChangeKind === "correction"}
-                onChange={() => onScheduleChangeKindChange("correction")}
-              />
-              资料修正
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="schedule-change-kind"
-                checked={scheduleChangeKind === "reschedule"}
-                onChange={() => onScheduleChangeKindChange("reschedule")}
-              />
-              主办方正式改期
-            </label>
-            <input
-              className="venue-query-input"
-              aria-label="排期变化说明"
-              value={scheduleChangeNote}
-              onChange={(event) => onScheduleChangeNoteChange(event.target.value)}
-              placeholder="说明（可选）"
-            />
-          </div>
-        )}
         </section>
 
         <section className="live-admin-status-section live-schedule-status-section" aria-labelledby="live-schedule-status-title">

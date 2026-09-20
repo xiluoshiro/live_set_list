@@ -86,25 +86,6 @@
   font-weight: 600;
 }
 
-.live-schedule-change-editor {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.live-schedule-change-editor input[aria-label="排期变化说明"] {
-  min-width: min(360px, 100%);
-}
-
-.live-schedule-change-editor > .live-management-label {
-  flex-basis: auto;
-  white-space: nowrap;
-}
-
 .live-admin-status-section {
   margin: 12px 0;
   padding: 14px;
@@ -309,7 +290,7 @@
 
 .live-admin-status-fields {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(160px, 220px) minmax(280px, 1fr);
+  grid-template-columns: minmax(150px, 220px) minmax(150px, 220px) minmax(150px, 220px) minmax(200px, 1fr);
   gap: 12px;
   align-items: start;
 }
