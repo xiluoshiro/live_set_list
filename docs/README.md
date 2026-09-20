@@ -16,6 +16,7 @@
 
 ## 当前设计
 
+- [歌曲资料、歌曲组与专辑实现设计](design/song-catalog-and-albums.md)：版本与归属数据模型、成员 ID、逐条演奏统计、Live 日期锁、公共及 Console API、歌曲新增 / 管理双页、公共左右分栏、封面出包与分阶段迁移；待实施。
 - [全站 Stage Ledger 视觉重构方案](design/site-wide-stage-ledger-ui-refactor.md)：以演出流程和新首页首屏为双参考，定义全站视觉系统、组件库边界、页面迁移批次与视觉回归门禁。
 - [首页 Live 日历改造设计](design/home-live-calendar.md)：以按月日期导航替换语义不准确的“最近收录”，并从首屏移除“个人与贡献”。
 - [巡演聚合实现设计](design/tour-aggregation.md)
