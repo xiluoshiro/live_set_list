@@ -127,53 +127,27 @@
   cursor: pointer;
 }
 
+.live-schedule-attention-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.live-schedule-attention-summary[data-expanded="true"] {
+  margin-bottom: 12px;
+}
+
 .live-schedule-attention-counts {
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 12px;
 }
 
-.live-schedule-attention-trigger {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  width: 100%;
-  gap: 16px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.live-schedule-attention-trigger[data-state="open"] {
-  margin-bottom: 12px;
-}
-
-.live-schedule-attention-trigger-copy {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 10px;
-  min-width: 0;
-}
-
-.live-schedule-attention-trigger-copy > strong {
+.live-schedule-attention-heading {
+  flex: 0 0 auto;
   color: var(--text-heading);
   font-size: 14px;
-}
-
-.live-schedule-attention-trigger-copy > span,
-.live-schedule-attention-toggle {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.live-schedule-attention-toggle {
-  flex: 0 0 auto;
 }
 
 .live-schedule-attention-counts button {
@@ -1355,10 +1329,6 @@
 }
 
 @media (max-width: 720px) {
-  .live-schedule-attention-counts {
-    grid-template-columns: 1fr;
-  }
-
   .live-schedule-attention-list article {
     align-items: flex-start;
   }

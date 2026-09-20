@@ -536,8 +536,8 @@ describe("ConsoleInsertPanel", () => {
     ));
   });
 
-  // 测试点：待补面板只在 Live 管理显示，默认折叠且可反复展开收起计数和活动列表。
-  test("待补排期资料面板只在Live管理显示并支持折叠", async () => {
+  // 测试点：待补面板常驻显示分类入口，具体活动默认收起并由对应分类按钮展开或再次收起。
+  test("待补排期面板通过分类按钮展开对应活动", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleLiveCandidates.mockResolvedValue({
       items: [{
@@ -560,31 +560,29 @@ describe("ConsoleInsertPanel", () => {
 
     const { unmount } = render(<ConsoleInsertPanel initialMode="live_create" />);
 
-    expect(screen.queryByRole("region", { name: "待补排期资料" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "待补排期" })).not.toBeInTheDocument();
     await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalled());
     expect(apiMocks.getConsoleLiveCandidates).not.toHaveBeenCalled();
 
     unmount();
     render(<ConsoleInsertPanel initialMode="live_edit" />);
 
-    const trigger = await screen.findByRole("button", { name: /待补排期资料/ });
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(within(trigger).getByText("展开")).toBeInTheDocument();
+    const categories = await screen.findByRole("group", { name: "待补排期分类" });
+    const upcomingButton = within(categories).getByRole("button", { name: /未来待公布.*3/ });
+    const todayButton = within(categories).getByRole("button", { name: /今日仍缺失.*1/ });
+    expect(screen.getByRole("region", { name: "待补排期" })).toBeInTheDocument();
+    expect(upcomingButton).toHaveAttribute("aria-expanded", "false");
+    expect(todayButton).toHaveAttribute("aria-expanded", "false");
+    expect(within(categories).getByRole("button", { name: /已结束仍缺失.*2/ })).toBeInTheDocument();
     expect(screen.queryByText("Today TBA Live")).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "待补排期资料分类" })).not.toBeInTheDocument();
 
-    await user.click(trigger);
-    expect(screen.getByRole("button", { name: /待补排期资料/ })).toHaveAttribute("aria-expanded", "true");
-    expect(within(trigger).getByText("收起")).toBeInTheDocument();
+    await user.click(todayButton);
+    expect(todayButton).toHaveAttribute("aria-expanded", "true");
     expect(await screen.findByText("Today TBA Live")).toBeInTheDocument();
     expect(screen.getByText("今日活动仍有资料未公布")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /今日未公布.*1/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /已结束仍缺失.*2/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /未来待公布.*3/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /待补排期资料/ }));
-    expect(screen.getByRole("button", { name: /待补排期资料/ })).toHaveAttribute("aria-expanded", "false");
-    expect(within(trigger).getByText("展开")).toBeInTheDocument();
+    await user.click(todayButton);
+    await waitFor(() => expect(todayButton).toHaveAttribute("aria-expanded", "false"));
     expect(screen.queryByText("Today TBA Live")).not.toBeInTheDocument();
   });
 

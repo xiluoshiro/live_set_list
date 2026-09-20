@@ -1633,7 +1633,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setScheduleAttentionFilter(attention);
     } catch (error) {
       setScheduleAttentionItems([]);
-      setMessage(`加载待补排期资料失败：${errorMessage(error)}`);
+      setMessage(`加载待补排期失败：${errorMessage(error)}`);
     } finally {
       setScheduleAttentionLoading(false);
     }

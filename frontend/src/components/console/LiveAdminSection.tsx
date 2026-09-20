@@ -1,4 +1,4 @@
-import { useState, type RefObject } from "react";
+import type { RefObject } from "react";
 
 import type {
   ConsoleBandHistory,
@@ -208,7 +208,6 @@ export function LiveAdminSection({
   onSubmitInsertLive,
   submitInsertDisabled,
 }: LiveAdminSectionProps) {
-  const [scheduleAttentionOpen, setScheduleAttentionOpen] = useState(false);
   const selectedVenue = venues.find((venue) => venue.venue_id === selectedVenueId);
   const selectedVenueText = (() => {
     if (!venueAnnounced) return "未公布";
@@ -237,29 +236,17 @@ export function LiveAdminSection({
     <>
       {variant === "edit" && (
       <section className="live-admin-status-section live-schedule-attention" aria-labelledby="live-schedule-attention-title">
-        <Collapsible.Root open={scheduleAttentionOpen} onOpenChange={setScheduleAttentionOpen}>
-          <Collapsible.Trigger asChild>
-            <button
-              type="button"
-              className="live-schedule-attention-trigger"
-              aria-expanded={scheduleAttentionOpen}
-              aria-controls="live-schedule-attention-content"
-            >
-              <span className="live-schedule-attention-trigger-copy">
-                <strong id="live-schedule-attention-title">待补排期资料</strong>
-                <span>补全最后一项后自动移出</span>
-              </span>
-              <span className="live-schedule-attention-toggle" aria-hidden="true">
-                {scheduleAttentionOpen ? "收起" : "展开"}
-              </span>
-            </button>
-          </Collapsible.Trigger>
-          <Collapsible.Content id="live-schedule-attention-content">
-            <div className="live-schedule-attention-counts" role="group" aria-label="待补排期资料分类">
+        <Collapsible.Root open={scheduleAttentionFilter !== ""}>
+          <div
+            className="live-schedule-attention-summary"
+            data-expanded={scheduleAttentionFilter !== "" || undefined}
+          >
+            <strong id="live-schedule-attention-title" className="live-schedule-attention-heading">待补排期</strong>
+            <div className="live-schedule-attention-counts" role="group" aria-label="待补排期分类">
               {([
-                ["today", "今日未公布", scheduleAttentionCounts.today],
-                ["overdue", "已结束仍缺失", scheduleAttentionCounts.overdue],
                 ["upcoming", "未来待公布", scheduleAttentionCounts.upcoming],
+                ["today", "今日仍缺失", scheduleAttentionCounts.today],
+                ["overdue", "已结束仍缺失", scheduleAttentionCounts.overdue],
               ] as const).map(([attention, label, count]) => (
                 <button
                   key={attention}
@@ -268,6 +255,8 @@ export function LiveAdminSection({
                   data-attention={attention}
                   data-active={scheduleAttentionFilter === attention || undefined}
                   data-empty={count === 0 || undefined}
+                  aria-expanded={scheduleAttentionFilter === attention}
+                  aria-controls="live-schedule-attention-content"
                   disabled={scheduleAttentionLoading}
                   onClick={() => onScheduleAttentionFilterChange(scheduleAttentionFilter === attention ? "" : attention)}
                 >
@@ -275,6 +264,8 @@ export function LiveAdminSection({
                 </button>
               ))}
             </div>
+          </div>
+          <Collapsible.Content id="live-schedule-attention-content">
             {scheduleAttentionItems.length === 0 ? (
               <p className="console-admin-hint">当前筛选下没有待补活动。</p>
             ) : (
