@@ -351,7 +351,7 @@
   - 单项 band 不存在或歌曲冲突会跳过该项，不回滚其他成功项
   - `ok` 只有在全部请求项都成功创建时才为 `true`
 - `POST /api/console/venues`
-  - 写入 `venue_list(venue)`，`id` 由 sequence 生成
+  - 同一事务创建 `venue_list` 身份与首个 `venue_name_versions` 名称版本，并保存位置资料；`id` 由 sequence 生成，名称不在身份表重复保存
 - `POST /api/console/lives`
   - 可选择已核验的 `venue_id`，或在场馆未公布时提交 `announced_locality_id`；未选择场馆时开场、开演必须为空；ONLINE 有时间时提交固定偏移 `timezone`
   - 后端按场馆自身 IANA 与日期解析实体／未公开场馆时间；ONLINE 只接受固定 UTC 偏移，偏移随 `timetz` 保存，不保存来源或独立时区快照

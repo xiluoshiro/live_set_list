@@ -26,16 +26,17 @@ TRUNCATE TABLE
     public.venue_list
 RESTART IDENTITY CASCADE;
 
-INSERT INTO public.venue_list (id, venue, timezone_id)
+INSERT INTO public.venue_list (id, timezone_id)
 VALUES
-    (1, 'Shibuya WWW X', 'Asia/Tokyo'),
-    (2, 'Zepp Shinjuku', 'Asia/Tokyo'),
-    (24, '東京ガーデンシアター', 'Asia/Tokyo');
+    (1, 'Asia/Tokyo'),
+    (2, 'Asia/Tokyo'),
+    (24, 'Asia/Tokyo');
 
 INSERT INTO public.venue_name_versions (venue_id, venue_name, valid_from, valid_to)
-SELECT id, venue, NULL, NULL
-FROM public.venue_list
-ORDER BY id;
+VALUES
+    (1, 'Shibuya WWW X', NULL, NULL),
+    (2, 'Zepp Shinjuku', NULL, NULL),
+    (24, '東京ガーデンシアター', NULL, NULL);
 
 INSERT INTO public.band_attrs (id, band_abbr, band_name)
 VALUES

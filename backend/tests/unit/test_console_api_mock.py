@@ -555,7 +555,7 @@ def test_console_update_song_mock_success_persists_and_audits():
     assert cursor.execute.call_args_list[1].args[1] == ("Updated Song", 2, True, 99)
 
 
-# 测试点：新增未公开 Venue 原子建立名称版本且允许时区为空。
+# 测试点：新增未公开 Venue 返回初始名称版本和场馆自身时区。
 def test_console_create_venue_mock_success_persists_and_audits():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(fetchone_side_effect=[None, (88,), (99,)])
@@ -585,7 +585,6 @@ def test_console_create_venue_mock_success_persists_and_audits():
             "last_live_date": None,
         },
     }
-    assert cursor.execute.call_args_list[2].args[1] == ("New Venue", "undisclosed")
 
 
 # 测试点：创建时位置与名称共用写入事务，响应返回时区并完整审计位置。

@@ -394,7 +394,7 @@ def test_manual_backup_generates_real_dump_and_validates_with_pg_restore(sandbox
         sandbox_context.docker_cmd,
         sandbox_context.container_name,
         "live_statistic",
-        """INSERT INTO public.venue_list (id, venue) VALUES (101, 'Sandbox Hall');
+        """INSERT INTO public.venue_list (id) VALUES (101);
         INSERT INTO public.venue_name_versions (id, venue_id, venue_name)
         VALUES (101, 101, 'Sandbox Hall');""",
     )
@@ -425,7 +425,9 @@ def test_auto_backup_rejects_current_dump_when_restore_line_count_drops_too_much
         sandbox_context.docker_cmd,
         sandbox_context.container_name,
         "live_statistic",
-        "INSERT INTO public.venue_list (id, venue) VALUES (201, 'Auto Backup Baseline Hall');",
+        """INSERT INTO public.venue_list (id) VALUES (201);
+        INSERT INTO public.venue_name_versions (venue_id, venue_name)
+        VALUES (201, 'Auto Backup Baseline Hall');""",
     )
 
     baseline_backup = backup.create_app_backup(
@@ -493,7 +495,7 @@ def test_restore_backup_on_candidate_container_runs_flyway_and_restores_data(san
         sandbox_context.docker_cmd,
         sandbox_context.container_name,
         "live_statistic",
-        """INSERT INTO public.venue_list (id, venue) VALUES (101, 'Sandbox Hall');
+        """INSERT INTO public.venue_list (id) VALUES (101);
         INSERT INTO public.venue_name_versions (id, venue_id, venue_name)
         VALUES (101, 101, 'Sandbox Hall');""",
     )
@@ -589,7 +591,7 @@ def test_restore_backup_on_candidate_container_runs_flyway_and_restores_data(san
             sandbox_context.docker_cmd,
             container_name,
             "live_statistic",
-            "SELECT venue FROM public.venue_list WHERE id = 101;",
+            "SELECT venue_name FROM public.current_venue_versions WHERE venue_id = 101;",
         ) == "Sandbox Hall"
         assert _psql(
             sandbox_context.docker_cmd,

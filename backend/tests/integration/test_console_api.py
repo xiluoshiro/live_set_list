@@ -651,7 +651,7 @@ def test_console_create_venue_persists_row_and_audit_log(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT venue.id, venue.venue, venue.venue_kind, version.id, version.venue_name
+            SELECT venue.id, venue.venue_kind, version.id, version.venue_name
             FROM venue_list venue
             JOIN venue_name_versions version ON version.venue_id = venue.id
             WHERE venue.id = %s AND version.valid_to IS NULL
@@ -660,7 +660,7 @@ def test_console_create_venue_persists_row_and_audit_log(
         )
         row = cursor.fetchone()
 
-    assert row == (venue_id, "Console Created Venue", "physical", payload["item"]["venue_name_version_id"], "Console Created Venue")
+    assert row == (venue_id, "physical", payload["item"]["venue_name_version_id"], "Console Created Venue")
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "venue_create",
         str(venue_id),

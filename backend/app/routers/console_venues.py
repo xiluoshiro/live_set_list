@@ -346,8 +346,8 @@ def create_venue(
                     if locality is None:
                         raise HTTPException(422, "地区不存在，请重新选择")
                 cur.execute(
-                    "INSERT INTO venue_list (venue, venue_kind) VALUES (%s, %s) RETURNING id",
-                    (payload.venue_name, payload.venue_kind),
+                    "INSERT INTO venue_list (venue_kind) VALUES (%s) RETURNING id",
+                    (payload.venue_kind,),
                 )
                 venue_id = int(cur.fetchone()[0])
                 cur.execute(
@@ -458,7 +458,6 @@ def _create_name_version(cur: Any, venue_id: int, payload: ConsoleVenueNameVersi
         (venue_id, payload.venue_name, payload.valid_from),
     )
     new_version_id = int(cur.fetchone()[0])
-    cur.execute("UPDATE venue_list SET venue = %s WHERE id = %s", (payload.venue_name, venue_id))
     _write_audit(
         cur,
         user_id=context.user.id,

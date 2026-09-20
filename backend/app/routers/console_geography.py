@@ -47,7 +47,9 @@ def _audit(cur: Any, context: AuthSessionContext, action: str, resource: str, id
 
 
 def _venue(cur: Any, venue_id: int, *, lock: bool = False) -> dict[str, Any]:
-    cur.execute("SELECT * FROM venue_list WHERE id = %s" + (" FOR UPDATE" if lock else ""), (venue_id,))
+    cur.execute("""SELECT id, venue_kind, locality_id, address, latitude, longitude, timezone_id,
+                   location_revision, location_verified_at FROM venue_list WHERE id = %s"""
+                + (" FOR UPDATE" if lock else ""), (venue_id,))
     row = cur.fetchone()
     if row is None:
         raise HTTPException(404, "场馆不存在")
@@ -113,6 +115,11 @@ def _locality_impact(cur: Any, locality_id: int) -> dict[str, Any]:
 
 
 def _read(cur: Any, row: dict[str, Any]) -> dict[str, Any]:
+    cur.execute("SELECT venue_name FROM current_venue_versions WHERE venue_id = %s", (row["id"],))
+    current_name = cur.fetchone()
+    if current_name is None:
+        raise HTTPException(409, "场馆缺少当前名称版本，请先核对名称资料")
+    venue_name = current_name["venue_name"]
     locality = _locality(cur, row["locality_id"])
     cur.execute("SELECT * FROM venue_map_links WHERE venue_id = %s ORDER BY provider", (row["id"],))
     stored = {item["provider"]: item for item in cur.fetchall()}
@@ -121,11 +128,11 @@ def _read(cur: Any, row: dict[str, Any]) -> dict[str, Any]:
         item = stored.get(provider)
         point_url = None
         if row["latitude"] is not None:
-            point_url = coordinate_url(provider, float(row["latitude"]), float(row["longitude"]), row["venue"])
+            point_url = coordinate_url(provider, float(row["latitude"]), float(row["longitude"]), venue_name)
         current = bool(item)
         target = point_url
         if item and current:
-            target = item["provider_url"] or place_url(provider, item["provider_place_id"], row["venue"])
+            target = item["provider_url"] or place_url(provider, item["provider_place_id"], venue_name)
         links.append({
             "provider": provider, "provider_place_id": item["provider_place_id"] if item else None,
             "provider_url": item["provider_url"] if item else None,
@@ -137,7 +144,7 @@ def _read(cur: Any, row: dict[str, Any]) -> dict[str, Any]:
         "latitude": row["latitude"], "longitude": row["longitude"],
         "timezone_id": row["timezone_id"],
         "state_token": _state_token({"venue": {key: value for key, value in row.items() if key != "location_revision"},
-                                    "locality": locality, "maps": stored}),
+                                    "venue_name": venue_name, "locality": locality, "maps": stored}),
         "location_verified_at": row["location_verified_at"],
         "map_links": links,
     }
@@ -336,7 +343,9 @@ def _save_location(cur: Any, row: dict[str, Any], venue_id: int, payload: Locati
         cur.execute(
             """UPDATE venue_list SET venue_kind=%s, locality_id=%s, address=%s, latitude=%s, longitude=%s,
                timezone_id=%s,
-               location_verified_at=CURRENT_TIMESTAMP WHERE id=%s RETURNING *""",
+               location_verified_at=CURRENT_TIMESTAMP WHERE id=%s
+               RETURNING id, venue_kind, locality_id, address, latitude, longitude, timezone_id,
+                         location_revision, location_verified_at""",
             (target_kind or row["venue_kind"], payload.locality_id, payload.address, payload.latitude, payload.longitude,
              payload.timezone_id, venue_id),
         )

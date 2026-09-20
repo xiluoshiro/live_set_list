@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 from app.map_providers import MapCandidate, MapSearchResult
 
@@ -56,13 +57,16 @@ def test_create_venue_with_location_is_atomic(integration_test_client, integrati
     for key in ("address", "latitude", "longitude", "timezone_id"):
         assert saved.json()[key] == location[key]
     assert next(link for link in saved.json()["map_links"] if link["provider"] == "google")["provider_place_id"] == "place-atomic"
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM venue_list")
+        venue_count = cur.fetchone()[0]
     invalid = client.post("/api/console/venues", headers=headers, json={
         "venue_name": "Must Not Exist", "location": {**location, "locality_id": 99999999},
     })
     assert invalid.status_code == 422, invalid.text
     with integration_admin_connection.cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM venue_list WHERE venue='Must Not Exist'")
-        assert cur.fetchone()[0] == 0
+        cur.execute("SELECT COUNT(*) FROM venue_list")
+        assert cur.fetchone()[0] == venue_count
         cur.execute("SELECT COUNT(*) FROM venue_name_versions WHERE venue_name='Must Not Exist'")
         assert cur.fetchone()[0] == 0
 
@@ -343,7 +347,7 @@ def test_live_uses_venue_iana_or_online_fixed_offset(integration_test_client, in
     assert client.post("/api/console/lives",headers=headers,json={**base,"venue_id":None,"venue_name_version_id":None}).status_code==422
     for kind in ("undisclosed","online"):
         with integration_admin_connection.cursor() as cur:
-            cur.execute("INSERT INTO venue_list(venue,venue_kind,timezone_id) VALUES (%s,%s,%s) RETURNING id",(kind,kind,"Asia/Tokyo" if kind=="undisclosed" else None)); venue=cur.fetchone()[0]
+            cur.execute("INSERT INTO venue_list(venue_kind,timezone_id) VALUES (%s,%s) RETURNING id",(kind,"Asia/Tokyo" if kind=="undisclosed" else None)); venue=cur.fetchone()[0]
             cur.execute("INSERT INTO venue_name_versions(venue_id,venue_name) VALUES (%s,%s) RETURNING id",(venue,kind)); version=cur.fetchone()[0]
         payload={**base,"venue_id":venue,"venue_name_version_id":version}
         if kind=="online":
@@ -519,7 +523,7 @@ def test_combined_venue_edit_rolls_back_on_name_conflict(integration_test_client
         assert cur.fetchone()[0] == audit_count
 
 
-# 测试点：统一编辑保持位置校验，正式更名要求生效日期、当前版本及递增日期并只追加版本。
+# 测试点：正式更名只追加版本，地图使用新名称且旧位置令牌失效，并保持位置与生效日期校验。
 def test_combined_venue_edit_validation_and_append_only_names(integration_test_client):
     client = integration_test_client
     headers = login(client)
@@ -545,6 +549,11 @@ def test_combined_venue_edit_validation_and_append_only_names(integration_test_c
     renamed = response.json()["detail"]
     assert len(renamed["name_versions"]) == len(detail["name_versions"]) + 1
     assert renamed["venue_name_version_id"] != detail["venue_name_version_id"]
+    renamed_location = response.json()["location"]
+    map_links = {link["provider"]: link for link in renamed_location["map_links"]}
+    assert parse_qs(urlsplit(map_links["apple"]["coordinate_url"]).query)["q"] == ["Next Unified Venue"]
+    assert parse_qs(urlsplit(map_links["amap"]["coordinate_url"]).query)["name"] == ["Next Unified Venue"]
+    assert client.put("/api/console/venues/1/location", headers=headers, json=location).status_code == 409
     old = next(v for v in renamed["name_versions"] if v["venue_name_version_id"] == detail["venue_name_version_id"])
     assert old["venue_name"] == detail["venue_name"]
     assert old["valid_to"] == "2099-01-01"
