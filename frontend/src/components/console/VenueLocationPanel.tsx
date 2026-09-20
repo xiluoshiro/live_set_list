@@ -70,6 +70,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
   const [mapQuery, setMapQuery] = useState(venueName);
   const [mapSearch, setMapSearch] = useState<MapCandidateSearch | null>(null);
   const [selectedMapCandidate, setSelectedMapCandidate] = useState<MapCandidate | null>(null);
+  const [manualLinkOpen, setManualLinkOpen] = useState(false);
   const [mapUrl, setMapUrl] = useState("");
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -102,7 +103,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
   });
   useEffect(() => { void load(); }, [venueId]);
   useEffect(() => {
-    setMapQuery(venueName); setMapSearch(null); setSelectedMapCandidate(null); setMapUrl("");
+    setMapQuery(venueName); setMapSearch(null); setSelectedMapCandidate(null); setManualLinkOpen(false); setMapUrl("");
   }, [venueId, venueName]);
   const searchCities = (query: string) => perform(async () => {
     const result = await loadVenueLocalities(query);
@@ -262,25 +263,12 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
           <label>名称或地址<input value={mapQuery} disabled={busy} onChange={e => setMapQuery(e.target.value)} /></label>
         </div>
         <div className="console-submit-row">
+          <button className="console-ghost-btn" type="button" aria-expanded={manualLinkOpen}
+            disabled={busy} onClick={() => setManualLinkOpen(!manualLinkOpen)}>手动关联</button>
           <button className="console-ghost-btn" type="button" disabled={busy || dirty || data.latitude === null || !mapQuery.trim()} onClick={() => void perform(async () => {
             const result = await searchConsoleVenueMapCandidates(venueId, provider, mapQuery.trim());
             if (alive.current) { setMapSearch(result); setSelectedMapCandidate(null); }
           })}>查询候选</button>
-        </div>
-        {mapSearch?.message && <p className="console-admin-hint" role="status">{mapSearch.message}</p>}
-        {mapSearch?.status === "ready" && mapSearch.candidates.length === 0 && <p className="console-admin-hint">没有找到候选；请调整名称或地址，或继续手工关联。</p>}
-        {mapSearch && mapSearch.candidates.length > 0 && <div className="console-table-wrap"><table className="console-admin-table live-history-table" aria-label={`${PROVIDERS[provider]} 地图候选`}>
-          <thead><tr><th>选择</th><th>地点</th><th>地址</th><th>WGS84 坐标</th><th>距离</th><th>来源坐标</th></tr></thead>
-          <tbody>{mapSearch.candidates.map(candidate => <tr key={`${candidate.provider_place_id}:${candidate.latitude}:${candidate.longitude}`}>
-            <td><input type="radio" name={`map-candidate-${venueId}`} aria-label={`选择 ${candidate.name}`} checked={selectedMapCandidate?.provider_place_id === candidate.provider_place_id} disabled={busy} onChange={() => setSelectedMapCandidate(candidate)} /></td>
-            <td>{candidate.name}<br /><small>{candidate.provider_place_id}</small></td>
-            <td>{candidate.address || "未提供"}</td>
-            <td>{candidate.latitude}, {candidate.longitude}</td>
-            <td>{candidate.distance_m < 1000 ? `${candidate.distance_m} m` : `${(candidate.distance_m / 1000).toFixed(1)} km`}</td>
-            <td>{candidate.source_coordinate_system === "GCJ02" ? "GCJ-02 → WGS84" : "WGS84"}</td>
-          </tr>)}</tbody>
-        </table></div>}
-        <div className="console-submit-row">
           <button className="console-submit-btn" type="button" disabled={busy || dirty || !selectedMapCandidate} onClick={() => {
             if (!selectedMapCandidate) return;
             const candidate = selectedMapCandidate; const selectedProvider = provider; const stateToken = data.state_token;
@@ -294,12 +282,27 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
               }, stateToken, auth.csrfToken ?? "");
               if (alive.current) { setData(saved); setMapSearch(null); setSelectedMapCandidate(null); setMessage("地图候选已关联。"); }
             } });
-          }}>关联所选候选</button>
+          }}>关联候选</button>
         </div>
-        <h3>手工关联</h3>
-        <p className="console-admin-hint">没有 API Key、搜索失败或平台未返回目标时，可粘贴已人工核对的同平台场馆详情链接。</p>
+        {mapSearch?.message && <p className="console-admin-hint" role="status">{mapSearch.message}</p>}
+        {mapSearch?.status === "ready" && mapSearch.candidates.length === 0 && <p className="console-admin-hint">没有找到候选；请调整名称或地址，或继续手动关联。</p>}
+        {mapSearch && mapSearch.candidates.length > 0 && <div className="console-table-wrap"><table className="console-admin-table live-history-table" aria-label={`${PROVIDERS[provider]} 地图候选`}>
+          <thead><tr><th>选择</th><th>地点</th><th>地址</th><th>WGS84 坐标</th><th>距离</th><th>来源坐标</th></tr></thead>
+          <tbody>{mapSearch.candidates.map(candidate => <tr key={`${candidate.provider_place_id}:${candidate.latitude}:${candidate.longitude}`}>
+            <td><input type="radio" name={`map-candidate-${venueId}`} aria-label={`选择 ${candidate.name}`} checked={selectedMapCandidate?.provider_place_id === candidate.provider_place_id} disabled={busy} onChange={() => setSelectedMapCandidate(candidate)} /></td>
+            <td>{candidate.name}<br /><small>{candidate.provider_place_id}</small></td>
+            <td>{candidate.address || "未提供"}</td>
+            <td>{candidate.latitude}, {candidate.longitude}</td>
+            <td>{candidate.distance_m < 1000 ? `${candidate.distance_m} m` : `${(candidate.distance_m / 1000).toFixed(1)} km`}</td>
+            <td>{candidate.source_coordinate_system === "GCJ02" ? "GCJ-02 → WGS84" : "WGS84"}</td>
+          </tr>)}</tbody>
+        </table></div>}
+        {manualLinkOpen && <>
         <div className="tour-admin-fields venue-map-link-editor">
-          <label>已核对的场馆详情链接<input type="url" value={mapUrl} disabled={busy} onChange={e => setMapUrl(e.target.value)} /></label>
+          <label>地图平台<select value={provider} disabled={busy} onChange={e => {
+            setProvider(e.target.value as MapSearchProvider); setMapUrl(""); setMapSearch(null); setSelectedMapCandidate(null);
+          }}>{EDITABLE_PROVIDERS.map(key => <option value={key} key={key}>{PROVIDERS[key]}</option>)}</select></label>
+          <label>场馆详情链接<input type="url" value={mapUrl} disabled={busy} onChange={e => setMapUrl(e.target.value)} /></label>
         </div>
         <div className="console-submit-row">
           <button className="console-submit-btn" type="button" disabled={busy || dirty || data.latitude === null || !mapUrl.trim()} onClick={() => {
@@ -319,6 +322,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
             } });
           }}>取消关联</button>
         </div></>}
+        </>}
       </>}
     {confirmation && <div className="modal-mask" onClick={() => !busy && setConfirmation(null)}>
       <div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="venue-location-confirm-title" onClick={e => e.stopPropagation()}>

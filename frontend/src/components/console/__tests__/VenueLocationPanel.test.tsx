@@ -218,9 +218,9 @@ test("requires an explicit candidate selection before linking a map place", asyn
 
   await user.click(screen.getByRole("button", { name: "查询候选" }));
   expect(await screen.findByRole("table", { name: "Apple Maps 地图候选" })).toHaveTextContent("First Hall");
-  expect(screen.getByRole("button", { name: "关联所选候选" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "关联候选" })).toBeDisabled();
   await user.click(screen.getByRole("radio", { name: "选择 Second Hall" }));
-  await user.click(screen.getByRole("button", { name: "关联所选候选" }));
+  await user.click(screen.getByRole("button", { name: "关联候选" }));
   const dialog = await screen.findByRole("dialog", { name: "确认地图场馆候选" });
   expect(dialog).toHaveTextContent("143 m");
   expect(api.saveConsoleVenueMapLink).not.toHaveBeenCalled();
@@ -231,6 +231,21 @@ test("requires an explicit candidate selection before linking a map place", asyn
       provider_url: "https://maps.apple.com/place?place-id=second",
     }), "2".repeat(64), "csrf",
   ));
+});
+
+// 测试点：手动关联默认收起，入口与候选操作并列，展开后复用地图平台和详情链接字段。
+test("toggles the manual map link fields from the candidate action row", async () => {
+  const user = await openPanel();
+  const manualLink = screen.getByRole("button", { name: "手动关联" });
+
+  expect(manualLink).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByLabelText("场馆详情链接")).not.toBeInTheDocument();
+  await user.click(manualLink);
+  expect(manualLink).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getAllByLabelText("地图平台")).toHaveLength(2);
+  expect(screen.getByLabelText("场馆详情链接")).toBeInTheDocument();
+  await user.click(manualLink);
+  expect(screen.queryByLabelText("场馆详情链接")).not.toBeInTheDocument();
 });
 
 // 测试点：切换场馆卸载旧表单后，延迟返回的旧请求不能污染新场馆的位置。
