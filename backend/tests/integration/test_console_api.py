@@ -145,7 +145,6 @@ def test_console_lookup_endpoints_return_seeded_options(
                 "live_count": 1,
                 "first_live_date": "2026-04-05",
                 "last_live_date": "2026-04-05",
-                "merged_into_venue_id": None,
             }
         ],
         "page": 1,

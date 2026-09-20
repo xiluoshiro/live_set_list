@@ -19,8 +19,6 @@ MAP_PROVIDERS = ("google", "apple", "amap")
 
 VENUE_HEADER_QUERY = """
 SELECT
-    requested.id,
-    requested.merged_into_venue_id,
     venue.id,
     current_name.venue_name,
     venue.venue_kind,
@@ -31,12 +29,10 @@ SELECT
     venue.latitude,
     venue.longitude,
     venue.timezone_id
-FROM venue_list requested
-JOIN venue_list venue
-  ON venue.id = COALESCE(requested.merged_into_venue_id, requested.id)
+FROM venue_list venue
 JOIN current_venue_versions current_name ON current_name.venue_id = venue.id
 LEFT JOIN geo_localities locality ON locality.id = venue.locality_id
-WHERE requested.id = %s
+WHERE venue.id = %s
 """
 
 VENUE_NAME_VERSIONS_QUERY = """
@@ -87,11 +83,11 @@ def _load_header(cur: Any, venue_id: int) -> tuple[Any, ...]:
 
 
 def _public_map_links(cur: Any, header: tuple[Any, ...]) -> list[dict[str, str]]:
-    venue_id = int(header[2])
-    venue_name = str(header[3])
-    venue_kind = str(header[4])
-    latitude = header[9]
-    longitude = header[10]
+    venue_id = int(header[0])
+    venue_name = str(header[1])
+    venue_kind = str(header[2])
+    latitude = header[7]
+    longitude = header[8]
     if venue_kind != "physical" or latitude is None or longitude is None:
         return []
 
@@ -135,8 +131,8 @@ def get_venue_maps(venue_id: int):
         with get_db_connection() as conn, conn.cursor() as cur:
             header = _load_header(cur, venue_id)
             return {
-                "venue_id": int(header[2]),
-                "venue_name": str(header[3]),
+                "venue_id": int(header[0]),
+                "venue_name": str(header[1]),
                 "map_links": _public_map_links(cur, header),
             }
     except HTTPException:
@@ -149,7 +145,7 @@ def get_venue_maps(venue_id: int):
     "/{venue_id}",
     response_model=PublicVenueDetailResponse,
     summary="获取场馆详情",
-    description="返回场馆公开资料、名称历史、地图入口和分页 Live；合并来源 ID 返回目标 Venue。",
+    description="返回场馆公开资料、名称历史、地图入口和分页 Live。",
     responses={
         400: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
@@ -171,16 +167,15 @@ def get_venue_detail(
     try:
         with get_db_connection() as conn, conn.cursor() as cur:
             header = _load_header(cur, venue_id)
-            canonical_id = int(header[2])
-            cur.execute(VENUE_NAME_VERSIONS_QUERY, (canonical_id,))
+            cur.execute(VENUE_NAME_VERSIONS_QUERY, (venue_id,))
             name_rows = cur.fetchall()
             map_links = _public_map_links(cur, header)
-            cur.execute(VENUE_LIVE_COUNT_QUERY, (canonical_id,))
+            cur.execute(VENUE_LIVE_COUNT_QUERY, (venue_id,))
             count_row = cur.fetchone()
             total = int(count_row[0]) if count_row else 0
             total_pages = ceil(total / page_size) if total > 0 else 1
             safe_page = min(page, total_pages)
-            cur.execute(VENUE_LIVES_QUERY, (canonical_id, page_size, (safe_page - 1) * page_size))
+            cur.execute(VENUE_LIVES_QUERY, (venue_id, page_size, (safe_page - 1) * page_size))
             live_rows = cur.fetchall()
     except HTTPException:
         raise
@@ -188,17 +183,17 @@ def get_venue_detail(
         _raise_read_error("get_venue_detail", venue_id, exc)
 
     locality = None
-    if header[5] is not None:
-        locality = {"country_code": header[5], "admin_area": header[6], "locality_name": header[7]}
+    if header[3] is not None:
+        locality = {"country_code": header[3], "admin_area": header[4], "locality_name": header[5]}
     return {
-        "venue_id": int(header[2]),
-        "venue_name": str(header[3]),
-        "venue_kind": str(header[4]),
+        "venue_id": int(header[0]),
+        "venue_name": str(header[1]),
+        "venue_kind": str(header[2]),
         "locality": locality,
-        "address": header[8],
-        "latitude": header[9],
-        "longitude": header[10],
-        "timezone_id": header[11],
+        "address": header[6],
+        "latitude": header[7],
+        "longitude": header[8],
+        "timezone_id": header[9],
         "name_versions": [
             {"venue_name": row[0], "valid_from": row[1], "valid_to": row[2], "is_current": bool(row[3])}
             for row in name_rows

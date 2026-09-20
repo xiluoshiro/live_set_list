@@ -203,7 +203,6 @@ def _resolve_venue_name_version(cur: Any, payload: ConsoleLiveBaseRequest) -> in
         JOIN venue_name_versions version ON version.venue_id = venue.id
         WHERE venue.id = %s
           AND version.id = %s
-          AND venue.merged_into_venue_id IS NULL
         """,
         (payload.venue_id, payload.venue_name_version_id),
     )

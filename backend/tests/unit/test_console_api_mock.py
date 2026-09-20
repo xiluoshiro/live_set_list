@@ -171,7 +171,7 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
         fetchall_side_effect=[[(2, "Roselia", "rsl", ["Yukina", "Sayo"])]],
     )
     venues_conn, _ = _build_connection_mock(
-        fetchall_side_effect=[[(3, "Zepp Shinjuku", 7, "physical", None, "Zepp Shinjuku", 7, True, 0, None, None, 1, "Asia/Tokyo")]],
+        fetchall_side_effect=[[(3, "Zepp Shinjuku", 7, "physical", "Zepp Shinjuku", 7, True, 0, None, None, 1, "Asia/Tokyo")]],
     )
 
     with patch("app.routers.console_read.get_db_connection", side_effect=[songs_conn, bands_conn]), patch(
@@ -217,7 +217,6 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
             "live_count": 0,
             "first_live_date": None,
             "last_live_date": None,
-            "merged_into_venue_id": None,
         }],
         "page": 1,
         "page_size": 10,
@@ -584,7 +583,6 @@ def test_console_create_venue_mock_success_persists_and_audits():
             "live_count": 0,
             "first_live_date": None,
             "last_live_date": None,
-            "merged_into_venue_id": None,
         },
     }
     assert cursor.execute.call_args_list[2].args[1] == ("New Venue", "undisclosed")

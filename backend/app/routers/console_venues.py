@@ -14,8 +14,6 @@ from app.schemas.console import (
     ConsoleVenueDetailResponse,
     ConsoleVenueListResponse,
     ConsoleVenueLivesResponse,
-    ConsoleVenueMergePreviewResponse,
-    ConsoleVenueMergeRequest,
     ConsoleVenueMutationResponse,
     ConsoleVenueNameVersionCreateRequest,
     ConsoleVenueUpdateRequest,
@@ -68,9 +66,7 @@ def _ensure_name_available(
         f"""
         SELECT 1
         FROM venue_name_versions version
-        JOIN venue_list venue ON venue.id = version.venue_id
         WHERE lower(btrim(version.venue_name)) = lower(btrim(%s))
-          AND venue.merged_into_venue_id IS NULL
           {exclude_sql}
         LIMIT 1
         """,
@@ -87,10 +83,10 @@ def _lock_name_registry(cur: Any) -> None:
     cur.execute(VENUE_NAME_LOCK_SQL)
 
 
-def _lock_active_venue(cur: Any, venue_id: int) -> None:
+def _lock_venue(cur: Any, venue_id: int) -> None:
     cur.execute(
         """
-        SELECT merged_into_venue_id
+        SELECT id
         FROM venue_list
         WHERE id = %s
         FOR UPDATE
@@ -100,8 +96,6 @@ def _lock_active_venue(cur: Any, venue_id: int) -> None:
     row = cur.fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Venue id {venue_id} not found")
-    if row[0] is not None:
-        raise HTTPException(status_code=409, detail=f"Venue id {venue_id} has already been merged")
 
 
 def _load_detail(cur: Any, venue_id: int) -> dict[str, Any]:
@@ -112,7 +106,6 @@ def _load_detail(cur: Any, venue_id: int) -> dict[str, Any]:
             current_version.venue_name,
             current_version.id,
             venue.venue_kind,
-            venue.merged_into_venue_id,
             COUNT(live.id),
             MIN(live.live_date),
             MAX(live.live_date),
@@ -157,11 +150,10 @@ def _load_detail(cur: Any, venue_id: int) -> dict[str, Any]:
         "venue_name": str(row[1]),
         "venue_name_version_id": int(row[2]),
         "venue_kind": str(row[3]),
-        "merged_into_venue_id": int(row[4]) if row[4] is not None else None,
-        "live_count": int(row[5]),
-        "first_live_date": row[6],
-        "last_live_date": row[7],
-        "timezone_id": row[8],
+        "live_count": int(row[4]),
+        "first_live_date": row[5],
+        "last_live_date": row[6],
+        "timezone_id": row[7],
         "name_versions": [
             {
                 "venue_name_version_id": int(version[0]),
@@ -192,19 +184,18 @@ def list_venues(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
     kind: VenueKind | None = Query(default=None),
-    include_merged: bool = Query(default=False),
     _: Any = Depends(require_role("editor")),
 ):
     query_text = q.strip() if q else ""
-    filters = ["(%s OR venue.merged_into_venue_id IS NULL)"]
-    params: list[Any] = [include_merged]
+    filters: list[str] = []
+    params: list[Any] = []
     if kind is not None:
         filters.append("venue.venue_kind = %s")
         params.append(kind)
     if query_text:
         filters.append("matched_version.venue_name ILIKE %s ESCAPE '\\'")
         params.append(_lookup_pattern(query_text))
-    where_sql = " AND ".join(filters)
+    where_sql = " AND ".join(filters) or "TRUE"
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -216,7 +207,6 @@ def list_venues(
                             current_version.venue_name,
                             current_version.id AS current_version_id,
                             venue.venue_kind,
-                            venue.merged_into_venue_id,
                             matched_version.venue_name AS matched_name,
                             matched_version.id AS matched_version_id,
                             matched_version.valid_to IS NULL AS is_current_match,
@@ -238,7 +228,7 @@ def list_venues(
                         GROUP BY venue_id
                     )
                     SELECT matched.id, matched.venue_name, matched.current_version_id,
-                           matched.venue_kind, matched.merged_into_venue_id,
+                           matched.venue_kind,
                            matched.matched_name, matched.matched_version_id, matched.is_current_match,
                            COALESCE(usage.live_count, 0),
                            usage.first_live_date, usage.last_live_date,
@@ -253,7 +243,7 @@ def list_venues(
                 rows = cur.fetchall()
     except (QueryCanceled, OperationalError, Error) as exc:
         _raise_database_error("list_venues", exc)
-    total = int(rows[0][11]) if rows else 0
+    total = int(rows[0][10]) if rows else 0
     total_pages = max(1, math.ceil(total / limit))
     return {
         "items": [
@@ -262,14 +252,13 @@ def list_venues(
                 "venue_name": str(row[1]),
                 "venue_name_version_id": int(row[2]),
                 "venue_kind": str(row[3]),
-                "merged_into_venue_id": int(row[4]) if row[4] is not None else None,
-                "matched_name": str(row[5]),
-                "matched_name_version_id": int(row[6]),
-                "match_kind": "current" if row[7] else "historical",
-                "live_count": int(row[8]),
-                "first_live_date": row[9],
-                "last_live_date": row[10],
-                "timezone_id": row[12],
+                "matched_name": str(row[4]),
+                "matched_name_version_id": int(row[5]),
+                "match_kind": "current" if row[6] else "historical",
+                "live_count": int(row[7]),
+                "first_live_date": row[8],
+                "last_live_date": row[9],
+                "timezone_id": row[11],
             }
             for row in rows
         ],
@@ -429,7 +418,7 @@ def update_venue(
     try:
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
-                _lock_active_venue(cur, venue_id)
+                _lock_venue(cur, venue_id)
                 if payload.venue_kind == "online":
                     cur.execute(
                         "SELECT 1 FROM venue_list WHERE id=%s AND (locality_id IS NOT NULL OR address IS NOT NULL OR latitude IS NOT NULL OR timezone_id IS NOT NULL)",
@@ -491,105 +480,10 @@ def create_venue_name_version(
     try:
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
-                _lock_active_venue(cur, venue_id)
+                _lock_venue(cur, venue_id)
                 _create_name_version(cur, venue_id, payload, context)
                 return _load_detail(cur, venue_id)
     except HTTPException:
         raise
     except (QueryCanceled, OperationalError, Error) as exc:
         _raise_database_error("create_venue_name_version", exc)
-
-
-@router.get("/venues/{source_venue_id}/merge-preview", response_model=ConsoleVenueMergePreviewResponse, summary="预览 Venue 合并")
-def preview_venue_merge(
-    source_venue_id: int = Path(..., ge=1),
-    target_venue_id: int = Query(..., ge=1),
-    _: Any = Depends(require_role("admin")),
-):
-    if source_venue_id == target_venue_id:
-        raise HTTPException(status_code=409, detail="Source and target Venue must differ")
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                source = _load_detail(cur, source_venue_id)
-                target = _load_detail(cur, target_venue_id)
-    except HTTPException:
-        raise
-    except (QueryCanceled, OperationalError, Error) as exc:
-        _raise_database_error("preview_venue_merge", exc)
-    if source["merged_into_venue_id"] is not None or target["merged_into_venue_id"] is not None:
-        raise HTTPException(status_code=409, detail="Merged Venue cannot be used as merge source or target")
-    return {
-        "source": source,
-        "target": target,
-        "required_source_version_ids": [int(version["venue_name_version_id"]) for version in source["name_versions"]],
-    }
-
-
-@router.post("/venues/{source_venue_id}/merge", response_model=ConsoleVenueDetailResponse, summary="执行 Venue 合并")
-def merge_venue(
-    payload: ConsoleVenueMergeRequest,
-    request: Request,
-    source_venue_id: int = Path(..., ge=1),
-    _: Any = Depends(require_role("admin")),
-    context: AuthSessionContext = Depends(get_current_auth_context),
-):
-    assert_valid_csrf(request, context)
-    if source_venue_id == payload.target_venue_id:
-        raise HTTPException(status_code=409, detail="Source and target Venue must differ")
-    mapping = {item.source_version_id: item.target_version_id for item in payload.version_mappings}
-    if len(mapping) != len(payload.version_mappings):
-        raise HTTPException(status_code=409, detail="Duplicate source version mapping")
-    try:
-        with get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                for venue_id in sorted((source_venue_id, payload.target_venue_id)):
-                    _lock_active_venue(cur, venue_id)
-                cur.execute(
-                    """SELECT 1 FROM venue_list v WHERE v.id = ANY(%s) AND
-                       (v.locality_id IS NOT NULL OR v.address IS NOT NULL OR v.latitude IS NOT NULL
-                        OR v.timezone_id IS NOT NULL OR EXISTS (SELECT 1 FROM venue_map_links m WHERE m.venue_id=v.id)) LIMIT 1""",
-                    ([source_venue_id, payload.target_venue_id],),
-                )
-                if cur.fetchone() is not None:
-                    raise HTTPException(status_code=409, detail="场馆已有地理资料；须先完成地理与地图关联的合并核对，本阶段不自动合并")
-                cur.execute("SELECT id FROM venue_name_versions WHERE venue_id = %s ORDER BY id", (source_venue_id,))
-                source_version_ids = [int(row[0]) for row in cur.fetchall()]
-                if set(mapping) != set(source_version_ids):
-                    raise HTTPException(status_code=409, detail="Every source name version must have exactly one mapping")
-                cur.execute("SELECT id FROM venue_name_versions WHERE venue_id = %s", (payload.target_venue_id,))
-                target_version_ids = {int(row[0]) for row in cur.fetchall()}
-                if not set(mapping.values()).issubset(target_version_ids):
-                    raise HTTPException(status_code=409, detail="Every mapped target version must belong to the target Venue")
-                live_count = 0
-                history_count = 0
-                for source_version_id, target_version_id in mapping.items():
-                    cur.execute(
-                        "UPDATE live_attrs SET venue_id = %s, venue_name_version_id = %s WHERE venue_id = %s AND venue_name_version_id = %s",
-                        (payload.target_venue_id, target_version_id, source_venue_id, source_version_id),
-                    )
-                    live_count += cur.rowcount
-                    cur.execute(
-                        "UPDATE live_schedule_history SET previous_venue_id = %s, previous_venue_name_version_id = %s WHERE previous_venue_id = %s AND previous_venue_name_version_id = %s",
-                        (payload.target_venue_id, target_version_id, source_venue_id, source_version_id),
-                    )
-                    history_count += cur.rowcount
-                cur.execute("SELECT COUNT(*) FROM live_attrs WHERE venue_id = %s", (source_venue_id,))
-                if int(cur.fetchone()[0]) != 0:
-                    raise HTTPException(status_code=409, detail="Source Venue contains Live rows without a mapped name version")
-                cur.execute("SELECT COUNT(*) FROM live_schedule_history WHERE previous_venue_id = %s", (source_venue_id,))
-                if int(cur.fetchone()[0]) != 0:
-                    raise HTTPException(status_code=409, detail="Source Venue contains schedule history rows without a mapped name version")
-                cur.execute("UPDATE venue_list SET merged_into_venue_id = %s WHERE id = %s", (payload.target_venue_id, source_venue_id))
-                _write_audit(
-                    cur,
-                    user_id=context.user.id,
-                    action="venue_merge",
-                    venue_id=source_venue_id,
-                    payload={"target_venue_id": payload.target_venue_id, "version_mappings": mapping, "live_count": live_count, "schedule_history_count": history_count},
-                )
-                return _load_detail(cur, payload.target_venue_id)
-    except HTTPException:
-        raise
-    except (QueryCanceled, OperationalError, Error) as exc:
-        _raise_database_error("merge_venue", exc)

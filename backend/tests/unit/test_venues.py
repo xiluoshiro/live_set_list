@@ -21,12 +21,10 @@ def _build_connection_mock():
     return conn, cursor
 
 
-# 测试点：合并来源 ID 应返回主 Venue，并优先使用当前 POI 链接、对其余地图生成坐标链接。
-def test_get_venue_detail_resolves_canonical_venue_and_map_sources():
+# 测试点：场馆详情返回请求的 Venue，并优先使用 POI 链接、对其余地图生成坐标链接。
+def test_get_venue_detail_returns_venue_and_map_sources():
     conn, cursor = _build_connection_mock()
     header = (
-        99,
-        7,
         7,
         "日本武道館",
         "physical",
@@ -46,7 +44,7 @@ def test_get_venue_detail_resolves_canonical_venue_and_map_sources():
     ]
 
     with patch("app.routers.venues.get_db_connection", return_value=conn):
-        response = TestClient(app).get("/api/venues/99?page=1&page_size=20")
+        response = TestClient(app).get("/api/venues/7?page=1&page_size=20")
 
     assert response.status_code == 200
     payload = response.json()
@@ -63,7 +61,7 @@ def test_get_venue_detail_resolves_canonical_venue_and_map_sources():
     assert payload["lives"][0]["live_id"] == 51
     assert payload["pagination"] == {"page": 1, "page_size": 20, "total": 1, "total_pages": 1}
     assert cursor.execute.call_args_list == [
-        call(VENUE_HEADER_QUERY, (99,)),
+        call(VENUE_HEADER_QUERY, (7,)),
         call(VENUE_NAME_VERSIONS_QUERY, (7,)),
         call(VENUE_MAP_LINKS_QUERY, (7,)),
         call(VENUE_LIVE_COUNT_QUERY, (7,)),
@@ -75,8 +73,6 @@ def test_get_venue_detail_resolves_canonical_venue_and_map_sources():
 def test_get_venue_maps_returns_empty_for_non_physical_venue():
     conn, cursor = _build_connection_mock()
     cursor.fetchone.return_value = (
-        8,
-        None,
         8,
         "Online Live",
         "online",

@@ -59,10 +59,10 @@ def normalize_live_times(cur: Any, *, live_date: date, venue_id: int | None,
             if cur.fetchone() is None:
                 raise HTTPException(422, "地区不存在")
         return None, None
-    cur.execute("SELECT venue_kind, timezone_id FROM venue_list WHERE id=%s AND merged_into_venue_id IS NULL", (venue_id,))
+    cur.execute("SELECT venue_kind, timezone_id FROM venue_list WHERE id=%s", (venue_id,))
     row = cur.fetchone()
     if row is None:
-        raise HTTPException(422, "场馆不存在或已合并")
+        raise HTTPException(422, "场馆不存在")
     kind, zone = row
     if kind != "online" and not zone:
         raise HTTPException(422, "请先填写场馆自身时区")

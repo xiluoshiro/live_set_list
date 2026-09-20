@@ -84,7 +84,6 @@ describe("Venue public pages", () => {
         onBack={vi.fn()}
         onOpenLive={onOpenLive}
         onOpenGroup={vi.fn()}
-        onCanonicalVenue={vi.fn()}
       />,
     );
 
@@ -112,7 +111,6 @@ describe("Venue public pages", () => {
         onBack={vi.fn()}
         onOpenLive={vi.fn()}
         onOpenGroup={vi.fn()}
-        onCanonicalVenue={vi.fn()}
       />,
     );
 
@@ -136,30 +134,10 @@ describe("Venue public pages", () => {
         onBack={vi.fn()}
         onOpenLive={vi.fn()}
         onOpenGroup={vi.fn()}
-        onCanonicalVenue={vi.fn()}
       />,
     );
 
     expect(await screen.findByText(expected)).toBeInTheDocument();
-  });
-
-  // 测试点：请求合并来源 ID 时，页面应把站内地址替换成主 Venue ID。
-  test("reports the canonical Venue returned by the API", async () => {
-    const onCanonicalVenue = vi.fn();
-    apiMocks.getVenueDetail.mockResolvedValue(makeVenueDetail());
-
-    render(
-      <VenueDetailPage
-        venueId={99}
-        fallbackName="旧场馆名"
-        onBack={vi.fn()}
-        onOpenLive={vi.fn()}
-        onOpenGroup={vi.fn()}
-        onCanonicalVenue={onCanonicalVenue}
-      />,
-    );
-
-    await waitFor(() => expect(onCanonicalVenue).toHaveBeenCalledWith(7, "日本武道館"));
   });
 
   // 测试点：Live 详情里的地图按钮应在轻量接口确认有位置后出现，并列出可选地图。

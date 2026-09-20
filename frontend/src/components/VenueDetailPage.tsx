@@ -19,7 +19,6 @@ type VenueDetailPageProps = {
   onBack: () => void;
   onOpenLive: (live: { live_id: number; live_date: string; live_title: string; url: string | null }) => void;
   onOpenGroup: (groupId: number, groupTitle: string) => void;
-  onCanonicalVenue: (venueId: number, venueName: string) => void;
 };
 
 const COUNTRY_DISPLAY_NAMES: Record<string, string> = {
@@ -96,7 +95,6 @@ export function VenueDetailPage({
   onBack,
   onOpenLive,
   onOpenGroup,
-  onCanonicalVenue,
 }: VenueDetailPageProps) {
   const [detail, setDetail] = useState<PublicVenueDetailResponse | null>(null);
   const [performances, setPerformances] = useState<PerformanceItem[]>([]);
@@ -119,7 +117,6 @@ export function VenueDetailPage({
       .then(async (response) => {
         if (canceled) return;
         setDetail(response);
-        if (response.venue_id !== venueId) onCanonicalVenue(response.venue_id, response.venue_name);
         try {
           const performanceResponse = await getPerformances(1, 20, "all", { venue_id: response.venue_id });
           if (!canceled) {
@@ -143,7 +140,7 @@ export function VenueDetailPage({
       })
       .finally(() => { if (!canceled) setLoading(false); });
     return () => { canceled = true; };
-  }, [onCanonicalVenue, venueId]);
+  }, [venueId]);
 
   useEffect(() => {
     if (!detail) return undefined;

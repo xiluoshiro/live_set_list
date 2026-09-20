@@ -35,8 +35,7 @@ QUALITY_CTE = f"""
         FROM venue_list venue
         JOIN venue_name_versions version ON version.venue_id = venue.id AND version.valid_to IS NULL
         LEFT JOIN geo_localities locality ON locality.id = venue.locality_id
-        WHERE venue.merged_into_venue_id IS NULL
-          AND venue.venue_kind = 'physical'
+        WHERE venue.venue_kind = 'physical'
     ), venue_quality AS (
         SELECT issue.category, 'venue'::text AS subject_type, base.venue_id AS subject_id,
                base.venue_id, base.venue_name, base.venue_kind, base.locality_label,

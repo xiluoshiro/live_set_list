@@ -105,7 +105,6 @@ class ConsoleVenueItem(BaseModel):
     live_count: int = Field(default=0, ge=0)
     first_live_date: date | None = None
     last_live_date: date | None = None
-    merged_into_venue_id: int | None = None
 
 
 class ConsoleVenueListResponse(BaseModel):
@@ -165,7 +164,6 @@ class ConsoleVenueDetailResponse(BaseModel):
     venue_name: str
     venue_name_version_id: int
     venue_kind: VenueKind
-    merged_into_venue_id: int | None = None
     live_count: int = Field(default=0, ge=0)
     first_live_date: date | None = None
     last_live_date: date | None = None
@@ -199,22 +197,6 @@ class ConsoleVenueEditRequest(BaseModel):
 class ConsoleVenueEditResponse(BaseModel):
     detail: ConsoleVenueDetailResponse
     location: VenueLocation
-
-
-class ConsoleVenueMergeVersionMapping(BaseModel):
-    source_version_id: int = Field(..., ge=1)
-    target_version_id: int = Field(..., ge=1)
-
-
-class ConsoleVenueMergeRequest(BaseModel):
-    target_venue_id: int = Field(..., ge=1)
-    version_mappings: list[ConsoleVenueMergeVersionMapping] = Field(default_factory=list)
-
-
-class ConsoleVenueMergePreviewResponse(BaseModel):
-    source: ConsoleVenueDetailResponse
-    target: ConsoleVenueDetailResponse
-    required_source_version_ids: list[int]
 
 
 class ConsoleVenueLiveItem(BaseModel):

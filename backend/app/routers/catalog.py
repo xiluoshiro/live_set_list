@@ -195,7 +195,6 @@ JOIN venue_name_versions matched_version
 LEFT JOIN live_attrs l
     ON l.venue_id = venue.id
 WHERE matched_version.venue_name ILIKE %s ESCAPE '\\'
-  AND venue.merged_into_venue_id IS NULL
 GROUP BY venue.id, current_version.venue_name
 ORDER BY live_count DESC, current_version.venue_name, venue.id
 LIMIT %s

@@ -51,8 +51,6 @@ def _venue(cur: Any, venue_id: int, *, lock: bool = False) -> dict[str, Any]:
     row = cur.fetchone()
     if row is None:
         raise HTTPException(404, "场馆不存在")
-    if row["merged_into_venue_id"] is not None:
-        raise HTTPException(409, "场馆已合并，请维护目标场馆")
     return dict(row)
 
 

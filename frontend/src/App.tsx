@@ -1076,19 +1076,6 @@ function App() {
     });
   };
 
-  const canonicalizeVenue = useCallback((venueId: number, venueName: string) => {
-    setDetailVenueId(venueId);
-    setVenueFallbackName(venueName);
-    const current = isAppHistoryState(window.history.state) ? window.history.state : null;
-    if (current?.tab === "venue_detail") {
-      window.history.replaceState(
-        { ...current, detailVenueId: venueId, venueFallbackName: venueName },
-        "",
-        `/venues/${venueId}`,
-      );
-    }
-  }, []);
-
   const handleShowAllLiveSearchResults = (query: string) => {
     handleListFiltersChange({ ...DEFAULT_LIVE_LIST_FILTERS, q: query });
     navigateToTab("all");
@@ -1590,7 +1577,6 @@ function App() {
             venueId={detailVenueId}
             fallbackName={venueFallbackName}
             onBack={handleBackFromVenue}
-            onCanonicalVenue={canonicalizeVenue}
             onOpenLive={openVenueLiveDetail}
             onOpenGroup={(groupId, groupTitle) => openPerformanceGroupDetail({
               group_id: groupId,

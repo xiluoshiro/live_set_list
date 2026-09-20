@@ -616,7 +616,6 @@ export type ConsoleVenueItem = {
   live_count?: number;
   first_live_date?: string | null;
   last_live_date?: string | null;
-  merged_into_venue_id?: number | null;
 };
 
 export type GeoLocality = {
@@ -828,7 +827,6 @@ export type ConsoleVenueDetail = {
   venue_name: string;
   venue_name_version_id: number;
   venue_kind: "physical" | "online" | "undisclosed";
-  merged_into_venue_id: number | null;
   live_count: number;
   first_live_date: string | null;
   last_live_date: string | null;
@@ -1643,11 +1641,9 @@ export async function getConsoleVenuePage(
   q = "",
   page = 1,
   limit = 20,
-  includeMerged = false,
 ): Promise<ConsoleVenueListResponse> {
   const query = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (q.trim()) query.set("q", q.trim());
-  if (includeMerged) query.set("include_merged", "true");
   const response = await fetchWithTimeout(`${BASE_URL}/api/console/venues?${query.toString()}`, undefined, {
     requestKind: "console_venue_page",
   });
