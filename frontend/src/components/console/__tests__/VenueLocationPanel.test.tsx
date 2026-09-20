@@ -49,7 +49,7 @@ test("online venues do not advertise a physical venue timezone fallback", async 
 // 测试点：所在地与地图直接加载且不再折叠，地区时区与缺失坐标如实展示，单个坐标不能提交。
 test("loads directly and validates paired coordinates", async () => {
   const user = await openPanel();
-  expect(screen.getByText(/场馆 IANA 时区：Asia\/Tokyo/)).toBeInTheDocument();
+  expect(screen.getByLabelText("场馆精确时区")).toHaveValue("Asia/Tokyo");
   expect(screen.getAllByText("暂无坐标")).toHaveLength(3);
   await user.type(screen.getByLabelText("纬度（WGS84）"), "0");
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
@@ -85,10 +85,10 @@ test("loads region-only localities without a city name", async () => {
   api.getConsoleVenueLocation.mockResolvedValue({ ...location, locality: tokyo });
   api.getConsoleLocalities.mockResolvedValue({ items: [tokyo, hongKong], total: 2, page: 1, page_size: 20 });
 
-  await openPanel();
-
-  expect(screen.getByRole("option", { name: "JP / 東京都" })).toBeInTheDocument();
-  expect(screen.getByRole("option", { name: "HK" })).toBeInTheDocument();
+  const user = await openPanel();
+  await user.click(screen.getByRole("button", { name: "已公布地区" }));
+  expect(screen.getByRole("radio", { name: "JP / 東京都" })).toBeChecked();
+  expect(screen.getByRole("radio", { name: "HK" })).toBeInTheDocument();
   expect(screen.queryByText(/Request failed: 500/)).not.toBeInTheDocument();
 });
 
@@ -120,7 +120,7 @@ test("only selects existing localities for the Venue", async () => {
   await openPanel();
   expect(screen.queryByRole("button", { name: "登记已核验地区" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "修改已选地区" })).not.toBeInTheDocument();
-  expect(screen.getByRole("combobox", { name: "已公布地区" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "已公布地区" })).toBeInTheDocument();
 });
 
 // 测试点：保存前必须预览，使用预览快照和数据状态令牌提交；失败保留确认框及编辑内容。
@@ -172,15 +172,23 @@ test("updates venue timezone without a live review workflow", async () => {
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("所在地已保存"));
 });
 
-// 测试点：地区分页提供总数和后续结果入口，不把首批地区当作完整列表。
-test("shows locality total and fetches the next page", async () => {
+// 测试点：地区菜单包含后续分页，搜索无结果仍保留已保存地区，更正后可恢复原值。
+test("loads all locality pages and preserves selection across searches", async () => {
   api.getConsoleLocalities.mockResolvedValueOnce({ items: [city], total: 21, page: 1, page_size: 20 })
     .mockResolvedValueOnce({ items: [{ ...city, id: 6, locality_name: "別の市" }], total: 21, page: 2, page_size: 20 });
   const user = await openPanel();
-  expect(screen.getByText(/共 21 个地区/)).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "下一页地区" }));
-  await screen.findByRole("option", { name: /別の市/ });
-  expect(api.getConsoleLocalities).toHaveBeenLastCalledWith("", 2);
+  await user.click(screen.getByRole("button", { name: "已公布地区" }));
+  await user.click(screen.getByRole("radio", { name: /別の市/ }));
+  expect(screen.getByRole("button", { name: "已公布地区" })).toHaveTextContent("別の市");
+  expect(api.getConsoleLocalities).toHaveBeenCalledWith("", 2);
+  await user.click(screen.getByRole("button", { name: "恢复原值" }));
+  expect(screen.getByRole("button", { name: "已公布地区" })).toHaveTextContent("検証市");
+  api.getConsoleLocalities.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20 });
+  await user.type(screen.getByLabelText("搜索地区"), "missing{Enter}");
+  await waitFor(() => expect(api.getConsoleLocalities).toHaveBeenLastCalledWith("missing", 1));
+  await user.click(screen.getByRole("button", { name: "已公布地区" }));
+  expect(screen.getByRole("radio", { name: /検証市/ })).toBeChecked();
+  expect(screen.queryByRole("button", { name: "下一页地区" })).not.toBeInTheDocument();
 });
 
 // 测试点：未关联平台时保留坐标生成的地图链接及对应平台入口。
@@ -240,7 +248,10 @@ test("ignores an old venue response after unmount", async () => {
 // 测试点：已确定地区不能清空，实体场馆地址清空或只填空格时不能保存。
 test("requires physical address and keeps established locality", async () => {
   const user = await openPanel();
-  expect(screen.getByRole("option", { name: "未填写" })).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "已公布地区" }));
+  expect(screen.queryByRole("radio", { name: "未填写" })).not.toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  expect(screen.getByRole("button", { name: "已公布地区" })).toHaveTextContent("検証市");
   const address = screen.getByLabelText("公开门牌地址");
   expect(address).toBeRequired();
   await user.clear(address);
@@ -259,4 +270,25 @@ test.each(["undisclosed", "online"])("does not require address for %s venues", a
   expect(address).toBeDisabled();
   expect(address).not.toBeRequired();
   expect(screen.queryByText("实体场馆必须填写公开门牌地址。")).not.toBeInTheDocument();
+});
+
+// 测试点：管理表单回填已有资料，恢复原值撤销位置草稿且不向服务器写入。
+test("restores the saved location without mutating it", async () => {
+  const user = await openPanel();
+  const form = within(screen.getByRole("table", { name: "场馆所在地资料" }));
+  expect(form.getByText("Test Venue")).toBeInTheDocument();
+  expect(form.getByText("实体场馆")).toBeInTheDocument();
+  expect(form.queryByRole("textbox", { name: "名称" })).not.toBeInTheDocument();
+  await user.clear(form.getByLabelText("公开门牌地址"));
+  await user.type(form.getByLabelText("公开门牌地址"), "Draft address");
+  await user.type(form.getByLabelText("纬度（WGS84）"), "35");
+  await user.type(form.getByLabelText("经度（WGS84）"), "139");
+  await user.selectOptions(form.getByLabelText("场馆精确时区"), "America/New_York");
+  await user.click(screen.getByRole("button", { name: "恢复原值" }));
+  expect(form.getByLabelText("公开门牌地址")).toHaveValue("Saved address");
+  expect(form.getByLabelText("纬度（WGS84）")).toHaveValue("");
+  expect(form.getByLabelText("经度（WGS84）")).toHaveValue("");
+  expect(form.getByLabelText("场馆精确时区")).toHaveValue("Asia/Tokyo");
+  expect(api.saveConsoleVenueLocation).not.toHaveBeenCalled();
+  expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
 });
