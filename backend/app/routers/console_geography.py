@@ -13,7 +13,14 @@ from app.auth import AuthSessionContext, assert_valid_csrf, get_current_auth_con
 from app.db import get_db_connection, get_write_db_connection
 from app.geography import coordinate_url, place_url, timezone_names
 from app.map_providers import haversine_distance_m, search_map_candidates
-from app.routers.console_venues import _raise_database_error
+from app.routers.console_venues import (
+    _raise_database_error, _load_detail, _create_name_version,
+    _ensure_name_available, _write_audit,
+)
+from app.schemas.console import (
+    ConsoleVenueEditRequest, ConsoleVenueEditResponse,
+    ConsoleVenueNameVersionCreateRequest,
+)
 from app.schemas.geography import (
     Locality, LocalityCreate, LocalityPage, LocalityPreview, LocalityUpdate, LocationPreview, LocationWrite,
     MapCandidateSearch, MapLinkWrite, MapProvider, MapSearchProvider, VenueLocation,
@@ -138,24 +145,25 @@ def _read(cur: Any, row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _validate(cur: Any, row: dict[str, Any], payload: LocationWrite) -> str | None:
+def _validate(cur: Any, row: dict[str, Any], payload: LocationWrite, *, target_kind: str | None = None) -> str | None:
     if _read(cur, row)["state_token"] != payload.expected_state_token:
         raise HTTPException(409, "场馆资料已更新，请重新加载并检查修改")
-    if row["venue_kind"] == "online" and any(value is not None for value in (
+    kind = target_kind or row["venue_kind"]
+    if kind == "online" and any(value is not None for value in (
         payload.locality_id, payload.address, payload.latitude, payload.longitude,
         payload.timezone_id, payload.google_place,
     )):
         raise HTTPException(422, "线上场馆不保存实体位置，请在活动中指定时间基准")
-    if row["venue_kind"] == "undisclosed" and any(value is not None for value in (
+    if kind == "undisclosed" and any(value is not None for value in (
         payload.address, payload.latitude, payload.longitude, payload.google_place,
     )):
         raise HTTPException(422, "未公开具体场馆可保存地区和时区，不保存门牌、坐标或地图关联")
     _locality(cur, payload.locality_id)
     if row["locality_id"] is not None and payload.locality_id is None:
         raise HTTPException(422, "已确定地区的场馆不能清空地区")
-    if row["venue_kind"] == "physical" and not payload.address:
+    if kind == "physical" and not payload.address:
         raise HTTPException(422, "实体场馆必须填写公开门牌地址")
-    if row["venue_kind"] != "online" and not payload.timezone_id:
+    if kind != "online" and not payload.timezone_id:
         raise HTTPException(422, "场馆必须填写自身 IANA 时区")
     return payload.timezone_id
 
@@ -324,6 +332,26 @@ def preview_location(venue_id: int, payload: LocationWrite):
         _raise_database_error("preview_venue_location", exc)
 
 
+def _save_location(cur: Any, row: dict[str, Any], venue_id: int, payload: LocationWrite, context: AuthSessionContext, *, target_kind: str | None = None) -> dict[str, Any]:
+    before = VenueLocation.model_validate(_read(cur, row)).model_dump(mode="json")
+    if _changed(cur, row, payload) or (target_kind is not None and target_kind != row["venue_kind"]):
+        cur.execute(
+            """UPDATE venue_list SET venue_kind=%s, locality_id=%s, address=%s, latitude=%s, longitude=%s,
+               timezone_id=%s,
+               location_verified_at=CURRENT_TIMESTAMP WHERE id=%s RETURNING *""",
+            (target_kind or row["venue_kind"], payload.locality_id, payload.address, payload.latitude, payload.longitude,
+             payload.timezone_id, venue_id),
+        )
+        row = dict(cur.fetchone())
+        _write_google_place(cur, venue_id, payload)
+        after = VenueLocation.model_validate(_read(cur, row)).model_dump(mode="json")
+        _audit(cur, context, "venue_location_update", "venue", venue_id, {
+            "before": before,
+            "after": after,
+        })
+    return _read(cur, row)
+
+
 @router.put("/venues/{venue_id}/location", response_model=VenueLocation, summary="保存已核对的位置资料")
 def save_location(venue_id: int, payload: LocationWrite, request: Request,
                   context: AuthSessionContext = Depends(get_current_auth_context)):
@@ -332,23 +360,7 @@ def save_location(venue_id: int, payload: LocationWrite, request: Request,
         with get_write_db_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
             row = _venue(cur, venue_id, lock=True)
             _validate(cur, row, payload)
-            before = VenueLocation.model_validate(_read(cur, row)).model_dump(mode="json")
-            if _changed(cur, row, payload):
-                cur.execute(
-                    """UPDATE venue_list SET locality_id=%s, address=%s, latitude=%s, longitude=%s,
-                       timezone_id=%s,
-                       location_verified_at=CURRENT_TIMESTAMP WHERE id=%s RETURNING *""",
-                    (payload.locality_id, payload.address, payload.latitude, payload.longitude,
-                     payload.timezone_id, venue_id),
-                )
-                row = dict(cur.fetchone())
-                _write_google_place(cur, venue_id, payload)
-                after = VenueLocation.model_validate(_read(cur, row)).model_dump(mode="json")
-                _audit(cur, context, "venue_location_update", "venue", venue_id, {
-                    "before": before,
-                    "after": after,
-                })
-            return _read(cur, row)
+            return _save_location(cur, row, venue_id, payload, context)
     except Error as exc:
         _raise_database_error("save_venue_location", exc)
 
@@ -429,3 +441,61 @@ def delete_map_link(venue_id: int, provider: MapProvider, request: Request,
             return _read(cur, row)
     except Error as exc:
         _raise_database_error("delete_venue_map_link", exc)
+
+
+def _validate_name_change(cur: Any, venue_id: int, payload: ConsoleVenueEditRequest) -> None:
+    change = payload.name_change
+    if change is None:
+        return
+    cur.execute("SELECT venue_name, valid_from, valid_to FROM venue_name_versions WHERE id=%s AND venue_id=%s",
+                (change.version_id, venue_id))
+    version = cur.fetchone()
+    if version is None or version[0] != change.expected_name:
+        raise HTTPException(409, "名称资料已更新，请重新查询场馆并检查修改")
+    if version[2] is not None:
+        raise HTTPException(409, "正式更名只能从当前名称版本追加")
+    if version[1] is not None and change.valid_from <= version[1]:
+        raise HTTPException(409, "更名生效日期必须晚于当前名称版本")
+    _ensure_name_available(cur, change.venue_name)
+
+
+
+@router.post("/venues/{venue_id}/edit-preview", response_model=ConsoleVenueEditRequest, summary="预览场馆资料修改")
+def preview_venue_edit(venue_id: int, payload: ConsoleVenueEditRequest):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                row = _venue(cur, venue_id)
+                _validate(cur, row, payload.location, target_kind=payload.venue_kind)
+            with conn.cursor() as cur:
+                _validate_name_change(cur, venue_id, payload)
+            return payload
+    except Error as exc:
+        _raise_database_error("preview_venue_edit", exc)
+
+
+@router.put("/venues/{venue_id}/edit", response_model=ConsoleVenueEditResponse, summary="统一保存场馆资料")
+def save_venue_edit(venue_id: int, payload: ConsoleVenueEditRequest, request: Request,
+                    context: AuthSessionContext = Depends(get_current_auth_context)):
+    assert_valid_csrf(request, context)
+    try:
+        with get_write_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                row = _venue(cur, venue_id, lock=True)
+                _validate(cur, row, payload.location, target_kind=payload.venue_kind)
+                _save_location(cur, row, venue_id, payload.location, context, target_kind=payload.venue_kind)
+            with conn.cursor() as cur:
+                if row["venue_kind"] != payload.venue_kind:
+                    _write_audit(cur, user_id=context.user.id, action="venue_update", venue_id=venue_id,
+                                 payload={"venue_kind": payload.venue_kind})
+                _validate_name_change(cur, venue_id, payload)
+                change = payload.name_change
+                if change is not None:
+                    _create_name_version(cur, venue_id, ConsoleVenueNameVersionCreateRequest(
+                        venue_name=change.venue_name, valid_from=change.valid_from), context)
+                detail = _load_detail(cur, venue_id)
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                location = _read(cur, _venue(cur, venue_id))
+            return {"detail": detail, "location": location}
+    except Error as exc:
+        _raise_database_error("save_venue_edit", exc)

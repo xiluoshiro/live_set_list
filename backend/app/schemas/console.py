@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.lives import DatePhase, EventStatus, LiveScheduleHistoryItem
-from app.schemas.geography import LocationFields
+from app.schemas.geography import LocationFields, LocationWrite, VenueLocation
 
 LIVE_TYPE_VALUES = ("oneman", "taiban", "multi_act", "festival", "event", "other")
 ScheduleField = Literal["venue", "opening_time", "start_time"]
@@ -173,6 +173,7 @@ class ConsoleVenueDetailResponse(BaseModel):
 
 
 class ConsoleVenueNameVersionCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     venue_name: str = Field(..., min_length=1, max_length=255)
     valid_from: date
 
@@ -182,13 +183,22 @@ class ConsoleVenueNameVersionCreateRequest(BaseModel):
         return _strip_required_text(value)
 
 
-class ConsoleVenueNameVersionUpdateRequest(BaseModel):
-    venue_name: str = Field(..., min_length=1, max_length=255)
+class ConsoleVenueNameChange(ConsoleVenueNameVersionCreateRequest):
+    model_config = ConfigDict(extra="forbid")
+    version_id: int = Field(ge=1)
+    expected_name: str
 
-    @field_validator("venue_name")
-    @classmethod
-    def validate_venue_name(cls, value: str) -> str:
-        return _strip_required_text(value)
+
+class ConsoleVenueEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    venue_kind: VenueKind
+    location: LocationWrite
+    name_change: ConsoleVenueNameChange | None = None
+
+
+class ConsoleVenueEditResponse(BaseModel):
+    detail: ConsoleVenueDetailResponse
+    location: VenueLocation
 
 
 class ConsoleVenueMergeVersionMapping(BaseModel):

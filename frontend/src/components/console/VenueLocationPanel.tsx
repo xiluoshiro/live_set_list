@@ -4,13 +4,15 @@ import {
   previewConsoleVenueLocation, saveConsoleVenueLocation, saveConsoleVenueMapLink, searchConsoleVenueMapCandidates,
   type GeoLocality, type GooglePlaceDraft, type MapCandidate,
   type MapCandidateSearch, type MapProvider, type MapSearchProvider,
-  type VenueLocation, type VenueLocationWrite,
+  type VenueLocation, type VenueLocationWrite, type ConsoleVenueDetail, type ConsoleVenueEdit,
+  previewConsoleVenueEdit, saveConsoleVenueEdit,
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { VenueLocationPicker } from "./VenueLocationPicker";
 import { VenueLocalitySelector, loadVenueLocalities } from "./VenueLocalitySelector";
 import { VenueLocationFields } from "./VenueLocationFields";
+import { ConsoleDateInput, isIsoCalendarDate } from "./ConsoleDateInput";
 
 const PROVIDERS: Record<MapProvider, string> = { google: "Google Maps", apple: "Apple Maps", amap: "高德地图" };
 const EDITABLE_PROVIDERS: MapSearchProvider[] = ["apple", "amap"];
@@ -29,13 +31,26 @@ type Confirmation = {
   run: () => Promise<void>;
 };
 
-export function VenueLocationPanel({ venueId, venueName, venueKind }: {
+export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, detail, onSaved }: {
   venueId: number;
   venueName: string;
   venueKind: string;
   onOpenLive?: (liveId: number) => void;
+  detail?: ConsoleVenueDetail;
+  onSaved?: (detail: ConsoleVenueDetail) => Promise<void>;
 }) {
   const auth = useAuth();
+  const currentVersion = detail?.name_versions.find(version => version.is_current);
+  const [venueKind, setVenueKind] = useState(savedKind);
+  const [name, setName] = useState(venueName);
+  const [effectiveDate, setEffectiveDate] = useState("");
+  const nameDirty = !!currentVersion && name.trim() !== currentVersion.venue_name;
+  const identityDirty = !!detail && (venueKind !== savedKind || nameDirty);
+  const resetIdentity = () => {
+    setVenueKind(savedKind);
+    setName(venueName); setEffectiveDate("");
+  };
+
   const [data, setData] = useState<VenueLocation | null>(null);
   const [zones, setZones] = useState<string[]>([]);
   const [cities, setCities] = useState<GeoLocality[]>([]);
@@ -95,7 +110,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
   });
   const restore = () => {
     if (!data) return;
-    apply(data); setMapOpen(false); setMapReview(false); setMessage("");
+    apply(data); resetIdentity(); setMapOpen(false); setMapReview(false); setMessage("");
   };
   const nullableNumber = (value: string) => value.trim() === "" ? null : Number(value);
   const invalidCoordinates = (latitude.trim() === "") !== (longitude.trim() === "")
@@ -104,6 +119,8 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
   const physical = venueKind === "physical";
   const validation = physical && !address.trim() ? "实体场馆必须填写公开门牌地址。"
     : data?.locality && !selectedCity ? "已确定地区的场馆不能清空地区。"
+    : nameDirty && !name.trim() ? "请填写场馆名称。"
+    : nameDirty && !isIsoCalendarDate(effectiveDate) ? "请填写有效的更名生效日期。"
     : "";
   const draft: VenueLocationWrite = {
     expected_state_token: data?.state_token ?? "",
@@ -116,11 +133,47 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
     google_place: physical ? googlePlace : null,
   };
   const savedGoogle = data?.map_links.find(link => link.provider === "google");
-  const dirty = !!data && ((data.locality?.id ?? null) !== draft.locality_id || data.address !== draft.address
+  const locationDirty = !!data && ((data.locality?.id ?? null) !== draft.locality_id || data.address !== draft.address
     || data.latitude !== draft.latitude || data.longitude !== draft.longitude
     || data.timezone_id !== draft.timezone_id
     || (savedGoogle?.provider_place_id ?? null) !== (googlePlace?.provider_place_id ?? null)
     || (savedGoogle?.provider_url ?? null) !== (googlePlace?.provider_url ?? null));
+
+  const dirty = locationDirty || identityDirty;
+  const kindLabel = (value: string) => value === "physical" ? "实体场馆" : value === "online" ? "线上" : "未公开";
+  const previewEdit = () => perform(async () => {
+    if (!data || !detail) return;
+    const payload: ConsoleVenueEdit = {
+      venue_kind: venueKind as ConsoleVenueDetail["venue_kind"], location: draft,
+      name_change: nameDirty && currentVersion ? {
+        version_id: currentVersion.venue_name_version_id, expected_name: currentVersion.venue_name,
+        venue_name: name.trim(), valid_from: effectiveDate,
+      } : null,
+    };
+    const snapshot = await previewConsoleVenueEdit(venueId, payload);
+    if (!alive.current) return;
+    const rows: [string, ReactNode][] = [["场馆", `#${venueId} ${venueName}`]];
+    if (identityDirty && venueKind !== savedKind) rows.push(["原类型", kindLabel(savedKind)], ["新类型", kindLabel(venueKind)]);
+    if (snapshot.name_change && currentVersion) {
+      rows.push(["原名称", currentVersion.venue_name], ["新名称", snapshot.name_change.venue_name],
+        ["生效日期", effectiveDate], ["既有 Live", "保留原名称版本"]);
+    }
+    if (locationDirty) rows.push(["原地区", data.locality ? cityLabel(data.locality) : "未填写"],
+      ["新地区", selectedCity ? cityLabel(selectedCity) : "未填写"],
+      ["原地址", data.address ?? "未填写"], ["新地址", draft.address ?? "未填写"],
+      ["原坐标", pointLabel(data)], ["新坐标", pointLabel(draft)],
+      ["原时区", data.timezone_id ?? "未填写"], ["新时区", draft.timezone_id ?? "未填写"],
+      ["Google Maps 场馆", draft.google_place?.name ?? "未关联"]);
+    setConfirmation({ title: "确认场馆修改", rows, run: async () => {
+      const saved = await saveConsoleVenueEdit(venueId, snapshot, auth.csrfToken ?? "");
+      if (!alive.current) return;
+      apply(saved.location); setVenueKind(saved.detail.venue_kind); setName(saved.detail.venue_name);
+      setEffectiveDate("");
+      setMessage("场馆资料已保存。");
+      try { await onSaved?.(saved.detail); }
+      catch { if (alive.current) setMessage("场馆资料已保存；候选刷新失败，请重新查询，无需重复提交。"); }
+    } });
+  });
 
   const preview = () => perform(async () => {
     const result = await previewConsoleVenueLocation(venueId, draft);
@@ -152,27 +205,36 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
       <h3>所在地与地图</h3>
       {message && <p role="status" className="console-admin-hint">{message}</p>}
       {busy && <p className="console-admin-hint">正在处理…</p>}
-      {!data && !busy && <button type="button" className="console-ghost-btn" onClick={() => void load()}>重新加载</button>}
       {data && <>
         {venueKind === "online" && <p className="console-admin-hint">线上场馆不登记实体位置；活动时间基准由每场 Live 单独维护。</p>}
         {venueKind === "undisclosed" && <p className="console-admin-hint">未公开具体场馆登记已公布地区和自身时区，不填写门牌、坐标或地图关联。</p>}
         <VenueLocalitySelector locality={selectedCity} cities={cities} query={cityQuery}
           disabled={busy || !!confirmation || venueKind === "online"} onQuery={setCityQuery}
           onSearch={query => void searchCities(query)} onSelect={setSelectedCity} />
-        <VenueLocationFields ariaLabel="场馆所在地资料" name={venueName}
-          kind={physical ? "实体场馆" : venueKind === "online" ? "线上" : "未公开"}
+        <VenueLocationFields ariaLabel="场馆所在地资料"
+          name={detail ? <input aria-label="名称" maxLength={255} value={name} disabled={busy || !!confirmation} onChange={event => setName(event.target.value)} /> : venueName}
+          kind={detail ? <select aria-label="类型" value={venueKind} disabled={busy || !!confirmation} onChange={event => {
+            const next = event.target.value; setVenueKind(next);
+            if (next !== "physical") { setAddress(""); setLatitude(""); setLongitude(""); setGooglePlace(null); setMapOpen(false); setMapReview(false); }
+            if (next === "online") { setSelectedCity(null); setTimezone(""); }
+          }}><option value="physical">实体场馆</option><option value="undisclosed">未公开</option><option value="online">线上</option></select> : kindLabel(venueKind)}
           physical={physical} online={venueKind === "online"} disabled={busy || !!confirmation}
           address={address} latitude={latitude} longitude={longitude} timezone={timezone} zones={zones}
           onAddress={setAddress} onLatitude={value => { setLatitude(value); setGooglePlace(null); }}
           onLongitude={value => { setLongitude(value); setGooglePlace(null); }} onTimezone={setTimezone} />
+        {detail && nameDirty && <section className="live-admin-status-section" aria-label="正式更名">
+          <div className="live-admin-status-fields">
+            <label><span>生效日期</span><ConsoleDateInput aria-label="生效日期" value={effectiveDate}
+              disabled={busy || !!confirmation} onChange={event => setEffectiveDate(event.target.value)} /></label>
+          </div>
+        </section>}
         {invalidCoordinates && <p role="alert">请同时填写有效经纬度，或同时清空。</p>}
         {validation && <p role="status" className="console-admin-hint">{validation}</p>}
         <div className="console-submit-row live-admin-insert-row venue-create-actions">
           {physical && <button className="console-ghost-btn" type="button" aria-expanded={mapOpen}
             disabled={busy || !!confirmation} onClick={() => setMapOpen(!mapOpen)}>{mapOpen ? "收起地图" : "地图选点"}</button>}
           <button className="console-ghost-btn" type="button" disabled={busy || !!confirmation || !dirty} onClick={restore}>恢复原值</button>
-        <button className="console-ghost-btn" type="button" disabled={busy || !!confirmation} onClick={() => void load()}>重新加载</button>
-          <button className="console-submit-btn" type="button" disabled={busy || !!confirmation || mapReview || !dirty || invalidCoordinates || !!validation || (venueKind !== "online" && !timezone)} onClick={() => void preview()}>保存修改</button>
+          <button className="console-submit-btn" type="button" disabled={busy || !!confirmation || mapReview || !dirty || invalidCoordinates || !!validation || (venueKind !== "online" && !timezone)} onClick={() => void (detail ? previewEdit() : preview())}>保存修改</button>
         </div>
         {physical && <>
           {mapOpen && <VenueLocationPicker venueId={venueId} venueName={venueName}
@@ -183,7 +245,6 @@ export function VenueLocationPanel({ venueId, venueName, venueKind }: {
             onTimezone={setTimezone} onAddress={setAddress} onLocality={setSelectedCity}
             onGooglePlace={setGooglePlace} onReview={setMapReview} onDone={() => setMapOpen(false)} />}
         </>}
-        <p className="console-admin-hint">位置资料修正不产生版本；场馆搬迁请新增场馆，正式更名请使用名称历史。</p>
         {physical && <><h3>已保存位置的地图链接</h3>
         <div className="console-table-wrap"><table className="console-admin-table venue-map-table" aria-label="场馆地图链接">
           <thead><tr><th>地图</th><th>场馆匹配</th><th>坐标位置</th></tr></thead>

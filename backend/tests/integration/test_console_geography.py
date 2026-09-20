@@ -395,12 +395,6 @@ def test_corrections_keep_identity_and_only_rename_creates_version(integration_t
     assert renamed.status_code == 201, renamed.text
     assert len(renamed.json()["name_versions"]) == version_count + 1
     assert client.get("/api/venues/1/maps").json()["map_links"][0]["source"] == "place"
-    correction = client.patch(
-        f"/api/console/venues/1/name-versions/{renamed.json()['venue_name_version_id']}",
-        headers=headers, json={"venue_name": "Renamed venue spelling correction"},
-    )
-    assert correction.status_code == 200, correction.text
-    assert len(correction.json()["name_versions"]) == version_count + 1
     moved = client.post("/api/console/venues", headers=headers, json={
         "venue_name": "Venue at new address", "venue_kind": "physical",
         "location": {"address": "New address", "latitude": 35.6, "longitude": 139.7, "timezone_id": "Asia/Tokyo"},
@@ -467,3 +461,104 @@ def test_undisclosed_location_does_not_require_address(integration_test_client):
     })
     assert response.status_code == 200, response.text
     assert response.json()["address"] is None
+
+
+# 测试点：类型、位置与正式更名统一提交，预览不写入，旧 Live 保持旧名称版本，旧令牌不能覆盖。
+def test_combined_venue_edit_preserves_history_and_rejects_stale_state(integration_test_client):
+    client = integration_test_client
+    headers = login(client)
+    before = client.get("/api/console/venues/1").json()
+    current = next(version for version in before["name_versions"] if version["is_current"])
+    payload = {"venue_kind": "undisclosed", "location": {**point(client), "address": None,
+               "latitude": None, "longitude": None}, "name_change": {
+        "version_id": current["venue_name_version_id"], "expected_name": current["venue_name"],
+        "venue_name": "Unified Renamed Venue", "valid_from": "2099-01-01",
+    }}
+    preview = client.post("/api/console/venues/1/edit-preview", json=payload)
+    assert preview.status_code == 200, preview.text
+    assert client.get("/api/console/venues/1").json() == before
+    denied = client.put("/api/console/venues/1/edit", json=payload)
+    assert denied.status_code == 403, denied.text
+    saved = client.put("/api/console/venues/1/edit", headers=headers, json=preview.json())
+    assert saved.status_code == 200, saved.text
+    result = saved.json()
+    assert result["detail"]["venue_kind"] == "undisclosed"
+    assert result["detail"]["venue_name"] == "Unified Renamed Venue"
+    old = next(version for version in result["detail"]["name_versions"] if version["venue_name_version_id"] == current["venue_name_version_id"])
+    assert old["live_count"] == current["live_count"]
+    assert old["valid_to"] == "2099-01-01"
+    assert result["location"]["address"] is None
+    assert client.put("/api/console/venues/1/edit", headers=headers, json=payload).status_code == 409
+    # 同一个事务切回实体场馆时可同时补全地址，不能被原未公开类型的数据库约束阻挡。
+    physical = {"venue_kind": "physical", "name_change": None,
+                "location": {**point(client), "address": "Restored physical address"}}
+    restored = client.put("/api/console/venues/1/edit", headers=headers, json=physical)
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["location"]["address"] == "Restored physical address"
+
+
+# 测试点：名称冲突导致整次修改回滚，包括已准备更新的类型、位置和审计记录。
+def test_combined_venue_edit_rolls_back_on_name_conflict(integration_test_client, integration_admin_connection):
+    client = integration_test_client
+    headers = login(client)
+    detail = client.get("/api/console/venues/1").json()
+    location_before = client.get("/api/console/venues/1/location").json()
+    other = client.get("/api/console/venues/2").json()
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("SELECT count(*) FROM audit_logs")
+        audit_count = cur.fetchone()[0]
+    payload = {"venue_kind": "undisclosed", "location": {**point(client), "address": None, "latitude": None, "longitude": None},
+               "name_change": {"valid_from": "2099-01-01", "version_id": detail["venue_name_version_id"],
+                               "expected_name": detail["venue_name"], "venue_name": other["venue_name"]}}
+    result = client.put("/api/console/venues/1/edit", headers=headers, json=payload)
+    assert result.status_code == 409, result.text
+    assert client.get("/api/console/venues/1").json() == detail
+    assert client.get("/api/console/venues/1/location").json() == location_before
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("SELECT count(*) FROM audit_logs")
+        assert cur.fetchone()[0] == audit_count
+
+
+# 测试点：统一编辑保持位置校验，正式更名要求生效日期、当前版本及递增日期并只追加版本。
+def test_combined_venue_edit_validation_and_append_only_names(integration_test_client):
+    client = integration_test_client
+    headers = login(client)
+    locality = city(client, headers)
+    saved = client.put("/api/console/venues/1/location", headers=headers, json=point(client, locality["id"]))
+    assert saved.status_code == 200, saved.text
+    detail = client.get("/api/console/venues/1").json()
+    location = point(client, locality["id"])
+    for change in ({"address": "   "}, {"locality_id": None}):
+        payload = {"venue_kind": "physical", "location": {**location, **change}}
+        assert client.post("/api/console/venues/1/edit-preview", json=payload).status_code == 422
+        assert client.put("/api/console/venues/1/edit", headers=headers, json=payload).status_code == 422
+    name_change = {"version_id": detail["venue_name_version_id"], "expected_name": detail["venue_name"],
+                   "venue_name": "Next Unified Venue", "valid_from": "2099-01-01"}
+    payload = {"venue_kind": "physical", "location": location, "name_change": name_change}
+    for method, path in ((client.post, "edit-preview"), (client.put, "edit")):
+        result = method(f"/api/console/venues/1/{path}", headers=headers,
+                        json={**payload, "name_change": {**name_change, "valid_from": None}})
+        assert result.status_code == 422, result.text
+    assert client.get("/api/console/venues/1").json() == detail
+    response = client.put("/api/console/venues/1/edit", headers=headers, json=payload)
+    assert response.status_code == 200, response.text
+    renamed = response.json()["detail"]
+    assert len(renamed["name_versions"]) == len(detail["name_versions"]) + 1
+    assert renamed["venue_name_version_id"] != detail["venue_name_version_id"]
+    old = next(v for v in renamed["name_versions"] if v["venue_name_version_id"] == detail["venue_name_version_id"])
+    assert old["venue_name"] == detail["venue_name"]
+    assert old["valid_to"] == "2099-01-01"
+    location = point(client, locality["id"])
+    # 旧版本不可再写，当前版本也不能以相同或更早日期追加；独立更名接口遵循同一限制。
+    for invalid in (name_change, *({"version_id": renamed["venue_name_version_id"],
+                                    "expected_name": renamed["venue_name"], "venue_name": "Invalid Next Venue",
+                                    "valid_from": day} for day in ("2099-01-01", "2098-12-31"))):
+        for method, path in ((client.post, "edit-preview"), (client.put, "edit")):
+            result = method(f"/api/console/venues/1/{path}", headers=headers,
+                            json={**payload, "location": location, "name_change": invalid})
+            assert result.status_code == 409, result.text
+    for day in ("2099-01-01", "2098-12-31"):
+        result = client.post("/api/console/venues/1/name-versions", headers=headers,
+                             json={"venue_name": "Invalid Next Venue", "valid_from": day})
+        assert result.status_code == 409, result.text
+    assert client.get("/api/console/venues/1").json() == renamed

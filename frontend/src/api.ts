@@ -1908,20 +1908,6 @@ export async function createConsoleVenueNameVersion(
   return expectJsonResponse<ConsoleVenueDetail>(response);
 }
 
-export async function updateConsoleVenueNameVersion(
-  venueId: number,
-  versionId: number,
-  venueName: string,
-  csrfToken: string,
-): Promise<ConsoleVenueDetail> {
-  const response = await fetchWithTimeout(`${BASE_URL}/api/console/venues/${venueId}/name-versions/${versionId}`, {
-    method: "PATCH",
-    headers: jsonHeaders(csrfToken),
-    body: JSON.stringify({ venue_name: venueName }),
-  }, { requestKind: "console_venue_name_update", method: "PATCH" });
-  return expectJsonResponse<ConsoleVenueDetail>(response);
-}
-
 export async function createConsoleLive(
   payload: ConsoleLiveCreatePayload,
   csrfToken: string,
@@ -2397,3 +2383,14 @@ export async function previewConsoleLiveClock(payload: Pick<ConsoleLiveCreatePay
   const response = await fetchWithTimeout(`${BASE_URL}/api/console/live-clock?${query}`, { signal });
   return expectJsonResponse<{ date_phase: DatePhase }>(response);
 }
+
+
+export type ConsoleVenueEdit = {
+  venue_kind: ConsoleVenueDetail["venue_kind"];
+  location: VenueLocationWrite;
+  name_change: { version_id: number; expected_name: string; venue_name: string; valid_from: string } | null;
+};
+export const previewConsoleVenueEdit = (id: number, payload: ConsoleVenueEdit) =>
+  geographyRequest<ConsoleVenueEdit>(`/venues/${id}/edit-preview`, "POST", payload);
+export const saveConsoleVenueEdit = (id: number, payload: ConsoleVenueEdit, csrf: string) =>
+  geographyRequest<{detail: ConsoleVenueDetail; location: VenueLocation}>(`/venues/${id}/edit`, "PUT", payload, csrf);

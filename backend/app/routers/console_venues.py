@@ -18,7 +18,6 @@ from app.schemas.console import (
     ConsoleVenueMergeRequest,
     ConsoleVenueMutationResponse,
     ConsoleVenueNameVersionCreateRequest,
-    ConsoleVenueNameVersionUpdateRequest,
     ConsoleVenueUpdateRequest,
     VenueKind,
 )
@@ -451,6 +450,35 @@ def update_venue(
         _raise_database_error("update_venue", exc)
 
 
+def _create_name_version(cur: Any, venue_id: int, payload: ConsoleVenueNameVersionCreateRequest, context: AuthSessionContext) -> None:
+    _lock_name_registry(cur)
+    _ensure_name_available(cur, payload.venue_name)
+    cur.execute(
+        "SELECT id, valid_from FROM venue_name_versions WHERE venue_id = %s AND valid_to IS NULL FOR UPDATE",
+        (venue_id,),
+    )
+    rows = cur.fetchall()
+    if len(rows) != 1:
+        raise HTTPException(status_code=409, detail="Venue must have exactly one current name version")
+    if rows[0][1] is not None and payload.valid_from <= rows[0][1]:
+        raise HTTPException(status_code=409, detail="New name valid_from must be later than the current version")
+    old_version_id = int(rows[0][0])
+    cur.execute("UPDATE venue_name_versions SET valid_to = %s WHERE id = %s", (payload.valid_from, old_version_id))
+    cur.execute(
+        "INSERT INTO venue_name_versions (venue_id, venue_name, valid_from) VALUES (%s, %s, %s) RETURNING id",
+        (venue_id, payload.venue_name, payload.valid_from),
+    )
+    new_version_id = int(cur.fetchone()[0])
+    cur.execute("UPDATE venue_list SET venue = %s WHERE id = %s", (payload.venue_name, venue_id))
+    _write_audit(
+        cur,
+        user_id=context.user.id,
+        action="venue_name_version_create",
+        venue_id=venue_id,
+        payload={"closed_version_id": old_version_id, "new_version_id": new_version_id, "venue_name": payload.venue_name, "valid_from": payload.valid_from.isoformat()},
+    )
+
+
 @router.post("/venues/{venue_id}/name-versions", response_model=ConsoleVenueDetailResponse, status_code=201, summary="记录 Venue 正式更名")
 def create_venue_name_version(
     payload: ConsoleVenueNameVersionCreateRequest,
@@ -464,77 +492,12 @@ def create_venue_name_version(
         with get_write_db_connection() as conn:
             with conn.cursor() as cur:
                 _lock_active_venue(cur, venue_id)
-                _lock_name_registry(cur)
-                _ensure_name_available(cur, payload.venue_name)
-                cur.execute(
-                    "SELECT id, valid_from FROM venue_name_versions WHERE venue_id = %s AND valid_to IS NULL FOR UPDATE",
-                    (venue_id,),
-                )
-                rows = cur.fetchall()
-                if len(rows) != 1:
-                    raise HTTPException(status_code=409, detail="Venue must have exactly one current name version")
-                if rows[0][1] is not None and payload.valid_from <= rows[0][1]:
-                    raise HTTPException(status_code=409, detail="New name valid_from must be later than the current version")
-                old_version_id = int(rows[0][0])
-                cur.execute("UPDATE venue_name_versions SET valid_to = %s WHERE id = %s", (payload.valid_from, old_version_id))
-                cur.execute(
-                    "INSERT INTO venue_name_versions (venue_id, venue_name, valid_from) VALUES (%s, %s, %s) RETURNING id",
-                    (venue_id, payload.venue_name, payload.valid_from),
-                )
-                new_version_id = int(cur.fetchone()[0])
-                cur.execute("UPDATE venue_list SET venue = %s WHERE id = %s", (payload.venue_name, venue_id))
-                _write_audit(
-                    cur,
-                    user_id=context.user.id,
-                    action="venue_name_version_create",
-                    venue_id=venue_id,
-                    payload={"closed_version_id": old_version_id, "new_version_id": new_version_id, "venue_name": payload.venue_name, "valid_from": payload.valid_from.isoformat()},
-                )
+                _create_name_version(cur, venue_id, payload, context)
                 return _load_detail(cur, venue_id)
     except HTTPException:
         raise
     except (QueryCanceled, OperationalError, Error) as exc:
         _raise_database_error("create_venue_name_version", exc)
-
-
-@router.patch("/venues/{venue_id}/name-versions/{version_id}", response_model=ConsoleVenueDetailResponse, summary="修正 Venue 名称版本文本")
-def update_venue_name_version(
-    payload: ConsoleVenueNameVersionUpdateRequest,
-    request: Request,
-    venue_id: int = Path(..., ge=1),
-    version_id: int = Path(..., ge=1),
-    _: Any = Depends(require_role("editor")),
-    context: AuthSessionContext = Depends(get_current_auth_context),
-):
-    assert_valid_csrf(request, context)
-    try:
-        with get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                _lock_active_venue(cur, venue_id)
-                _lock_name_registry(cur)
-                _ensure_name_available(cur, payload.venue_name, exclude_version_id=version_id)
-                cur.execute(
-                    "SELECT venue_name, valid_to FROM venue_name_versions WHERE id = %s AND venue_id = %s FOR UPDATE",
-                    (version_id, venue_id),
-                )
-                row = cur.fetchone()
-                if row is None:
-                    raise HTTPException(status_code=404, detail=f"Venue name version id {version_id} not found")
-                cur.execute("UPDATE venue_name_versions SET venue_name = %s WHERE id = %s", (payload.venue_name, version_id))
-                if row[1] is None:
-                    cur.execute("UPDATE venue_list SET venue = %s WHERE id = %s", (payload.venue_name, venue_id))
-                _write_audit(
-                    cur,
-                    user_id=context.user.id,
-                    action="venue_name_version_update",
-                    venue_id=venue_id,
-                    payload={"venue_name_version_id": version_id, "before": str(row[0]), "after": payload.venue_name},
-                )
-                return _load_detail(cur, venue_id)
-    except HTTPException:
-        raise
-    except (QueryCanceled, OperationalError, Error) as exc:
-        _raise_database_error("update_venue_name_version", exc)
 
 
 @router.get("/venues/{source_venue_id}/merge-preview", response_model=ConsoleVenueMergePreviewResponse, summary="预览 Venue 合并")

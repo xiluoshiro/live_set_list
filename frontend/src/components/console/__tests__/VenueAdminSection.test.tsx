@@ -6,6 +6,9 @@ import { VenueAdminSection } from "../VenueAdminSection";
 
 
 const apiMocks = vi.hoisted(() => ({
+  getConsoleVenueLocation: vi.fn(),
+  previewConsoleVenueEdit: vi.fn(),
+  saveConsoleVenueEdit: vi.fn(),
   getConsoleVenuePage: vi.fn(),
   getConsoleLocalities: vi.fn(),
   getConsoleTimezones: vi.fn(),
@@ -13,15 +16,11 @@ const apiMocks = vi.hoisted(() => ({
   createConsoleVenue: vi.fn(),
   updateConsoleVenueKind: vi.fn(),
   createConsoleVenueNameVersion: vi.fn(),
-  updateConsoleVenueNameVersion: vi.fn(),
 }));
 
 vi.mock("../../../api", () => apiMocks);
 vi.mock("../../../auth/AuthProvider", () => ({
   useAuth: () => ({ csrfToken: "csrf-token", user: { role: "admin" } }),
-}));
-vi.mock("../VenueLocationPanel", () => ({
-  VenueLocationPanel: () => <div>所在地与地图</div>,
 }));
 
 const venueItems = [
@@ -81,6 +80,9 @@ const details = {
   },
 };
 
+const location = { venue_id: 1, locality: null, address: "Saved address", latitude: null, longitude: null,
+  timezone_id: "Asia/Tokyo", coordinate_system: "WGS84", state_token: "a".repeat(64), map_links: [] };
+
 function installPagedVenues() {
   apiMocks.getConsoleVenuePage.mockImplementation((_q: string, page: number) => Promise.resolve({
     items: page === 1 ? [venueItems[1]] : [venueItems[0]],
@@ -103,6 +105,9 @@ describe("VenueAdminSection", () => {
     installPagedVenues();
     apiMocks.getConsoleLocalities.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20 });
     apiMocks.getConsoleTimezones.mockResolvedValue(["Asia/Tokyo"]);
+    apiMocks.getConsoleVenueLocation.mockResolvedValue(location);
+    apiMocks.previewConsoleVenueEdit.mockImplementation((_id, payload) => Promise.resolve(payload));
+    apiMocks.saveConsoleVenueEdit.mockResolvedValue({ detail: details[1], location });
   });
 
   // 测试点：场馆管理只读取当前分页，并提供搜索和翻页入口，避免一次加载全部 Venue。
@@ -120,7 +125,7 @@ describe("VenueAdminSection", () => {
     expect(screen.getByText(/共 2 个场馆/)).toBeInTheDocument();
     expect(apiMocks.getConsoleVenuePage).toHaveBeenCalledWith("", 1, 20);
     await user.type(screen.getByLabelText("搜索场馆"), "First");
-    await user.click(screen.getByRole("button", { name: "查询" }));
+    await user.click(screen.getAllByRole("button", { name: "查询" })[0]);
     await waitFor(() => expect(apiMocks.getConsoleVenuePage).toHaveBeenLastCalledWith("First", 1, 20));
   });
 
@@ -160,75 +165,56 @@ describe("VenueAdminSection", () => {
     expect(onVenuesChanged).toHaveBeenCalledTimes(1);
   });
 
-  // 测试点：正式更名使用明确的 ISO 日期输入，并在二次确认后才调用写接口。
-  test("confirms kind and formal rename changes before submitting", async () => {
+  // 测试点：名称改动需填写生效日期，正式更名与类型和位置在同一次确认后提交。
+  test("confirms a combined kind and formal rename edit", async () => {
     const user = userEvent.setup();
-    apiMocks.updateConsoleVenueKind.mockResolvedValue(details[1]);
-    apiMocks.createConsoleVenueNameVersion.mockResolvedValue(details[1]);
     renderSection();
-    await screen.findByRole("table", { name: "Venue 历史名称" });
-
-    const kindBlock = screen.getByRole("heading", { name: "当前场馆资料" }).closest(".tour-admin-block") as HTMLElement | null;
-    if (!kindBlock) throw new Error("missing kind block");
-    await user.selectOptions(within(kindBlock).getByLabelText("类型"), "online");
-    await user.click(within(kindBlock).getByRole("button", { name: "保存修改" }));
-    expect(apiMocks.updateConsoleVenueKind).not.toHaveBeenCalled();
-    let dialog = screen.getByRole("dialog", { name: "确认修改场馆类型" });
-    expect(within(dialog).getByRole("table", { name: "场馆类型变化确认" })).toHaveTextContent("实体场馆");
+    await screen.findByLabelText("名称");
+    expect(screen.queryByRole("heading", { name: "当前场馆资料" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重新加载" })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("类型"), "undisclosed");
+    await user.clear(screen.getByLabelText("名称"));
+    await user.type(screen.getByLabelText("名称"), "Renamed Hall");
+    expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+    await user.type(screen.getByLabelText("生效日期"), "2026-09-04");
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+    const dialog = await screen.findByRole("dialog", { name: "确认场馆修改" });
+    expect(dialog).toHaveTextContent("First Hall");
+    expect(dialog).toHaveTextContent("Renamed Hall");
+    expect(dialog).toHaveTextContent("2026-09-04");
+    expect(apiMocks.saveConsoleVenueEdit).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
-    await waitFor(() => expect(apiMocks.updateConsoleVenueKind).toHaveBeenCalledWith(1, "online", "csrf-token"));
-
-    const renameBlock = screen.getByRole("heading", { name: "追加正式名称版本" }).closest(".tour-admin-block") as HTMLElement | null;
-    if (!renameBlock) throw new Error("missing rename block");
-    expect(within(renameBlock).getByLabelText("生效日期")).toHaveAttribute("placeholder", "YYYY-MM-DD");
-    expect(within(renameBlock).getByLabelText("生效日期")).toHaveAttribute("type", "text");
-    await user.type(within(renameBlock).getByLabelText("新名称"), "Renamed Hall");
-    await user.type(within(renameBlock).getByLabelText("生效日期"), "2026-09-04");
-    await user.click(within(renameBlock).getByRole("button", { name: "保存修改" }));
-    expect(apiMocks.createConsoleVenueNameVersion).not.toHaveBeenCalled();
-    dialog = screen.getByRole("dialog", { name: "确认追加正式名称版本" });
-    const renameTable = within(dialog).getByRole("table", { name: "正式名称版本变化确认" });
-    expect(renameTable).toHaveTextContent("First Hall");
-    expect(renameTable).toHaveTextContent("Renamed Hall");
-    expect(renameTable).toHaveTextContent("2026-09-04 → 开放");
-    await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
-    await waitFor(() => expect(apiMocks.createConsoleVenueNameVersion).toHaveBeenCalledWith(1, "Renamed Hall", "2026-09-04", "csrf-token"));
+    await waitFor(() => expect(apiMocks.saveConsoleVenueEdit).toHaveBeenCalledWith(1, expect.objectContaining({
+      venue_kind: "undisclosed", location: expect.objectContaining({ address: null }),
+      name_change: { version_id: 11, expected_name: "First Hall", venue_name: "Renamed Hall", valid_from: "2026-09-04" },
+    }), "csrf-token"));
   });
 
-  // 测试点：资料修正确认回显原值、新值及 Live/改期影响数，失败后保留表单并允许再次提交。
-  test("confirms correction impact and remains recoverable after a failed submit", async () => {
+  // 测试点：只能提交当前名称的正式更名，失败保留草稿，恢复原值不写入。
+  test("preserves a failed formal rename draft without a historical editor", async () => {
     const user = userEvent.setup();
-    const onMessage = vi.fn();
-    apiMocks.updateConsoleVenueNameVersion
-      .mockRejectedValueOnce(new Error("write failed"))
-      .mockResolvedValueOnce(details[1]);
-    renderSection(onMessage);
-    await screen.findByRole("table", { name: "Venue 历史名称" });
-
-    const correctionBlock = screen.getByRole("heading", { name: "名称资料修正" }).closest(".tour-admin-block") as HTMLElement | null;
-    if (!correctionBlock) throw new Error("missing correction block");
-    await user.selectOptions(within(correctionBlock).getByLabelText("名称版本"), "10");
-    const input = within(correctionBlock).getByLabelText("正确名称");
-    await user.clear(input);
-    await user.type(input, "Correct Old Hall");
-    await user.click(within(correctionBlock).getByRole("button", { name: "保存修改" }));
-    expect(apiMocks.updateConsoleVenueNameVersion).not.toHaveBeenCalled();
-    let dialog = screen.getByRole("dialog", { name: "确认修正名称资料" });
-    const table = within(dialog).getByRole("table", { name: "名称资料修正确认" });
-    expect(table).toHaveTextContent("Old First Hall");
-    expect(table).toHaveTextContent("Correct Old Hall");
-    expect(within(table).getByRole("row", { name: "影响 Live 2" })).toBeInTheDocument();
-    expect(within(table).getByRole("row", { name: "影响改期历史 1" })).toBeInTheDocument();
+    apiMocks.saveConsoleVenueEdit.mockRejectedValueOnce(new Error("write failed"));
+    renderSection();
+    await screen.findByLabelText("名称");
+    expect(screen.queryByLabelText("名称版本")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("本次名称变化")).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText("名称"));
+    await user.type(screen.getByLabelText("名称"), "New Hall");
+    await user.type(screen.getByLabelText("生效日期"), "2026-09-04");
+    await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
+    const dialog = await screen.findByRole("dialog", { name: "确认场馆修改" });
+    expect(dialog).toHaveTextContent("保留原名称版本");
     await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
-    await waitFor(() => expect(onMessage).toHaveBeenCalledWith("修正名称失败：write failed"));
-    expect(input).toHaveValue("Correct Old Hall");
-    dialog = screen.getByRole("dialog", { name: "确认修正名称资料" });
-    await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
-    await waitFor(() => expect(apiMocks.updateConsoleVenueNameVersion).toHaveBeenCalledTimes(2));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("write failed");
+    expect(screen.getByLabelText("名称")).toHaveValue("New Hall");
+    await user.click(within(dialog).getByRole("button", { name: "取消" }));
+    await user.click(screen.getByRole("button", { name: "恢复原值" }));
+    expect(screen.getByLabelText("名称")).toHaveValue("First Hall");
+    expect(screen.queryByLabelText("生效日期")).not.toBeInTheDocument();
   });
 
-  // 测试点：空列表和首次加载失败都提供可恢复的重新加载入口。
-  test("recovers from a failed initial load through the empty-state reload", async () => {
+  // 测试点：首次加载失败可通过现有查询按钮恢复，不新增重新加载入口。
+  test("recovers from a failed initial load through the query action", async () => {
     const user = userEvent.setup();
     const onMessage = vi.fn();
     apiMocks.getConsoleVenuePage
@@ -238,7 +224,7 @@ describe("VenueAdminSection", () => {
 
     expect(await screen.findByText("暂无可管理的 Venue。", { exact: false })).toBeInTheDocument();
     expect(onMessage).toHaveBeenCalledWith("加载 Venue 列表失败：network failed");
-    await user.click(screen.getByRole("button", { name: "重新加载" }));
+    await user.click(screen.getAllByRole("button", { name: "查询" })[0]);
 
     expect(await screen.findByRole("table", { name: "Venue 历史名称" })).toHaveTextContent("First Hall");
   });

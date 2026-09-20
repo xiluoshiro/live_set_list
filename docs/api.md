@@ -464,6 +464,8 @@
 - `POST /localities`：登记城市，包含 `country_code`、可空 `admin_area`、`locality_name`。当前仅新增和查询。
 - `GET /timezones`：本地时区数据支持的 IANA 标识列表。
 - `GET /venues/{id}/location`：独立位置详情、场馆自身时区和各地图的平台链接／坐标回退链接。
+- `POST /venues/{id}/edit-preview`：校验统一场馆编辑草稿，返回可确认的规范化请求；不写入。草稿包含 `venue_kind`、带 `expected_state_token` 的 `location`，以及可选 `name_change`（`version_id`、`expected_name`、`venue_name`、必填的 `valid_from`；版本必须是当前版本）。
+- `PUT /venues/{id}/edit`：在同一事务中保存类型、位置和名称变化，返回 `{detail, location}`。沿用 CSRF、editor 权限和位置状态令牌；名称校验失败时整次回滚，正式更名保留既有 Live 的名称版本引用，名称只允许按递增生效日期追加版本，历史及当前名称的原地修正仅通过 SQL。
 - `POST /venues/{id}/location-preview`：返回修改前后值、关联 Live 数及失效地图关联数，不修改排期。
 - `PUT /venues/{id}/location`：完整替换地理资料，要求 `expected_state_token`；坐标仅接受 `coordinate_system=WGS84`。过期返回 409，非法坐标／时区返回 422。
 - `PUT /venues/{id}/map-links`：确认 `provider`、地点 ID 或平台 HTTPS 详情链接，要求 `expected_state_token`；Apple 必须提供详情 URL。

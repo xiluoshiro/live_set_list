@@ -1,17 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 import {
-  createConsoleVenueNameVersion,
   getConsoleVenue,
   getConsoleVenuePage,
-  updateConsoleVenueKind,
-  updateConsoleVenueNameVersion,
   type ConsoleVenueDetail,
   type ConsoleVenueItem,
 } from "../../api";
-import { useAuth } from "../../auth/AuthProvider";
-import { CompactConfirmationTable } from "./CompactConfirmationTable";
-import { ConsoleDateInput, isIsoCalendarDate } from "./ConsoleDateInput";
 import { VenueCreateSection } from "./VenueCreateSection";
 import { VenueLocationPanel } from "./VenueLocationPanel";
 
@@ -24,23 +18,7 @@ type VenueAdminSectionProps = {
   initialCreateName?: string;
 };
 
-type ConfirmationKind = "kind" | "rename" | "correction";
-
-type VenueConfirmation = {
-  title: string;
-  ariaLabel: string;
-  rows: ReadonlyArray<readonly [label: string, value: ReactNode]>;
-  confirmLabel: string;
-  submit: () => Promise<void>;
-};
-
 const VENUE_PAGE_SIZE = 20;
-
-const KIND_LABELS: Record<ConsoleVenueDetail["venue_kind"], string> = {
-  physical: "实体场馆",
-  online: "线上",
-  undisclosed: "未公开",
-};
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -51,37 +29,18 @@ function dateText(value: string | null, emptyText: string): string {
 }
 
 export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenLive, initialVenueId, initialCreateName }: VenueAdminSectionProps) {
-  const auth = useAuth();
   const [venues, setVenues] = useState<ConsoleVenueItem[]>([]);
   const [selectedVenueId, setSelectedVenueId] = useState<number | null>(null);
   const [detail, setDetail] = useState<ConsoleVenueDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [detailGeneration, setDetailGeneration] = useState(0);
   const [detailLoadFailed, setDetailLoadFailed] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [venueQuery, setVenueQuery] = useState("");
   const [searchedVenueQuery, setSearchedVenueQuery] = useState("");
   const [venuePage, setVenuePage] = useState(1);
   const [venueTotal, setVenueTotal] = useState(0);
   const [venueTotalPages, setVenueTotalPages] = useState(1);
-  const [confirmationKind, setConfirmationKind] = useState<ConfirmationKind | null>(null);
-
-  const [kindDraft, setKindDraft] = useState<ConsoleVenueDetail["venue_kind"]>("physical");
-  const [renameName, setRenameName] = useState("");
-  const [renameDate, setRenameDate] = useState("");
-  const [correctionVersionId, setCorrectionVersionId] = useState<number | null>(null);
-  const [correctionName, setCorrectionName] = useState("");
-
-  const applyDetail = (nextDetail: ConsoleVenueDetail) => {
-    setDetail(nextDetail);
-    setKindDraft(nextDetail.venue_kind);
-    const selectedVersion = nextDetail.name_versions.find(
-      (version) => version.venue_name_version_id === correctionVersionId,
-    ) ?? nextDetail.name_versions.find((version) => version.is_current)
-      ?? nextDetail.name_versions[0]
-      ?? null;
-    setCorrectionVersionId(selectedVersion?.venue_name_version_id ?? null);
-    setCorrectionName(selectedVersion?.venue_name ?? "");
-  };
+  const applyDetail = (nextDetail: ConsoleVenueDetail) => { setDetail(nextDetail); setDetailGeneration(value => value + 1); };
 
   const loadDetail = async (venueId: number) => {
     setSelectedVenueId(venueId);
@@ -147,111 +106,6 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
     void loadVenuePage("", 1);
   }, [variant, initialVenueId]);
 
-  const refreshAfterMutation = async (venueId: number) => {
-    await loadVenuePage(searchedVenueQuery, venuePage, venueId);
-    await onVenuesChanged();
-  };
-
-  const submitKind = async () => {
-    if (!detail) return;
-    setSubmitting(true);
-    try {
-      await updateConsoleVenueKind(detail.venue_id, kindDraft, auth.csrfToken ?? "");
-      setConfirmationKind(null);
-      await refreshAfterMutation(detail.venue_id);
-      onMessage("Venue 类型已更新");
-    } catch (error) {
-      onMessage(`更新 Venue 类型失败：${errorMessage(error)}`);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const submitRename = async () => {
-    if (!detail) return;
-    setSubmitting(true);
-    try {
-      await createConsoleVenueNameVersion(
-        detail.venue_id,
-        renameName.trim(),
-        renameDate,
-        auth.csrfToken ?? "",
-      );
-      setConfirmationKind(null);
-      setRenameName("");
-      setRenameDate("");
-      await refreshAfterMutation(detail.venue_id);
-      onMessage("正式更名已记录；既有 Live 仍保留原名称版本");
-    } catch (error) {
-      onMessage(`记录正式更名失败：${errorMessage(error)}`);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const submitCorrection = async () => {
-    if (!detail || correctionVersionId === null) return;
-    setSubmitting(true);
-    try {
-      await updateConsoleVenueNameVersion(
-        detail.venue_id,
-        correctionVersionId,
-        correctionName.trim(),
-        auth.csrfToken ?? "",
-      );
-      setConfirmationKind(null);
-      await refreshAfterMutation(detail.venue_id);
-      onMessage("名称资料修正已应用到引用该版本的 Live");
-    } catch (error) {
-      onMessage(`修正名称失败：${errorMessage(error)}`);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const currentVersion = detail?.name_versions.find((version) => version.is_current) ?? null;
-  const correctionVersion = detail?.name_versions.find(
-    (version) => version.venue_name_version_id === correctionVersionId,
-  ) ?? null;
-
-  const confirmation: VenueConfirmation | null = confirmationKind === "kind" && detail
-      ? {
-          title: "确认修改场馆类型",
-          ariaLabel: "场馆类型变化确认",
-          rows: [["Venue", `#${detail.venue_id} ${detail.venue_name}`], ["原类型", KIND_LABELS[detail.venue_kind]], ["新类型", KIND_LABELS[kindDraft]]],
-          confirmLabel: "保存修改",
-          submit: submitKind,
-        }
-      : confirmationKind === "rename" && detail && currentVersion
-        ? {
-            title: "确认追加正式名称版本",
-            ariaLabel: "正式名称版本变化确认",
-            rows: [
-              ["Venue", `#${detail.venue_id}`],
-              ["原名称", currentVersion.venue_name],
-              ["原版本有效期", `${dateText(currentVersion.valid_from, "起始未记录")} → ${renameDate}`],
-              ["新名称", renameName.trim()],
-              ["新版本有效期", `${renameDate} → 开放`],
-            ],
-            confirmLabel: "保存修改",
-            submit: submitRename,
-          }
-        : confirmationKind === "correction" && detail && correctionVersion
-          ? {
-              title: "确认修正名称资料",
-              ariaLabel: "名称资料修正确认",
-              rows: [
-                ["名称版本", `#${correctionVersion.venue_name_version_id}`],
-                ["修正前", correctionVersion.venue_name],
-                ["修正后", correctionName.trim()],
-                ["影响 Live", String(correctionVersion.live_count)],
-                ["影响改期历史", String(correctionVersion.schedule_history_count)],
-              ],
-              confirmLabel: "保存修改",
-              submit: submitCorrection,
-            }
-          : null;
-
   return (
     <section className="tour-admin-section" aria-label={variant === "create" ? "新增场馆" : "场馆管理"}>
       {variant === "edit" && <>
@@ -287,7 +141,7 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
 
       {venues.length === 0 && !loading && (
         <p className="console-admin-hint">
-          暂无可管理的 Venue。<button type="button" className="console-ghost-btn" onClick={() => void loadVenuePage(searchedVenueQuery, venuePage)}>重新加载</button>
+          暂无可管理的 Venue。
         </p>
       )}
 
@@ -304,11 +158,17 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
       {variant === "edit" && detail && (
         <>
           <VenueLocationPanel
-            key={`${detail.venue_id}:${detail.venue_kind}`}
+            key={`${detail.venue_id}:${detailGeneration}`}
             venueId={detail.venue_id}
             venueName={detail.venue_name}
             venueKind={detail.venue_kind}
             onOpenLive={onOpenLive}
+            detail={detail}
+            onSaved={async saved => {
+              setDetail(saved);
+              setVenues(items => items.map(item => item.venue_id === saved.venue_id ? { ...item, ...saved } : item));
+              await onVenuesChanged();
+            }}
           />
           <div className="tour-admin-block">
             <h3>历史名称（只读）</h3>
@@ -328,68 +188,9 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
             </div>
           </div>
 
-          <div className="tour-admin-block">
-            <h3>当前场馆资料</h3>
-            <p className="console-admin-hint">#{detail.venue_id} {detail.venue_name}；共引用 {detail.live_count} 场 Live。</p>
-            <div className="tour-admin-fields">
-              <label>类型<select value={kindDraft} onChange={(event) => setKindDraft(event.target.value as ConsoleVenueDetail["venue_kind"])}>
-                {Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select></label>
-            </div>
-            <div className="console-submit-row">
-              <button type="button" className="console-submit-btn" disabled={submitting || kindDraft === detail.venue_kind} onClick={() => setConfirmationKind("kind")}>保存修改</button>
-            </div>
-          </div>
-
-          <div className="tour-admin-block">
-            <h3>追加正式名称版本</h3>
-            <p className="console-admin-hint">当前名称为“{currentVersion?.venue_name ?? detail.venue_name}”。提交后关闭当前版本并建立唯一后继，不改写旧 Live。</p>
-            <div className="tour-admin-fields">
-              <label>新名称<input value={renameName} onChange={(event) => setRenameName(event.target.value)} /></label>
-              <label>生效日期<ConsoleDateInput value={renameDate} onChange={(event) => setRenameDate(event.target.value)} /></label>
-            </div>
-            <div className="console-submit-row">
-              <button type="button" className="console-submit-btn" disabled={submitting || !renameName.trim() || !isIsoCalendarDate(renameDate) || currentVersion === null} onClick={() => setConfirmationKind("rename")}>保存修改</button>
-            </div>
-          </div>
-
-          <div className="tour-admin-block">
-            <h3>名称资料修正</h3>
-            <p className="console-admin-hint">仅修正同一名称版本的文本；引用该版本的 Live 和改期历史会同步显示修正结果。</p>
-            <div className="tour-admin-fields">
-              <label>名称版本<select value={correctionVersionId ?? ""} onChange={(event) => {
-                const versionId = Number(event.target.value);
-                const version = detail.name_versions.find((item) => item.venue_name_version_id === versionId);
-                setCorrectionVersionId(versionId);
-                setCorrectionName(version?.venue_name ?? "");
-              }}>
-                {detail.name_versions.map((version) => (
-                  <option key={version.venue_name_version_id} value={version.venue_name_version_id}>#{version.venue_name_version_id} {version.venue_name}</option>
-                ))}
-              </select></label>
-              <label>正确名称<input value={correctionName} onChange={(event) => setCorrectionName(event.target.value)} /></label>
-            </div>
-            <div className="console-submit-row">
-              <button type="button" className="console-submit-btn" disabled={submitting || correctionVersion === null || !correctionName.trim() || correctionName.trim() === correctionVersion.venue_name} onClick={() => setConfirmationKind("correction")}>保存修改</button>
-            </div>
-          </div>
         </>
       )}
 
-      {confirmation && (
-        <div className="modal-mask" onClick={() => !submitting && setConfirmationKind(null)}>
-          <div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="venue-admin-confirm-title" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head"><h2 id="venue-admin-confirm-title">{confirmation.title}</h2></div>
-            <div className="console-confirm-body">
-              <CompactConfirmationTable ariaLabel={confirmation.ariaLabel} rows={confirmation.rows} />
-            </div>
-            <div className="console-confirm-actions">
-              <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirmationKind(null)}>取消</button>
-              <button type="button" className="console-submit-btn" disabled={submitting} onClick={() => void confirmation.submit()}>{confirmation.confirmLabel}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
