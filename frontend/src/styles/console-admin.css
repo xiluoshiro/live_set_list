@@ -632,6 +632,15 @@
   width: auto;
 }
 
+.console-admin-table.setlist-management-lineup-table {
+  table-layout: fixed;
+}
+
+.console-admin-table.setlist-management-lineup-table th,
+.console-admin-table.setlist-management-lineup-table td {
+  width: 25%;
+}
+
 .tour-band-field {
   min-width: 0;
   margin: 0;
