@@ -110,8 +110,7 @@ def test_catalog_statistics_limits_stale_song_kinds_independently(
     with integration_admin_connection.cursor() as cursor:
         cursor.executemany(
             """
-            INSERT INTO song_list (id, song_name, band_id, is_cover)
-            VALUES (%s, %s, 2, %s)
+            WITH seed(id, song_name, band_id, is_cover) AS (VALUES (%s, %s, 2, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (id, song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name
             """,
             [
                 (

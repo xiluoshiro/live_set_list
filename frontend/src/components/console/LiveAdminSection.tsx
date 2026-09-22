@@ -17,6 +17,7 @@ type LiveAdminSectionProps = {
   clockError?: string;
   variant: "create" | "edit";
   liveDate: string;
+  dateLocked?: boolean;
   liveTitle: string;
   liveType: string;
   eventStatus?: EventStatus;
@@ -123,6 +124,7 @@ export function LiveAdminSection({
   clockError = "",
   variant,
   liveDate,
+  dateLocked = false,
   liveTitle,
   liveType,
   eventStatus = "scheduled",
@@ -324,8 +326,8 @@ export function LiveAdminSection({
           >
             <option value="">状态</option>
             <option value="scheduled">按计划</option>
-            <option value="postponed">延期</option>
-            <option value="cancelled">已取消</option>
+            <option value="postponed" disabled={dateLocked}>延期</option>
+            <option value="cancelled" disabled={dateLocked}>已取消</option>
           </select>
           <select
             aria-label="选择要编辑的 Live"
@@ -424,6 +426,7 @@ export function LiveAdminSection({
                   aria-label="live_date"
                   min="2015-01-01"
                   value={liveDate}
+                  disabled={dateLocked}
                   onChange={(e) => onLiveDateChange(e.target.value)}
                 />
               </td>
@@ -513,8 +516,8 @@ export function LiveAdminSection({
               onChange={(event) => onEventStatusChange(event.target.value as EventStatus)}
             >
               <option value="scheduled">按计划</option>
-              <option value="postponed">延期</option>
-              <option value="cancelled">已取消</option>
+              <option value="postponed" disabled={dateLocked}>延期</option>
+              <option value="cancelled" disabled={dateLocked}>已取消</option>
             </select>
           </label>
           <div

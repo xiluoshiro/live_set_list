@@ -27,6 +27,11 @@ class SandboxContext:
 
 CONSOLE_DELETABLE_TABLES = (
     "venue_map_links",
+    "song_groups",
+    "song_bands",
+    "song_member_groups",
+    "song_members",
+    "album_tracks",
     "band_lineup_version_members",
     "live_band_lineup_contexts",
     "live_setlist",

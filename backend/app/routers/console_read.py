@@ -566,6 +566,7 @@ def get_editable_live_setlist(
 @router.get(
     "/songs",
     response_model=ConsoleSongListResponse,
+    response_model_exclude_unset=True,
     summary="查询歌曲候选",
     description="`editor+` 用户查询控制台录入时可选择的歌曲。支持按歌名前缀和归属 Band 筛选。",
     responses={
@@ -586,8 +587,8 @@ def list_songs(
     """Return song_list rows for the console song selector without mutating any data."""
     query_text = _normalize_lookup_query(q)
     normalized_query_text = normalize_song_lookup_text(query_text)
-    band_filter_sql = " AND band_id = %s" if band_id is not None else ""
-    band_filter_params = (band_id,) if band_id is not None else ()
+    band_filter_sql = " AND (band_id = %s OR id IN (SELECT song_id FROM song_bands WHERE band_id = %s UNION SELECT song_id FROM song_member_groups WHERE band_id = %s))" if band_id is not None else ""
+    band_filter_params = (band_id, band_id, band_id) if band_id is not None else ()
 
     try:
         with get_db_connection() as conn:
@@ -600,7 +601,8 @@ def list_songs(
                                 s.song_name,
                                 s.band_id,
                                 s.is_cover,
-                                b.band_name,
+                                COALESCE(b.band_name, (SELECT string_agg(ob.band_name, ' / ' ORDER BY owner.display_order) FROM (SELECT band_id, display_order FROM song_bands WHERE song_id = s.id UNION ALL SELECT band_id, display_order FROM song_member_groups WHERE song_id = s.id) owner JOIN band_attrs ob ON ob.id = owner.band_id), '待回填') AS band_name,
+                                s.group_id, s.version_label, s.owner_mode,
                                 regexp_replace(
                                     regexp_replace(
                                         regexp_replace(
@@ -623,7 +625,7 @@ def list_songs(
                                     'g'
                                 ) AS normalized_song_name
                             FROM song_list AS s
-                            JOIN band_attrs AS b ON b.id = s.band_id
+                            LEFT JOIN band_attrs AS b ON b.id = s.band_id
                         )
                     """
                     normalization_params = (
@@ -652,7 +654,7 @@ def list_songs(
                         (*normalization_params, *prefix_params, *band_filter_params),
                     )
                 elif band_id is not None:
-                    cur.execute("SELECT COUNT(*) FROM song_list WHERE band_id = %s", (band_id,))
+                    cur.execute(f"SELECT COUNT(*) FROM song_list WHERE true {band_filter_sql}", band_filter_params)
                 else:
                     cur.execute("SELECT COUNT(*) FROM song_list")
                 total_row = cur.fetchone()
@@ -665,7 +667,7 @@ def list_songs(
                     cur.execute(
                         f"""
                         {normalized_song_list_sql}
-                        SELECT id, song_name, band_id, is_cover, band_name
+                        SELECT id, song_name, band_id, is_cover, band_name, group_id, version_label, owner_mode
                         FROM normalized_song_list
                         WHERE (
                             song_name ILIKE %s ESCAPE '\\'
@@ -695,21 +697,21 @@ def list_songs(
                 elif band_id is not None:
                     cur.execute(
                         """
-                        SELECT s.id, s.song_name, s.band_id, s.is_cover, b.band_name
+                        SELECT s.id, s.song_name, s.band_id, s.is_cover, COALESCE(b.band_name, (SELECT string_agg(ob.band_name, ' / ' ORDER BY owner.display_order) FROM (SELECT band_id, display_order FROM song_bands WHERE song_id = s.id UNION ALL SELECT band_id, display_order FROM song_member_groups WHERE song_id = s.id) owner JOIN band_attrs ob ON ob.id = owner.band_id), '待回填') AS band_name, s.group_id, s.version_label, s.owner_mode
                         FROM song_list AS s
-                        JOIN band_attrs AS b ON b.id = s.band_id
-                        WHERE s.band_id = %s
+                        LEFT JOIN band_attrs AS b ON b.id = s.band_id
+                        WHERE s.band_id = %s OR s.id IN (SELECT song_id FROM song_bands WHERE band_id = %s UNION SELECT song_id FROM song_member_groups WHERE band_id = %s)
                         ORDER BY s.song_name, s.id
                         LIMIT %s OFFSET %s
                         """,
-                        (band_id, limit, offset),
+                        (band_id, band_id, band_id, limit, offset),
                     )
                 else:
                     cur.execute(
                         """
-                        SELECT s.id, s.song_name, s.band_id, s.is_cover, b.band_name
+                        SELECT s.id, s.song_name, s.band_id, s.is_cover, COALESCE(b.band_name, (SELECT string_agg(ob.band_name, ' / ' ORDER BY owner.display_order) FROM (SELECT band_id, display_order FROM song_bands WHERE song_id = s.id UNION ALL SELECT band_id, display_order FROM song_member_groups WHERE song_id = s.id) owner JOIN band_attrs ob ON ob.id = owner.band_id), '待回填') AS band_name, s.group_id, s.version_label, s.owner_mode
                         FROM song_list AS s
-                        JOIN band_attrs AS b ON b.id = s.band_id
+                        LEFT JOIN band_attrs AS b ON b.id = s.band_id
                         ORDER BY s.song_name, s.id
                         LIMIT %s OFFSET %s
                         """,
@@ -751,9 +753,10 @@ def list_songs(
             {
                 "song_id": int(row[0]),
                 "song_name": row[1],
-                "band_id": int(row[2]),
+                "band_id": int(row[2]) if row[2] is not None else None,
                 "cover": bool(row[3]),
-                "band_name": row[4],
+                "band_name": row[4] or "待回填",
+                **({"group_id": row[5], "version_label": row[6], "owner_mode": row[7]} if len(row) > 7 and (row[2] is None or row[6] or row[7]) else {}),
             }
             for row in rows
         ],

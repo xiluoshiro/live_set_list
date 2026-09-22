@@ -6,6 +6,7 @@ import {
 } from "./liveListFilters";
 import { logError, logInfo } from "./logger";
 import { publishConsoleLiveChange } from "./consoleLiveSync";
+import { SONG_CATALOG_STORAGE_KEY, SONG_CATALOG_WRITE_EVENT } from "./songCatalogSync";
 
 export type { LiveListFilters, LiveListSort } from "./liveListFilters";
 
@@ -85,9 +86,12 @@ export type CatalogBandItem = {
 };
 
 export type CatalogSongItem = {
+  group_id?: number;
+  version_label?: string;
+  ownership?: SongOwnershipDetail;
   song_id: number;
   song_name: string;
-  band_id: number;
+  band_id: number | null;
   band_name: string | null;
   live_count: number;
 };
@@ -152,7 +156,7 @@ export type CatalogStatisticsFilters = {
 };
 export type StatisticsDimensionItem = { key: string; label: string; live_count: number };
 export type StatisticsSongItem = {
-  song_id: number; song_name: string; band_id: number; band_name: string | null; is_cover: boolean;
+  song_id: number; song_name: string; band_id: number | null; band_name: string | null; is_cover: boolean;
   live_count: number; performance_count: number;
   first_live_id: number; first_live_date: string; first_live_title: string;
   latest_live_id: number; latest_live_date: string; latest_live_title: string;
@@ -236,6 +240,7 @@ export type LiveDetailEventAttendee = {
 };
 
 export type LiveDetailRow = {
+  live_cover?: "original" | "cover" | "unknown";
   /** Stable live_setlist UUID. Older cached responses may omit it. */
   setlist_id?: string;
   row_id: string;
@@ -495,9 +500,12 @@ export type FavoriteBatchResponse = {
 };
 
 export type ConsoleSongItem = {
+  group_id?: number;
+  version_label?: string;
+  owner_mode?: "bands" | "members" | null;
   song_id: number;
   song_name: string;
-  band_id: number;
+  band_id: number | null;
   cover: boolean;
   band_name?: string;
 };
@@ -1086,6 +1094,9 @@ type AuthErrorPayload = {
 };
 
 type RequestKind =
+  | "song_catalog"
+  | "song_catalog_write"
+  | "song_catalog_console"
   | "console_geography"
   | "health"
   | "lives"
@@ -1386,6 +1397,7 @@ function clearLiveCollectionCaches(): void {
 }
 
 export function clearLiveDataCaches(): void {
+  invalidateSongCatalog();
   clearLiveCollectionCaches();
   detailCache.clear();
   calendarCache.clear();
@@ -2390,3 +2402,92 @@ export const previewConsoleVenueEdit = (id: number, payload: ConsoleVenueEdit) =
   geographyRequest<ConsoleVenueEdit>(`/venues/${id}/edit-preview`, "POST", payload);
 export const saveConsoleVenueEdit = (id: number, payload: ConsoleVenueEdit, csrf: string) =>
   geographyRequest<{detail: ConsoleVenueDetail; location: VenueLocation}>(`/venues/${id}/edit`, "PUT", payload, csrf);
+
+
+export type SongOwnership = {
+  mode: "bands" | "members" | "pending";
+  band_ids: number[];
+  member_groups: { band_id: number; member_ids: number[] }[];
+};
+export type SongOwnershipDetail = SongOwnership & {
+  bands: { band_id: number; band_name: string }[];
+  groups: { band_id: number; band_name: string; members: { member_id: number; display_name: string }[] }[];
+};
+export type AlbumSummary = {
+  album_id: number; album_name: string; release_label: string; release_date: string | null;
+  cover_path: string | null; revision: number;
+};
+export type AlbumTrackWrite = { album_track_id?: number | null; song_id: number; track_order: number; edition_label: string };
+export type AlbumDetail = AlbumSummary & { tracks: (AlbumTrackWrite & {
+  album_track_id: number; song_name: string; version_label: string; group_id: number;
+})[] };
+export type SongVersion = {
+  song_id: number; song_name: string; group_id: number; group_name: string;
+  version_label: string; version_order: number; revision: number; legacy_cover: boolean;
+  ownership: SongOwnershipDetail; performance_count: number;
+  albums: AlbumSummary[];
+};
+export type SongGroup = { group_id: number; group_name: string; revision: number; versions: SongVersion[] };
+export type SongGroupSummary = { group_id: number; group_name: string; version_count: number; matched_song_ids?: number[] };
+export type CatalogPage<T> = { items: T[]; page: number; page_size: number; total: number; total_pages: number };
+export type SongPerformance = {
+  setlist_id: string; live_id: number; live_title: string; live_date: string;
+  segment_type: string; sub_order: number; absolute_order: number; is_short: boolean;
+  live_cover: "original" | "cover" | "unknown";
+};
+export type CatalogMember = { member_id: number; display_name: string; revision: number };
+export type SongVersionDraft = { song_name: string; version_label: string };
+export type AlbumDraft = Omit<AlbumSummary, "album_id" | "revision"> & { tracks: AlbumTrackWrite[] };
+export const SONG_CATALOG_CHANGE = "song-catalog-change";
+const songCatalogCache = new LruRequestCache<unknown>(80);
+let songCatalogGeneration = 0;
+export function invalidateSongCatalog() {
+  songCatalogGeneration += 1;
+  songCatalogCache.clear();
+  window.dispatchEvent(new Event(SONG_CATALOG_CHANGE));
+}
+
+
+async function catalogGet<T>(path: string): Promise<T> {
+  const fresh = songCatalogCache.getFresh(path, 30_000);
+  if (fresh !== undefined) return fresh as T;
+  const running = songCatalogCache.getInFlight(path);
+  if (running) return running as Promise<T>;
+  const generation = songCatalogGeneration;
+  const request = fetchWithTimeout(`${BASE_URL}/api${path}`, undefined, { requestKind: "song_catalog" })
+    .then(expectJsonResponse<T>);
+  songCatalogCache.setInFlight(path, request);
+  try {
+    const result = await request;
+    if (generation === songCatalogGeneration) songCatalogCache.setData(path, result);
+    return result;
+  } finally { songCatalogCache.clearInFlightIfMatch(path, request); }
+}
+export async function songCatalogWrite<T>(path: string, method: "POST" | "PUT", payload: unknown, csrfToken: string): Promise<T> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console${path}`, {
+    method, headers: jsonHeaders(csrfToken), body: JSON.stringify(payload),
+  }, { requestKind: "song_catalog_write", method });
+  const result = await expectJsonResponse<T>(response);
+  clearLiveDataCaches();
+  window.dispatchEvent(new Event(SONG_CATALOG_WRITE_EVENT));
+  try {
+    window.localStorage.setItem(SONG_CATALOG_STORAGE_KEY, `${Date.now()}-${songCatalogGeneration}`);
+  } catch {
+    // Storage may be unavailable; local invalidation and server revisions still apply.
+  }
+  return result;
+}
+export const getSongGroups = (q = "", page = 1, bandId?: number, albumId?: number) => {
+  const query = new URLSearchParams({ q, page: String(page) });
+  if (bandId) query.set("band_id", String(bandId));
+  if (albumId) query.set("album_id", String(albumId));
+  return catalogGet<{ items: SongGroupSummary[]; pagination: Omit<CatalogPage<SongGroupSummary>, "items"> }>(`/song-groups?${query}`).then(result => ({ items: result.items, ...result.pagination }));
+};
+export const getSongGroup = (id: number) => catalogGet<SongGroup>(`/song-groups/${id}`);
+export const getSongVersion = (id: number) => catalogGet<SongVersion>(`/songs/${id}`);
+export const getSongPerformances = (id: number, page = 1) => catalogGet<{ items: SongPerformance[]; pagination: Omit<CatalogPage<SongPerformance>, "items"> }>(`/songs/${id}/performances?page=${page}`).then(result => ({ items: result.items, ...result.pagination }));
+export const getAlbumDetail = (id: number) => catalogGet<AlbumDetail>(`/albums/${id}`);
+export async function getCatalogConsole<T>(path: string): Promise<T> {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console${path}`, undefined, { requestKind: "song_catalog_console" });
+  return expectJsonResponse<T>(response);
+}

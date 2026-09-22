@@ -1,4 +1,5 @@
-﻿import json
+from app.song_catalog import LIVE_COVER_SQL
+import json
 import re
 from collections.abc import Mapping
 from math import ceil
@@ -258,7 +259,7 @@ LEFT JOIN performance_group_attrs pg
 WHERE l.id = %s
 """
 
-LIVE_DETAIL_ROWS_QUERY = """
+LIVE_DETAIL_ROWS_QUERY = f"""
 SELECT
     concat(stl.segment_type, stl.sub_order)::text AS row_id,
     s.song_name,
@@ -271,7 +272,8 @@ SELECT
     stl.segment_type,
     stl.sub_order,
     stl.song_id,
-    stl.id::text AS setlist_id
+    stl.id::text AS setlist_id,
+    {LIVE_COVER_SQL} AS live_cover
 FROM live_setlist stl
 JOIN song_list s
     ON s.id = stl.song_id
@@ -371,7 +373,8 @@ WITH row_base AS (
         stl.segment_type,
         stl.sub_order,
         stl.song_id,
-        stl.id::text AS setlist_id
+        stl.id::text AS setlist_id,
+    {LIVE_COVER_SQL} AS live_cover
     FROM live_setlist stl
     JOIN song_list s
         ON s.id = stl.song_id
@@ -390,7 +393,8 @@ SELECT
     rb.segment_type,
     rb.sub_order,
     rb.song_id,
-    rb.setlist_id
+    rb.setlist_id,
+    rb.live_cover
 FROM row_base rb
 LEFT JOIN band_attrs owner_band
     ON owner_band.id = rb.band_id
@@ -461,12 +465,13 @@ ParsedDetailRow = tuple[
     dict[str, Any],
     bool,
     bool,
-    int,
+    int | None,
     str | None,
     int,
     str,
     int,
     int,
+    str,
     str,
 ]
 PerformanceRowsByDetail = dict[tuple[int, str], list[dict[str, Any]]]
@@ -702,7 +707,7 @@ def _other_member_sort_key(item: dict[str, Any]) -> str:
 def _build_detail_tags(
     is_short: bool,
     is_cover: bool,
-    song_band_id: int,
+    song_band_id: int | None,
     song_band_name: str | None,
     performer_band_ids: set[int],
 ) -> tuple[list[str], dict[str, Any] | None]:
@@ -712,7 +717,7 @@ def _build_detail_tags(
     if is_cover:
         comments.append("翻唱")
         return comments, None
-    if song_band_id > 0 and song_band_id not in performer_band_ids:
+    if song_band_id is not None and song_band_id > 0 and song_band_id not in performer_band_ids:
         comments.append("翻唱")
         return comments, {
             "band_id": song_band_id,
@@ -815,6 +820,7 @@ def _build_live_detail_payload(
         sub_order,
         song_id,
         setlist_id,
+        live_cover,
     ) in sorted(parsed_rows, key=lambda row: row[7]):
         band_members = _build_detail_band_members(
             live_id=live_id,
@@ -834,6 +840,9 @@ def _build_live_detail_payload(
             performer_band_ids,
         )
 
+        if song_band_id is None:
+            comments = (["短版"] if is_short else []) + (["翻唱"] if live_cover == "cover" else [])
+            cover_band = None
         detail_rows.append(
             {
                 "setlist_id": setlist_id,
@@ -847,6 +856,7 @@ def _build_live_detail_payload(
                 "other_members": other_members,
                 "comments": comments,
                 "cover_band": cover_band,
+                "live_cover": live_cover,
             }
         )
 
@@ -910,7 +920,7 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
     parsed_rows: list[ParsedDetailRow] = []
     for row_index, row in enumerate(raw_rows, start=1):
         row_id, song_name, other_member_raw, is_short, is_cover, *song_band_values = row
-        song_band_id = int(song_band_values[0]) if song_band_values else 0
+        song_band_id = int(song_band_values[0]) if song_band_values and song_band_values[0] is not None else None
         song_band_name = str(song_band_values[1]) if len(song_band_values) > 1 and song_band_values[1] is not None else None
         absolute_order, segment_type, sub_order, song_id = _parse_detail_row_values(
             str(row_id),
@@ -926,13 +936,14 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
                 other_member_obj,
                 bool(is_short),
                 bool(is_cover),
-                int(song_band_id),
+                song_band_id,
                 song_band_name,
                 absolute_order,
                 segment_type,
                 sub_order,
                 song_id,
                 setlist_id,
+                str(song_band_values[7]) if len(song_band_values) > 7 else "unknown",
             )
         )
 
@@ -1152,7 +1163,7 @@ def get_live_details_batch(
                 parsed_rows_by_live_id: dict[int, list[ParsedDetailRow]] = {}
                 for row_index, row in enumerate(raw_rows, start=1):
                     live_id, row_id, song_name, other_member_raw, is_short, is_cover, *song_band_values = row
-                    song_band_id = int(song_band_values[0]) if song_band_values else 0
+                    song_band_id = int(song_band_values[0]) if song_band_values and song_band_values[0] is not None else None
                     song_band_name = str(song_band_values[1]) if len(song_band_values) > 1 and song_band_values[1] is not None else None
                     absolute_order, segment_type, sub_order, song_id = _parse_detail_row_values(
                         str(row_id),
@@ -1168,13 +1179,14 @@ def get_live_details_batch(
                             _ensure_json_object(other_member_raw),
                             bool(is_short),
                             bool(is_cover),
-                            int(song_band_id),
+                            song_band_id,
                             song_band_name,
                             absolute_order,
                             segment_type,
                             sub_order,
                             song_id,
                             setlist_id,
+                            str(song_band_values[7]) if len(song_band_values) > 7 else "unknown",
                         )
                     )
 

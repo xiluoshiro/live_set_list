@@ -22,6 +22,8 @@ from app.logging_config import get_logger
 from app.live_status import build_public_live_status
 from app.schemas import ErrorResponse, ValidationErrorResponse
 from app.schemas.auth import AuthErrorResponse
+from app.song_catalog import require_setlist_date
+from app.schemas.song_catalog import SongMutation, VersionCreate, VersionUpdate
 from app.schemas.console import (
     ConsoleLiveMutationResponse,
     ConsoleLiveBandLineupContextRequest,
@@ -345,7 +347,7 @@ def _build_live_mutation_item(
 @router.post(
     "/songs",
     status_code=201,
-    response_model=ConsoleSongMutationResponse,
+    response_model=SongMutation | ConsoleSongMutationResponse,
     summary="新增歌曲",
     description="`editor+` 用户新增歌曲基础信息。",
     responses={
@@ -360,12 +362,15 @@ def _build_live_mutation_item(
     },
 )
 def create_song(
-    payload: ConsoleSongCreateRequest,
+    payload: VersionCreate | ConsoleSongCreateRequest,
     request: Request,
     _: Any = Depends(require_role("editor")),
     context: AuthSessionContext = Depends(get_current_auth_context),
 ):
     """Insert one new song from the console page after auth, CSRF, and band checks pass."""
+    if isinstance(payload, VersionCreate):
+        from app.routers.console_song_catalog import create_version
+        return create_version(payload, request, context)
     assert_valid_csrf(request, context)
 
     try:
@@ -377,8 +382,10 @@ def create_song(
 
                 cur.execute(
                     """
-                    INSERT INTO song_list (song_name, band_id, is_cover)
-                    VALUES (%s, %s, %s)
+                    WITH input(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)),
+                    new_group AS (INSERT INTO song_groups(group_name) SELECT song_name FROM input RETURNING id)
+                    INSERT INTO song_list (song_name, band_id, is_cover, group_id)
+                    SELECT input.*, new_group.id FROM input CROSS JOIN new_group
                     RETURNING id
                     """,
                     (payload.song_name, payload.band_id, payload.cover),
@@ -425,17 +432,20 @@ def create_song(
 
 @router.put(
     "/songs/{song_id}",
-    response_model=ConsoleSongMutationResponse,
+    response_model=SongMutation | ConsoleSongMutationResponse,
     summary="更新歌曲",
     description="`editor+` 用户更新歌曲名称、归属 Band 和翻唱属性。",
 )
 def update_song(
-    payload: ConsoleSongUpdateRequest,
+    payload: VersionUpdate | ConsoleSongUpdateRequest,
     request: Request,
     song_id: int = Path(..., ge=1),
     _: Any = Depends(require_role("editor")),
     context: AuthSessionContext = Depends(get_current_auth_context),
 ):
+    if isinstance(payload, VersionUpdate):
+        from app.routers.console_song_catalog import update_version
+        return update_version(payload, song_id, request, context)
     assert_valid_csrf(request, context)
     try:
         with get_write_db_connection() as conn:
@@ -446,8 +456,8 @@ def update_song(
                 cur.execute(
                     """
                     UPDATE song_list
-                    SET song_name = %s, band_id = %s, is_cover = %s
-                    WHERE id = %s
+                    SET song_name = %s, band_id = %s, is_cover = %s, revision = revision + 1
+                    WHERE id = %s AND owner_mode IS NULL
                     RETURNING id
                     """,
                     (payload.song_name, payload.band_id, payload.cover, song_id),
@@ -529,8 +539,10 @@ def create_songs_batch(
 
                         cur.execute(
                             """
-                            INSERT INTO song_list (song_name, band_id, is_cover)
-                            VALUES (%s, %s, %s)
+                            WITH input(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)),
+                            new_group AS (INSERT INTO song_groups(group_name) SELECT song_name FROM input RETURNING id)
+                            INSERT INTO song_list (song_name, band_id, is_cover, group_id)
+                            SELECT input.*, new_group.id FROM input CROSS JOIN new_group
                             RETURNING id
                             """,
                             (song.song_name, song.band_id, song.cover),
@@ -760,6 +772,10 @@ def update_live(
                 )
                 cur.execute("SELECT 1 FROM live_setlist WHERE live_id = %s LIMIT 1", (live_id,))
                 has_setlist = cur.fetchone() is not None
+                if has_setlist and (str(existing["live_date"]) != str(payload.live_date) or payload.event_status == "cancelled"):
+                    raise HTTPException(409, "已有歌单的演出不允许修改日期或取消")
+                if (payload.schedule_change_kind == "reschedule" or (payload.event_status == "postponed" and existing["event_status"] != "postponed")) and str(existing["live_date"]) == str(payload.live_date):
+                    raise HTTPException(422, "延期必须指定新的演出日期")
                 existing_lineup_contexts = load_lineup_contexts(cur, live_id)
                 if has_setlist:
                     normalized_event_attendees, persisted_event_attendees, _ = _validate_and_normalize_live_relations(
@@ -999,6 +1015,7 @@ def append_live_setlist(
                 cur.execute("SELECT 1 FROM live_attrs WHERE id = %s FOR UPDATE", (live_id,))
                 if cur.fetchone() is None:
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
+                require_setlist_date(cur, live_id)
 
                 cur.execute("SELECT 1 FROM live_setlist WHERE live_id = %s LIMIT 1", (live_id,))
                 if cur.fetchone() is not None:
@@ -1182,6 +1199,7 @@ def replace_live_setlist(
                 cur.execute("SELECT 1 FROM live_attrs WHERE id = %s FOR UPDATE", (live_id,))
                 if cur.fetchone() is None:
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
+                require_setlist_date(cur, live_id)
                 song_ids = list(dict.fromkeys(item["song_id"] for item in normalized_rows))
                 cur.execute("SELECT id FROM song_list WHERE id = ANY(%s)", (song_ids,))
                 existing_song_ids = {int(row[0]) for row in cur.fetchall()}

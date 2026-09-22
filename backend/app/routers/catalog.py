@@ -8,6 +8,7 @@ from psycopg2.errors import QueryCanceled
 
 from app.auth import AuthUser, get_current_user_optional
 from app.db import get_db_connection
+from app.song_catalog import read_ownership
 from app.favorites import get_favorite_live_id_set
 from app.live_list_filters import effective_band_ids_sql
 from app.logging_config import get_logger
@@ -169,7 +170,8 @@ SELECT
     s.song_name,
     s.band_id,
     b.band_name,
-    COUNT(DISTINCT ls.live_id) AS live_count
+    COUNT(DISTINCT ls.live_id) AS live_count,
+    s.owner_mode, s.group_id, s.version_label
 FROM song_list s
 LEFT JOIN band_attrs b
     ON b.id = s.band_id
@@ -325,6 +327,7 @@ def search_catalog(
                 song_rows = cur.fetchall()
                 cur.execute(SEARCH_VENUES_QUERY, (pattern, limit))
                 venue_rows = cur.fetchall()
+                song_ownership = {int(row[0]): read_ownership(cur, int(row[0]), row[5]) for row in song_rows}
     except QueryCanceled as exc:
         logger.exception("search_catalog timeout q=%s limit=%s", query_text, limit)
         raise HTTPException(status_code=504, detail="Database query timeout") from exc
@@ -355,9 +358,12 @@ def search_catalog(
             {
                 "song_id": int(row[0]),
                 "song_name": row[1],
-                "band_id": int(row[2]),
+                "band_id": int(row[2]) if row[2] is not None else None,
                 "band_name": row[3],
                 "live_count": int(row[4]),
+                "ownership": song_ownership[int(row[0])],
+                "group_id": row[6],
+                "version_label": row[7],
             }
             for row in song_rows
         ],
@@ -839,7 +845,7 @@ def get_catalog_statistics(
         "years": [{"key": str(row[0]), "label": f"{row[0]} 年", "live_count": int(row[1])} for row in year_rows],
         "live_types": [{"key": row[0], "label": row[0], "live_count": int(row[1])} for row in type_rows],
         "top_songs": [{
-            "song_id": int(r[0]), "song_name": r[1], "band_id": int(r[2]), "band_name": r[3], "is_cover": bool(r[4]),
+            "song_id": int(r[0]), "song_name": r[1], "band_id": int(r[2]) if r[2] is not None else None, "band_name": r[3], "is_cover": bool(r[4]),
             "live_count": int(r[5]), "performance_count": int(r[6]),
             "first_live_id": int(r[7]), "first_live_date": r[8], "first_live_title": r[9],
             "latest_live_id": int(r[10]), "latest_live_date": r[11], "latest_live_title": r[12],

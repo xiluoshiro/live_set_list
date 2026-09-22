@@ -24,6 +24,7 @@ from app.routers.performance_groups import router as performance_groups_router
 from app.routers.performance_groups import catalog_router as catalog_performances_router
 from app.routers.tours import router as tours_router
 from app.routers.venues import router as venues_router
+from app.routers.songs import router as songs_router
 from app.schemas import RootResponse
 
 setup_logging()
@@ -141,6 +142,7 @@ def create_app() -> FastAPI:
     app.include_router(catalog_router)
     app.include_router(tours_router)
     app.include_router(venues_router)
+    app.include_router(songs_router)
     app.include_router(performance_groups_router)
     app.include_router(catalog_performances_router)
     app.include_router(auth_router)

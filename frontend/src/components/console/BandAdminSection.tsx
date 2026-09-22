@@ -1,3 +1,4 @@
+import { MemberAdminSection } from "./MemberAdminSection";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -388,6 +389,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
           </div>
         </div>
       )}
+      <MemberAdminSection />
     </section>
   );
 }

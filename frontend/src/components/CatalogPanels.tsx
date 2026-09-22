@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { ownershipLabel } from "./SongCatalog";
 
 import type {
   CatalogBandItem,
@@ -209,8 +210,8 @@ export function SearchResultsPanel({
               <ul className="catalog-entity-list">
                 {result.songs.map((song) => (
                   <li key={song.song_id}>
-                    <strong>{song.song_name}</strong>
-                    <span>{song.band_name ?? "未关联乐队"} · {song.live_count} 场 Live</span>
+                    <strong><a href={`/songs/${song.song_id}`}>{song.song_name}</a></strong>
+                    <span>{song.ownership ? ownershipLabel({ ownership: song.ownership }) : song.band_name ?? "未关联乐队"}{song.version_label ? ` · ${song.version_label}` : ""} · {song.live_count} 场 Live</span>
                   </li>
                 ))}
               </ul>

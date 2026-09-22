@@ -364,11 +364,9 @@ def test_get_live_detail_applies_cross_band_cover_rules(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
-            INSERT INTO song_list (id, song_name, band_id, is_cover)
-            VALUES
-                (9000, 'Cross Band Cover Song', 2, false),
+            WITH seed(id, song_name, band_id, is_cover) AS (VALUES (9000, 'Cross Band Cover Song', 2, false),
                 (9001, 'Legacy Cover Song', 2, true),
-                (9002, 'Own Band Song', 1, false)
+                (9002, 'Own Band Song', 1, false)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (id, song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name
             """
         )
         cursor.execute(

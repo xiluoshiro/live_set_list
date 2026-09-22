@@ -1,3 +1,4 @@
+import { AlbumAdminSection } from "./console/AlbumAdminSection";
 import { previewConsoleLiveClock } from "../api";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -49,6 +50,7 @@ import { MemberStatusTable } from "./DetailMemberTable";
 import { LiveAdminSection } from "./console/LiveAdminSection";
 import { PageTitle } from "./PageTitle";
 import { LiveInsertTab } from "./console/LiveInsertTab";
+import { SongCatalogAdmin } from "./console/SongCatalogAdmin";
 import { SongAdminSection } from "./console/SongAdminSection";
 import { BandAdminSection } from "./console/BandAdminSection";
 import { CompactConfirmationTable } from "./console/CompactConfirmationTable";
@@ -113,7 +115,8 @@ type ConsoleInsertPanelProps = {
 const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; label: string }; manage?: { value: ConsoleMode; label: string } }[] = [
   { title: "演出", create: { value: "live_create", label: "新增演出" }, manage: { value: "live_edit", label: "演出管理" } },
   { title: "歌单", create: { value: "setlist", label: "新增歌单" }, manage: { value: "setlist_edit", label: "歌单管理" } },
-  { title: "歌曲", manage: { value: "song", label: "歌曲管理" } },
+  { title: "歌曲", create: { value: "song_create", label: "新增歌曲" }, manage: { value: "song_edit", label: "歌曲管理" } },
+  { title: "专辑", manage: { value: "album", label: "专辑管理" } },
   { title: "巡演", manage: { value: "tour", label: "巡演管理" } },
   { title: "活动组", manage: { value: "performance_group", label: "活动组管理" } },
   { title: "乐队", manage: { value: "band", label: "乐队管理" } },
@@ -1508,7 +1511,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     void loadLiveForEdit(liveId);
   };
 
-  const changeConsoleMode = (nextMode: ConsoleMode) => {
+  const songLeaveGuard = useRef<((proceed: () => void) => void) | null>(null);
+
+  const changeConsoleMode = (nextMode: ConsoleMode, confirmed = false) => {
+    if (!confirmed && nextMode !== mode && (mode === "song_edit" || mode === "song")) {
+      songLeaveGuard.current?.(() => changeConsoleMode(nextMode, true));
+      if (songLeaveGuard.current) return;
+    }
     if (mode === "live_edit" && nextMode !== "live_edit" && isLiveDirty) {
       setPendingConfirmation({
         kind: "live_discard",
@@ -1572,7 +1581,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
   const selectSongForEdit = (songId: number) => {
     const song = songCandidates.find((candidate) => candidate.song_id === songId);
-    if (!song) return;
+    if (!song || song.band_id === null) return;
     setEditingSongId(song.song_id);
     setOriginalSongPayload({
       song_name: song.song_name,
@@ -1645,11 +1654,12 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   }, [mode]);
 
   useEffect(() => {
-    if (mode !== "song") return;
+    if (songModalRowKey === null) return;
     void loadSongCandidatePage(songQuery, songPage, songBandFilterId);
-  }, [mode, songPage]);
+  }, [songModalRowKey, songPage]);
 
   const selectSongForEditFromItem = (song: SongInsertRow) => {
+    if (song.band_id === null) return;
     setEditingSongId(song.song_id);
     setOriginalSongPayload({
       song_name: song.song_name,
@@ -3142,6 +3152,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         <LiveAdminSection
           variant={mode === "live_create" ? "create" : "edit"}
           liveDate={liveDate}
+          dateLocked={editingLiveHasSetlist}
           liveTitle={liveTitle}
           liveType={liveType}
           eventStatus={eventStatus}
@@ -3350,9 +3361,14 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         />
       )}
 
-      {mode === "song" && (
-        renderSongAdminSection()
-      )}
+      {mode === "album" && <AlbumAdminSection />}
+      <SongCatalogAdmin
+        active={mode === "song_create" || mode === "song_edit" || mode === "song"}
+        variant={mode === "song_create" ? "create" : "edit"}
+        bands={bands}
+        registerLeaveGuard={guard => { songLeaveGuard.current = guard; }}
+        onManage={() => setMode("song_edit")}
+      />
 
       {mode === "band" && (
         <BandAdminSection

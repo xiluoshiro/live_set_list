@@ -35,7 +35,7 @@ def test_search_catalog_returns_grouped_public_results():
     cursor.fetchall.side_effect = [
         [(24, 1, "2026-03-28", "Poppin'Party Live", [1], "https://example.com/live/1", "oneman", None, None, 5, "Party Weekend")],
         [(1, "Poppin'Party", "PoPiPa", ["Kasumi"], 12)],
-        [(7, "STAR BEAT!", 1, "Poppin'Party", 5)],
+        [(7, "STAR BEAT!", 1, "Poppin'Party", 5, None, 7, "")],
         [(3, "有明アリーナ", 4)],
     ]
 
@@ -63,7 +63,8 @@ def test_search_catalog_returns_grouped_public_results():
     }
     assert payload["bands"] == [{"band_id": 1, "band_name": "Poppin'Party", "band_abbr": "PoPiPa", "band_members": ["Kasumi"], "live_count": 12}]
     assert payload["songs"] == [
-        {"song_id": 7, "song_name": "STAR BEAT!", "band_id": 1, "band_name": "Poppin'Party", "live_count": 5}
+        {"song_id": 7, "song_name": "STAR BEAT!", "band_id": 1, "band_name": "Poppin'Party", "live_count": 5,
+         "group_id": 7, "version_label": "", "ownership": {"mode": "pending", "band_ids": [], "member_groups": [], "bands": [], "groups": []}}
     ]
     assert payload["venues"] == [{"venue_id": 3, "venue_name": "有明アリーナ", "live_count": 4}]
     assert cursor.execute.call_args_list == [

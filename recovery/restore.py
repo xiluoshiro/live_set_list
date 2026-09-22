@@ -499,6 +499,21 @@ BEGIN
     IF to_regclass('public.venue_map_links') IS NOT NULL THEN
         EXECUTE 'GRANT DELETE ON TABLE public.venue_map_links TO {super_user}';
     END IF;
+    IF to_regclass('public.song_groups') IS NOT NULL THEN
+        EXECUTE 'GRANT DELETE ON TABLE public.song_groups TO {super_user}';
+    END IF;
+    IF to_regclass('public.song_bands') IS NOT NULL THEN
+        EXECUTE 'GRANT DELETE ON TABLE public.song_bands TO {super_user}';
+    END IF;
+    IF to_regclass('public.song_member_groups') IS NOT NULL THEN
+        EXECUTE 'GRANT DELETE ON TABLE public.song_member_groups TO {super_user}';
+    END IF;
+    IF to_regclass('public.song_members') IS NOT NULL THEN
+        EXECUTE 'GRANT DELETE ON TABLE public.song_members TO {super_user}';
+    END IF;
+    IF to_regclass('public.album_tracks') IS NOT NULL THEN
+        EXECUTE 'GRANT DELETE ON TABLE public.album_tracks TO {super_user}';
+    END IF;
 END
 $$;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.flyway_schema_history TO {flyway_user};

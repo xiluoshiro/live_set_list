@@ -322,6 +322,7 @@ function StageTrackInspector({ row, onClose }: { row: StageRow; onClose?: () => 
         <div>
           <span className="stage-inspector-index">{row.row_id}</span>
           <h3>{row.song_name}</h3>
+          <a href={`/songs/${row.song_id}`}>歌曲资料</a>
         </div>
         {onClose && (
           <button type="button" className="stage-iconless-button" onClick={onClose} aria-label="关闭歌曲详情">

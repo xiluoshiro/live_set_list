@@ -925,6 +925,7 @@ def test_console_append_setlist_mock_success_inserts_rows_and_audits():
     conn, cursor = _build_connection_mock(
         fetchone_side_effect=[
             (1,),
+            ("scheduled", datetime(2020, 1, 1).date(), datetime(2026, 1, 1).date()),
             None,
             ("setlist-row-1",),
             ("setlist-row-2",),
@@ -1012,7 +1013,7 @@ def test_console_append_setlist_mock_rejects_pre_db_business_errors(
 def test_console_append_setlist_mock_missing_song_rejects_batch_without_partial_insert():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
-        fetchone_side_effect=[(1,), None],
+        fetchone_side_effect=[(1,), ("scheduled", datetime(2020, 1, 1).date(), datetime(2026, 1, 1).date()), None],
         fetchall_side_effect=[[(1,)]],
     )
     payload = {
@@ -1034,7 +1035,7 @@ def test_console_append_setlist_mock_missing_song_rejects_batch_without_partial_
 def test_console_append_setlist_mock_existing_setlist_rejects_with_409():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
-        fetchone_side_effect=[(1,), (1,)],
+        fetchone_side_effect=[(1,), ("scheduled", datetime(2020, 1, 1).date(), datetime(2026, 1, 1).date()), (1,)],
         fetchall_side_effect=[[(1,)]],
     )
 
@@ -1054,7 +1055,7 @@ def test_console_append_setlist_mock_existing_setlist_rejects_with_409():
 def test_console_replace_setlist_mock_replaces_complete_collection():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
-        fetchone_side_effect=[(1,), ("setlist-row-1",)],
+        fetchone_side_effect=[(1,), ("scheduled", datetime(2020, 1, 1).date(), datetime(2026, 1, 1).date()), ("setlist-row-1",)],
         fetchall_side_effect=[[(1,)]],
     )
     lineup_contexts = {

@@ -319,7 +319,7 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                 return (
                   <tr key={rowKey}>
                     <td>{row.row_id}</td>
-                    <td title={row.song_name}>{row.song_name}</td>
+                    <td title={row.song_name}>{row.song_id ? <a href={`/songs/${row.song_id}`}>{row.song_name}</a> : row.song_name}</td>
                     <td>
                       <button
                         type="button"

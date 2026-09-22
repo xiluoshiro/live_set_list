@@ -3,6 +3,7 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 from app.schemas.lives import DatePhase, EventStatus, LiveItem, LivesPagination
+from app.schemas.song_catalog import OwnershipDetail
 
 
 class CatalogBandItem(BaseModel):
@@ -14,9 +15,12 @@ class CatalogBandItem(BaseModel):
 
 
 class CatalogSongItem(BaseModel):
+    group_id: int
+    version_label: str
+    ownership: OwnershipDetail
     song_id: int = Field(..., description="song_list.id")
     song_name: str = Field(..., description="Song title")
-    band_id: int = Field(..., description="song_list.band_id")
+    band_id: int | None = Field(..., description="Legacy song band hint")
     band_name: str | None = Field(default=None, description="Owning band display name")
     live_count: int = Field(..., description="Matched live count for this song")
 
@@ -98,7 +102,7 @@ class StatisticsDimensionItem(BaseModel):
 class StatisticsSongItem(BaseModel):
     song_id: int
     song_name: str
-    band_id: int
+    band_id: int | None
     band_name: str | None = None
     is_cover: bool
     live_count: int

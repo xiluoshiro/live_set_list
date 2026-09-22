@@ -250,7 +250,7 @@ export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenSto
             <table className="console-table tour-statistics-table">
               <thead><tr><th>歌曲</th><th>场次</th><th>状态</th></tr></thead>
               <tbody>{data.songs.map((song) => (
-                <tr key={song.song_id}><td>{song.song_name}</td><td>{song.appearance_count} / {data.coverage.setlist_stop_count}</td><td>{STATUS_LABELS[song.status]}</td></tr>
+                <tr key={song.song_id}><td><a href={`/songs/${song.song_id}`}>{song.song_name}</a></td><td>{song.appearance_count} / {data.coverage.setlist_stop_count}</td><td>{STATUS_LABELS[song.status]}</td></tr>
               ))}</tbody>
             </table>
           </div>

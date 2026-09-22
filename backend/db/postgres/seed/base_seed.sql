@@ -22,6 +22,9 @@ TRUNCATE TABLE
     public.live_setlist,
     public.live_attrs,
     public.song_list,
+    public.song_groups,
+    public.members,
+    public.albums,
     public.band_attrs,
     public.venue_list
 RESTART IDENTITY CASCADE;
@@ -45,8 +48,7 @@ VALUES
     (2, 'rsl', 'Roselia'),
     (3, 'mygo', 'MyGO!!!!!');
 
-INSERT INTO public.song_list (id, song_name, band_id, is_cover)
-VALUES
+WITH seed(id, song_name, band_id, is_cover) AS (VALUES
     (1, 'Yes! BanG_Dream!', 1, false),
     (2, 'BLACK SHOUT', 2, false),
     (3, '春日影', 3, false),
@@ -63,7 +65,8 @@ VALUES
     (199, '開けたら Dream!', 1, false),
     (200, '前へススメ！', 1, false),
     (201, '切ない Sandglass', 1, false),
-    (202, 'Drive Your Heart', 1, false);
+    (202, 'Drive Your Heart', 1, false)), groups AS (INSERT INTO public.song_groups(id, group_name) SELECT id, song_name FROM seed RETURNING id)
+INSERT INTO public.song_list(id, song_name, band_id, is_cover, group_id) SELECT seed.*, groups.id FROM seed JOIN groups ON groups.id = seed.id;
 
 INSERT INTO public.live_attrs (
     id,
@@ -534,4 +537,5 @@ SELECT setval('public.tour_attrs_id_seq', (SELECT MAX(id) FROM public.tour_attrs
 SELECT setval('public.band_name_versions_id_seq', (SELECT MAX(id) FROM public.band_name_versions), true);
 SELECT setval('public.band_lineup_versions_id_seq', (SELECT MAX(id) FROM public.band_lineup_versions), true);
 
+SELECT setval(pg_get_serial_sequence('public.song_groups', 'id'), (SELECT max(id) FROM public.song_groups));
 COMMIT;

@@ -117,3 +117,13 @@ def normalize_song_lookup_text(value: str) -> str:
     normalized = SONG_LOOKUP_PUNCTUATED_TOKEN_BEFORE_NON_ASCII_PATTERN.sub(r"\1\2", normalized)
     normalized = SONG_LOOKUP_PUNCTUATED_TOKEN_AFTER_NON_ASCII_PATTERN.sub(r"\1\2", normalized)
     return normalized.strip().lower()
+
+
+def song_lookup_sql(column: str) -> tuple[str, tuple[str, ...]]:
+    """Build the same punctuation equivalence for a trusted catalog column."""
+    if column not in {"g.group_name", "s.song_name", "s.version_label"}:
+        raise ValueError("Unsupported song search column")
+    expression = f"translate(normalize({column}, NFKC), %s, %s)"
+    for replacement in (r"\1", r"\1", r"\1\2", r"\1\2"):
+        expression = f"regexp_replace({expression}, %s, '{replacement}', 'g')"
+    return expression, (SONG_LOOKUP_SQL_FROM_CHARS, SONG_LOOKUP_SQL_TO_CHARS, *SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS)

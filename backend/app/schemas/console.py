@@ -44,11 +44,14 @@ class ConsoleSongCreateRequest(BaseModel):
 class ConsoleSongItem(BaseModel):
     song_id: int = Field(..., description="Created song ID")
     song_name: str = Field(..., description="Song title")
-    band_id: int = Field(..., description="band_attrs.id")
+    band_id: int | None = Field(..., description="Legacy band hint; nullable for new ownership")
     cover: bool = Field(..., description="Whether the song is a cover")
 
 
 class ConsoleSongLookupItem(ConsoleSongItem):
+    group_id: int | None = None
+    version_label: str = ""
+    owner_mode: Literal["bands", "members"] | None = None
     band_name: str = Field(..., description="Owning band display name")
 
 

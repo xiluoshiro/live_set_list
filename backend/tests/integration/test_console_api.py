@@ -163,7 +163,7 @@ def test_console_song_lookup_prioritizes_exact_title_match(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s) RETURNING id",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
             ("R", 1, False),
         )
         song_id = cursor.fetchone()[0]
@@ -191,10 +191,8 @@ def test_console_song_lookup_supports_server_side_pagination(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
-            INSERT INTO song_list (song_name, band_id, is_cover)
-            VALUES
-                ('Pagination Probe A', 1, false),
-                ('Pagination Probe B', 1, false)
+            WITH seed(song_name, band_id, is_cover) AS (VALUES ('Pagination Probe A', 1, false),
+                ('Pagination Probe B', 1, false)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name
             RETURNING id
             """
         )
@@ -235,10 +233,8 @@ def test_console_song_lookup_filters_by_owning_band(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
             """
-            INSERT INTO song_list (song_name, band_id, is_cover)
-            VALUES
-                ('Band Filter Probe Poppin', 1, false),
-                ('Band Filter Probe Roselia', 2, false)
+            WITH seed(song_name, band_id, is_cover) AS (VALUES ('Band Filter Probe Poppin', 1, false),
+                ('Band Filter Probe Roselia', 2, false)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name
             RETURNING id, band_id
             """
         )
@@ -288,11 +284,11 @@ def test_console_song_lookup_only_matches_title_prefix(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s)",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name",
             ("Sing Alive", 1, False),
         )
         cursor.execute(
-            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s) RETURNING id",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
             ("V.I.P MONSTER", 1, False),
         )
         prefix_song_id = cursor.fetchone()[0]
@@ -329,7 +325,7 @@ def test_console_song_lookup_matches_punctuation_equivalent_title(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s) RETURNING id",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
             ("Song ‘A’，B；C〜D", 1, False),
         )
         song_id = cursor.fetchone()[0]
@@ -362,7 +358,7 @@ def test_console_song_lookup_matches_modifier_apostrophe_pair(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s) RETURNING id",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
             ("ぽっぴん'しゃっふる", 1, False),
         )
         song_id = cursor.fetchone()[0]
@@ -396,12 +392,12 @@ def test_console_song_lookup_ignores_only_whitespace_adjacent_to_punctuation(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s) RETURNING id",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
             ("LET’S あちあちトレーニング！", 1, False),
         )
         song_id = cursor.fetchone()[0]
         cursor.execute(
-            "INSERT INTO song_list (song_name, band_id, is_cover) VALUES (%s, %s, %s)",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name",
             ("LET’S あち あちトレーニング！", 1, False),
         )
 
@@ -1150,6 +1146,10 @@ def test_console_live_schedule_change_separates_correction_from_reschedule(
     integration_test_client,
     integration_admin_connection,
 ):
+    # 本场尚未录入歌单，允许正式改期；已有歌单日期锁由独立用例覆盖。
+    integration_admin_connection.autocommit = True
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("DELETE FROM live_setlist WHERE live_id = 1")
     live_id = 1
     csrf_token = _login_and_get_csrf_for(
         integration_test_client,
@@ -1296,7 +1296,7 @@ def test_console_live_unannounced_schedule_announcement_and_withdrawal_rules(
     withdrawn = integration_test_client.put(
         f"/api/console/lives/{live_id}",
         headers={"X-CSRF-Token": csrf_token},
-        json={**base_payload, "schedule_change_kind": "reschedule"},
+        json={**base_payload, "live_date": "2031-01-02", "schedule_change_kind": "reschedule"},
     )
     assert withdrawn.status_code == 200
     integration_admin_connection.autocommit = True

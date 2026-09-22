@@ -10,6 +10,8 @@ from app.routers.console_tours import router as console_tours_router
 from app.routers.console_venues import router as console_venues_router
 from app.routers.console_write import router as console_write_router
 
+from app.routers.console_song_catalog import router as console_song_catalog_router
+
 router = APIRouter(prefix="/api/console", tags=["console"])
 router.include_router(console_bands_router)
 router.include_router(console_geography_router)
@@ -20,3 +22,5 @@ router.include_router(console_read_router)
 router.include_router(console_write_router)
 router.include_router(console_tours_router)
 router.include_router(console_performance_groups_router)
+
+router.include_router(console_song_catalog_router)

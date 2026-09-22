@@ -110,6 +110,7 @@ class LiveDetailEventAttendee(BaseModel):
 
 
 class LiveDetailRow(BaseModel):
+    live_cover: Literal["original", "cover", "unknown"] = "unknown"
     setlist_id: str = Field(..., description='Stable live_setlist UUID for row identity')
     row_id: str = Field(..., description='segment_type + sub_order composite row ID')
     absolute_order: int = Field(..., ge=1, description='Stable setlist order from live_setlist.absolute_order')

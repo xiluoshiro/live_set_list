@@ -15,6 +15,11 @@ EXPECTED_BAND_HISTORY_SEQUENCES = {
 }
 
 CONSOLE_DELETABLE_TABLES = {
+    "song_groups",
+    "song_bands",
+    "song_member_groups",
+    "song_members",
+    "album_tracks",
     "venue_map_links",
     "band_lineup_version_members",
     "live_band_lineup_contexts",

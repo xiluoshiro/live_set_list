@@ -43,6 +43,29 @@ describe("api cache behavior", () => {
     vi.useRealTimers();
   });
 
+  test("歌曲资料失效后旧请求不能覆盖新缓存，写入广播跨页通知", async () => {
+    // 测试点：并发请求合并；失效前在途结果不能重填缓存；写入后其他标签可收到通知。
+    const oldRequest = deferred<Response>();
+    fetchMock.mockReturnValueOnce(oldRequest.promise);
+    const api = await import("../api");
+    const first = api.getSongVersion(1);
+    const duplicate = api.getSongVersion(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    api.invalidateSongCatalog();
+    fetchMock.mockResolvedValueOnce(makeJsonResponse({ song_id: 1, revision: 2 }));
+    expect(await api.getSongVersion(1)).toEqual({ song_id: 1, revision: 2 });
+    oldRequest.resolve(makeJsonResponse({ song_id: 1, revision: 1 }));
+    await Promise.all([first, duplicate]);
+    expect(await api.getSongVersion(1)).toEqual({ song_id: 1, revision: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockResolvedValueOnce(makeJsonResponse({ ok: true }));
+    await api.songCatalogWrite("/songs/1", "PUT", { song_name: "新名称" }, "csrf");
+    const { SONG_CATALOG_STORAGE_KEY } = await import("../songCatalogSync");
+    expect(localStorage.getItem(SONG_CATALOG_STORAGE_KEY)).toBeTruthy();
+    fetchMock.mockResolvedValueOnce(makeJsonResponse({ song_id: 1, revision: 3 }));
+    expect(await api.getSongVersion(1)).toEqual({ song_id: 1, revision: 3 });
+  });
+
   test("getLives 相同参数命中缓存，不重复请求", async () => {
     // 测试点：列表页缓存命中（page/page_size 维度）。
     fetchMock.mockResolvedValue(

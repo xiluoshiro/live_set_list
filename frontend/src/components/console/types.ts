@@ -1,4 +1,4 @@
-export type ConsoleMode = "live_create" | "live_edit" | "geography_quality" | "setlist" | "setlist_edit" | "song" | "band" | "venue_create" | "venue" | "locality" | "tour" | "performance_group";
+export type ConsoleMode = "live_create" | "live_edit" | "geography_quality" | "setlist" | "setlist_edit" | "song" | "song_create" | "song_edit" | "album" | "band" | "venue_create" | "venue" | "locality" | "tour" | "performance_group";
 
 export type Position = {
   top: number;
@@ -33,7 +33,7 @@ export type LiveInsertRow = {
 export type SongInsertRow = {
   song_id: number;
   song_name: string;
-  band_id: number;
+  band_id: number | null;
   cover: boolean;
   band_name?: string;
 };

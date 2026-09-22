@@ -100,7 +100,7 @@ export function StatisticsPanel(props: StatisticsPanelProps) {
         <section className="statistics-card">
           <h2>{filters.year ? `${filters.year} 年高频歌曲` : "高频歌曲"}</h2>
           {data.top_songs.length === 0 ? <ContentState kind="empty" title="当前条件下没有 Setlist 数据。" layout="rows" compact /> : <ol className="statistics-song-list">{data.top_songs.map((song) => <li key={`${song.band_id}:${song.song_id}`}>
-            <div><strong>{song.song_name}</strong><span>{song.band_name ?? "未知乐队"}{song.is_cover ? " · 翻唱" : ""}</span></div>
+            <div><strong><a href={`/songs/${song.song_id}`}>{song.song_name}</a></strong><span>{song.band_name ?? "未知乐队"}{song.is_cover ? " · 翻唱" : ""}</span></div>
             <b>{song.live_count} 场</b>
             <button onClick={() => props.onOpenLive({ liveId: song.latest_live_id, liveDate: song.latest_live_date, liveTitle: song.latest_live_title })}>最近：{song.latest_live_date}</button>
           </li>)}</ol>}
@@ -110,7 +110,7 @@ export function StatisticsPanel(props: StatisticsPanelProps) {
           {filters.bandId === undefined ? <ContentState kind="empty" title="选择乐队后查看久未演唱歌曲。" description="该指标会比较歌曲上次演唱后的后续 Live。" layout="rows" compact /> : data.stale_songs.length === 0 ? <ContentState kind="empty" title="当前条件下没有符合条件的久未演唱歌曲。" layout="rows" compact /> : <>
             <SectionTabs label="久未演唱歌曲类型" value={staleSongKind} options={STALE_SONG_TABS} onChange={setStaleSongKind} />
             {staleSongs.length === 0 ? <ContentState kind="empty" title={`当前条件下没有久未演唱的${staleSongKind === "cover" ? "翻唱" : "原创"}歌曲。`} layout="rows" compact /> : <ol className="statistics-song-list stale">{staleSongs.map((song) => <li key={song.song_id}>
-            <div><strong>{song.song_name}</strong><span>上次演唱后又收录 {song.missed_live_count} 场该乐队 Live</span></div>
+            <div><strong><a href={`/songs/${song.song_id}`}>{song.song_name}</a></strong><span>上次演唱后又收录 {song.missed_live_count} 场该乐队 Live</span></div>
             <b>{song.stale_days} 天</b>
             <button onClick={() => props.onOpenLive({ liveId: song.latest_live_id, liveDate: song.latest_live_date, liveTitle: song.latest_live_title })}>上次：{song.latest_live_date}</button>
           </li>)}</ol>}</>}
