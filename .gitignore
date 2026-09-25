@@ -8,6 +8,11 @@ AGENTS.md
 .mypy_cache*/
 .pytest_cache/
 *.log
+*.dump
+*.backup
+.env
+.env.*
+!.env*.example
 backend/.venv/
 backend/logs/
 dist-release/

@@ -34,9 +34,9 @@ python scripts/recovery_db.py <arguments> [--force]
 
 ## 备份目录
 
-主库备份目录默认是当前 Windows 开发机路径：
-
-- `~/Backups/live-set-list-docker`
+主库备份目录默认是用户主目录下的 `Backups/live-set-list-docker`。
+本机自定义路径写入不受 Git 追踪的 `infra/postgres/.env.pg-migrate` 中的
+`LIVESETLIST_BACKUP_ROOT`；进程环境中的同名变量优先。
 
 Linux 生产环境应通过环境变量覆盖：
 

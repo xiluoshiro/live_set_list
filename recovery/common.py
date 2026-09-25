@@ -12,10 +12,6 @@ FLYWAY_CONFIG = ROOT / "backend" / "db" / "flyway" / "flyway.toml"
 OWNERSHIP_CONTRACT_SQL = ROOT / "backend" / "db" / "postgres" / "checks" / "ownership_contract.sql"
 SEED_SQL = ROOT / "backend" / "db" / "postgres" / "seed" / "base_seed.sql"
 DEFAULT_BACKUP_ROOT = Path.home() / "Backups" / "live-set-list-docker"
-BACKUP_ROOT = Path(os.getenv("LIVESETLIST_BACKUP_ROOT", str(DEFAULT_BACKUP_ROOT))).expanduser()
-AUTO_BACKUP_DIR = BACKUP_ROOT / "app" / "auto"
-MANUAL_BACKUP_DIR = BACKUP_ROOT / "app" / "manual"
-RECOVERY_SNAPSHOT_DIR = BACKUP_ROOT / "app" / "recovery-snapshot"
 AUTO_BACKUP_KEEP = 5
 MANUAL_BACKUP_KEEP = 3
 
@@ -29,6 +25,19 @@ def load_env_file(path: Path) -> dict[str, str]:
         key, value = line.split("=", 1)
         values[key] = value.strip().strip('"')
     return values
+
+
+def resolve_backup_root(env_file: Path) -> Path:
+    configured = os.getenv("LIVESETLIST_BACKUP_ROOT")
+    if not configured and env_file.exists():
+        configured = load_env_file(env_file).get("LIVESETLIST_BACKUP_ROOT")
+    return Path(configured or DEFAULT_BACKUP_ROOT).expanduser()
+
+
+BACKUP_ROOT = resolve_backup_root(ENV_FILE)
+AUTO_BACKUP_DIR = BACKUP_ROOT / "app" / "auto"
+MANUAL_BACKUP_DIR = BACKUP_ROOT / "app" / "manual"
+RECOVERY_SNAPSHOT_DIR = BACKUP_ROOT / "app" / "recovery-snapshot"
 
 
 def run_step(

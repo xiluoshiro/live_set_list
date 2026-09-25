@@ -30,6 +30,24 @@ def test_backup_root_can_be_overridden_by_environment(tmp_path, monkeypatch) -> 
     importlib.reload(common)
 
 
+@pytest.mark.parametrize("source", ["environment", "local_file", "default"])
+def test_backup_root_configuration_precedence(tmp_path, monkeypatch, source) -> None:
+    # 测试点：备份路径按进程环境、本地配置、通用默认值的顺序选择。
+    env_file = tmp_path / ".env.pg-migrate"
+    default_root = tmp_path / "default-backups"
+    local_root = tmp_path / "local backups"
+    process_root = tmp_path / "process-backups"
+    monkeypatch.setattr(common, "DEFAULT_BACKUP_ROOT", default_root)
+    monkeypatch.delenv("LIVESETLIST_BACKUP_ROOT", raising=False)
+    if source != "default":
+        env_file.write_text(f'LIVESETLIST_BACKUP_ROOT="{local_root}"\n', encoding="utf-8")
+    if source == "environment":
+        monkeypatch.setenv("LIVESETLIST_BACKUP_ROOT", str(process_root))
+
+    expected = {"environment": process_root, "local_file": local_root, "default": default_root}
+    assert common.resolve_backup_root(env_file) == expected[source]
+
+
 def test_build_backup_path_routes_snapshot_to_dedicated_directory(tmp_path, monkeypatch) -> None:
     # 测试点：恢复流程临时快照应落到独立目录，不能混入自动/手动备份。
     auto_dir = tmp_path / "auto"
