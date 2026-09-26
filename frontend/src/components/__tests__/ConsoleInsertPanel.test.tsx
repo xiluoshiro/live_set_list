@@ -905,6 +905,7 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.getConsoleBands).toHaveBeenCalledWith(undefined, 100));
     await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
     await user.selectOptions(screen.getByLabelText("归属模式"), "bands");
+    await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
     expect(await screen.findByRole("checkbox", { name: "Real Band" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "新增歌单" }));
@@ -1126,7 +1127,8 @@ describe("ConsoleInsertPanel", () => {
 
     await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
     await user.selectOptions(screen.getByLabelText("归属模式"), "bands");
-    const bandOptions = within(screen.getByRole("group", { name: "归属乐队" })).getAllByRole("checkbox").map(node => node.closest("label")?.textContent);
+    await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
+    const bandOptions = within(screen.getByRole("group", { name: "归属乐队选项" })).getAllByRole("checkbox").map(node => node.closest("label")?.textContent);
     expect(bandOptions).toEqual(["Early Band", "Later Band"]);
 
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
@@ -2880,11 +2882,13 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel />);
     await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
     await user.selectOptions(screen.getByLabelText("归属模式"), "bands");
+    await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
     await user.click(await screen.findByRole("checkbox", { name: "甲" }));
     await user.click(screen.getByRole("checkbox", { name: "乙" }));
     expect(screen.getByRole("checkbox", { name: "甲" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "乙" })).toBeChecked();
     await user.selectOptions(screen.getByLabelText("归属模式"), "members");
+    await user.click(screen.getByRole("button", { name: "选择成员所属乐队" }));
     expect(screen.getByRole("checkbox", { name: "甲" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "乙" })).not.toBeChecked();
   });

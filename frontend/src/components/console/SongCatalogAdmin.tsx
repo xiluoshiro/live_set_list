@@ -1,5 +1,5 @@
 import { SongGroupEditor } from "./SongGroupEditor";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   getCatalogConsole, getSongGroup, getSongGroups, songCatalogWrite,
   type CatalogMember, type CatalogPage, type ConsoleSongItem, type SongGroupSummary,
@@ -9,6 +9,8 @@ import { useAuth } from "../../auth/AuthProvider";
 import { ownershipLabel } from "../SongCatalog";
 import type { BandOption } from "./types";
 import { UpdateDiffTable } from "./UpdateDiffTable";
+import { CompactConfirmationTable } from "./CompactConfirmationTable";
+import { ConsoleMultiSelect } from "./ConsoleMultiSelect";
 
 const emptyFields = (): SongVersionDraft => ({ song_name: "", version_label: "" });
 const emptyOwner = (): SongOwnership => ({ mode: "pending", band_ids: [], member_groups: [] });
@@ -20,6 +22,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   onManage: () => void;
 }) {
   const { csrfToken } = useAuth();
+  const formId = useId();
   const [createDraft, setCreateDraft] = useState(emptyFields);
   const [editDraft, setEditDraft] = useState(emptyFields);
   const [owner, setOwner] = useState<SongOwnership>(emptyOwner);
@@ -120,9 +123,6 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     } catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   };
-  const toggleBand = (id: number, checked: boolean, kind: "bands" | "members") => setOwnership(kind === "bands"
-    ? { ...ownership, band_ids: checked ? [...ownership.band_ids, id] : ownership.band_ids.filter(value => value !== id) }
-    : { ...ownership, member_groups: checked ? [...ownership.member_groups, { band_id: id, member_ids: [] }] : ownership.member_groups.filter(group => group.band_id !== id) });
   const ownerValid = ownership.mode === "pending" ||
     ((ownership.mode === "members" || ownership.band_ids.length > 0) &&
      (ownership.mode === "bands" || (ownership.member_groups.length > 0 && ownership.member_groups.every(g => g.member_ids.length > 0))));
@@ -132,74 +132,167 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   ].join(" / ");
   const changes = correcting ? [{ field: "归属", before: original ? ownershipLabel(original) : "", after: ownerSummary }, { field: "更正原因", before: "", after: reason }]
     : (Object.keys(draft) as (keyof SongVersionDraft)[]).map(key => ({ field: ({ song_name: "歌曲名称", version_label: "版本标识", version_order: "版本顺序" })[key], before: original ? String(original[key]) : "", after: String(draft[key]) })).filter(change => creating || change.before !== change.after);
+  const bandOptions = bands.filter(band => band.band_id > 0).map(band => ({ id: band.band_id, label: band.band_name }));
+  const memberOptions = members.map(member => ({ id: member.member_id, label: member.display_name }));
+  const visibleHistory = history.filter(entry => entry.action === (creating ? "create" : "update"));
+  const fieldsDisabled = busy || confirm;
+  const hasBands = ownership.mode === "bands" || ownership.mode === "mixed";
+  const hasMembers = ownership.mode === "members" || ownership.mode === "mixed";
+  const songNameField = <input aria-label="歌曲名称" disabled={fieldsDisabled} value={draft.song_name}
+    onChange={event => setDraft({ ...draft, song_name: event.target.value })} />;
+  const versionField = <input aria-label="版本标识" disabled={fieldsDisabled || (creating && newGroup) || (!creating && original?.version_label === "")}
+    value={creating && newGroup ? "" : draft.version_label} onChange={event => setDraft({ ...draft, version_label: event.target.value })} />;
+  const ownershipModeField = <select aria-label="归属模式" disabled={fieldsDisabled} value={ownership.mode} onChange={event => {
+    const mode = event.target.value as SongOwnership["mode"];
+    setOwnership({ mode, band_ids: mode === "bands" || mode === "mixed" ? ownership.band_ids : [], member_groups: mode === "members" || mode === "mixed" ? ownership.member_groups : [] });
+  }}>
+    <option value="pending">待回填</option><option value="bands">乐队</option><option value="members">成员</option><option value="mixed">乐队与成员</option>
+  </select>;
+  const bandPicker = <ConsoleMultiSelect label="归属乐队" options={bandOptions} hideLabel={creating}
+    value={ownership.band_ids} disabled={fieldsDisabled} onChange={band_ids => setOwnership({ ...ownership, band_ids })} />;
+  const memberBandPicker = <ConsoleMultiSelect label="成员所属乐队" options={bandOptions} hideLabel={creating}
+    value={ownership.member_groups.map(group => group.band_id)} disabled={fieldsDisabled}
+    onChange={ids => setOwnership({ ...ownership,
+      member_groups: ids.map(id => ownership.member_groups.find(group => group.band_id === id) ?? { band_id: id, member_ids: [] }),
+    })} />;
+  const memberPickers = ownership.member_groups.map(group => <ConsoleMultiSelect key={group.band_id}
+    label={`${bands.find(band => band.band_id === group.band_id)?.band_name ?? `#${group.band_id}`} 固定成员`}
+    options={memberOptions} value={group.member_ids} disabled={fieldsDisabled}
+    onChange={member_ids => setOwnership({ ...ownership, member_groups: ownership.member_groups.map(item => item.band_id === group.band_id ? { ...item, member_ids } : item) })} />);
+  const formActions = <div className={`console-submit-row ${creating ? "live-admin-insert-row" : "song-submit-row"} venue-create-actions`}>
+    {creating && <label className="live-clear-after-create-option"><input type="checkbox" disabled={busy}
+      checked={clearAfterCreate} onChange={event => setClearAfterCreate(event.target.checked)} />新增后清空数据</label>}
+    <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => creating ? clear() : restore(original!)}>{creating ? "清空数据" : "恢复原值"}</button>
+    <button type="button" className="console-submit-btn" disabled={busy || !draft.song_name.trim() || !ownerValid || (!creating && !dirty) || (creating && !newGroup && (!groupId || !groupRevision)) || (correcting && !reason.trim())}
+      onClick={() => setConfirm(true)}>{creating ? "提交插入" : "保存修改"}</button>
+  </div>;
   if (!active) return null;
-  return <section className="tour-admin-section" aria-label={creating ? "新增歌曲" : "歌曲管理"} hidden={!active}>
+  return <section className="tour-admin-section" aria-label={creating ? "新增歌曲" : "歌曲管理"}>
     {error && <p role="alert">{error}</p>}
-    {!creating && <>
-      <div className="tour-admin-toolbar">
-        <label>已有歌曲<select aria-label="选择要编辑的歌曲" value={original?.song_id ?? ""} disabled={busy} onChange={e => { if (e.target.value) guard(() => void loadSong(Number(e.target.value))); }}>
-          <option value="">选择要编辑的歌曲</option>
-          {original && !candidates?.items.some(s => s.song_id === original.song_id) && <option value={original.song_id}>{candidateLabels[original.song_id] ?? `#${original.song_id} ${original.song_name} / ${original.version_label || "默认版本"} / ${ownershipLabel(original)}`}</option>}
-          {candidates?.items.map(s => <option key={s.song_id} value={s.song_id}>{candidateLabel(s)}</option>)}
-        </select></label>
+    {!creating && <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar">
+      <span className="live-management-label">已有歌曲</span>
+      <input className="venue-query-input live-management-primary-control" aria-label="搜索歌曲" placeholder="歌曲名称"
+        value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} />
+      <select className="song-band-filter" aria-label="筛选归属乐队" value={bandFilter}
+        onChange={event => { setBandFilter(event.target.value); setPage(1); }}>
+        <option value="">全部乐队</option>
+        {bandOptions.map(band => <option key={band.id} value={band.id}>{band.label}</option>)}
+      </select>
+      <select aria-label="选择要编辑的歌曲" value={original?.song_id ?? ""} disabled={busy}
+        onChange={event => { if (event.target.value) guard(() => void loadSong(Number(event.target.value))); }}>
+        <option value="">选择要编辑的歌曲</option>
+        {original && !candidates?.items.some(song => song.song_id === original.song_id) &&
+          <option value={original.song_id}>{candidateLabels[original.song_id] ?? `#${original.song_id} ${original.song_name} / ${original.version_label || "默认版本"} / ${ownershipLabel(original)}`}</option>}
+        {candidates?.items.map(song => <option key={song.song_id} value={song.song_id}>{candidateLabel(song)}</option>)}
+      </select>
+      <div className="tour-candidate-pager">
+        <button type="button" className="console-ghost-btn" disabled={!candidates || candidates.page <= 1} onClick={() => setPage(page - 1)}>上一页</button>
+        <span>第 {candidates?.page ?? 1} / {candidates?.total_pages ?? 1} 页，共 {candidates?.total ?? 0} 首歌曲</span>
+        <button type="button" className="console-ghost-btn" disabled={!candidates || candidates.page >= candidates.total_pages} onClick={() => setPage(page + 1)}>下一页</button>
       </div>
-      <div className="tour-admin-toolbar">
-        <input aria-label="搜索歌曲" placeholder="歌曲名称" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} />
-        <select aria-label="筛选归属乐队" value={bandFilter} onChange={e => { setBandFilter(e.target.value); setPage(1); }}><option value="">全部乐队</option>{bands.filter(b => b.band_id > 0).map(b => <option key={b.band_id} value={b.band_id}>{b.band_name}</option>)}</select>
-        <button disabled={!candidates || candidates.page <= 1} onClick={() => setPage(page - 1)}>上一页</button>
-        <span>{candidates?.page ?? 1} / {candidates?.total_pages ?? 1}</span>
-        <button disabled={!candidates || candidates.page >= candidates.total_pages} onClick={() => setPage(page + 1)}>下一页</button>
-      </div>
-    </>}
-    {!creating && original && <div className="tour-admin-toolbar"><span>{original.group_name}</span><button disabled={dirty || busy} onClick={() => setGroupEditor(true)}>歌曲组管理</button></div>}
+    </div>}
+    {!creating && original && <div className="tour-admin-toolbar">
+      <span>歌曲组：{original.group_name}</span>
+      <button type="button" className="console-ghost-btn" disabled={dirty || busy} onClick={() => setGroupEditor(true)}>歌曲组管理</button>
+    </div>}
     {groupEditor && original && <SongGroupEditor song={original} onClose={() => setGroupEditor(false)} onSaved={() => { setGroupEditor(false); void loadSong(original.song_id); }} />}
-    {(creating || original) && <>
-      <fieldset disabled={busy || confirm} className="tour-admin-fields song-admin-fields">
-        {creating && <>
-          <label>歌曲组<select value={newGroup ? "new" : "existing"} onChange={e => setNewGroup(e.target.value === "new")}><option value="new">新建歌曲组</option><option value="existing">已有歌曲组的新版本</option></select></label>
-          {newGroup ? <label>歌曲组名称<input value={groupName} placeholder="默认使用歌曲名称" onChange={e => setGroupName(e.target.value)} /></label> : <>
-            <label>搜索歌曲组<input value={groupQuery} onChange={e => setGroupQuery(e.target.value)} /></label>
-            <label>选择歌曲组<select value={groupId ?? ""} onChange={e => { const id = Number(e.target.value) || null; setGroupId(id); setSelectedGroupName(groups.find(g => g.group_id === id)?.group_name ?? ""); }}><option value="">请选择</option>{groupId && !groups.some(g => g.group_id === groupId) && <option value={groupId}>{selectedGroupName}</option>}{groups.map(g => <option key={g.group_id} value={g.group_id}>{g.group_name}</option>)}</select></label>
-          </>}
-        </>}
-        {!correcting && <>
-          <label>歌曲名称<input value={draft.song_name} onChange={e => setDraft({ ...draft, song_name: e.target.value })} /></label>
-          <label>版本标识<input disabled={(creating && newGroup) || (!creating && original?.version_label === "")} value={creating && newGroup ? "" : draft.version_label} onChange={e => setDraft({ ...draft, version_label: e.target.value })} /></label>
-        </>}
-        {(creating || correcting) ? <>
-          <label>归属模式<select value={ownership.mode} onChange={e => {
-            const mode = e.target.value as SongOwnership["mode"];
-            setOwnership({ mode, band_ids: mode === "bands" || mode === "mixed" ? ownership.band_ids : [], member_groups: mode === "members" || mode === "mixed" ? ownership.member_groups : [] });
-          }}><option value="pending">待回填</option><option value="bands">乐队</option><option value="members">成员</option><option value="mixed">乐队与成员</option></select></label>
-          {(ownership.mode === "bands" || ownership.mode === "mixed") && <fieldset className="tour-band-field"><legend>归属乐队</legend>{bands.filter(b => b.band_id > 0).map(b =>
-            <label key={b.band_id}><input type="checkbox" checked={ownership.band_ids.includes(b.band_id)} onChange={e => toggleBand(b.band_id, e.target.checked, "bands")} />{b.band_name}</label>
-          )}</fieldset>}
-          {(ownership.mode === "members" || ownership.mode === "mixed") && <fieldset className="tour-band-field"><legend>成员所属乐队</legend>{bands.filter(b => b.band_id > 0).map(b => {
-            const memberGroup = ownership.member_groups.find(g => g.band_id === b.band_id);
-            return <div key={b.band_id}><label><input type="checkbox" checked={!!memberGroup} onChange={e => toggleBand(b.band_id, e.target.checked, "members")} />{b.band_name}</label>
-              {memberGroup && <select multiple aria-label={`${b.band_name} 固定成员`} value={memberGroup.member_ids.map(String)} onChange={e => setOwnership({ ...ownership, member_groups: ownership.member_groups.map(g => g.band_id === b.band_id ? { ...g, member_ids: Array.from(e.target.selectedOptions, option => Number(option.value)) } : g) })}>
-                {members.map(m => <option key={m.member_id} value={m.member_id}>{m.display_name}</option>)}
-              </select>}
-            </div>;
-          })}</fieldset>}
-          {correcting && <label>更正原因<input value={reason} onChange={e => setReason(e.target.value)} /></label>}
-        </> : <div>归属：{ownershipLabel(original!)} <button type="button" disabled={dirty} onClick={() => setCorrecting(true)}>更正归属</button></div>}
-      </fieldset>
-      <div className="console-submit-row">
-        <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => creating ? clear() : restore(original!)}>{creating ? "清空数据" : "恢复原值"}</button>
-        {creating && <label><input type="checkbox" checked={clearAfterCreate} onChange={e => setClearAfterCreate(e.target.checked)} />新增后清空数据</label>}
-        <button type="button" className="console-submit-btn" disabled={busy || !draft.song_name.trim() || !ownerValid || (!creating && !dirty) || (creating && !newGroup && (!groupId || !groupRevision)) || (correcting && !reason.trim())} onClick={() => setConfirm(true)}>{creating ? "提交插入" : "保存修改"}</button>
+    {creating ? <div>
+      <div className="live-id-selector live-create-tools">
+        <label className="live-management-label" htmlFor={`${formId}-group-mode`}>歌曲组</label>
+        <select id={`${formId}-group-mode`} className="live-management-primary-control" disabled={fieldsDisabled}
+          value={newGroup ? "new" : "existing"} onChange={event => setNewGroup(event.target.value === "new")}>
+          <option value="new">新建歌曲组</option><option value="existing">已有歌曲组的新版本</option>
+        </select>
       </div>
+      {!newGroup && <>
+        <div className="live-id-selector live-create-query-row">
+          <label className="live-management-label" htmlFor={`${formId}-group-query`}>搜索歌曲组</label>
+          <input id={`${formId}-group-query`} className="venue-query-input live-management-primary-control" disabled={fieldsDisabled}
+            placeholder="歌曲组名称" value={groupQuery} onChange={event => setGroupQuery(event.target.value)} />
+        </div>
+        <div className="live-id-selector live-create-tools">
+          <label className="live-management-label" htmlFor={`${formId}-group-select`}>选择歌曲组</label>
+          <select id={`${formId}-group-select`} className="live-management-primary-control" disabled={fieldsDisabled} value={groupId ?? ""}
+            onChange={event => {
+              const id = Number(event.target.value) || null;
+              setGroupId(id); setSelectedGroupName(groups.find(group => group.group_id === id)?.group_name ?? "");
+            }}>
+            <option value="">请选择</option>
+            {groupId && !groups.some(group => group.group_id === groupId) && <option value={groupId}>{selectedGroupName}</option>}
+            {groups.map(group => <option key={group.group_id} value={group.group_id}>{group.group_name}</option>)}
+          </select>
+        </div>
+      </>}
+      <div className="console-table-wrap">
+        <table className="console-admin-table song-create-form-table" data-ownership={ownership.mode} aria-label="新增歌曲资料">
+          <colgroup>
+            <col /><col className="song-create-version-column" />{newGroup && <col />}
+            <col className="song-create-mode-column" />
+            {hasBands && <col className="song-create-band-column" />}
+            {hasMembers && <col className="song-create-members-column" />}
+          </colgroup>
+          <thead><tr>
+            <th scope="col">歌曲名称</th><th scope="col">版本标识</th>{newGroup && <th scope="col">歌曲组名称</th>}
+            <th scope="col">归属模式</th>{hasBands && <th scope="col">归属乐队</th>}{hasMembers && <th scope="col">成员所属乐队</th>}
+          </tr></thead>
+          <tbody><tr>
+            <td>{songNameField}</td><td>{versionField}</td>
+            {newGroup && <td><input aria-label="歌曲组名称" disabled={fieldsDisabled} value={groupName}
+              placeholder="默认使用歌曲名称" onChange={event => setGroupName(event.target.value)} /></td>}
+            <td>{ownershipModeField}</td>{hasBands && <td>{bandPicker}</td>}
+            {hasMembers && <td>{memberBandPicker}</td>}
+          </tr></tbody>
+        </table>
+      </div>
+      {hasMembers && memberPickers.length > 0 && <div className="tour-admin-toolbar song-create-member-fields">{memberPickers}</div>}
+      {formActions}
+    </div> : original && <>
+      <fieldset disabled={fieldsDisabled} className="tour-admin-fields tour-band-field">
+        {!correcting && <>
+          <label>歌曲名称{songNameField}</label>
+          <label>版本标识{versionField}</label>
+        </>}
+        {correcting && <>
+          <label>归属模式{ownershipModeField}</label>
+          {hasBands && bandPicker}
+          {hasMembers && <>{memberBandPicker}{memberPickers}</>}
+          <label>更正原因<input value={reason} onChange={event => setReason(event.target.value)} /></label>
+        </>}
+      </fieldset>
+      {!correcting && <div className="tour-admin-toolbar">
+        <span>归属：{ownershipLabel(original)}</span>
+        <button type="button" className="console-ghost-btn" disabled={dirty || busy} onClick={() => setCorrecting(true)}>更正归属</button>
+      </div>}
+      {formActions}
     </>}
-    <div className="console-table-wrap"><table className="console-admin-table" aria-label="歌曲操作记录"><thead><tr><th>ID</th><th>歌曲</th><th>版本</th><th>操作</th></tr></thead><tbody>
-      {history.filter(h => h.action === (creating ? "create" : "update")).map((h, i) => <tr key={i}><td>{h.song.song_id}</td><td>{h.song.song_name}</td><td>{h.song.version_label || "默认版本"}</td><td><button onClick={() => guard(() => { onManage(); void loadSong(h.song.song_id); })}>编辑</button></td></tr>)}
-    </tbody></table></div>
-    {(confirm || discard) && <div className="modal-mask"><div className="modal compact console-confirm-modal" role="dialog" aria-modal="true" aria-label={discard ? "确认放弃歌曲修改" : creating ? "确认新增歌曲" : "确认修改歌曲"}>
+    <div className="console-table-wrap live-history-wrap">
+      <table className="console-admin-table console-compact-table entity-history-table live-history-table" aria-label="歌曲操作记录">
+        <thead><tr><th>ID</th><th>歌曲</th><th>版本</th><th>操作</th></tr></thead>
+        <tbody>{visibleHistory.length === 0 ? <tr><td colSpan={4} className="empty-cell">暂无歌曲操作记录</td></tr> :
+          visibleHistory.map((entry, index) => <tr key={index}>
+            <td>{entry.song.song_id}</td><td>{entry.song.song_name}</td><td>{entry.song.version_label || "默认版本"}</td>
+            <td><button type="button" className="console-ghost-btn" onClick={() => guard(() => { onManage(); void loadSong(entry.song.song_id); })}>编辑</button></td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+    {(confirm || discard) && <div className="modal-mask"><div className="modal compact console-confirm-modal" role="dialog" aria-modal="true"
+      aria-label={discard ? "确认放弃歌曲修改" : creating ? "确认新增歌曲" : "确认修改歌曲"}>
       <div className="modal-head"><h2>{discard ? "确认放弃歌曲修改" : creating ? "确认新增歌曲" : "确认修改歌曲"}</h2></div>
-      {!discard && <div className="console-confirm-body">{error && <p role="alert">{error}</p>}<UpdateDiffTable changes={changes} ariaLabel="歌曲修改内容" />{creating && <><p>歌曲组：{newGroup ? groupName.trim() || draft.song_name : selectedGroupName}</p><p>归属模式：{ownership.mode === "pending" ? "待回填" : ownership.mode === "mixed" ? "乐队与成员" : ownership.mode === "bands" ? "乐队" : "成员"}</p><p>归属：{ownerSummary}</p></>}</div>}
-      <div className="console-confirm-actions"><button disabled={busy} onClick={() => { setConfirm(false); setDiscard(null); }}>取消</button><button disabled={busy} onClick={() => {
-        if (discard) { const proceed = discard; setDiscard(null); setCorrecting(false); if (original) restore(original); proceed(); } else void submit();
-      }}>{busy ? "提交中…" : discard ? "确认放弃" : "确认提交"}</button></div>
+      {!discard && <div className="console-confirm-body">
+        {error && <p role="alert">{error}</p>}
+        {creating ? <CompactConfirmationTable ariaLabel="新增歌曲确认" rows={[
+          ["歌曲名称", draft.song_name], ["版本标识", newGroup ? "默认版本" : draft.version_label || "默认版本"],
+          ["歌曲组", newGroup ? groupName.trim() || draft.song_name : selectedGroupName],
+          ["归属模式", { pending: "待回填", mixed: "乐队与成员", bands: "乐队", members: "成员" }[ownership.mode]], ["归属", ownerSummary],
+        ]} /> : <UpdateDiffTable changes={changes} ariaLabel="歌曲修改内容" />}
+      </div>}
+      <div className="console-confirm-actions">
+        <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => { setConfirm(false); setDiscard(null); }}>取消</button>
+        <button type="button" className="console-submit-btn" disabled={busy} onClick={() => {
+          if (discard) { const proceed = discard; setDiscard(null); setCorrecting(false); if (original) restore(original); proceed(); } else void submit();
+        }}>{busy ? "提交中…" : discard ? "确认放弃" : "确认提交"}</button>
+      </div>
     </div></div>}
   </section>;
 }

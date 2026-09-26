@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import { SongCatalog } from "../SongCatalog";
 import { SongCatalogAdmin } from "../console/SongCatalogAdmin";
+import { SongGroupEditor } from "../console/SongGroupEditor";
 import type { SongVersion } from "../../api";
 
 const api = vi.hoisted(() => ({ getSongGroups: vi.fn(), getSongGroup: vi.fn(), getSongVersion: vi.fn(),
@@ -50,13 +51,24 @@ test("mixed ownership submits bands and selected members", async () => {
   render(<SongCatalogAdmin variant="create" active bands={[{ band_id: 1, band_name: "乐队甲" }, { band_id: 2, band_name: "乐队乙" }]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.type(screen.getByLabelText("歌曲名称"), "合作曲");
   await user.selectOptions(screen.getByLabelText("归属模式"), "mixed");
-  await user.click(within(screen.getByRole("group", { name: "归属乐队" })).getByLabelText("乐队甲"));
+  await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
+  await user.click(within(screen.getByRole("group", { name: "归属乐队选项" })).getByLabelText("乐队甲"));
+  await user.keyboard("{Escape}");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
-  await user.click(within(screen.getByRole("group", { name: "成员所属乐队" })).getByLabelText("乐队乙"));
-  await user.selectOptions(screen.getByLabelText("乐队乙 固定成员"), "68");
+  await user.click(screen.getByRole("button", { name: "选择成员所属乐队" }));
+  await user.click(within(screen.getByRole("group", { name: "成员所属乐队选项" })).getByLabelText("乐队乙"));
+  await user.keyboard("{Escape}");
+  await user.click(screen.getByRole("button", { name: "选择乐队乙 固定成员" }));
+  await user.click(screen.getByRole("checkbox", { name: "成员乙" }));
+  await user.keyboard("{Escape}");
+  expect(screen.getByRole("button", { name: "选择乐队乙 固定成员" })).toHaveTextContent("成员乙");
+  await user.click(screen.getByRole("button", { name: "选择乐队乙 固定成员" }));
+  expect(screen.getByRole("checkbox", { name: "成员乙" })).toBeChecked();
+  await user.keyboard("{Escape}");
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   const dialog = screen.getByRole("dialog", { name: "确认新增歌曲" });
-  expect(within(dialog).getByText("归属：乐队甲 / 乐队乙：成员乙")).toBeInTheDocument();
+  expect(within(dialog).getByRole("row", { name: "归属 乐队甲 / 乐队乙：成员乙" })).toBeInTheDocument();
+  expect(api.songCatalogWrite).not.toHaveBeenCalled();
   await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/song-groups", "POST", expect.objectContaining({
     ownership: { mode: "mixed", band_ids: [1], member_groups: [{ band_id: 2, member_ids: [68] }] },
@@ -88,7 +100,9 @@ test("create keeps its mode and uses creation requests", async () => {
   expect(screen.queryByLabelText("选择要编辑的歌曲")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("歌曲名称"), "合唱曲");
   await user.selectOptions(screen.getByLabelText("归属模式"), "bands");
+  await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
   await user.click(screen.getByRole("checkbox", { name: "乐队甲" }));
+  await user.keyboard("{Escape}");
   await user.click(screen.getByRole("checkbox", { name: "新增后清空数据" }));
   for (let index = 0; index < 2; index += 1) {
     await user.click(screen.getByRole("button", { name: "提交插入" }));
@@ -101,6 +115,35 @@ test("create keeps its mode and uses creation requests", async () => {
     group_name: "合唱曲", song_name: "合唱曲", version_label: "", ownership: { mode: "bands", band_ids: [1], member_groups: [] },
   }, "csrf");
   expect(screen.getByLabelText("歌曲名称")).toHaveValue("合唱曲");
+});
+
+// 测试点：已有歌曲组先搜索选择；确认保留版本资料，提交携带组 ID 和已加载的修订号。
+test("create adds a version to the selected song group", async () => {
+  const user = userEvent.setup();
+  api.getSongGroup.mockResolvedValue({ group_id: 1, group_name: "合唱曲", revision: 7, versions: [version()] });
+  render(<SongCatalogAdmin variant="create" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  await user.type(screen.getByLabelText("歌曲名称"), "合唱曲 新版");
+  expect(screen.getByLabelText("版本标识")).toBeDisabled();
+  await user.selectOptions(screen.getByLabelText("歌曲组", { exact: true }), "existing");
+  await user.type(screen.getByLabelText("搜索歌曲组"), "合唱");
+  await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("合唱"));
+  await user.type(screen.getByLabelText("版本标识"), "新版");
+  expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
+  await user.selectOptions(screen.getByLabelText("选择歌曲组"), "1");
+  await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).toBeEnabled());
+  await user.click(screen.getByRole("button", { name: "提交插入" }));
+  const dialog = screen.getByRole("dialog", { name: "确认新增歌曲" });
+  expect(within(dialog).getByRole("row", { name: "歌曲组 合唱曲" })).toBeInTheDocument();
+  expect(within(dialog).getByRole("row", { name: "版本标识 新版" })).toBeInTheDocument();
+  expect(api.songCatalogWrite).not.toHaveBeenCalled();
+  await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/songs", "POST", {
+    group_id: 1, expected_group_revision: 7, song_name: "合唱曲 新版", version_label: "新版",
+    ownership: { mode: "pending", band_ids: [], member_groups: [] },
+  }, "csrf");
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(screen.getByLabelText("歌曲组", { exact: true })).toHaveValue("new");
+  expect(screen.getByLabelText("歌曲名称")).toHaveValue("");
 });
 
 // 测试点：管理先选版本，恢复保留对象，放弃确认取消后保留草稿；409 保留输入。
@@ -167,4 +210,26 @@ test("album gallery switches locally and resets on reopening or version change",
   await waitFor(() => expect(screen.queryByRole("region", { name: "专辑详情" })).not.toBeInTheDocument());
   await user.click(await screen.findByRole("button", { name: /收录盘/ }));
   expect(await screen.findByText("1 / 2")).toBeInTheDocument();
+});
+
+// 测试点：版本排序和组名修改先展示确认内容，返回编辑保留草稿，确认才写入顺序。
+test("group editor reviews name and version order before saving", async () => {
+  const user = userEvent.setup();
+  const onSaved = vi.fn();
+  render(<SongGroupEditor song={version()} onClose={vi.fn()} onSaved={onSaved} />);
+  await user.clear(await screen.findByLabelText("歌曲组名称"));
+  await user.type(screen.getByLabelText("歌曲组名称"), "新组名");
+  const table = screen.getByRole("table", { name: "歌曲版本顺序" });
+  await user.click(within(within(table).getByRole("row", { name: /普通版/ })).getByRole("button", { name: "下移" }));
+  expect(within(table).getAllByRole("row").slice(1).map(row => within(row).getAllByRole("cell")[0].textContent)).toEqual(["合唱版", "普通版"]);
+  await user.click(screen.getByRole("button", { name: "保存组名与顺序" }));
+  expect(screen.getByRole("row", { name: "组名 合唱曲 新组名" })).toBeInTheDocument();
+  expect(screen.getByRole("row", { name: "版本顺序 普通版 / 合唱版 合唱版 / 普通版" })).toBeInTheDocument();
+  expect(api.songCatalogWrite).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "返回编辑" }));
+  expect(screen.getByLabelText("歌曲组名称")).toHaveValue("新组名");
+  await user.click(screen.getByRole("button", { name: "保存组名与顺序" }));
+  await user.click(screen.getByRole("button", { name: "确认保存" }));
+  await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/song-groups/1", "PUT", { expected_revision: 1, group_name: "新组名", song_ids: [2, 1] }, "csrf");
 });

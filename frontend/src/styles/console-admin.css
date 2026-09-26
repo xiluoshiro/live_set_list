@@ -402,6 +402,10 @@
   border-collapse: collapse;
 }
 
+.console-admin-table.console-compact-table {
+  min-width: 0;
+}
+
 .console-admin-table th,
 .console-admin-table td {
   padding: 10px 12px;
@@ -1222,6 +1226,20 @@
 .venue-create-coordinate-column { width: 132px; }
 .venue-create-timezone-column { width: 220px; }
 
+.song-create-form-table { table-layout: fixed; }
+.song-create-form-table[data-ownership="bands"] { min-width: 1100px; }
+.song-create-form-table[data-ownership="members"] { min-width: 1100px; }
+.song-create-form-table[data-ownership="mixed"] { min-width: 1340px; }
+.song-create-version-column,
+.song-create-mode-column { width: 152px; }
+.song-create-band-column,
+.song-create-members-column { width: 240px; }
+.song-create-member-fields { margin-top: 10px; align-items: flex-end; }
+.song-create-member-fields > .tour-band-field {
+  flex: 0 1 var(--console-live-management-control-width);
+  width: min(var(--console-live-management-control-width), 100%);
+}
+
 .venue-create-actions { flex-wrap: wrap; }
 .venue-create-actions > button { flex-shrink: 0; white-space: nowrap; }
 
@@ -1331,7 +1349,8 @@
   width: 72px;
 }
 
-.tour-candidate-search .song-band-filter {
+.tour-candidate-search .song-band-filter,
+.tour-admin-toolbar .song-band-filter {
   flex: 0 1 240px;
   width: min(240px, 100%);
   min-width: min(240px, 100%);

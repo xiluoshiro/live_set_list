@@ -52,19 +52,40 @@ export function SongGroupEditor({ song, onSaved, onClose }: { song: SongVersion;
         { field: "组名", before: original.group_name, after: draft.group_name },
         { field: "版本顺序", before: original.versions.map(v => v.version_label || v.song_name).join(" / "), after: draft.versions.map(v => v.version_label || v.song_name).join(" / ") },
       ]} /> : <>
-        <label>歌曲组名称<input value={draft.group_name} onChange={e => setDraft({ ...draft, group_name: e.target.value })} /></label>
-        <ol>{draft.versions.map((version, i) => <li key={version.song_id}>{version.version_label || version.song_name}
-          <button disabled={i === 0} onClick={() => move(i, -1)}>上移</button><button disabled={i === draft.versions.length - 1} onClick={() => move(i, 1)}>下移</button>
-        </li>)}</ol>
-        <button disabled={!draft.group_name.trim() || JSON.stringify(draft) === JSON.stringify(original)} onClick={() => setConfirm("group")}>保存组名与顺序</button>
-        <fieldset className="tour-admin-fields"><legend>更正当前版本归组</legend>
-          <label>搜索歌曲组<input value={query} onChange={e => { setQuery(e.target.value); setTarget(""); }} /></label>
-          <label>目标歌曲组<select value={target} onChange={e => setTarget(e.target.value)}><option value="">请选择</option>{groups.filter(g => g.group_id !== song.group_id).map(g => <option key={g.group_id} value={g.group_id}>{g.group_name}</option>)}</select></label>
-          <label>更正原因<input value={reason} onChange={e => setReason(e.target.value)} /></label>
-          <button disabled={!target || !reason.trim()} onClick={() => setConfirm("move")}>更正归组</button>
-        </fieldset>
+        <div className="tour-admin-fields">
+          <label className="band-admin-members-field">歌曲组名称<input value={draft.group_name} onChange={e => setDraft({ ...draft, group_name: e.target.value })} /></label>
+        </div>
+        <div className="console-table-wrap">
+          <table className="console-admin-table console-compact-table" aria-label="歌曲版本顺序">
+            <thead><tr><th>版本</th><th>操作</th></tr></thead>
+            <tbody>{draft.versions.map((version, i) => <tr key={version.song_id}>
+              <td>{version.version_label || version.song_name}</td>
+              <td><div className="tour-admin-toolbar">
+                <button type="button" className="console-ghost-btn" disabled={i === 0} onClick={() => move(i, -1)}>上移</button>
+                <button type="button" className="console-ghost-btn" disabled={i === draft.versions.length - 1} onClick={() => move(i, 1)}>下移</button>
+              </div></td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        <div className="console-submit-row song-submit-row">
+          <button type="button" className="console-submit-btn" disabled={!draft.group_name.trim() || JSON.stringify(draft) === JSON.stringify(original)} onClick={() => setConfirm("group")}>保存组名与顺序</button>
+        </div>
+        <div className="tour-admin-block">
+          <h3>更正当前版本归组</h3>
+          <div className="tour-admin-fields">
+            <label>搜索歌曲组<input value={query} onChange={e => { setQuery(e.target.value); setTarget(""); }} /></label>
+            <label>目标歌曲组<select value={target} onChange={e => setTarget(e.target.value)}><option value="">请选择</option>{groups.filter(g => g.group_id !== song.group_id).map(g => <option key={g.group_id} value={g.group_id}>{g.group_name}</option>)}</select></label>
+            <label className="band-admin-members-field">更正原因<input value={reason} onChange={e => setReason(e.target.value)} /></label>
+          </div>
+          <div className="console-submit-row">
+            <button type="button" className="console-submit-btn" disabled={!target || !reason.trim()} onClick={() => setConfirm("move")}>更正归组</button>
+          </div>
+        </div>
       </>}
     </div>}
-    <div className="console-confirm-actions"><button disabled={busy} onClick={() => confirm ? setConfirm(null) : onClose()}>{confirm ? "返回编辑" : "关闭"}</button>{confirm && <button disabled={busy} onClick={() => void save()}>确认保存</button>}</div>
+    <div className="console-confirm-actions">
+      <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => confirm ? setConfirm(null) : onClose()}>{confirm ? "返回编辑" : "关闭"}</button>
+      {confirm && <button type="button" className="console-submit-btn" disabled={busy} onClick={() => void save()}>确认保存</button>}
+    </div>
   </div></div>;
 }
