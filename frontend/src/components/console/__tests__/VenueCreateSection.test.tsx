@@ -15,9 +15,9 @@ beforeEach(() => {
   api.createConsoleVenue.mockResolvedValue({ ok: true, item: { venue_id: 88, venue_name: "New Hall", venue_kind: "physical" } });
   api.getConsoleVenuePage.mockResolvedValue({ items: [{ venue_id: 1, venue_name: "Hall", matched_name: "Old Hall", venue_kind: "physical" }], total: 1, page: 1, total_pages: 1 });
 });
-async function setup(onVenuesChanged = vi.fn().mockResolvedValue(undefined)) {
+async function setup(onVenuesChanged = vi.fn().mockResolvedValue(undefined), onMessage = vi.fn()) {
   const user = userEvent.setup();
-  render(<VenueCreateSection onMessage={vi.fn()} onVenuesChanged={onVenuesChanged} />);
+  render(<VenueCreateSection onMessage={onMessage} onVenuesChanged={onVenuesChanged} />);
   await waitFor(() => expect(screen.getByLabelText("已公布地区")).toHaveTextContent("JP / 東京都"));
   await user.type(screen.getByLabelText("名称"), "New Hall");
   await user.type(screen.getByLabelText("公开门牌地址"), "Tokyo address");
@@ -28,9 +28,10 @@ async function confirm(user: ReturnType<typeof userEvent.setup>) {
   return within(screen.getByRole("dialog", { name: "确认新增场馆" }));
 }
 
-// 测试点：完整位置在确认后一次提交，地区搜索保留完整标签，成功后恢复默认值且不嵌入管理界面。
+// 测试点：完整位置在确认后一次提交，成功后通知控制台并恢复默认值，地区搜索保留完整标签。
 test("creates complete location after preview and retains selection across searches", async () => {
-  const user = await setup();
+  const onMessage = vi.fn();
+  const user = await setup(undefined, onMessage);
   api.getConsoleLocalities.mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 20 });
   await user.type(screen.getByLabelText("搜索地区"), "missing");
   await user.click(screen.getByRole("button", { name: "查询" }));
@@ -53,6 +54,7 @@ test("creates complete location after preview and retains selection across searc
     coordinate_system: "WGS84", google_place: null,
   }));
   expect(screen.getByLabelText("名称")).toHaveValue("");
+  expect(onMessage).toHaveBeenCalledWith("已新增场馆 #88 New Hall，名称和所在地资料已保存。");
   expect(screen.queryByRole("button", { name: "继续完善所在地与地图链接" })).not.toBeInTheDocument();
 });
 
@@ -70,9 +72,10 @@ test("clears fields forbidden by venue kind", async () => {
   expect(api.createConsoleVenue).toHaveBeenCalledWith("New Hall", "csrf", "undisclosed", expect.objectContaining({ locality_id: 1, address: null, latitude: null, timezone_id: "Asia/Tokyo" }));
 });
 
-// 测试点：创建失败保留草稿并在确认框展示错误；候选刷新失败明确已创建，不能提示重试创建。
+// 测试点：创建失败保留草稿并在确认框展示错误；候选刷新失败通过控制台提示已创建及无需重复提交。
 test("preserves draft on failure and distinguishes refresh failure", async () => {
-  const user = await setup(vi.fn().mockRejectedValue(new Error("refresh failed")));
+  const onMessage = vi.fn();
+  const user = await setup(vi.fn().mockRejectedValue(new Error("refresh failed")), onMessage);
   await user.type(screen.getByLabelText("纬度（WGS84）"), "35.6");
   await user.type(screen.getByLabelText("经度（WGS84）"), "139.7");
   await user.selectOptions(screen.getByLabelText("场馆精确时区"), "Asia/Tokyo");
@@ -84,7 +87,7 @@ test("preserves draft on failure and distinguishes refresh failure", async () =>
   expect(screen.getByLabelText("名称")).toHaveValue("New Hall");
   await user.click(dialog.getByRole("button", { name: "提交插入" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  expect(screen.getByText(/无需重复提交/)).toBeInTheDocument();
+  expect(onMessage).toHaveBeenLastCalledWith(expect.stringContaining("无需重复提交"));
   expect(screen.getByLabelText("名称")).toHaveValue("New Hall");
 });
 

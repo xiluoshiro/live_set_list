@@ -93,9 +93,9 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
       setConfirm(false);
       if (clearAfter) clear();
       const success = `已新增场馆 #${result.item.venue_id} ${result.item.venue_name}，名称和所在地资料已保存。`;
-      setMessage(success); onMessage(success);
+      onMessage(success);
       try { await onVenuesChanged(); }
-      catch (error) { const warning = `${success} 候选刷新失败，请刷新页面；无需重复提交：${errorText(error)}`; setMessage(warning); onMessage(warning); }
+      catch (error) { const warning = `${success} 候选刷新失败，请刷新页面；无需重复提交：${errorText(error)}`; onMessage(warning); }
     } catch (error) { setMessage(`新增场馆失败，已保留填写内容：${errorText(error)}`); }
     finally { submittingRef.current = false; setSubmitting(false); }
   };
@@ -116,7 +116,6 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
         onLongitude={value => { setLongitude(value); setGooglePlace(null); }} onTimezone={setTimezone} />
       {kind === "undisclosed" && <p className="console-admin-hint">未公开具体场馆时，填写已公布地区及场馆精确时区。</p>}
       {validation && name.trim() && <p className="console-admin-hint" role="status">{validation}</p>}
-      {message && <p role="status" className="console-admin-hint">{message}</p>}
       <div className="console-submit-row live-admin-insert-row venue-create-actions">
         <label className="live-clear-after-create-option"><input type="checkbox" checked={clearAfter} disabled={submitting} onChange={e => setClearAfter(e.target.checked)} />新增成功后清空表单</label>
         {physical && <button type="button" className="console-ghost-btn" aria-expanded={mapOpen} disabled={submitting} onClick={() => {
