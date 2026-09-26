@@ -1,7 +1,30 @@
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, HttpUrl, TypeAdapter, ValidationError, field_validator, model_validator
+
+
+_http_url = TypeAdapter(HttpUrl)
+
+
+def external_https_url(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("URL must be a string")
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError("URL must not contain control characters")
+    value = value.strip()
+    if not value or len(value) > 2048:
+        raise ValueError("URL must contain 1 to 2048 characters")
+    parsed = urlsplit(value)
+    if (parsed.scheme.lower() != "https" or not parsed.hostname or "@" in parsed.netloc
+            or "\\" in value or any(char.isspace() for char in value)):
+        raise ValueError("Use an absolute HTTPS URL without credentials or whitespace")
+    _http_url.validate_python(value)
+    return value
+
+
+ExternalHttpsUrl = Annotated[str, BeforeValidator(external_https_url)]
 
 
 class CatalogModel(BaseModel):
@@ -89,7 +112,8 @@ class AlbumWrite(CatalogModel):
     album_name: str = Field(min_length=1, max_length=255)
     release_label: str = Field(default="", max_length=255)
     release_date: date | None = None
-    cover_path: str | None = Field(default=None, max_length=255)
+    album_url: ExternalHttpsUrl | None = None
+    cover_urls: list[ExternalHttpsUrl] = Field(default_factory=list, max_length=20)
     tracks: list[AlbumTrackWrite] | None = Field(default=None, max_length=500)
 
     @field_validator("release_date", mode="before")
@@ -100,14 +124,25 @@ class AlbumWrite(CatalogModel):
                 raise ValueError("Release date must be YYYY-MM-DD or null")
         return value
 
-    @field_validator("cover_path")
+    @field_validator("album_url", mode="before")
     @classmethod
-    def bundled_cover(cls, value: str | None) -> str | None:
-        if value is not None:
-            import re
-            if not re.fullmatch(r"/album-covers/[A-Za-z0-9_-]+\.(?:webp|jpg|jpeg|png|avif)", value):
-                raise ValueError("Cover must be a bundled /album-covers/ image")
+    def blank_album_url(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip() and not any(ord(char) < 32 or ord(char) == 127 for char in value):
+            return None
         return value
+
+    @field_validator("cover_urls")
+    @classmethod
+    def unique_covers(cls, values: list[str]) -> list[str]:
+        seen: set[str] = set()
+        for index, value in enumerate(values):
+            if value in seen:
+                raise ValidationError.from_exception_data("cover_urls", [{
+                    "type": "value_error", "loc": (index,), "input": value,
+                    "ctx": {"error": ValueError("Cover URL must not repeat")},
+                }])
+            seen.add(value)
+        return values
 
     @model_validator(mode="after")
     def unique_order(self):
@@ -165,7 +200,8 @@ class AlbumSummary(BaseModel):
     album_name: str
     release_label: str
     release_date: date | None
-    cover_path: str | None
+    album_url: str | None
+    cover_urls: list[str]
     revision: int
 
 

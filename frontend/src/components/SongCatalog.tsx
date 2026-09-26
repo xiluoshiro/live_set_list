@@ -6,6 +6,7 @@ import {
 } from "../api";
 import { PageTitle } from "./PageTitle";
 import { albumTitle } from "../albumTitle";
+import { AlbumCover, AlbumCoverGallery } from "./AlbumCover";
 import "./song-catalog.css";
 
 export function ownershipLabel(song: Pick<SongVersion, "ownership">) {
@@ -111,11 +112,13 @@ export function SongCatalog({ songId, onSongSelect, onLiveSelect, browse = { que
               void getAlbumDetail(item.album_id).then(detail => { if (generation === albumGeneration.current) setAlbum(detail); })
                 .catch(reason => { if (generation === albumGeneration.current) setError(String(reason)); });
             }}>
-              {item.cover_path && <img src={item.cover_path} alt="" loading="lazy" />}
+              {item.cover_urls[0] && <AlbumCover url={item.cover_urls[0]} />}
               <span>{albumTitle(item)}<small>{item.release_date ?? "日期未知"}</small></span>
             </button>)}</div>
           {album && <section aria-label="专辑详情">
             <h4>{albumTitle(album)}</h4><button onClick={() => { albumGeneration.current += 1; setAlbum(null); }}>收起</button>
+            {album.album_url && <p><a href={album.album_url} target="_blank" rel="noopener noreferrer">专辑页面</a></p>}
+            <AlbumCoverGallery key={album.album_id} urls={album.cover_urls} title={albumTitle(album)} />
             {[...new Set(album.tracks.map(t => t.section_name ?? ""))].map(section => <div key={section}>{section && <h5>{section}</h5>}<ol className="song-album-tracks">{album.tracks.filter(t => (t.section_name ?? "") === section).map(track => <li key={track.album_track_id} value={track.track_order}>
               <button onClick={() => onSongSelect(track.song_id)}>{track.song_name}{track.version_label ? ` · ${track.version_label}` : ""}{track.edition_label ? ` · ${track.edition_label}` : ""}</button>
             </li>)}</ol></div>)}

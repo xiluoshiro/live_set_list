@@ -2,7 +2,9 @@
 
 ## 1. 文档定位与范围
 
-状态：主体框架已实现，人工回填及回填后的约束收紧待执行。业务规则以[歌曲资料、详情与专辑关联需求](../product/song-details-and-albums.md)为准；实际落地范围见第 16 节。
+状态：主体框架及本批资料回填已完成，未审核资料的约束收紧仍待后续处理。业务规则以[歌曲资料、详情与专辑关联需求](../product/song-details-and-albums.md)为准；实际落地范围见第 16 节。
+
+专辑页面链接与多封面已实现，字段为 `album_url` / `cover_urls`。迁移、交互及本地验证见[专项实现说明](album-links-and-covers.md)；旧 `cover_path` 仅暂留数据库供应用切换使用。
 
 已确认的产品边界：
 
@@ -15,7 +17,7 @@
 - 专辑发售日期为完整年月日或未知；歌曲不保存发售日期。专辑发行标识为自由文本，不拆类型、序号或碟号。
 - 演奏次数按有效 setlist 记录计数。短版正常计数，仅在对应条目后标记。
 - 延期调整必须指定新日期；已有歌单后不得修改演出日期，未来或取消 Live 不允许有歌单。
-- 成员首次按需求文档的固定 67 人顺序编号；封面首期随包携带。
+- 成员首次按需求文档的固定 67 人顺序编号；专辑手动维护页面链接和封面数组，数组第一项为默认封面。
 
 本文确定技术结构；页面具体栏宽、筛选样式及版本切换控件外观继续延后。本批数据范围见第 15 节，审核规则以回填输入为准。
 
@@ -138,7 +140,8 @@ V40 已实现歌曲组歌单引用、混合归属和专辑子项。`live_setlist
 | albums | `id integer identity`、`album_name text` | PK；名称非空白，不全局唯一 |
 | albums | `release_label text NULL` | 如 10th single；trim 后空串归一为 NULL，不解析或枚举 |
 | albums | `release_date date NULL` | NULL 表示未知；API 只接受 `YYYY-MM-DD` 或 null |
-| albums | `cover_path text NULL` | 站内资源路径，不存 Base64、本机路径或用户任意 URL |
+| albums | `album_url text NULL` | 专辑公告或平台详情页的 HTTPS 地址，未补录时为空 |
+| albums | `cover_urls text[] NOT NULL DEFAULT '{}'::text[]` | 有序 HTTPS 图片地址数组；第一项默认，无图时为空数组 |
 | albums | `revision bigint NOT NULL DEFAULT 1` | 包含曲目关系的编辑版本 |
 | album_tracks | `id bigint identity PK`、`album_id`、`song_id` | 两个外键；删除歌曲 RESTRICT，删除专辑需先显式处理曲目 |
 | album_tracks | `track_order integer > 0`、`edition_label text NULL` | 专辑子项内排序；Instrumental 标识位于 edition_label |
@@ -451,7 +454,8 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
   "album_name": "示意专辑",
   "release_label": "10th single",
   "release_date": null,
-  "cover_path": null,
+  "album_url": null,
+  "cover_urls": [],
   "revision": 1,
   "tracks": [
     {"album_track_id": 9001, "song_id": 1000, "song_name": "示意歌曲", "track_order": 1, "edition_label": null},
@@ -511,7 +515,7 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 
 数组顺序映射为连续 track_order；已有 ID 保留，新条目分配 ID，遗漏旧条目视为解除收录关联。界面保存前显示差异，接口拒绝其他专辑的曲目 ID。锁 albums 父行、校验 revision 后，完整变更和专辑 revision 加一同事务完成；解除关联不删除歌曲。
 
-专辑资料请求采用 `album_name, release_label, release_date, cover_path`，更新增加 expected_revision。日期只接受 JSON 字符串 `YYYY-MM-DD` 或 null；拒绝数字时间戳、空字符串、仅年份 / 年月和非法日期，不能依赖宽松的 date 类型自动补全。可空文本空白归一为 null。
+专辑资料请求采用 `album_name, release_label, release_date, album_url, cover_urls`，更新增加 expected_revision。新增时链接和封面默认为 null / []；更新时未提供的新字段保留原值，显式 null / [] 分别清空页面链接或封面数组。日期只接受 JSON 字符串 `YYYY-MM-DD` 或 null；拒绝数字时间戳、空字符串、仅年份 / 年月和非法日期，不能依赖宽松的 date 类型自动补全。可空文本空白归一为 null。
 
 新成员请求仅传 display_name，不允许客户端分配正式 ID；固定 1–67 的初始化走审核后的回填，之后使用序列。任何 POST 在网络结果未知时不自动重试创建，先重新读取核对，避免重复组或专辑。
 
@@ -529,7 +533,7 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 | 查询或锁等待超时 | 504，按现有异常转换 | 不宣称成功；重新读取确认，避免盲目重复创建 |
 | 其他数据库失败 | 500 | 同事务修改及审计回滚；客户端保留输入 |
 
-成功响应在提交之后构造，缓存也只在成功后失效。关系冲突、失效的成员和失效的封面引用不能被压成“数据库一般错误”让用户猜测。数据库错误详情按项目现有日志与 API 规则处理，不把数据库连接信息返回客户端。
+成功响应在提交之后构造，缓存也只在成功后失效。关系冲突、失效的成员和无效的封面 URL 输入不能被压成“数据库一般错误”让用户猜测。外部图片暂时不可访问由展示端处理，不作为资料保存失败条件。数据库错误详情按项目现有日志与 API 规则处理，不把数据库连接信息返回客户端。
 
 ## 9. 前端页面与状态
 
@@ -648,7 +652,7 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 
 成员管理放在乐队管理下，但成员 ID 是全局实体：通过历史阵容查看某队人物、创建新人物或选已有跨团人物，不能在每支乐队下各自编号。已有 ID 不允许手工改号。
 
-专辑管理维护名称、发行标识、日期和封面引用；曲目用具体 song_id 选择器维护顺序和 edition_label。添加 Instrumental 时复用已有非 Instrumental 曲目，禁止该操作调用创建歌曲接口。
+专辑管理维护名称、发行标识、日期、专辑页面和有序封面链接；封面支持添加、移除、排序和设为默认。曲目用具体 song_id 选择器维护顺序和 edition_label。添加 Instrumental 时复用已有非 Instrumental 曲目，禁止该操作调用创建歌曲接口。
 
 必须同步清点：
 
@@ -689,15 +693,13 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 
 审计保存实体 ID、修改前后差异、归属模式及关系、纠错原因和操作者。批量关系更新失败整事务回滚，不记录已成功审计但数据未提交的状态。
 
-### 11.3 封面出包
+### 11.3 专辑页面与外链封面
 
-使用 `frontend/public/media/albums/<album-id>/<content-hash>.webp`，数据库存 `/media/albums/...`。静态文件随 frontend/dist 被 build_release.py 打包；一张专辑图片被所有相关歌曲共享。
+字段为 `album_url` 和 `cover_urls`，首期手动维护。图片由浏览器直接加载，数据库只保存页面链接和有序图片地址，不进入前端发布包。数组第一项为默认封面，歌曲通过专辑关系共享；前台切换不写数据库。
 
-首期目标约 600–800 像素、每张 80–150 KB，200 张预算约 16–30 MB；属于素材处理目标，不是实测。保持独立图片请求、懒加载和固定宽高占位，不内联进 JS 或 API。详见[需求文档封面预算](../product/song-details-and-albums.md#54-封面随包方案及体积预算)。
+后台移除旧发布目录存在性检查，改为 URL 和数组校验。资料写入不访问外部地址，第三方暂时不可用不会阻止保存。展示采用完整图片、懒加载、固定占位及失败状态。
 
-封面路径写入限制在预定资源前缀，拒绝 `..`、协议 URL、本机路径。新增图片先随包提供，再关联路径；改图更换 hash，不覆盖旧缓存同名文件。一个仍被数据库引用的旧 hash 不能在后续包中直接删掉。
-
-若首期不提供 Console 上传，管理端选择或填写已随包提供的资源引用即可；上传功能不能只保存浏览器本地路径，也不能临时写入可能被下次出包替换的静态目录。
+迁移先增加新字段以兼容应用切换，旧 `cover_path` 在后续独立迁移中清理；已交付回填 SQL 的适用阶段需明确。数据约束、全部 API 入口、后台操作、前台切换和验证要求见[专项实现方案](album-links-and-covers.md)。
 
 ## 12. 迁移与回填顺序
 

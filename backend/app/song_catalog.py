@@ -110,7 +110,7 @@ def read_song(cur: Any, song_id: int) -> dict[str, Any]:
         LEFT JOIN venue_list v ON v.id = l.venue_id WHERE s.song_group_id = %s AND {VALID_PERFORMANCE_SQL}""", (song["group_id"],))
     song["performance_count"] = cur.fetchone()[0]
     cur.execute("""SELECT DISTINCT a.id AS album_id, a.album_name, a.release_label, a.release_date,
-        a.cover_path, a.revision
+        a.album_url, a.cover_urls, a.revision
         FROM album_tracks t JOIN albums a ON a.id = t.album_id WHERE t.song_id = %s
         ORDER BY a.release_date NULLS LAST, a.id""", (song_id,))
     song["albums"] = rows(cur)
@@ -118,7 +118,7 @@ def read_song(cur: Any, song_id: int) -> dict[str, Any]:
 
 
 def read_album(cur: Any, album_id: int) -> dict[str, Any]:
-    cur.execute("""SELECT id AS album_id, album_name, release_label, release_date, cover_path,
+    cur.execute("""SELECT id AS album_id, album_name, release_label, release_date, album_url, cover_urls,
         revision FROM albums WHERE id = %s""", (album_id,))
     album = one(cur)
     cur.execute("""SELECT t.id AS album_track_id, t.song_id, t.track_order, t.edition_label, section.section_name,

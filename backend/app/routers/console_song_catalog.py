@@ -1,5 +1,4 @@
 from typing import Any
-from pathlib import Path as FilePath
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
@@ -142,7 +141,7 @@ def move_group(payload: GroupMove, request: Request, song_id: int = Path(ge=1), 
 @router.get("/albums")
 def list_albums(q: str = Query("", max_length=255)):
     with catalog_errors(), get_db_connection() as conn, conn.cursor() as cur:
-        cur.execute("""SELECT id AS album_id, album_name, release_label, release_date, cover_path, revision
+        cur.execute("""SELECT id AS album_id, album_name, release_label, release_date, album_url, cover_urls, revision
             FROM albums WHERE album_name ILIKE %s ORDER BY release_date DESC NULLS LAST, id DESC LIMIT 500""", ("%" + q + "%",))
         return {"items": rows(cur)}
 
@@ -155,23 +154,26 @@ def edit_album(album_id: int = Path(ge=1)):
 
 def save_album(payload: AlbumWrite, request: Request, context: AuthSessionContext, album_id: int | None = None):
     assert_valid_csrf(request, context)
-    if payload.cover_path:
-        frontend = FilePath(__file__).resolve().parents[3] / "frontend"
-        relative = payload.cover_path.lstrip("/")
-        if not any((frontend / folder / relative).is_file() for folder in ("public", "dist")):
-            raise HTTPException(422, "封面文件不存在，请先将图片放入随包目录")
     with catalog_errors(), get_write_db_connection() as conn, conn.cursor() as cur:
-        fields = (payload.album_name, payload.release_label, payload.release_date, payload.cover_path)
+        album_url, cover_urls = payload.album_url, payload.cover_urls
+        fields = (payload.album_name, payload.release_label, payload.release_date)
         if album_id is None:
-            cur.execute("""INSERT INTO albums(album_name, release_label, release_date, cover_path)
-                VALUES (%s, %s, %s, %s) RETURNING id""", fields)
+            cur.execute("""INSERT INTO albums(album_name, release_label, release_date, album_url, cover_urls)
+                VALUES (%s, %s, %s, %s, %s) RETURNING id""", (*fields, album_url, cover_urls))
             album_id = cur.fetchone()[0]
             existing_tracks: set[int] = set()
         else:
             assert isinstance(payload, AlbumUpdate)
             lock_revision(cur, "albums", album_id, payload.expected_revision)
+            cur.execute("SELECT album_url, cover_urls FROM albums WHERE id = %s", (album_id,))
+            previous_url, previous_covers = cur.fetchone()
+            if "album_url" not in payload.model_fields_set:
+                album_url = previous_url
+            if "cover_urls" not in payload.model_fields_set:
+                cover_urls = previous_covers
             cur.execute("""UPDATE albums SET album_name = %s, release_label = %s, release_date = %s,
-                cover_path = %s, revision = revision + 1 WHERE id = %s""", (*fields, album_id))
+                album_url = %s, cover_urls = %s, revision = revision + 1 WHERE id = %s""",
+                        (*fields, album_url, cover_urls, album_id))
             cur.execute("SELECT id FROM album_tracks WHERE album_id = %s", (album_id,))
             existing_tracks = {row[0] for row in cur.fetchall()}
         if payload.tracks is not None:
@@ -204,7 +206,8 @@ def save_album(payload: AlbumWrite, request: Request, context: AuthSessionContex
             cur.execute("DELETE FROM album_sections WHERE album_id = %s AND NOT(section_name = ANY(%s))",
                         (album_id, section_names))
         assert album_id is not None
-        audit(cur, context, "album_save", "album", album_id, payload.model_dump(mode="json"))
+        audit(cur, context, "album_save", "album", album_id,
+              {**payload.model_dump(mode="json"), "album_url": album_url, "cover_urls": cover_urls})
         return read_album(cur, album_id)
 
 
@@ -225,7 +228,7 @@ def update_album_tracks(payload: AlbumTracksUpdate, request: Request, album_id: 
         album = read_album(cur, album_id)
     return save_album(AlbumUpdate(
         album_name=album["album_name"], release_label=album["release_label"], release_date=album["release_date"],
-        cover_path=album["cover_path"], expected_revision=payload.expected_revision, tracks=payload.tracks,
+        expected_revision=payload.expected_revision, tracks=payload.tracks,
     ), request, context, album_id)
 
 

@@ -14,7 +14,7 @@ vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ csrfToken: "csrf" 
 const version = (id = 1, count = 2): SongVersion => ({ song_id: id, song_name: "合唱曲", group_id: 1, group_name: "合唱曲",
   version_label: id === 1 ? "普通版" : "合唱版", version_order: id, revision: 1, legacy_cover: false,
   ownership: { mode: "bands", band_ids: [1], member_groups: [], bands: [{ band_id: 1, band_name: "乐队甲" }], groups: [] },
-  performance_count: count, albums: [{ album_id: 1, album_name: "收录盘", release_label: "special disc", release_date: null, cover_path: null, revision: 1 }] });
+  performance_count: count, albums: [{ album_id: 1, album_name: "收录盘", release_label: "special disc", release_date: null, album_url: null, cover_urls: [], revision: 1 }] });
 const page = <T,>(items: T[], index = 1, pages = 1) => ({ items, page: index, page_size: 30, total: items.length, total_pages: pages });
 beforeEach(() => {
   vi.resetAllMocks();
@@ -128,4 +128,43 @@ test("manage loads details and protects unsaved changes", async () => {
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(screen.getByLabelText("歌曲名称")).toHaveValue("再次修改"));
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/songs/1", "PUT", { song_name: "再次修改", version_label: "普通版", expected_revision: 1 }, "csrf");
+});
+
+// 测试点：卡片采用第一张，详情本地切图遵守边界，坏图仍可切换和访问来源，重开及换版本恢复默认。
+test("album gallery switches locally and resets on reopening or version change", async () => {
+  const user = userEvent.setup();
+  const covers = ["https://img.example.test/first", "https://img.example.test/second"];
+  const album = { ...version().albums[0], album_url: "https://example.test/album", cover_urls: covers, tracks: [] };
+  api.getSongVersion.mockImplementation(async (id: number) => ({ ...version(id), albums: [album] }));
+  api.getAlbumDetail.mockResolvedValue(album);
+  function Page() { const [id, setId] = useState<number | null>(1); return <SongCatalog songId={id} onSongSelect={setId} onLiveSelect={vi.fn()} />; }
+  render(<Page />);
+  const card = await screen.findByRole("button", { name: /收录盘/ });
+  expect(within(card).getByRole("presentation")).toHaveAttribute("src", covers[0]);
+  await user.click(card);
+  const detail = await screen.findByRole("region", { name: "专辑详情" });
+  const gallery = within(detail).getByRole("group", { name: "专辑封面" });
+  expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[0]);
+  expect(within(gallery).getByRole("button", { name: "上一张" })).toBeDisabled();
+  const requestsBefore = api.getAlbumDetail.mock.calls.length;
+  await user.click(within(gallery).getByRole("button", { name: "下一张" }));
+  expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[1]);
+  expect(within(gallery).getByText("2 / 2")).toBeInTheDocument();
+  expect(within(gallery).getByRole("button", { name: "下一张" })).toBeDisabled();
+  fireEvent.error(within(gallery).getByRole("img"));
+  expect(within(gallery).getByRole("status")).toHaveTextContent("封面无法显示");
+  expect(within(detail).getByRole("link", { name: "专辑页面" })).toHaveAttribute("href", album.album_url);
+  await user.click(within(gallery).getByRole("button", { name: "上一张" }));
+  expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[0]);
+  expect(api.getAlbumDetail).toHaveBeenCalledTimes(requestsBefore);
+  expect(api.songCatalogWrite).not.toHaveBeenCalled();
+  await user.click(within(gallery).getByRole("button", { name: "下一张" }));
+  await user.click(within(detail).getByRole("button", { name: "收起" }));
+  await user.click(card);
+  expect(await screen.findByText("1 / 2")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "下一张" }));
+  await user.click(screen.getByRole("button", { name: "合唱版" }));
+  await waitFor(() => expect(screen.queryByRole("region", { name: "专辑详情" })).not.toBeInTheDocument());
+  await user.click(await screen.findByRole("button", { name: /收录盘/ }));
+  expect(await screen.findByText("1 / 2")).toBeInTheDocument();
 });

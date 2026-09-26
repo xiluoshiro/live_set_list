@@ -13,7 +13,7 @@
 .song-catalog-facts dd { margin: 0; }
 .song-catalog-albums { display: grid; gap: 12px; }
 .song-catalog-album { display: flex; gap: 14px; text-align: left; align-items: center; background: transparent; border: 0; color: inherit; cursor: pointer; padding: 0; }
-.song-catalog-album img { width: 64px; height: 64px; object-fit: cover; }
+.song-catalog-album img { width: 64px; height: 64px; object-fit: contain; }
 .song-catalog-album small { display: block; margin-top: 5px; }
 .song-catalog-link, .song-album-tracks button { border: 0; padding: 0; background: none; color: inherit; text-align: left; text-decoration: underline; cursor: pointer; }
 @media (max-width: 760px) {

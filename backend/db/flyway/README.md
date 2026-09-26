@@ -11,6 +11,8 @@
 5. 当前默认先操作测试库 `live_statistic_test`
 6. 将结构变更写入 `sql/V...sql`
 
+V41 增加专辑 `album_url` 与有序 `cover_urls`，第一张为默认封面。迁移遇到非空旧 `cover_path` 会停止，须先审核旧封面转换方案。旧列暂留以兼容迁移后、应用切换前的旧版本；新应用只使用新字段，删除旧列另走后续迁移。历史 `backfill/song-catalog-2026-09-26` 交付包仍依赖旧列，未改写其 SQL 或模板。详见[实现及验证记录](../../../docs/design/album-links-and-covers.md)。
+
 修改表结构时：
 
 1. 先在 pgAdmin 中试验 SQL

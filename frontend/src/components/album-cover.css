@@ -1,0 +1,9 @@
+.album-cover-image { object-fit: contain; }
+.album-cover-gallery { margin: 16px 0; }
+.album-cover-gallery > .album-cover-image { display: block; width: min(100%, 320px); height: 320px; }
+.album-cover-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.album-cover-error { font-size: 0.85em; }
+.album-cover-editor .album-cover-image { width: 64px; height: 64px; }
+.album-cover-editor input { min-width: 220px; width: 100%; box-sizing: border-box; }
+.album-cover-editor td:nth-child(2) { width: 100%; }
+.album-cover-editor td:last-child { min-width: 200px; }

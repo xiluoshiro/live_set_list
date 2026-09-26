@@ -2416,7 +2416,7 @@ export type SongOwnershipDetail = SongOwnership & {
 };
 export type AlbumSummary = {
   album_id: number; album_name: string; release_label: string; release_date: string | null;
-  cover_path: string | null; revision: number;
+  album_url: string | null; cover_urls: string[]; revision: number;
 };
 export type AlbumTrackWrite = { album_track_id?: number | null; song_id: number; track_order: number; edition_label: string; section_name?: string };
 export type AlbumDetail = AlbumSummary & { tracks: (AlbumTrackWrite & {

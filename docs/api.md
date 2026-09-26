@@ -424,6 +424,17 @@
   - 更新使用完整目标集合替换，并与 `performance_group_create/performance_group_update` 审计写入处于同一事务
   - 第一版不提供活动组删除、合并或拆分接口
 
+## 专辑页面与封面（V41）
+
+专辑摘要、详情、Console 列表及歌曲/歌曲组内的专辑均返回 `album_url: string | null` 和 `cover_urls: string[]`。封面数组保持顺序，第一项为默认图；没有图片时为 `[]`。
+
+- `POST /api/console/albums`：省略时页面链接为 `null`，封面为 `[]`。
+- `PUT /api/console/albums/{id}`：要求 `expected_revision`；省略新字段保留原值，显式 `album_url: null` / `cover_urls: []` 分别清空。`PUT /api/console/albums/{id}/tracks` 保留两字段。
+- 两类地址只接受无凭据和控制字符的绝对 HTTPS URL，每项最多 2048 字符；最多 20 张封面，不接受空元素、NULL 元素和修剪后重复的 URL。无效项返回带数组下标的 422。页面空字符串归一为 `null`。
+- 保存只校验 URL，不请求远端图片；管理写入继续要求 editor、session、CSRF 和 revision，访客切图不写库。
+
+完整交互与迁移要求见[专辑页面链接与多封面](design/album-links-and-covers.md)。
+
 ## 错误处理说明
 
 当前实现没有自定义统一错误包装，仍以 FastAPI 默认错误结构为主。

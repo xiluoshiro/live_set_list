@@ -8,7 +8,7 @@
 - [数据库角色](db-roles.md)：运行时、迁移、测试和恢复所用 PostgreSQL 角色。
 - [产品需求与 TODO](product/homepage-community-database.md)：当前产品阶段、已完成能力和下一轮优先项。
 - [公共 Live 与收藏 Live 统计需求](product/public-statistics.md)：当前 S1 口径、全部 / 收藏通用统计、按乐队划分的年度歌曲排行、久未演唱和后续歌曲生命周期方向。
-- [歌曲资料与专辑关联需求](product/song-details-and-albums.md)：歌曲资料宽版左列表右详情、固定翻唱基准、成员 ID、逐条歌单计数、分阶段回填、专辑与特殊版本方案；业务功能尚未实现。
+- [歌曲资料与专辑关联需求](product/song-details-and-albums.md)：歌曲组与版本、固定翻唱基准、逐条歌单计数、专辑及子项；页面链接和多封面已实现。
 - [巡演聚合产品需求](product/tour-aggregation.md)：巡演与单场 Live 的产品边界、用户页面、资料口径、阶段范围和验收标准。
 - [Flyway 落地说明](design/flyway.md)：仓库 migration、角色和日常迁移流程；当前仓库已到 V23。
 - [生产部署设计](design/production-deployment.md)：目标架构、安全边界和未完成的运维项。
@@ -16,7 +16,8 @@
 
 ## 当前设计
 
-- [歌曲资料、歌曲组与专辑实现设计](design/song-catalog-and-albums.md)：版本与归属数据模型、成员 ID、逐条演奏统计、Live 日期锁、公共及 Console API、歌曲新增 / 管理双页、公共左右分栏、封面出包与分阶段迁移；待实施。
+- [歌曲资料、歌曲组与专辑实现设计](design/song-catalog-and-albums.md)：版本与归属数据模型、逐条演奏统计、公共及 Console API、专辑子项与迁移；主体已有实现，增量封面方案见专项文档。
+- [专辑页面链接与多封面实现方案](design/album-links-and-covers.md)：两个 URL 字段、默认封面与切换、后台手工维护、迁移兼容和本地验证记录。
 - [全站 Stage Ledger 视觉重构方案](design/site-wide-stage-ledger-ui-refactor.md)：以演出流程和新首页首屏为双参考，定义全站视觉系统、组件库边界、页面迁移批次与视觉回归门禁。
 - [首页 Live 日历改造设计](design/home-live-calendar.md)：以按月日期导航替换语义不准确的“最近收录”，并从首屏移除“个人与贡献”。
 - [巡演聚合实现设计](design/tour-aggregation.md)
