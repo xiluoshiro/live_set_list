@@ -107,7 +107,7 @@ def read_song(cur: Any, song_id: int) -> dict[str, Any]:
     song = one(cur)
     song["ownership"] = read_ownership(cur, song_id, song.pop("owner_mode"))
     cur.execute(f"""SELECT count(*) FROM live_setlist s JOIN live_attrs l ON l.id = s.live_id
-        LEFT JOIN venue_list v ON v.id = l.venue_id WHERE s.song_id = %s AND {VALID_PERFORMANCE_SQL}""", (song_id,))
+        LEFT JOIN venue_list v ON v.id = l.venue_id WHERE s.song_group_id = %s AND {VALID_PERFORMANCE_SQL}""", (song["group_id"],))
     song["performance_count"] = cur.fetchone()[0]
     cur.execute("""SELECT DISTINCT a.id AS album_id, a.album_name, a.release_label, a.release_date,
         a.cover_path, a.revision
@@ -121,9 +121,11 @@ def read_album(cur: Any, album_id: int) -> dict[str, Any]:
     cur.execute("""SELECT id AS album_id, album_name, release_label, release_date, cover_path,
         revision FROM albums WHERE id = %s""", (album_id,))
     album = one(cur)
-    cur.execute("""SELECT t.id AS album_track_id, t.song_id, t.track_order, t.edition_label,
+    cur.execute("""SELECT t.id AS album_track_id, t.song_id, t.track_order, t.edition_label, section.section_name,
         s.song_name, s.version_label, s.group_id FROM album_tracks t
-        JOIN song_list s ON s.id = t.song_id WHERE t.album_id = %s ORDER BY t.track_order, t.id""", (album_id,))
+        JOIN song_list s ON s.id = t.song_id
+        JOIN album_sections section ON section.id = t.section_id
+        WHERE t.album_id = %s ORDER BY section.display_order, t.track_order, t.id""", (album_id,))
     album["tracks"] = rows(cur)
     return album
 

@@ -514,6 +514,9 @@ BEGIN
     IF to_regclass('public.album_tracks') IS NOT NULL THEN
         EXECUTE 'GRANT DELETE ON TABLE public.album_tracks TO {super_user}';
     END IF;
+    IF to_regclass('public.album_sections') IS NOT NULL THEN
+        EXECUTE 'GRANT DELETE ON TABLE public.album_sections TO {super_user}';
+    END IF;
 END
 $$;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.flyway_schema_history TO {flyway_user};

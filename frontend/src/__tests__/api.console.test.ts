@@ -207,7 +207,7 @@ describe("console lookup api", () => {
         next_lineup_version_id: null,
       }],
       setlist_rows: [{
-        song_id: 1,
+        song_group_id: 1,
         absolute_order: 1,
         segment_type: "M",
         sub_order: 1,
@@ -233,7 +233,7 @@ describe("console lookup api", () => {
       method: "PUT",
       body: JSON.stringify({
         setlist_rows: [{
-          song_id: 1,
+          song_group_id: 1,
           absolute_order: 1,
           segment_type: "M",
           sub_order: 1,
@@ -351,7 +351,7 @@ describe("console lookup api", () => {
       }],
       setlist_rows: [
         {
-          song_id: 901,
+          song_group_id: 901,
           absolute_order: 1,
           segment_type: "M",
           sub_order: 1,
@@ -378,7 +378,7 @@ describe("console lookup api", () => {
       headers: expect.objectContaining({ "content-type": "application/json", "x-csrf-token": "csrf-token" }),
       body: JSON.stringify({
         setlist_rows: [{
-          song_id: 901,
+          song_group_id: 901,
           absolute_order: 1,
           segment_type: "M",
           sub_order: 1,

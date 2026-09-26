@@ -126,7 +126,7 @@ def _valid_band_payload(**overrides):
 def _valid_setlist_payload(**row_overrides):
     """Return a minimal valid setlist append request body with optional first-row overrides."""
     row = {
-        "song_id": 1,
+        "song_group_id": 1,
         "absolute_order": 3,
         "segment_type": "EN",
         "sub_order": 1,
@@ -442,7 +442,7 @@ def test_console_update_live_mock_requires_valid_csrf():
         ("/api/console/lives", _valid_live_payload(venue_id=0)),
         ("/api/console/lives/1/setlist", {}),
         ("/api/console/lives/1/setlist", {"setlist_rows": []}),
-        ("/api/console/lives/1/setlist", _valid_setlist_payload(song_id=0)),
+        ("/api/console/lives/1/setlist", _valid_setlist_payload(song_group_id=0)),
         ("/api/console/lives/1/setlist", _valid_setlist_payload(absolute_order=0)),
         ("/api/console/lives/1/setlist", _valid_setlist_payload(band_member={})),
     ],
@@ -948,10 +948,10 @@ def test_console_append_setlist_mock_success_inserts_rows_and_audits():
     }
     payload = {
         "setlist_rows": [
-            _valid_setlist_payload(song_id=1, absolute_order=3, segment_type="EN")["setlist_rows"][0],
-            _valid_setlist_payload(song_id=2, absolute_order=4, segment_type="SP", is_short=True)["setlist_rows"][0],
-            _valid_setlist_payload(song_id=3, absolute_order=5, segment_type="OP")["setlist_rows"][0],
-            _valid_setlist_payload(song_id=4, absolute_order=6, segment_type="WEN")["setlist_rows"][0],
+            _valid_setlist_payload(song_group_id=1, absolute_order=3, segment_type="EN")["setlist_rows"][0],
+            _valid_setlist_payload(song_group_id=2, absolute_order=4, segment_type="SP", is_short=True)["setlist_rows"][0],
+            _valid_setlist_payload(song_group_id=3, absolute_order=5, segment_type="OP")["setlist_rows"][0],
+            _valid_setlist_payload(song_group_id=4, absolute_order=6, segment_type="WEN")["setlist_rows"][0],
         ]
     }
 
@@ -983,8 +983,8 @@ def test_console_append_setlist_mock_success_inserts_rows_and_audits():
         (
             {
                 "setlist_rows": [
-                    _valid_setlist_payload(song_id=1, absolute_order=3)["setlist_rows"][0],
-                    _valid_setlist_payload(song_id=2, absolute_order=3)["setlist_rows"][0],
+                    _valid_setlist_payload(song_group_id=1, absolute_order=3)["setlist_rows"][0],
+                    _valid_setlist_payload(song_group_id=2, absolute_order=3)["setlist_rows"][0],
                 ]
             },
             400,
@@ -1018,8 +1018,8 @@ def test_console_append_setlist_mock_missing_song_rejects_batch_without_partial_
     )
     payload = {
         "setlist_rows": [
-            _valid_setlist_payload(song_id=1, absolute_order=3)["setlist_rows"][0],
-            _valid_setlist_payload(song_id=999, absolute_order=4)["setlist_rows"][0],
+            _valid_setlist_payload(song_group_id=1, absolute_order=3)["setlist_rows"][0],
+            _valid_setlist_payload(song_group_id=999, absolute_order=4)["setlist_rows"][0],
         ]
     }
 
@@ -1043,7 +1043,7 @@ def test_console_append_setlist_mock_existing_setlist_rejects_with_409():
         client = TestClient(app)
         response = client.post(
             "/api/console/lives/1/setlist",
-            json=_valid_setlist_payload(song_id=1, absolute_order=3),
+            json=_valid_setlist_payload(song_group_id=1, absolute_order=3),
             headers={"X-CSRF-Token": CSRF_TOKEN},
         )
 
@@ -1069,7 +1069,7 @@ def test_console_replace_setlist_mock_replaces_complete_collection():
             next_members=(),
         )
     }
-    payload = _valid_setlist_payload(song_id=1, absolute_order=1, segment_type="M")
+    payload = _valid_setlist_payload(song_group_id=1, absolute_order=1, segment_type="M")
     payload["setlist_rows"][0]["comment"] = "Encore note"
 
     with (

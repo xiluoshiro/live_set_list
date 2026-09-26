@@ -110,7 +110,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     setBusy(true); setError("");
     try {
       const path = creating ? newGroup ? "/song-groups" : "/songs" : `/songs/${original!.song_id}${correcting ? "/ownership" : ""}`;
-      const payload = creating ? { ...draft, ownership, ...(newGroup ? { group_name: groupName.trim() || draft.song_name } : { group_id: groupId, expected_group_revision: groupRevision }) }
+      const payload = creating ? { ...draft, version_label: newGroup ? "" : draft.version_label, ownership, ...(newGroup ? { group_name: groupName.trim() || draft.song_name } : { group_id: groupId, expected_group_revision: groupRevision }) }
         : correcting ? { ownership, expected_revision: original!.revision, reason }
         : { ...draft, expected_revision: original!.revision };
       const result = await songCatalogWrite<{ item: SongVersion }>(path, creating ? "POST" : "PUT", payload, csrfToken);
@@ -120,13 +120,16 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     } catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   };
-  const toggleBand = (id: number, checked: boolean) => setOwnership(ownership.mode === "bands"
+  const toggleBand = (id: number, checked: boolean, kind: "bands" | "members") => setOwnership(kind === "bands"
     ? { ...ownership, band_ids: checked ? [...ownership.band_ids, id] : ownership.band_ids.filter(value => value !== id) }
     : { ...ownership, member_groups: checked ? [...ownership.member_groups, { band_id: id, member_ids: [] }] : ownership.member_groups.filter(group => group.band_id !== id) });
-  const ownerValid = ownership.mode === "pending" || (ownership.mode === "bands" ? ownership.band_ids.length > 0 : ownership.member_groups.length > 0 && ownership.member_groups.every(g => g.member_ids.length > 0));
-  const ownerSummary = ownership.mode === "pending" ? "待回填" : ownership.mode === "bands"
-    ? ownership.band_ids.map(id => bands.find(b => b.band_id === id)?.band_name ?? `#${id}`).join(" / ")
-    : ownership.member_groups.map(g => `${bands.find(b => b.band_id === g.band_id)?.band_name ?? `#${g.band_id}`}：${g.member_ids.map(id => members.find(m => m.member_id === id)?.display_name ?? `#${id}`).join("、")}`).join(" / ");
+  const ownerValid = ownership.mode === "pending" ||
+    ((ownership.mode === "members" || ownership.band_ids.length > 0) &&
+     (ownership.mode === "bands" || (ownership.member_groups.length > 0 && ownership.member_groups.every(g => g.member_ids.length > 0))));
+  const ownerSummary = ownership.mode === "pending" ? "待回填" : [
+    ...ownership.band_ids.map(id => bands.find(b => b.band_id === id)?.band_name ?? `#${id}`),
+    ...ownership.member_groups.map(g => `${bands.find(b => b.band_id === g.band_id)?.band_name ?? `#${g.band_id}`}：${g.member_ids.map(id => members.find(m => m.member_id === id)?.display_name ?? `#${id}`).join("、")}`),
+  ].join(" / ");
   const changes = correcting ? [{ field: "归属", before: original ? ownershipLabel(original) : "", after: ownerSummary }, { field: "更正原因", before: "", after: reason }]
     : (Object.keys(draft) as (keyof SongVersionDraft)[]).map(key => ({ field: ({ song_name: "歌曲名称", version_label: "版本标识", version_order: "版本顺序" })[key], before: original ? String(original[key]) : "", after: String(draft[key]) })).filter(change => creating || change.before !== change.after);
   if (!active) return null;
@@ -161,13 +164,19 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         </>}
         {!correcting && <>
           <label>歌曲名称<input value={draft.song_name} onChange={e => setDraft({ ...draft, song_name: e.target.value })} /></label>
-          <label>版本标识<input value={draft.version_label} onChange={e => setDraft({ ...draft, version_label: e.target.value })} /></label>
+          <label>版本标识<input disabled={(creating && newGroup) || (!creating && original?.version_label === "")} value={creating && newGroup ? "" : draft.version_label} onChange={e => setDraft({ ...draft, version_label: e.target.value })} /></label>
         </>}
         {(creating || correcting) ? <>
-          <label>归属模式<select value={ownership.mode} onChange={e => setOwnership({ ...emptyOwner(), mode: e.target.value as SongOwnership["mode"] })}><option value="pending">待回填</option><option value="bands">乐队</option><option value="members">成员</option></select></label>
-          {ownership.mode !== "pending" && <fieldset className="tour-band-field"><legend>归属乐队</legend>{bands.filter(b => b.band_id > 0).map(b => {
+          <label>归属模式<select value={ownership.mode} onChange={e => {
+            const mode = e.target.value as SongOwnership["mode"];
+            setOwnership({ mode, band_ids: mode === "bands" || mode === "mixed" ? ownership.band_ids : [], member_groups: mode === "members" || mode === "mixed" ? ownership.member_groups : [] });
+          }}><option value="pending">待回填</option><option value="bands">乐队</option><option value="members">成员</option><option value="mixed">乐队与成员</option></select></label>
+          {(ownership.mode === "bands" || ownership.mode === "mixed") && <fieldset className="tour-band-field"><legend>归属乐队</legend>{bands.filter(b => b.band_id > 0).map(b =>
+            <label key={b.band_id}><input type="checkbox" checked={ownership.band_ids.includes(b.band_id)} onChange={e => toggleBand(b.band_id, e.target.checked, "bands")} />{b.band_name}</label>
+          )}</fieldset>}
+          {(ownership.mode === "members" || ownership.mode === "mixed") && <fieldset className="tour-band-field"><legend>成员所属乐队</legend>{bands.filter(b => b.band_id > 0).map(b => {
             const memberGroup = ownership.member_groups.find(g => g.band_id === b.band_id);
-            return <div key={b.band_id}><label><input type="checkbox" checked={ownership.mode === "bands" ? ownership.band_ids.includes(b.band_id) : !!memberGroup} onChange={e => toggleBand(b.band_id, e.target.checked)} />{b.band_name}</label>
+            return <div key={b.band_id}><label><input type="checkbox" checked={!!memberGroup} onChange={e => toggleBand(b.band_id, e.target.checked, "members")} />{b.band_name}</label>
               {memberGroup && <select multiple aria-label={`${b.band_name} 固定成员`} value={memberGroup.member_ids.map(String)} onChange={e => setOwnership({ ...ownership, member_groups: ownership.member_groups.map(g => g.band_id === b.band_id ? { ...g, member_ids: Array.from(e.target.selectedOptions, option => Number(option.value)) } : g) })}>
                 {members.map(m => <option key={m.member_id} value={m.member_id}>{m.display_name}</option>)}
               </select>}
@@ -187,7 +196,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     </tbody></table></div>
     {(confirm || discard) && <div className="modal-mask"><div className="modal compact console-confirm-modal" role="dialog" aria-modal="true" aria-label={discard ? "确认放弃歌曲修改" : creating ? "确认新增歌曲" : "确认修改歌曲"}>
       <div className="modal-head"><h2>{discard ? "确认放弃歌曲修改" : creating ? "确认新增歌曲" : "确认修改歌曲"}</h2></div>
-      {!discard && <div className="console-confirm-body">{error && <p role="alert">{error}</p>}<UpdateDiffTable changes={changes} ariaLabel="歌曲修改内容" />{creating && <><p>歌曲组：{newGroup ? groupName.trim() || draft.song_name : selectedGroupName}</p><p>归属模式：{ownership.mode === "pending" ? "待回填" : ownership.mode === "bands" ? "乐队" : "成员"}</p><p>归属：{ownerSummary}</p></>}</div>}
+      {!discard && <div className="console-confirm-body">{error && <p role="alert">{error}</p>}<UpdateDiffTable changes={changes} ariaLabel="歌曲修改内容" />{creating && <><p>歌曲组：{newGroup ? groupName.trim() || draft.song_name : selectedGroupName}</p><p>归属模式：{ownership.mode === "pending" ? "待回填" : ownership.mode === "mixed" ? "乐队与成员" : ownership.mode === "bands" ? "乐队" : "成员"}</p><p>归属：{ownerSummary}</p></>}</div>}
       <div className="console-confirm-actions"><button disabled={busy} onClick={() => { setConfirm(false); setDiscard(null); }}>取消</button><button disabled={busy} onClick={() => {
         if (discard) { const proceed = discard; setDiscard(null); setCorrecting(false); if (original) restore(original); proceed(); } else void submit();
       }}>{busy ? "提交中…" : discard ? "确认放弃" : "确认提交"}</button></div>

@@ -38,7 +38,7 @@ describe("parseSetlistText", () => {
     expect(result.rows[0]).toMatchObject({
       song_name: "BLACK SHOUT",
       segment_start_type: "M",
-      song_id: "",
+      song_group_id: "",
       is_short: false,
     });
     expect(result.rows[0]?.band_member).toEqual({

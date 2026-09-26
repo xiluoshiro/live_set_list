@@ -18,7 +18,7 @@ def list_song_groups(
     band_id: int | None = Query(default=None, ge=1),
     album_id: int | None = Query(default=None, ge=1),
     page: int = Query(default=1, ge=1),
-    owner_mode: Literal["bands", "members", "pending"] | None = None,
+    owner_mode: Literal["bands", "members", "mixed", "pending"] | None = None,
     member_id: int | None = Query(default=None, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ):
@@ -78,7 +78,9 @@ def album_detail(album_id: int = Path(ge=1)):
 def song_performances(song_id: int = Path(ge=1), page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
     with catalog_errors(), get_db_connection() as conn, conn.cursor() as cur:
         song = read_song(cur, song_id)
-        ownership = song["ownership"]
+        cur.execute("SELECT id FROM song_list WHERE group_id = %s AND version_label = ''", (song["group_id"],))
+        default = cur.fetchone()
+        ownership = read_song(cur, default[0])["ownership"] if default else {"band_ids": [], "member_groups": []}
         baseline = set(ownership["band_ids"]) | {group["band_id"] for group in ownership["member_groups"]}
         total = song["performance_count"]
         total_pages = max(1, (total + page_size - 1) // page_size)
@@ -90,9 +92,9 @@ def song_performances(song_id: int = Path(ge=1), page: int = Query(1, ge=1), pag
                 AND NOT EXISTS(SELECT 1 FROM live_setlist_band_performance_members m
                     WHERE m.setlist_id = p.setlist_id AND m.band_id = p.band_id)) AS complete
             FROM live_setlist s JOIN live_attrs l ON l.id = s.live_id LEFT JOIN venue_list v ON v.id = l.venue_id
-            WHERE s.song_id = %s AND {VALID_PERFORMANCE_SQL}
+            WHERE s.song_group_id = %s AND {VALID_PERFORMANCE_SQL}
             ORDER BY l.live_date DESC, l.id DESC, s.absolute_order, s.id LIMIT %s OFFSET %s""",
-                    (song_id, page_size, (page - 1) * page_size))
+                    (song["group_id"], page_size, (page - 1) * page_size))
         items = rows(cur)
         for item in items:
             item["live_cover"] = classify_live_cover(baseline, set(item.pop("actual_bands")), item.pop("complete"))

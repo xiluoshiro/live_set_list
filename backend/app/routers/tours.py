@@ -390,8 +390,8 @@ SELECT
     l.id,
     l.live_date,
     l.live_title,
-    stl.song_id,
-    s.song_name,
+    s.id AS song_id,
+    sg.group_name,
     stl.segment_type,
     stl.sub_order,
     stl.absolute_order,
@@ -421,7 +421,8 @@ LEFT JOIN live_setlist stl
                 WHERE explicit_tour_band.tour_id = tl.tour_id
             )
    )
-LEFT JOIN song_list s ON s.id = stl.song_id
+LEFT JOIN song_list s ON s.group_id = stl.song_group_id AND s.version_label = ''
+LEFT JOIN song_groups sg ON sg.id = stl.song_group_id
 WHERE tl.tour_id = %s
 ORDER BY l.live_date, l.start_time NULLS LAST, l.id, stl.absolute_order
 """

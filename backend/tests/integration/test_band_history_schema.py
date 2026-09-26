@@ -511,7 +511,7 @@ def test_console_appends_lineup_and_binds_transition_atomically(
         json={
             "setlist_rows": [
                 {
-                    "song_id": 4,
+                    "song_group_id": 4,
                     "absolute_order": 1,
                     "segment_type": "M",
                     "sub_order": 1,

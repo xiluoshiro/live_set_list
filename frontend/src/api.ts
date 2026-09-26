@@ -502,7 +502,7 @@ export type FavoriteBatchResponse = {
 export type ConsoleSongItem = {
   group_id?: number;
   version_label?: string;
-  owner_mode?: "bands" | "members" | null;
+  owner_mode?: "bands" | "members" | "mixed" | null;
   song_id: number;
   song_name: string;
   band_id: number | null;
@@ -900,7 +900,7 @@ export type ConsoleLiveMutationResponse = {
 };
 
 export type ConsoleLiveSetlistRowPayload = {
-  song_id: number;
+  song_group_id: number;
   absolute_order: number;
   segment_type: string;
   sub_order: number;
@@ -1574,8 +1574,9 @@ export async function getConsoleSongs(
   limit = 20,
   page?: number,
   bandId?: number,
+  groupsOnly = false,
 ): Promise<ConsoleSongListResponse> {
-  const response = await fetchWithTimeout(`${BASE_URL}/api/console/songs?${consoleLookupQuery(q, limit, page, bandId)}`, undefined, {
+  const response = await fetchWithTimeout(`${BASE_URL}/api/console/songs?${consoleLookupQuery(q, limit, page, bandId)}${groupsOnly ? "&groups_only=true" : ""}`, undefined, {
     requestKind: "console_songs",
   });
   return expectJsonResponse<ConsoleSongListResponse>(response);
@@ -2405,7 +2406,7 @@ export const saveConsoleVenueEdit = (id: number, payload: ConsoleVenueEdit, csrf
 
 
 export type SongOwnership = {
-  mode: "bands" | "members" | "pending";
+  mode: "bands" | "members" | "mixed" | "pending";
   band_ids: number[];
   member_groups: { band_id: number; member_ids: number[] }[];
 };
@@ -2417,7 +2418,7 @@ export type AlbumSummary = {
   album_id: number; album_name: string; release_label: string; release_date: string | null;
   cover_path: string | null; revision: number;
 };
-export type AlbumTrackWrite = { album_track_id?: number | null; song_id: number; track_order: number; edition_label: string };
+export type AlbumTrackWrite = { album_track_id?: number | null; song_id: number; track_order: number; edition_label: string; section_name?: string };
 export type AlbumDetail = AlbumSummary & { tracks: (AlbumTrackWrite & {
   album_track_id: number; song_name: string; version_label: string; group_id: number;
 })[] };

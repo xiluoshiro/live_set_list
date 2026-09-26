@@ -241,15 +241,15 @@ describe("ConsoleInsertPanel", () => {
     });
     apiMocks.createConsoleSong.mockResolvedValue({
       ok: true,
-      item: { song_id: 903, song_name: "新曲", band_id: 2, cover: false },
+      item: { song_id: 903, group_id: 903, song_name: "新曲", band_id: 2, cover: false },
     });
     apiMocks.updateConsoleSong.mockResolvedValue({
       ok: true,
-      item: { song_id: 901, song_name: "改名曲", band_id: 2, cover: true },
+      item: { song_id: 901, group_id: 901, song_name: "改名曲", band_id: 2, cover: true },
     });
     apiMocks.createConsoleSongsBatch.mockResolvedValue({
       ok: true,
-      created: [{ song_id: 902, song_name: "Requiem for Fate", band_id: 2, cover: false }],
+      created: [{ song_id: 902, group_id: 902, song_name: "Requiem for Fate", band_id: 2, cover: false }],
     });
     apiMocks.createConsoleVenue.mockResolvedValue({
       ok: true,
@@ -443,7 +443,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleBandHistory.mockResolvedValue(currentRoseliaHistory());
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
-      .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
+      .mockResolvedValueOnce({ items: [{ song_id: 901, group_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
     await screen.findByLabelText("批量粘贴 Setlist 文本");
@@ -479,7 +479,7 @@ describe("ConsoleInsertPanel", () => {
         }],
         setlist_rows: [
           {
-            song_id: 901,
+            song_group_id: 901,
             absolute_order: 1,
             segment_type: "M",
             sub_order: 1,
@@ -610,7 +610,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleBandHistory.mockResolvedValue(currentRoseliaHistory());
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
-      .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
+      .mockResolvedValueOnce({ items: [{ song_id: 901, group_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
     apiMocks.appendConsoleLiveSetlist.mockRejectedValueOnce(new Error("Request timeout"));
     apiMocks.getConsoleLiveSetlist.mockResolvedValueOnce({
       live_id: 101,
@@ -622,7 +622,7 @@ describe("ConsoleInsertPanel", () => {
       }],
       rows: [{
         row_id: "persisted-row-1",
-        song_id: 901,
+        song_group_id: 901,
         song_name: "BLACK SHOUT",
         absolute_order: 1,
         segment_type: "M",
@@ -723,7 +723,7 @@ describe("ConsoleInsertPanel", () => {
     });
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
-      .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
+      .mockResolvedValueOnce({ items: [{ song_id: 901, group_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
 
     render(<ConsoleInsertPanel />);
     await screen.findByLabelText("批量粘贴 Setlist 文本");
@@ -769,7 +769,7 @@ describe("ConsoleInsertPanel", () => {
           next_lineup_version_id: 22,
         }],
         setlist_rows: [{
-          song_id: 901,
+          song_group_id: 901,
           absolute_order: 1,
           segment_type: "M",
           sub_order: 1,
@@ -894,10 +894,10 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
-        items: [{ song_id: 901, song_name: "春日序曲", band_id: 9, cover: false }],
+        items: [{ song_id: 901, group_id: 901, song_name: "春日序曲", band_id: 9, cover: false }],
       })
       .mockResolvedValueOnce({
-        items: [{ song_id: 902, song_name: "逆光海岸", band_id: 9, cover: false }],
+        items: [{ song_id: 902, group_id: 902, song_name: "逆光海岸", band_id: 9, cover: false }],
       });
 
     render(<ConsoleInsertPanel />);
@@ -913,8 +913,8 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getAllByPlaceholderText("请输入歌曲名")[1], "逆光海岸");
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
 
-    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("春日序曲", 10));
-    expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("逆光海岸", 10);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("春日序曲", 10, undefined, undefined, true));
+    expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("逆光海岸", 10, undefined, undefined, true);
     expect(await screen.findByText("查询歌曲完成：匹配 2 行，未匹配 0 行。")).toBeInTheDocument();
   });
 
@@ -924,7 +924,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
-        items: [{ song_id: 904, song_name: "Song ‘A’，B；C〜D", band_id: 9, cover: false }],
+        items: [{ song_id: 904, group_id: 904, song_name: "Song ‘A’，B；C〜D", band_id: 9, cover: false }],
       });
 
     render(<ConsoleInsertPanel />);
@@ -933,7 +933,7 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByPlaceholderText("请输入歌曲名"), "Song 'A',B;C~D");
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
 
-    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("Song 'A',B;C~D", 10));
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("Song 'A',B;C~D", 10, undefined, undefined, true));
     expect(await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。")).toBeInTheDocument();
   });
 
@@ -943,7 +943,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
-        items: [{ song_id: 908, song_name: "LET’S あちあちトレーニング！", band_id: 9, cover: false }],
+        items: [{ song_id: 908, group_id: 908, song_name: "LET’S あちあちトレーニング！", band_id: 9, cover: false }],
       });
 
     render(<ConsoleInsertPanel />);
@@ -953,7 +953,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
 
     await waitFor(() => {
-      expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("LET'Sあちあちトレーニング！", 10);
+      expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith("LET'Sあちあちトレーニング！", 10, undefined, undefined, true);
     });
     expect(await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。")).toBeInTheDocument();
     expect(screen.getByText("908")).toBeInTheDocument();
@@ -969,7 +969,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
-        items: [{ song_id: 905, song_name: "V.I.P MONSTER", band_id: 9, cover: false }],
+        items: [{ song_id: 905, group_id: 905, song_name: "V.I.P MONSTER", band_id: 9, cover: false }],
       });
 
     render(<ConsoleInsertPanel />);
@@ -1002,7 +1002,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
-        items: [{ song_id: 909, song_name: "Sing Alive", band_id: 9, cover: false }],
+        items: [{ song_id: 909, group_id: 909, song_name: "Sing Alive", band_id: 9, cover: false }],
       });
 
     render(<ConsoleInsertPanel />);
@@ -1027,8 +1027,8 @@ describe("ConsoleInsertPanel", () => {
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
         items: [
-          { song_id: 906, song_name: "CORUSCATE -DNA-", band_id: 9, cover: false, band_name: "Roselia" },
-          { song_id: 907, song_name: "CORUSCATE -DNA-A", band_id: 9, cover: false, band_name: "Roselia" },
+          { song_id: 906, group_id: 906, song_name: "CORUSCATE -DNA-", band_id: 9, cover: false, band_name: "Roselia" },
+          { song_id: 907, group_id: 907, song_name: "CORUSCATE -DNA-A", band_id: 9, cover: false, band_name: "Roselia" },
         ],
       });
 
@@ -1952,7 +1952,7 @@ describe("ConsoleInsertPanel", () => {
       }],
       rows: [{
         row_id: "00000000-0000-0000-0000-000000000055",
-        song_id: 901,
+        song_group_id: 901,
         song_name: "BLACK SHOUT",
         absolute_order: 1,
         segment_type: "M",
@@ -2010,7 +2010,7 @@ describe("ConsoleInsertPanel", () => {
           next_lineup_version_id: null,
         }],
         setlist_rows: [{
-          song_id: 901,
+          song_group_id: 901,
           absolute_order: 1,
           segment_type: "M",
           sub_order: 1,
@@ -2298,7 +2298,7 @@ describe("ConsoleInsertPanel", () => {
     apiMocks.getConsoleBandHistory.mockResolvedValue(currentRoseliaHistory());
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
-      .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
+      .mockResolvedValueOnce({ items: [{ song_id: 901, group_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] });
     apiMocks.getLives
       .mockResolvedValueOnce({
         items: [
@@ -2535,10 +2535,10 @@ describe("ConsoleInsertPanel", () => {
     });
     apiMocks.getConsoleSongs
       .mockResolvedValueOnce({ items: [] })
-      .mockResolvedValueOnce({ items: [{ song_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] })
+      .mockResolvedValueOnce({ items: [{ song_id: 901, group_id: 901, song_name: "BLACK SHOUT", band_id: 2, cover: false }] })
       .mockResolvedValueOnce({ items: [] });
     apiMocks.createConsoleSongsBatch
-      .mockResolvedValueOnce({ ok: true, created: [{ song_id: 902, song_name: "Requiem for Fate", band_id: 2, cover: false }] });
+      .mockResolvedValueOnce({ ok: true, created: [{ song_id: 902, group_id: 902, song_name: "Requiem for Fate", band_id: 2, cover: false }] });
 
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
@@ -2595,8 +2595,8 @@ describe("ConsoleInsertPanel", () => {
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({
         items: [
-          { song_id: 910, song_name: "Candidate Song A", band_id: 2, cover: false },
-          { song_id: 911, song_name: "Candidate Song B", band_id: 2, cover: false },
+          { song_id: 910, group_id: 910, song_name: "Candidate Song A", band_id: 2, cover: false },
+          { song_id: 911, group_id: 911, song_name: "Candidate Song B", band_id: 2, cover: false },
         ],
       })
       .mockResolvedValueOnce({ items: [] });

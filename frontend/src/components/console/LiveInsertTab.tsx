@@ -434,8 +434,8 @@ export function LiveInsertTab({
                   />
                 </td>
                 <td>
-                  {row.song_id !== "" ? (
-                    <span className="readonly-cell">{row.song_id}</span>
+                  {row.song_group_id !== "" ? (
+                    <span className="readonly-cell">{row.song_group_id}</span>
                   ) : row.song_candidates && row.song_candidates.length > 1 ? (
                     <button
                       type="button"
@@ -662,7 +662,7 @@ export function LiveInsertTab({
             <tbody>
               {displayedBundle.setlist_rows.map((row) => (
                 <tr key={`${displayedBundle.live.live_id}-${row.absolute_order}`}>
-                  <td>{row.song_id}</td>
+                  <td>{row.song_group_id}</td>
                   <td>{row.absolute_order}</td>
                   <td>{row.segment_type}</td>
                   <td>{row.sub_order}</td>
@@ -859,7 +859,7 @@ export function LiveInsertTab({
                 <table className="console-admin-table song-candidate-table">
                   <thead>
                     <tr>
-                      <th>song_id</th>
+                      <th>歌曲组 ID</th>
                       <th>song_name</th>
                       <th>band_name</th>
                       <th>操作</th>
@@ -868,7 +868,7 @@ export function LiveInsertTab({
                   <tbody>
                     {songModalRow.song_candidates.map((song) => (
                       <tr key={song.song_id}>
-                        <td>{song.song_id}</td>
+                        <td>{song.group_id}</td>
                         <td>{song.song_name}</td>
                         <td>{song.band_name ?? "-"}</td>
                         <td>
@@ -876,7 +876,7 @@ export function LiveInsertTab({
                             type="button"
                             className="console-submit-btn"
                             onClick={() => {
-                              onUpdateSetlistSongId(songModalRow.row_key, String(song.song_id), song.song_name);
+                              onUpdateSetlistSongId(songModalRow.row_key, String(song.group_id), song.song_name);
                               onSetSongModalRowKey(null);
                             }}
                           >

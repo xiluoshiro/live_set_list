@@ -19,14 +19,51 @@ const page = <T,>(items: T[], index = 1, pages = 1) => ({ items, page: index, pa
 beforeEach(() => {
   vi.resetAllMocks();
   api.getSongGroups.mockResolvedValue(page([{ group_id: 1, group_name: "合唱曲", version_count: 2 }]));
-  api.getSongGroup.mockResolvedValue({ group_id: 1, group_name: "合唱曲", revision: 1, versions: [version(), version(2, 5)] });
-  api.getSongVersion.mockImplementation((id: number) => Promise.resolve(version(id, id === 1 ? 2 : 5)));
+  api.getSongGroup.mockResolvedValue({ group_id: 1, group_name: "合唱曲", revision: 1, versions: [version(), version(2)] });
+  api.getSongVersion.mockImplementation((id: number) => Promise.resolve(version(id)));
   api.getSongPerformances.mockResolvedValue(page([{ setlist_id: "row-1", live_id: 1, live_title: "Live 1", live_date: "2026-01-01", segment_type: "M", sub_order: 1, absolute_order: 1, is_short: true, live_cover: "original" }]));
   api.getCatalogConsole.mockImplementation((path: string) => Promise.resolve(path === "/members" ? { items: [] } : path === "/songs/1" ? version() : page([{ song_id: 1, song_name: "合唱曲", band_id: null, band_name: "乐队甲", version_label: "普通版" }])));
   api.songCatalogWrite.mockResolvedValue({ item: version() });
 });
 
-// 测试点：左列只有歌曲组，切换版本只改变右侧次数；Instrumental 点击仍定位对应歌曲。
+// 测试点：空说明不加括号，发行及合作前缀在专辑卡片和展开标题中一致展示。
+test.each([
+  ["劇場版「BanG Dream! Episode of Roselia」Theme Songs Collection", "", "劇場版「BanG Dream! Episode of Roselia」Theme Songs Collection"],
+  ["Yes! BanG_Dream!", "Poppin'Party 1st Single", "Poppin'Party 1st Single「Yes! BanG_Dream!」"],
+  ["ピコっと！パピっと！！ガルパ☆ピコ！！！", "香澄×蘭×彩×友希那×こころ", "香澄×蘭×彩×友希那×こころ「ピコっと！パピっと！！ガルパ☆ピコ！！！」"],
+])("album title: %s", async (album_name, release_label, title) => {
+  const user = userEvent.setup();
+  const album = { ...version().albums[0], album_name, release_label, release_date: "2021-06-30" };
+  api.getSongVersion.mockResolvedValue({ ...version(), albums: [album] });
+  api.getAlbumDetail.mockResolvedValue({ ...album, tracks: [] });
+  render(<SongCatalog songId={1} onSongSelect={vi.fn()} onLiveSelect={vi.fn()} />);
+  const card = await screen.findByRole("button", { name: `${title} 2021-06-30` });
+  expect(within(card).getByText(title, { exact: true })).toBeInTheDocument();
+  await user.click(card);
+  expect(await screen.findByRole("heading", { level: 4, name: title })).toBeInTheDocument();
+});
+
+// 测试点：整队与固定成员可同时选择，确认和提交保留两类归属。
+test("mixed ownership submits bands and selected members", async () => {
+  const user = userEvent.setup();
+  api.getCatalogConsole.mockResolvedValue({ items: [{ member_id: 68, display_name: "成员乙", revision: 1 }] });
+  render(<SongCatalogAdmin variant="create" active bands={[{ band_id: 1, band_name: "乐队甲" }, { band_id: 2, band_name: "乐队乙" }]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  await user.type(screen.getByLabelText("歌曲名称"), "合作曲");
+  await user.selectOptions(screen.getByLabelText("归属模式"), "mixed");
+  await user.click(within(screen.getByRole("group", { name: "归属乐队" })).getByLabelText("乐队甲"));
+  expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
+  await user.click(within(screen.getByRole("group", { name: "成员所属乐队" })).getByLabelText("乐队乙"));
+  await user.selectOptions(screen.getByLabelText("乐队乙 固定成员"), "68");
+  await user.click(screen.getByRole("button", { name: "提交插入" }));
+  const dialog = screen.getByRole("dialog", { name: "确认新增歌曲" });
+  expect(within(dialog).getByText("归属：乐队甲 / 乐队乙：成员乙")).toBeInTheDocument();
+  await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/song-groups", "POST", expect.objectContaining({
+    ownership: { mode: "mixed", band_ids: [1], member_groups: [{ band_id: 2, member_ids: [68] }] },
+  }), "csrf");
+});
+
+// 测试点：切换版本仍显示歌曲组次数，Instrumental 点击定位收录的具体版本。
 test("song group list, version counts and instrumental target", async () => {
   const user = userEvent.setup();
   function Page() { const [id, setId] = useState<number | null>(1); return <SongCatalog songId={id} onSongSelect={setId} onLiveSelect={vi.fn()} />; }
@@ -36,10 +73,10 @@ test("song group list, version counts and instrumental target", async () => {
   await within(detail).findByText("2");
   expect(within(screen.getByRole("complementary", { name: "歌曲组列表" })).queryByText("演奏次数")).not.toBeInTheDocument();
   await user.click(within(detail).getByRole("button", { name: "合唱版" }));
-  await within(detail).findByText("5");
+  await within(detail).findByText("2");
   expect(await within(detail).findByText("短版")).toBeInTheDocument();
   await user.click(within(detail).getByRole("button", { name: /收录盘/ }));
-  await user.click(await screen.findByRole("button", { name: "合唱曲 · Instrumental" }));
+  await user.click(await screen.findByRole("button", { name: "合唱曲 · 普通版 · Instrumental" }));
   await within(detail).findByText("2");
   expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 1);
 });

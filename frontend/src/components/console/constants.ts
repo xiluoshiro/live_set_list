@@ -51,7 +51,7 @@ export const INITIAL_SETLIST_ROWS: SetlistDraftRow[] = [
   {
     row_key: 1,
     song_name: "",
-    song_id: "",
+    song_group_id: "",
     segment_start_type: "M",
     is_short: false,
     band_member: {},

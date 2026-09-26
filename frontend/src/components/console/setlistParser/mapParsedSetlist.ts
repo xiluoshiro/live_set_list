@@ -201,7 +201,7 @@ export function mapParsedSetlist(
     rows.push({
       row_key: nextRowKey,
       song_name: line.songName,
-      song_id: "",
+      song_group_id: "",
       segment_start_type: segmentStartType,
       // abs 保留段内跳号，并累加此前各段的最大编号，避免从 1 重新顺排。
       absolute_order: absoluteOffset + line.segmentOrder,

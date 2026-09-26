@@ -51,7 +51,7 @@ class ConsoleSongItem(BaseModel):
 class ConsoleSongLookupItem(ConsoleSongItem):
     group_id: int | None = None
     version_label: str = ""
-    owner_mode: Literal["bands", "members"] | None = None
+    owner_mode: Literal["bands", "members", "mixed"] | None = None
     band_name: str = Field(..., description="Owning band display name")
 
 
@@ -448,7 +448,7 @@ class ConsoleLiveBandPerformanceRequest(BaseModel):
 class ConsoleLiveSetlistRowRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    song_id: int = Field(..., ge=1, description="song_list.id")
+    song_group_id: int = Field(..., ge=1, description="song_groups.id")
     absolute_order: int = Field(..., ge=1, description="Absolute order in the setlist")
     segment_type: str = Field(..., min_length=1, max_length=32, description="Segment code or canonical segment type")
     sub_order: int = Field(..., ge=1, description="Sub-order within the segment")

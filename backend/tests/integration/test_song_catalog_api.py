@@ -17,7 +17,7 @@ def test_group_version_roundtrip_and_conflict(integration_test_client):
     client = integration_test_client
     headers = auth(client)
     result = client.post("/api/console/song-groups", headers=headers, json={
-        "group_name": "合唱曲", "song_name": "合唱曲", "version_label": "三乐队版",
+        "group_name": "合唱曲", "song_name": "合唱曲", "version_label": "",
         "ownership": {"mode": "bands", "band_ids": [1, 2, 3]},
     })
     assert result.status_code == 201, result.text
@@ -87,7 +87,7 @@ def test_member_ownership_and_atomic_failure(integration_test_client):
     }).status_code == 200
 
 
-# 测试点：公开读无需登录，写入必须同时具备角色与 CSRF；拒绝混合归属模式。
+# 测试点：公开读无需登录，写入校验角色、CSRF 和归属模式与内容的一致性。
 def test_catalog_access_and_exclusive_modes(integration_test_client):
     client = integration_test_client
     assert client.get("/api/song-groups").status_code == 200
@@ -106,11 +106,11 @@ def test_performance_count_and_actual_band_cover(integration_test_client, integr
     headers = auth(client)
     with integration_admin_connection.cursor() as cur:
         cur.execute("UPDATE live_attrs SET live_date = '2020-01-01' WHERE id = 1")
-        cur.execute("SELECT count(*) FROM live_setlist WHERE live_id = 1 AND song_id = 1")
+        cur.execute("SELECT count(*) FROM live_setlist WHERE live_id = 1 AND song_group_id = 1")
         initial = cur.fetchone()[0]
-        cur.execute("""INSERT INTO live_setlist(live_id, song_id, absolute_order, segment_type, sub_order, is_short)
-            SELECT live_id, song_id, 999, 'EN', 99, true
-            FROM live_setlist WHERE live_id = 1 AND song_id = 1 LIMIT 1 RETURNING id""")
+        cur.execute("""INSERT INTO live_setlist(live_id, song_group_id, absolute_order, segment_type, sub_order, is_short)
+            SELECT live_id, song_group_id, 999, 'EN', 99, true
+            FROM live_setlist WHERE live_id = 1 AND song_group_id = 1 LIMIT 1 RETURNING id""")
         added_id = cur.fetchone()[0]
     integration_admin_connection.commit()
     changed = client.put("/api/console/songs/1/ownership", headers=headers, json={
@@ -154,7 +154,7 @@ def test_invalid_live_cannot_accept_setlist(integration_test_client, integration
         cur.execute("DELETE FROM live_setlist WHERE live_id = 1")
         cur.execute("UPDATE live_attrs SET event_status = %s, live_date = %s WHERE id = 1", (event_status, live_date))
     integration_admin_connection.commit()
-    payload = {"setlist_rows": [{"song_id": 1, "absolute_order": 1, "segment_type": "M", "sub_order": 1,
+    payload = {"setlist_rows": [{"song_group_id": 1, "absolute_order": 1, "segment_type": "M", "sub_order": 1,
                                  "is_short": False, "band_performances": [{"band_id": 1, "lineup_usage": "base", "members": ["Kasumi"]}], "other_member": {}}]}
     for method in [client.post, client.put]:
         response = method("/api/console/lives/1/setlist", headers=headers, json=payload)
@@ -191,7 +191,7 @@ def test_version_order_move_and_album_track_identity(integration_test_client):
     assert [t["album_track_id"] for t in reordered.json()["tracks"]] == [t["album_track_id"] for t in reversed(tracks)]
 
 
-# 测试点：数据库延迟约束阻止删除最后归属、混合两种模式，提交失败后保留原关系。
+# 测试点：数据库延迟约束阻止删除最后归属或在整队模式下混入成员，提交失败后保留原关系。
 def test_ownership_constraints_at_commit(integration_test_client, integration_admin_connection):
     import psycopg2
     client = integration_test_client
@@ -209,3 +209,64 @@ def test_ownership_constraints_at_commit(integration_test_client, integration_ad
             conn.commit()
         conn.rollback()
     assert client.get("/api/songs/1").json()["ownership"]["band_ids"] == [1]
+
+
+# 测试点：混合归属完整保存，两个版本共享历史次数，旧来源版本不改变组默认项的翻唱判定。
+def test_mixed_version_uses_group_history_and_default(integration_test_client, integration_admin_connection):
+    client = integration_test_client
+    headers = auth(client)
+    member = client.post("/api/console/members", headers=headers, json={"display_name": "合作成员"}).json()
+    response = client.put("/api/console/songs/1/ownership", headers=headers, json={
+        "expected_revision": 1, "reason": "确认默认归属", "ownership": {"mode": "bands", "band_ids": [1]},
+    })
+    assert response.status_code == 200, response.text
+    response = client.post("/api/console/songs", headers=headers, json={
+        "group_id": 1, "expected_group_revision": 1, "song_name": "合作版名称", "version_label": "合作版",
+        "ownership": {"mode": "mixed", "band_ids": [2], "member_groups": [{"band_id": 3, "member_ids": [member["member_id"]]}]},
+    })
+    assert response.status_code == 201, response.text
+    version = response.json()["item"]
+    assert version["ownership"]["band_ids"] == [2]
+    assert version["ownership"]["groups"][0]["members"][0]["display_name"] == "合作成员"
+    sid = version["song_id"]
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("UPDATE live_attrs SET live_date='2020-01-01' WHERE id=1")
+        cur.execute("UPDATE live_setlist SET song_id=%s WHERE song_group_id=1", (sid,))
+    integration_admin_connection.commit()
+    default_history = client.get("/api/songs/1/performances").json()
+    other_history = client.get(f"/api/songs/{sid}/performances").json()
+    assert default_history == other_history
+    assert default_history["pagination"]["total"] > 0
+    assert any(row["live_cover"] == "original" for row in default_history["items"])
+    assert client.get("/api/songs/1").json()["performance_count"] == client.get(f"/api/songs/{sid}").json()["performance_count"]
+    rows = client.get("/api/lives/1").json()["detail_rows"]
+    assert any(row["song_id"] == 1 and row["live_cover"] == "original" for row in rows)
+    options = client.get("/api/console/songs?groups_only=true&q=Yes").json()["items"]
+    assert len([row for row in options if row["group_id"] == 1]) == 1
+    editable = client.get("/api/console/lives/1/setlist").json()["rows"]
+    assert any(row["song_group_id"] == 1 for row in editable)
+    assert client.get("/api/catalog/statistics?band_id=1").status_code == 200
+
+
+# 测试点：同专辑不同碟号或发行版各自从 1 排序，重排后保留收录 ID 与器乐标识。
+def test_album_sections_roundtrip(integration_test_client):
+    client = integration_test_client
+    headers = auth(client)
+    response = client.post("/api/console/albums", headers=headers, json={"album_name": "多子项盘", "tracks": [
+        {"song_id": 1, "section_name": "Disc1"},
+        {"song_id": 1, "section_name": "Disc1", "edition_label": "Instrumental"},
+        {"song_id": 2, "section_name": "限定版"},
+    ]})
+    assert response.status_code == 201, response.text
+    album = response.json()
+    assert [(t["section_name"], t["track_order"]) for t in album["tracks"]] == [("Disc1", 1), ("Disc1", 2), ("限定版", 1)]
+    tracks = [{k: t[k] for k in ["album_track_id", "song_id", "section_name", "edition_label"]} for t in reversed(album["tracks"])]
+    response = client.put(f"/api/console/albums/{album['album_id']}/tracks", headers=headers, json={
+        "expected_revision": album["revision"], "tracks": tracks,
+    })
+    assert response.status_code == 200, response.text
+    changed = response.json()
+    assert [t["album_track_id"] for t in changed["tracks"]] == [t["album_track_id"] for t in tracks]
+    assert [(t["section_name"], t["track_order"]) for t in changed["tracks"]] == [("限定版", 1), ("Disc1", 1), ("Disc1", 2)]
+    assert changed["tracks"][1]["edition_label"] == "Instrumental"
+    assert client.get(f"/api/albums/{album['album_id']}").json() == changed

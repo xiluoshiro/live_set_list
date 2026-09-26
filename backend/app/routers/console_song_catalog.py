@@ -53,6 +53,8 @@ def update_version(payload: VersionUpdate, song_id: int, request: Request, conte
     with catalog_errors(), get_write_db_connection() as conn, conn.cursor() as cur:
         lock_revision(cur, "song_list", song_id, payload.expected_revision)
         before = read_song(cur, song_id)
+        if before["version_label"] == "" and payload.version_label:
+            raise HTTPException(409, "歌曲组必须保留空版本的默认项")
         cur.execute("""UPDATE song_list SET song_name = %s, version_label = %s,
             revision = revision + 1 WHERE id = %s""",
                     (payload.song_name, payload.version_label, song_id))
@@ -64,6 +66,8 @@ def update_version(payload: VersionUpdate, song_id: int, request: Request, conte
 @router.post("/song-groups", response_model=SongMutation, status_code=201)
 def create_group(payload: GroupCreate, request: Request, context: AuthSessionContext = Depends(get_current_auth_context)):
     assert_valid_csrf(request, context)
+    if payload.version_label:
+        raise HTTPException(422, "新歌曲组的首个版本必须为默认项")
     with catalog_errors(), get_write_db_connection() as conn, conn.cursor() as cur:
         cur.execute("INSERT INTO song_groups(group_name) VALUES (%s) RETURNING id", (payload.group_name,))
         group_id = cur.fetchone()[0]
@@ -118,6 +122,9 @@ def move_group(payload: GroupMove, request: Request, song_id: int = Path(ge=1), 
         if record is None:
             raise HTTPException(404, "Song not found")
         before = record[0]
+        cur.execute("SELECT version_label FROM song_list WHERE id = %s", (song_id,))
+        if cur.fetchone()[0] == "":
+            raise HTTPException(409, "默认版本保留在所属歌曲组中")
         cur.execute("SELECT id FROM song_groups WHERE id = ANY(%s) ORDER BY id FOR UPDATE", ([before, payload.group_id],))
         if payload.group_id not in [row[0] for row in cur.fetchall()]:
             raise HTTPException(404, "Target group not found")
@@ -172,13 +179,30 @@ def save_album(payload: AlbumWrite, request: Request, context: AuthSessionContex
             if not retained <= existing_tracks:
                 raise HTTPException(422, "Track ID does not belong to this album")
             cur.execute("DELETE FROM album_tracks WHERE album_id = %s AND NOT(id = ANY(%s))", (album_id, list(retained)))
-            for order, track in enumerate(payload.tracks, 1):
-                if track.album_track_id is None:
-                    cur.execute("""INSERT INTO album_tracks(album_id, song_id, track_order, edition_label)
-                        VALUES (%s, %s, %s, %s)""", (album_id, track.song_id, order, track.edition_label))
+            cur.execute("SELECT section_name, id FROM album_sections WHERE album_id = %s", (album_id,))
+            section_ids = dict(cur.fetchall())
+            section_names = list(dict.fromkeys(track.section_name for track in payload.tracks)) or [""]
+            for position, name in enumerate(section_names, 1):
+                if name not in section_ids:
+                    cur.execute("""INSERT INTO album_sections(album_id, section_name, display_order)
+                        VALUES (%s, %s, %s) RETURNING id""", (album_id, name, position))
+                    section_ids[name] = cur.fetchone()[0]
                 else:
-                    cur.execute("""UPDATE album_tracks SET song_id = %s, track_order = %s, edition_label = %s
-                        WHERE id = %s AND album_id = %s""", (track.song_id, order, track.edition_label, track.album_track_id, album_id))
+                    cur.execute("UPDATE album_sections SET display_order = %s WHERE id = %s",
+                                (position, section_ids[name]))
+            track_orders: dict[str, int] = {}
+            for track in payload.tracks:
+                order = track_orders.get(track.section_name, 0) + 1
+                track_orders[track.section_name] = order
+                section_id = section_ids[track.section_name]
+                if track.album_track_id is None:
+                    cur.execute("""INSERT INTO album_tracks(album_id, song_id, track_order, edition_label, section_id)
+                        VALUES (%s, %s, %s, %s, %s)""", (album_id, track.song_id, order, track.edition_label, section_id))
+                else:
+                    cur.execute("""UPDATE album_tracks SET song_id = %s, track_order = %s, edition_label = %s, section_id = %s
+                        WHERE id = %s AND album_id = %s""", (track.song_id, order, track.edition_label, section_id, track.album_track_id, album_id))
+            cur.execute("DELETE FROM album_sections WHERE album_id = %s AND NOT(section_name = ANY(%s))",
+                        (album_id, section_names))
         assert album_id is not None
         audit(cur, context, "album_save", "album", album_id, payload.model_dump(mode="json"))
         return read_album(cur, album_id)

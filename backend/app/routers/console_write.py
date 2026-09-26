@@ -383,7 +383,9 @@ def create_song(
                 cur.execute(
                     """
                     WITH input(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)),
-                    new_group AS (INSERT INTO song_groups(group_name) SELECT song_name FROM input RETURNING id)
+                    new_group AS (INSERT INTO song_groups(group_name) SELECT song_name FROM input
+                        WHERE NOT EXISTS(SELECT 1 FROM song_list s WHERE s.song_name=input.song_name
+                            AND s.band_id=input.band_id AND s.version_label='') RETURNING id)
                     INSERT INTO song_list (song_name, band_id, is_cover, group_id)
                     SELECT input.*, new_group.id FROM input CROSS JOIN new_group
                     RETURNING id
@@ -391,7 +393,8 @@ def create_song(
                     (payload.song_name, payload.band_id, payload.cover),
                 )
                 created_row = cur.fetchone()
-                assert created_row is not None
+                if created_row is None:
+                    raise HTTPException(status_code=409, detail=f"Song name already exists: {payload.song_name}")
                 song_id = int(created_row[0])
 
                 _write_console_audit_log(
@@ -540,7 +543,9 @@ def create_songs_batch(
                         cur.execute(
                             """
                             WITH input(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)),
-                            new_group AS (INSERT INTO song_groups(group_name) SELECT song_name FROM input RETURNING id)
+                            new_group AS (INSERT INTO song_groups(group_name) SELECT song_name FROM input
+                                WHERE NOT EXISTS(SELECT 1 FROM song_list s WHERE s.song_name=input.song_name
+                                    AND s.band_id=input.band_id AND s.version_label='') RETURNING id)
                             INSERT INTO song_list (song_name, band_id, is_cover, group_id)
                             SELECT input.*, new_group.id FROM input CROSS JOIN new_group
                             RETURNING id
@@ -548,7 +553,9 @@ def create_songs_batch(
                             (song.song_name, song.band_id, song.cover),
                         )
                         created_row = cur.fetchone()
-                        assert created_row is not None
+                        if created_row is None:
+                            cur.execute("RELEASE SAVEPOINT batch_song_sp")
+                            continue
                         song_id = int(created_row[0])
 
                         _write_console_audit_log(
@@ -987,7 +994,7 @@ def append_live_setlist(
 
     normalized_rows: list[dict[str, Any]] = []
     seen_absolute_orders: set[int] = set()
-    song_ids_in_request: list[int] = []
+    song_group_ids_in_request: list[int] = []
 
     for row in payload.setlist_rows:
         if row.absolute_order in seen_absolute_orders:
@@ -997,7 +1004,7 @@ def append_live_setlist(
             )
         seen_absolute_orders.add(row.absolute_order)
         normalized_row: dict[str, Any] = {
-            "song_id": row.song_id,
+            "song_group_id": row.song_group_id,
             "absolute_order": row.absolute_order,
             "segment_type": _normalize_segment_type(row.segment_type),
             "sub_order": row.sub_order,
@@ -1007,7 +1014,7 @@ def append_live_setlist(
             "comment": row.comment,
         }
         normalized_rows.append(normalized_row)
-        song_ids_in_request.append(row.song_id)
+        song_group_ids_in_request.append(row.song_group_id)
 
     try:
         with get_write_db_connection() as conn:
@@ -1021,12 +1028,12 @@ def append_live_setlist(
                 if cur.fetchone() is not None:
                     raise HTTPException(status_code=409, detail=f"Live id {live_id} already has setlist data")
 
-                deduped_song_ids = list(dict.fromkeys(song_ids_in_request))
-                cur.execute("SELECT id FROM song_list WHERE id = ANY(%s)", (deduped_song_ids,))
-                existing_song_ids = {int(row[0]) for row in cur.fetchall()}
-                missing_song_ids = [song_id for song_id in deduped_song_ids if song_id not in existing_song_ids]
-                if len(missing_song_ids) > 0:
-                    missing_text = ", ".join(str(song_id) for song_id in missing_song_ids)
+                deduped_song_group_ids = list(dict.fromkeys(song_group_ids_in_request))
+                cur.execute("SELECT id FROM song_groups WHERE id = ANY(%s)", (deduped_song_group_ids,))
+                existing_song_group_ids = {int(row[0]) for row in cur.fetchall()}
+                missing_song_group_ids = [song_group_id for song_group_id in deduped_song_group_ids if song_group_id not in existing_song_group_ids]
+                if len(missing_song_group_ids) > 0:
+                    missing_text = ", ".join(str(song_group_id) for song_group_id in missing_song_group_ids)
                     raise HTTPException(status_code=404, detail=f"Song ids not found: {missing_text}")
 
                 cur.execute("SELECT absolute_order FROM live_setlist WHERE live_id = %s", (live_id,))
@@ -1072,7 +1079,7 @@ def append_live_setlist(
                     )
                     insert_values = (
                         live_id,
-                        normalized_row["song_id"],
+                        normalized_row["song_group_id"],
                         normalized_row["absolute_order"],
                         normalized_row["segment_type"],
                         normalized_row["sub_order"],
@@ -1084,7 +1091,7 @@ def append_live_setlist(
                         cur.execute(
                             """
                             INSERT INTO live_setlist (
-                                live_id, song_id, absolute_order, segment_type, sub_order,
+                                live_id, song_group_id, absolute_order, segment_type, sub_order,
                                 is_short, other_member, comment
                             )
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -1103,7 +1110,7 @@ def append_live_setlist(
                         cur.execute(
                             """
                             INSERT INTO live_setlist (
-                                live_id, song_id, absolute_order, segment_type, sub_order,
+                                live_id, song_group_id, absolute_order, segment_type, sub_order,
                                 is_short, other_member, comment
                             )
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -1184,7 +1191,7 @@ def replace_live_setlist(
             _raise_business_error(status.HTTP_400_BAD_REQUEST, f"Duplicate absolute_order in setlist_rows: {row.absolute_order}")
         seen_absolute_orders.add(row.absolute_order)
         normalized_rows.append({
-            "song_id": row.song_id,
+            "song_group_id": row.song_group_id,
             "absolute_order": row.absolute_order,
             "segment_type": _normalize_segment_type(row.segment_type),
             "sub_order": row.sub_order,
@@ -1200,12 +1207,12 @@ def replace_live_setlist(
                 if cur.fetchone() is None:
                     raise HTTPException(status_code=404, detail=f"Live id {live_id} not found")
                 require_setlist_date(cur, live_id)
-                song_ids = list(dict.fromkeys(item["song_id"] for item in normalized_rows))
-                cur.execute("SELECT id FROM song_list WHERE id = ANY(%s)", (song_ids,))
-                existing_song_ids = {int(row[0]) for row in cur.fetchall()}
-                missing_song_ids = [song_id for song_id in song_ids if song_id not in existing_song_ids]
-                if missing_song_ids:
-                    raise HTTPException(status_code=404, detail=f"Song ids not found: {', '.join(map(str, missing_song_ids))}")
+                song_group_ids = list(dict.fromkeys(item["song_group_id"] for item in normalized_rows))
+                cur.execute("SELECT id FROM song_groups WHERE id = ANY(%s)", (song_group_ids,))
+                existing_song_group_ids = {int(row[0]) for row in cur.fetchall()}
+                missing_song_group_ids = [song_group_id for song_group_id in song_group_ids if song_group_id not in existing_song_group_ids]
+                if missing_song_group_ids:
+                    raise HTTPException(status_code=404, detail=f"Song ids not found: {', '.join(map(str, missing_song_group_ids))}")
                 lineup_contexts = load_lineup_contexts(cur, live_id)
                 requested_band_ids = {
                     performance.band_id
@@ -1241,7 +1248,7 @@ def replace_live_setlist(
                 ):
                     insert_values = (
                         live_id,
-                        normalized_row["song_id"],
+                        normalized_row["song_group_id"],
                         normalized_row["absolute_order"],
                         normalized_row["segment_type"],
                         normalized_row["sub_order"],
@@ -1253,7 +1260,7 @@ def replace_live_setlist(
                         cur.execute(
                             """
                             INSERT INTO live_setlist (
-                                live_id, song_id, absolute_order, segment_type, sub_order,
+                                live_id, song_group_id, absolute_order, segment_type, sub_order,
                                 is_short, other_member, comment
                             )
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -1272,7 +1279,7 @@ def replace_live_setlist(
                         cur.execute(
                             """
                             INSERT INTO live_setlist (
-                                live_id, song_id, absolute_order, segment_type, sub_order,
+                                live_id, song_group_id, absolute_order, segment_type, sub_order,
                                 is_short, other_member, comment
                             )
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)

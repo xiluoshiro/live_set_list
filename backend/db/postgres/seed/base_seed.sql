@@ -155,7 +155,7 @@ VALUES
 
 INSERT INTO public.live_setlist (
     live_id,
-    song_id,
+    song_group_id,
     absolute_order,
     segment_type,
     sub_order,
@@ -217,7 +217,7 @@ VALUES
 INSERT INTO public.live_setlist (
     id,
     live_id,
-    song_id,
+    song_group_id,
     absolute_order,
     segment_type,
     sub_order,

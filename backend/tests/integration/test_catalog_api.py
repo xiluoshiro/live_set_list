@@ -153,12 +153,12 @@ def test_catalog_statistics_limits_stale_song_kinds_independently(
             """
             INSERT INTO live_setlist (
                 live_id,
-                song_id,
+                song_group_id,
                 absolute_order,
                 segment_type,
                 sub_order
             )
-            VALUES (%s, %s, %s, 'main', %s)
+            VALUES (%s, (SELECT group_id FROM song_list WHERE id=%s), %s, 'main', %s)
             """,
             [(901, 901 + index, index + 1, index + 1) for index in range(12)],
         )

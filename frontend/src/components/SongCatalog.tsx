@@ -5,13 +5,13 @@ import {
   type SongGroupSummary, type SongPerformance, type SongVersion,
 } from "../api";
 import { PageTitle } from "./PageTitle";
+import { albumTitle } from "../albumTitle";
 import "./song-catalog.css";
 
 export function ownershipLabel(song: Pick<SongVersion, "ownership">) {
   const owner = song.ownership;
   if (owner.mode === "pending") return "待回填";
-  if (owner.mode === "bands") return owner.bands.map(b => b.band_name).join(" / ");
-  return owner.groups.map(g => `${g.band_name}：${g.members.map(m => m.display_name).join("、")}`).join(" / ");
+  return [...owner.bands.map(b => b.band_name), ...owner.groups.map(g => `${g.band_name}：${g.members.map(m => m.display_name).join("、")}`)].join(" / ");
 }
 
 export function SongCatalog({ songId, onSongSelect, onLiveSelect, browse = { query: "", page: 1 }, onBrowseChange }: {
@@ -70,7 +70,7 @@ export function SongCatalog({ songId, onSongSelect, onLiveSelect, browse = { que
     const generation = ++selectionGeneration.current;
     try {
       const detail = await getSongGroup(groupId);
-      if (generation === selectionGeneration.current && detail.versions.length) onSongSelect(matchedId ?? detail.versions[0].song_id);
+      if (generation === selectionGeneration.current && detail.versions.length) onSongSelect(matchedId ?? (detail.versions.find(v => !v.version_label) ?? detail.versions[0]).song_id);
     } catch (reason) { if (generation === selectionGeneration.current) setError(String(reason)); }
   };
   return <section className="catalog-panel song-catalog">
@@ -101,7 +101,7 @@ export function SongCatalog({ songId, onSongSelect, onLiveSelect, browse = { que
           <dl className="song-catalog-facts">
             <dt>歌曲</dt><dd>{song.song_name}</dd>
             <dt>归属</dt><dd>{ownershipLabel(song)}</dd>
-            <dt>演奏次数</dt><dd>{song.performance_count}</dd>
+            <dt>歌曲组演奏次数</dt><dd>{song.performance_count}</dd>
           </dl>
           <h3>收录专辑</h3>
           <div className="song-catalog-albums">{song.albums.length === 0 ? <p>暂无收录记录</p> : song.albums.map(item =>
@@ -112,13 +112,13 @@ export function SongCatalog({ songId, onSongSelect, onLiveSelect, browse = { que
                 .catch(reason => { if (generation === albumGeneration.current) setError(String(reason)); });
             }}>
               {item.cover_path && <img src={item.cover_path} alt="" loading="lazy" />}
-              <span>{item.album_name}<small>{item.release_label} · {item.release_date ?? "日期未知"}</small></span>
+              <span>{albumTitle(item)}<small>{item.release_date ?? "日期未知"}</small></span>
             </button>)}</div>
           {album && <section aria-label="专辑详情">
-            <h4>{album.album_name}</h4><button onClick={() => { albumGeneration.current += 1; setAlbum(null); }}>收起</button>
-            <ol className="song-album-tracks">{album.tracks.map(track => <li key={track.album_track_id} value={track.track_order}>
-              <button onClick={() => onSongSelect(track.song_id)}>{track.song_name}{track.edition_label ? ` · ${track.edition_label}` : ""}</button>
-            </li>)}</ol>
+            <h4>{albumTitle(album)}</h4><button onClick={() => { albumGeneration.current += 1; setAlbum(null); }}>收起</button>
+            {[...new Set(album.tracks.map(t => t.section_name ?? ""))].map(section => <div key={section}>{section && <h5>{section}</h5>}<ol className="song-album-tracks">{album.tracks.filter(t => (t.section_name ?? "") === section).map(track => <li key={track.album_track_id} value={track.track_order}>
+              <button onClick={() => onSongSelect(track.song_id)}>{track.song_name}{track.version_label ? ` · ${track.version_label}` : ""}{track.edition_label ? ` · ${track.edition_label}` : ""}</button>
+            </li>)}</ol></div>)}
           </section>}
           <h3>关联歌单</h3>
           <div className="console-table-wrap"><table className="console-admin-table"><thead><tr><th>日期</th><th>演出 / 曲目</th><th>标记</th></tr></thead>

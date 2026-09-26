@@ -31,6 +31,7 @@ export type LiveInsertRow = {
 };
 
 export type SongInsertRow = {
+  group_id?: number;
   song_id: number;
   song_name: string;
   band_id: number | null;
@@ -39,7 +40,7 @@ export type SongInsertRow = {
 };
 
 export type SetlistInsertRow = {
-  song_id: number;
+  song_group_id: number;
   absolute_order: number;
   segment_type: string;
   sub_order: number;
@@ -62,7 +63,7 @@ export type OtherMemberDraft = {
 export type SetlistDraftRow = {
   row_key: number;
   song_name: string;
-  song_id: string;
+  song_group_id: string;
   song_resolved_name?: string;
   song_candidates?: SongInsertRow[];
   segment_start_type: string;

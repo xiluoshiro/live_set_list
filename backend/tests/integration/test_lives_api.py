@@ -265,7 +265,7 @@ def test_live_detail_queries_isolate_duplicate_display_ids_by_setlist_uuid(
         cursor.execute(
             """
             INSERT INTO live_setlist (
-                live_id, song_id, absolute_order, segment_type, sub_order,
+                live_id, song_group_id, absolute_order, segment_type, sub_order,
                 is_short, other_member, comment
             )
             VALUES (1, 2, 99, 'main', 1, false, NULL, NULL)
@@ -373,7 +373,7 @@ def test_get_live_detail_applies_cross_band_cover_rules(
             """
             INSERT INTO live_setlist (
                 live_id,
-                song_id,
+                song_group_id,
                 absolute_order,
                 segment_type,
                 sub_order,
@@ -382,9 +382,9 @@ def test_get_live_detail_applies_cross_band_cover_rules(
                 comment
             )
             VALUES
-                (1, 9000, 99, 'SP', 99, true, NULL, NULL),
-                (1, 9001, 100, 'SP', 100, false, NULL, NULL),
-                (1, 9002, 101, 'SP', 101, false, NULL, NULL)
+                (1, (SELECT group_id FROM song_list WHERE id=9000), 99, 'SP', 99, true, NULL, NULL),
+                (1, (SELECT group_id FROM song_list WHERE id=9001), 100, 'SP', 100, false, NULL, NULL),
+                (1, (SELECT group_id FROM song_list WHERE id=9002), 101, 'SP', 101, false, NULL, NULL)
             """
         )
         cursor.execute(

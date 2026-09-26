@@ -262,7 +262,7 @@ WHERE l.id = %s
 LIVE_DETAIL_ROWS_QUERY = f"""
 SELECT
     concat(stl.segment_type, stl.sub_order)::text AS row_id,
-    s.song_name,
+    sg.group_name AS song_name,
     stl.other_member,
     stl.is_short,
     s.is_cover,
@@ -271,12 +271,13 @@ SELECT
     stl.absolute_order,
     stl.segment_type,
     stl.sub_order,
-    stl.song_id,
+    s.id AS song_id,
     stl.id::text AS setlist_id,
     {LIVE_COVER_SQL} AS live_cover
 FROM live_setlist stl
 JOIN song_list s
-    ON s.id = stl.song_id
+    ON s.group_id = stl.song_group_id AND s.version_label = ''
+JOIN song_groups sg ON sg.id = stl.song_group_id
 LEFT JOIN band_attrs owner_band
     ON owner_band.id = s.band_id
 WHERE stl.live_id = %s
@@ -364,7 +365,7 @@ WITH row_base AS (
     SELECT
         stl.live_id,
         concat(stl.segment_type, stl.sub_order)::text AS row_id,
-        s.song_name,
+        sg.group_name AS song_name,
         stl.other_member,
         stl.is_short,
         s.is_cover,
@@ -372,12 +373,13 @@ WITH row_base AS (
         stl.absolute_order,
         stl.segment_type,
         stl.sub_order,
-        stl.song_id,
+        s.id AS song_id,
         stl.id::text AS setlist_id,
     {LIVE_COVER_SQL} AS live_cover
     FROM live_setlist stl
     JOIN song_list s
-        ON s.id = stl.song_id
+        ON s.group_id = stl.song_group_id AND s.version_label = ''
+    JOIN song_groups sg ON sg.id = stl.song_group_id
     WHERE stl.live_id = ANY(%s)
 )
 SELECT

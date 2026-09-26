@@ -32,6 +32,7 @@ CONSOLE_DELETABLE_TABLES = (
     "song_member_groups",
     "song_members",
     "album_tracks",
+    "album_sections",
     "band_lineup_version_members",
     "live_band_lineup_contexts",
     "live_setlist",

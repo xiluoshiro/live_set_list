@@ -14,7 +14,7 @@ class MemberGroup(CatalogModel):
 
 
 class Ownership(CatalogModel):
-    mode: Literal["bands", "members", "pending"]
+    mode: Literal["bands", "members", "mixed", "pending"]
     band_ids: list[int] = Field(default_factory=list)
     member_groups: list[MemberGroup] = Field(default_factory=list)
 
@@ -26,11 +26,15 @@ class Ownership(CatalogModel):
             raise ValueError("Band ownership requires only band_ids")
         if self.mode == "members" and (self.band_ids or not self.member_groups):
             raise ValueError("Member ownership requires only member_groups")
-        ids = self.band_ids or [group.band_id for group in self.member_groups]
+        if self.mode == "mixed" and (not self.band_ids or not self.member_groups):
+            raise ValueError("Mixed ownership requires bands and member groups")
+        group_ids = [group.band_id for group in self.member_groups]
+        ids = self.band_ids + group_ids
         members = [member for group in self.member_groups for member in group.member_ids]
         if any(value < 1 for value in ids + members):
             raise ValueError("Ownership IDs must be positive")
-        if len(set(ids)) != len(ids) or len(set(members)) != len(members):
+        if (len(set(self.band_ids)) != len(self.band_ids) or len(set(group_ids)) != len(group_ids)
+                or len(set(members)) != len(members)):
             raise ValueError("Ownership IDs must not repeat")
         return self
 
@@ -78,6 +82,7 @@ class AlbumTrackWrite(CatalogModel):
     song_id: int = Field(ge=1)
     track_order: int | None = Field(default=None, ge=1)
     edition_label: str = Field(default="", max_length=255)
+    section_name: str = Field(default="", max_length=255)
 
 
 class AlbumWrite(CatalogModel):

@@ -25,7 +25,9 @@ from app.song_lookup import (
     SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS,
     SONG_LOOKUP_SQL_TO_CHARS,
     normalize_song_lookup_text,
+    song_lookup_sql,
 )
+from app.song_catalog import catalog_errors, rows as catalog_rows
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -455,8 +457,8 @@ def get_editable_live_setlist(
                     """
                     SELECT
                         ls.id::text,
-                        ls.song_id,
-                        s.song_name,
+                        ls.song_group_id,
+                        s.group_name,
                         ls.absolute_order,
                         ls.segment_type,
                         ls.sub_order,
@@ -464,7 +466,7 @@ def get_editable_live_setlist(
                         ls.other_member,
                         ls.comment
                     FROM live_setlist AS ls
-                    JOIN song_list AS s ON s.id = ls.song_id
+                    JOIN song_groups AS s ON s.id = ls.song_group_id
                     WHERE ls.live_id = %s
                     ORDER BY ls.absolute_order, ls.id
                     """,
@@ -544,7 +546,7 @@ def get_editable_live_setlist(
         "rows": [
             {
                 "row_id": row[0],
-                "song_id": int(row[1]),
+                "song_group_id": int(row[1]),
                 "song_name": str(row[2]),
                 "absolute_order": int(row[3]),
                 "segment_type": str(row[4]),
@@ -582,11 +584,31 @@ def list_songs(
     limit: int = Query(default=20, ge=1, le=100, description="Maximum number of songs to return"),
     page: int = Query(default=1, ge=1, description="Result page"),
     band_id: int | None = Query(default=None, ge=0, description="Owning band_attrs.id"),
+    groups_only: bool = Query(default=False),
     _: Any = Depends(require_role("editor")),
 ):
     """Return song_list rows for the console song selector without mutating any data."""
     query_text = _normalize_lookup_query(q)
     normalized_query_text = normalize_song_lookup_text(query_text)
+    if groups_only:
+        expression, params = song_lookup_sql("g.group_name")
+        where = f"{expression} ILIKE %s AND (%s::int IS NULL OR s.band_id = %s OR EXISTS(SELECT 1 FROM song_bands b WHERE b.song_id=s.id AND b.band_id=%s) OR EXISTS(SELECT 1 FROM song_member_groups m WHERE m.song_id=s.id AND m.band_id=%s))"
+        values = (*params, _build_prefix_lookup_pattern(normalized_query_text), band_id, band_id, band_id, band_id)
+        source = "FROM song_groups g JOIN song_list s ON s.group_id=g.id AND s.version_label=''"
+        with catalog_errors(), get_db_connection() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT count(*) {source} WHERE {where}", values)
+            total = cur.fetchone()[0]
+            pages = max(1, ceil(total / limit))
+            safe_page = min(page, pages)
+            cur.execute(f"""SELECT s.id AS song_id, g.id AS group_id, g.group_name AS song_name,
+                s.band_id, s.is_cover AS cover, s.version_label, s.owner_mode,
+                COALESCE((SELECT string_agg(b.band_name, ' / ' ORDER BY b.id) FROM band_attrs b
+                  WHERE b.id IN (SELECT band_id FROM song_bands WHERE song_id=s.id
+                    UNION SELECT band_id FROM song_member_groups WHERE song_id=s.id)),
+                  (SELECT band_name FROM band_attrs WHERE id=s.band_id), '待回填') AS band_name
+                {source} WHERE {where} ORDER BY g.group_name, g.id LIMIT %s OFFSET %s""",
+                        (*values, limit, (safe_page - 1) * limit))
+            return {"items": catalog_rows(cur), "page": safe_page, "page_size": limit, "total": total, "total_pages": pages}
     band_filter_sql = " AND (band_id = %s OR id IN (SELECT song_id FROM song_bands WHERE band_id = %s UNION SELECT song_id FROM song_member_groups WHERE band_id = %s))" if band_id is not None else ""
     band_filter_params = (band_id, band_id, band_id) if band_id is not None else ()
 

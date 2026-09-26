@@ -788,7 +788,7 @@ def test_console_live_and_setlist_writes_require_csrf_without_side_effects(
         json={
             "setlist_rows": [
                 {
-                    "song_id": 4,
+                    "song_group_id": 4,
                     "absolute_order": 3,
                     "segment_type": "EN",
                     "sub_order": 1,
@@ -1334,7 +1334,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
         json={
             "setlist_rows": [
                 {
-                    "song_id": 4,
+                    "song_group_id": 4,
                     "absolute_order": 1,
                     "segment_type": "EN",
                     "sub_order": 1,
@@ -1344,7 +1344,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
                     "comment": "appended encore",
                 },
                 {
-                    "song_id": 2,
+                    "song_group_id": 2,
                     "absolute_order": 2,
                     "segment_type": "SP",
                     "sub_order": 1,
@@ -1354,7 +1354,7 @@ def test_console_append_live_setlist_inserts_rows_to_clean_live(
                     "comment": None,
                 },
                 {
-                    "song_id": 1,
+                    "song_group_id": 1,
                     "absolute_order": 3,
                     "segment_type": "M",
                     "sub_order": 1,
@@ -1519,7 +1519,7 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
         json={
             "setlist_rows": [
                 {
-                    "song_id": 4,
+                    "song_group_id": 4,
                     "absolute_order": 1,
                     "segment_type": "M",
                     "sub_order": 1,
@@ -1681,7 +1681,7 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
         json={
             "setlist_rows": [
                 {
-                    "song_id": 999,
+                    "song_group_id": 999,
                     "absolute_order": 1,
                     "segment_type": "M",
                     "sub_order": 1,
@@ -1699,7 +1699,7 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
         json={
             "setlist_rows": [
                 {
-                    "song_id": 3,
+                    "song_group_id": 3,
                     "absolute_order": 1,
                     "segment_type": "M",
                     "sub_order": 1,
@@ -1709,7 +1709,7 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
                     "comment": None,
                 },
                 {
-                    "song_id": 4,
+                    "song_group_id": 4,
                     "absolute_order": 1,
                     "segment_type": "M",
                     "sub_order": 2,
@@ -1754,7 +1754,7 @@ def test_console_append_live_setlist_rolls_back_when_one_row_is_invalid(
         json={
             "setlist_rows": [
                 {
-                    "song_id": 4,
+                    "song_group_id": 4,
                     "absolute_order": 3,
                     "segment_type": "EN",
                     "sub_order": 1,
@@ -1764,7 +1764,7 @@ def test_console_append_live_setlist_rolls_back_when_one_row_is_invalid(
                     "comment": "should rollback",
                 },
                 {
-                    "song_id": 999,
+                    "song_group_id": 999,
                     "absolute_order": 4,
                     "segment_type": "SP",
                     "sub_order": 1,
@@ -1806,7 +1806,7 @@ def test_console_append_live_setlist_stores_segment_type_raw(
         json={
             "setlist_rows": [
                 {
-                    "song_id": 4,
+                    "song_group_id": 4,
                     "absolute_order": 5,
                     "segment_type": "OP",
                     "sub_order": 1,
@@ -1816,7 +1816,7 @@ def test_console_append_live_setlist_stores_segment_type_raw(
                     "comment": "opening track",
                 },
                 {
-                    "song_id": 29,
+                    "song_group_id": 29,
                     "absolute_order": 6,
                     "segment_type": "WEN",
                     "sub_order": 1,
@@ -1863,7 +1863,7 @@ def test_console_append_live_setlist_rejects_when_live_has_existing_rows(
         json={
             "setlist_rows": [
                 {
-                    "song_id": 4,
+                    "song_group_id": 4,
                     "absolute_order": 1,
                     "segment_type": "M",
                     "sub_order": 1,

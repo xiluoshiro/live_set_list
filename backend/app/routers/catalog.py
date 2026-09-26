@@ -84,7 +84,7 @@ WITH matched_live_ids AS (
     LEFT JOIN live_setlist ls
         ON ls.live_id = l.id
     LEFT JOIN song_list s
-        ON s.id = ls.song_id
+        ON s.group_id = ls.song_group_id AND s.version_label = ''
     LEFT JOIN effective_live_bands effective
         ON effective.live_id = l.id
     LEFT JOIN current_band_versions b
@@ -167,19 +167,22 @@ LIMIT %s
 SEARCH_SONGS_QUERY = """
 SELECT
     s.id,
-    s.song_name,
+    g.group_name,
     s.band_id,
     b.band_name,
     COUNT(DISTINCT ls.live_id) AS live_count,
     s.owner_mode, s.group_id, s.version_label
 FROM song_list s
+JOIN song_groups g ON g.id = s.group_id
 LEFT JOIN band_attrs b
     ON b.id = s.band_id
 LEFT JOIN live_setlist ls
-    ON ls.song_id = s.id
-WHERE s.song_name ILIKE %s ESCAPE '\\'
-GROUP BY s.id, s.song_name, s.band_id, b.band_name
-ORDER BY live_count DESC, s.song_name, s.id
+    ON ls.song_group_id = s.group_id
+WHERE s.version_label = '' AND EXISTS(SELECT 1 FROM song_list version
+    WHERE version.group_id = s.group_id AND
+    (g.group_name || ' ' || version.song_name || ' ' || version.version_label) ILIKE %s ESCAPE '\\')
+GROUP BY s.id, g.group_name, s.band_id, b.band_name
+ORDER BY live_count DESC, g.group_name, s.id
 LIMIT %s
 """
 
@@ -510,7 +513,7 @@ def get_catalog_stats():
                 SELECT
                     (SELECT COUNT(*) FROM live_attrs)  AS live_count,
                     (SELECT COUNT(*) FROM band_attrs) AS band_count,
-                    (SELECT COUNT(*) FROM song_list)   AS song_count,
+                    (SELECT COUNT(*) FROM song_groups) AS song_count,
                     (SELECT COUNT(*) FROM venue_list)  AS venue_count,
                     (SELECT MAX(live_date) FROM live_attrs) AS latest_live_date,
                     ARRAY(
@@ -692,8 +695,8 @@ def get_catalog_statistics(
                       COUNT(DISTINCT cl.id),
                       COUNT(DISTINCT cl.id) FILTER (WHERE ls.live_id IS NOT NULL),
                       COUNT(DISTINCT effective_band.band_id),
-                      COUNT(DISTINCT (performance.band_id, ls.song_id))
-                        FILTER (WHERE ls.song_id IS NOT NULL AND performance.band_id IS NOT NULL
+                      COUNT(DISTINCT (performance.band_id, ls.song_group_id))
+                        FILTER (WHERE ls.song_group_id IS NOT NULL AND performance.band_id IS NOT NULL
                           {"AND performance.band_id = %s" if band_id is not None else ""}),
                       COUNT(DISTINCT cl.venue_id),
                       MIN(cl.live_date), MAX(cl.live_date)
@@ -728,7 +731,7 @@ def get_catalog_statistics(
                              cl.id AS live_id, cl.live_date, cl.live_title, ls.id AS setlist_id
                       FROM candidate_lives cl
                       JOIN live_setlist ls ON ls.live_id = cl.id
-                      JOIN song_list s ON s.id = ls.song_id
+                      JOIN song_list s ON s.group_id = ls.song_group_id AND s.version_label = ''
                       JOIN live_setlist_band_performances performance
                         ON performance.setlist_id = ls.id
                       JOIN current_band_versions performing_band
@@ -795,7 +798,7 @@ def get_catalog_statistics(
                           JOIN live_setlist_band_performances performance
                             ON performance.setlist_id = ls.id
                            AND performance.band_id = b.band_id
-                          JOIN song_list s ON s.id = ls.song_id
+                          JOIN song_list s ON s.group_id = ls.song_group_id AND s.version_label = ''
                         ), play_counts AS (
                           SELECT id, COUNT(DISTINCT live_id) AS live_count FROM song_plays GROUP BY id
                         ), latest AS (
