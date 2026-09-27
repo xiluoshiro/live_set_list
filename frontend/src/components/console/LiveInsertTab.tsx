@@ -226,7 +226,6 @@ export function LiveInsertTab({
           />
           <button type="button" className="console-ghost-btn" onClick={onQueryLives}>查询</button>
           <select
-            className="console-entity-select"
             aria-label="选择要编辑的 Setlist"
             value={selectedLiveId || ""}
             onChange={(event) => onSelectedLiveIdChange(Number(event.target.value))}
@@ -244,7 +243,6 @@ export function LiveInsertTab({
         <label className="live-management-label" htmlFor="live-id-select">选择 live_id</label>
         <select
           id="live-id-select"
-          className="console-entity-select"
           value={selectedLiveId}
           disabled={isLiveLoading || lives.length === 0}
           onChange={(e) => onSelectedLiveIdChange(Number(e.target.value))}

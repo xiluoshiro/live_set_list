@@ -39,8 +39,10 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const [groupPage, setGroupPage] = useState(1);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
   const [bandFilter, setBandFilter] = useState("");
+  const [search, setSearch] = useState({ query: "", bandFilter: "", page: 1 });
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const querySongs = () => setSearch({ query: query.trim(), bandFilter, page: 1 });
   const [candidates, setCandidates] = useState<CatalogPage<ConsoleSongItem> | null>(null);
   const [candidateLabels, setCandidateLabels] = useState<Record<number, string>>({});
   const candidateLabel = (s: ConsoleSongItem) => `#${s.song_id} ${s.song_name} / ${s.version_label || "默认版本"} / ${s.band_name ?? "待回填"}`;
@@ -77,12 +79,15 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   useEffect(() => {
     if (!active || creating) return;
     let current = true;
-    const params = new URLSearchParams({ q: query, page: String(page), limit: "20" });
-    if (bandFilter) params.set("band_id", bandFilter);
+    setCandidatesLoading(true);
+    setCandidates(null);
+    const params = new URLSearchParams({ q: search.query, page: String(search.page), limit: "20" });
+    if (search.bandFilter) params.set("band_id", search.bandFilter);
     void getCatalogConsole<CatalogPage<ConsoleSongItem>>(`/songs?${params}`).then(result => { if (current) { setCandidates(result); setCandidateLabels(labels => ({ ...labels, ...Object.fromEntries(result.items.map(s => [s.song_id, candidateLabel(s)])) })); } })
-      .catch(e => { if (current) setError(String(e)); });
+      .catch(e => { if (current) setError(String(e)); })
+      .finally(() => { if (current) setCandidatesLoading(false); });
     return () => { current = false; };
-  }, [active, creating, query, page, bandFilter, history.length]);
+  }, [active, creating, search, history.length]);
   useEffect(() => {
     if (!active || !creating || newGroup) return;
     let current = true;
@@ -176,16 +181,18 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   if (!active) return null;
   return <section className="tour-admin-section" aria-label={creating ? "新增歌曲" : "歌曲管理"}>
     {error && <p role="alert">{error}</p>}
-    {!creating && <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar">
+    {!creating && <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar" role="search" aria-label="查询已有歌曲">
       <span className="live-management-label">已有歌曲</span>
       <input className="venue-query-input live-management-primary-control" aria-label="搜索歌曲" placeholder="歌曲名称"
-        value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} />
+        value={query} onChange={event => setQuery(event.target.value)}
+        onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing) querySongs(); }} />
       <select className="song-band-filter" aria-label="筛选归属乐队" value={bandFilter}
-        onChange={event => { setBandFilter(event.target.value); setPage(1); }}>
+        onChange={event => setBandFilter(event.target.value)}>
         <option value="">全部乐队</option>
         {bandOptions.map(band => <option key={band.id} value={band.id}>{band.label}</option>)}
       </select>
-      <select aria-label="选择要编辑的歌曲" value={original?.song_id ?? ""} disabled={busy}
+      <button type="button" className="console-ghost-btn" disabled={candidatesLoading} onClick={querySongs}>查询</button>
+      <select aria-label="选择要编辑的歌曲" value={original?.song_id ?? ""} disabled={busy || candidatesLoading}
         onChange={event => { if (event.target.value) guard(() => void loadSong(Number(event.target.value))); }}>
         <option value="">选择要编辑的歌曲</option>
         {original && !candidates?.items.some(song => song.song_id === original.song_id) &&
@@ -193,9 +200,9 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         {candidates?.items.map(song => <option key={song.song_id} value={song.song_id}>{candidateLabel(song)}</option>)}
       </select>
       <div className="tour-candidate-pager">
-        <button type="button" className="console-ghost-btn" disabled={!candidates || candidates.page <= 1} onClick={() => setPage(page - 1)}>上一页</button>
-        <span>第 {candidates?.page ?? 1} / {candidates?.total_pages ?? 1} 页，共 {candidates?.total ?? 0} 首歌曲</span>
-        <button type="button" className="console-ghost-btn" disabled={!candidates || candidates.page >= candidates.total_pages} onClick={() => setPage(page + 1)}>下一页</button>
+        <button type="button" className="console-ghost-btn" disabled={candidatesLoading || !candidates || candidates.page <= 1} onClick={() => setSearch(value => ({ ...value, page: value.page - 1 }))}>上一页</button>
+        <span>{candidatesLoading ? "加载中…" : `第 ${candidates?.page ?? search.page} / ${candidates?.total_pages ?? 1} 页，共 ${candidates?.total ?? 0} 首歌曲`}</span>
+        <button type="button" className="console-ghost-btn" disabled={candidatesLoading || !candidates || candidates.page >= candidates.total_pages} onClick={() => setSearch(value => ({ ...value, page: value.page + 1 }))}>下一页</button>
       </div>
     </div>}
     {!creating && original && <div className="tour-admin-toolbar">
