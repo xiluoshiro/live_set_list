@@ -549,6 +549,7 @@ export function LiveInsertTab({
                   <button
                     type="button"
                     className="band-member-trigger"
+                    title={summarizeBandMember(row)}
                     ref={(element) => {
                       bandMemberTriggerRefs.current[row.row_key] = element;
                     }}
@@ -561,6 +562,7 @@ export function LiveInsertTab({
                   <button
                     type="button"
                     className="other-member-trigger"
+                    title={summarizeOtherMember(row)}
                     ref={(element) => {
                       otherMemberTriggerRefs.current[row.row_key] = element;
                     }}
