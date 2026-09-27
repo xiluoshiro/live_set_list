@@ -44,6 +44,11 @@
   color: var(--accent-primary);
 }
 
+.site-title:focus-visible {
+  outline-width: 1px;
+  outline-offset: 1px;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -150,6 +155,12 @@
 
 .tab-btn:hover {
   color: var(--accent-primary);
+}
+
+.tab-btn:focus-visible {
+  outline-width: 1px;
+  /* Keep the focus indicator inside the horizontally scrolling navigation. */
+  outline-offset: -1px;
 }
 
 .back-to-top-btn {

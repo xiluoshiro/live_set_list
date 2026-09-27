@@ -65,6 +65,7 @@
 .console-mode-button {
   padding: 0;
   border: 0;
+  border-radius: 2px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -77,11 +78,8 @@
 }
 
 .console-mode-button:focus-visible {
-  outline: none;
-  box-shadow: none;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
+  outline-width: 1px;
+  outline-offset: 1px;
 }
 
 .console-admin-hint {
@@ -1275,7 +1273,6 @@
 .console-focus-group:focus-within {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--accent-focus-ring);
 }
 
 .console-focus-group > :focus-visible {
