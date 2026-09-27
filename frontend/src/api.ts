@@ -2428,9 +2428,18 @@ export type SongVersion = {
   ownership: SongOwnershipDetail; performance_count: number;
   albums: AlbumSummary[];
 };
-export type SongGroup = { group_id: number; group_name: string; revision: number; versions: SongVersion[] };
-export type SongGroupSummary = { group_id: number; group_name: string; version_count: number; matched_song_ids?: number[] };
+export type SongDisplayCover = { url: string; album_id: number; album_name: string };
+export type SongGroup = { group_id: number; group_name: string; revision: number; versions: SongVersion[]; display_cover: SongDisplayCover | null };
+export type SongGroupSummary = {
+  group_id: number; group_name: string; version_count: number; matched_song_ids: number[];
+  first_release_date: string | null; first_release_albums: AlbumSummary[];
+  performance_count: number; latest_performance_date: string | null; display_cover: SongDisplayCover | null;
+};
+export type SongSort = "name" | "plays" | "recent" | "release";
+export type SongFacets = { total: number; bands: { band_id: number; band_name: string; song_count: number }[] };
 export type CatalogPage<T> = { items: T[]; page: number; page_size: number; total: number; total_pages: number };
+export type SongDirectoryPage = CatalogPage<SongGroupSummary> & { facets: SongFacets };
+export type SongPerformancePage = CatalogPage<SongPerformance> & { available_years: number[] };
 export type SongPerformance = {
   setlist_id: string; live_id: number; live_title: string; live_date: string;
   segment_type: string; sub_order: number; absolute_order: number; is_short: boolean;
@@ -2478,15 +2487,25 @@ export async function songCatalogWrite<T>(path: string, method: "POST" | "PUT", 
   }
   return result;
 }
-export const getSongGroups = (q = "", page = 1, bandId?: number, albumId?: number) => {
+export const getSongGroups = (q = "", page = 1, bandId?: number, albumId?: number,
+  options: { sort?: SongSort; pageSize?: number } = {}) => {
   const query = new URLSearchParams({ q, page: String(page) });
   if (bandId) query.set("band_id", String(bandId));
   if (albumId) query.set("album_id", String(albumId));
-  return catalogGet<{ items: SongGroupSummary[]; pagination: Omit<CatalogPage<SongGroupSummary>, "items"> }>(`/song-groups?${query}`).then(result => ({ items: result.items, ...result.pagination }));
+  if (options.sort) query.set("sort", options.sort);
+  if (options.pageSize) query.set("page_size", String(options.pageSize));
+  return catalogGet<{ items: SongGroupSummary[]; pagination: Omit<CatalogPage<SongGroupSummary>, "items">; facets: SongFacets }>(`/song-groups?${query}`)
+    .then(result => ({ items: result.items, ...result.pagination, facets: result.facets }));
 };
 export const getSongGroup = (id: number) => catalogGet<SongGroup>(`/song-groups/${id}`);
 export const getSongVersion = (id: number) => catalogGet<SongVersion>(`/songs/${id}`);
-export const getSongPerformances = (id: number, page = 1) => catalogGet<{ items: SongPerformance[]; pagination: Omit<CatalogPage<SongPerformance>, "items"> }>(`/songs/${id}/performances?page=${page}`).then(result => ({ items: result.items, ...result.pagination }));
+export const getSongPerformances = (id: number, page = 1, options: { year?: number; pageSize?: number } = {}) => {
+  const query = new URLSearchParams({ page: String(page) });
+  if (options.year) query.set("year", String(options.year));
+  if (options.pageSize) query.set("page_size", String(options.pageSize));
+  return catalogGet<{ items: SongPerformance[]; pagination: Omit<CatalogPage<SongPerformance>, "items">; available_years: number[] }>(`/songs/${id}/performances?${query}`)
+    .then(result => ({ items: result.items, ...result.pagination, available_years: result.available_years }));
+};
 export const getAlbumDetail = (id: number) => catalogGet<AlbumDetail>(`/albums/${id}`);
 export async function getCatalogConsole<T>(path: string): Promise<T> {
   const response = await fetchWithTimeout(`${BASE_URL}/api/console${path}`, undefined, { requestKind: "song_catalog_console" });

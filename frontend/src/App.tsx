@@ -1,4 +1,5 @@
 import { SongCatalog } from "./components/SongCatalog";
+import { normalizeSongBrowse, songBrowseFromSearch, songCatalogHref, type SongBrowseState } from "./songCatalogNavigation";
 import { SONG_CATALOG_STORAGE_KEY, SONG_CATALOG_WRITE_EVENT } from "./songCatalogSync";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -113,7 +114,11 @@ type ListTabKey = "favorites" | "all";
 type MainTabKey = Exclude<TabKey, "detail" | "tour_detail" | "performance_group_detail" | "venue_detail">;
 type AppHistoryState = {
   songId?: number | null;
-  songBrowse?: { query: string; page: number };
+  albumId?: number | null;
+  songBrowse?: SongBrowseState;
+  songScrollY?: number;
+  songReturnHref?: string;
+  songBackLabel?: string;
   app: "live-set-list";
   tab: TabKey;
   previousTab?: TabKey;
@@ -258,8 +263,11 @@ function App() {
   const { mode: themeMode, resolvedTheme, setMode: setThemeMode } = useTheme();
   const initialLiveId = getLiveIdFromPath(window.location.pathname);
   const initialSongMatch = window.location.pathname.match(/^\/songs(?:\/(\d+))?\/?$/);
-  const [songBrowse, setSongBrowse] = useState({ query: "", page: 1 });
+  const initialAlbumMatch = window.location.pathname.match(/^\/albums\/(\d+)\/?$/);
+  const [songBrowse, setSongBrowse] = useState(() => songBrowseFromSearch(window.location.search));
   const [songId, setSongId] = useState<number | null>(initialSongMatch?.[1] ? Number(initialSongMatch[1]) : null);
+  const [albumId, setAlbumId] = useState<number | null>(initialAlbumMatch ? Number(initialAlbumMatch[1]) : null);
+  const [songScrollY, setSongScrollY] = useState(0);
   const initialVenueId = getVenueIdFromPath(window.location.pathname);
   const [pageSize, setPageSize] = useState<15 | 20>(20);
   const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
@@ -274,7 +282,7 @@ function App() {
   const [listFilters, setListFilters] = useState<LiveListFilters>({ ...DEFAULT_LIVE_LIST_FILTERS });
   const [listFilterBands, setListFilterBands] = useState<CatalogBandItem[]>([]);
   const [jumpPageInput, setJumpPageInput] = useState("1");
-  const [tab, setTab] = useState<TabKey>(initialLiveId !== null ? "detail" : initialVenueId !== null ? "venue_detail" : initialSongMatch ? "songs" : "home");
+  const [tab, setTab] = useState<TabKey>(initialLiveId !== null ? "detail" : initialVenueId !== null ? "venue_detail" : initialSongMatch || initialAlbumMatch ? "songs" : "home");
   const [detailLiveId, setDetailLiveId] = useState<number | null>(initialLiveId);
   const [detailFallback, setDetailFallback] = useState<LiveDetailFallback | null>(
     initialLiveId === null
@@ -353,6 +361,7 @@ function App() {
   );
 
   const captureCurrentListState = (state: AppHistoryState): AppHistoryState => {
+    if (tab === "songs") return { ...state, songScrollY: window.scrollY };
     if (tab !== "all" && tab !== "favorites") return state;
     return {
       ...state,
@@ -372,7 +381,10 @@ function App() {
         ? "home"
         : requestedTab;
     setUserMenuOpen(false);
-    if (allowedTab === "songs") { setSongId(state.songId ?? null); setSongBrowse(state.songBrowse ?? { query: "", page: 1 }); }
+    if (allowedTab === "songs") {
+      setSongId(state.songId ?? null); setAlbumId(state.albumId ?? null);
+      setSongBrowse(normalizeSongBrowse(state.songBrowse)); setSongScrollY(state.songScrollY ?? 0);
+    }
     if (allowedTab === "detail" && state.detailLiveId && state.detailFallback && state.previousTab) {
       if (!(tab === "detail" && detailLiveId === state.detailLiveId)) {
         resetPageScroll();
@@ -449,6 +461,9 @@ function App() {
 
   const pushHistoryState = (state: AppHistoryState) => {
     if (state.tab === "songs" && !state.songBrowse) state = { ...state, songBrowse };
+    if (state.tab === "songs" && tab === "songs") state = { ...state,
+      songReturnHref: window.location.pathname + window.location.search,
+      songBackLabel: albumId !== null ? "返回唱片" : songId !== null ? "返回歌曲" : "歌曲资料" };
     if (isAppHistoryState(window.history.state)) {
       window.history.replaceState(captureCurrentListState(window.history.state), "", window.location.href);
     }
@@ -456,7 +471,7 @@ function App() {
       ? `/lives/${state.detailLiveId}`
       : state.tab === "venue_detail" && state.detailVenueId
         ? `/venues/${state.detailVenueId}`
-      : state.tab === "songs" ? state.songId ? `/songs/${state.songId}` : "/songs" : "/";
+      : state.tab === "songs" ? songCatalogHref(state.songId ?? null, state.albumId ?? null, normalizeSongBrowse(state.songBrowse)) : "/";
     window.history.pushState(state, "", nextPath);
     applyHistoryState(state);
   };
@@ -520,13 +535,16 @@ function App() {
         } satisfies AppHistoryState;
         window.history.replaceState(directState, "", window.location.href);
         applyHistoryState(directState);
-      } else if (initialSongMatch) {
-        const directState = { app: "live-set-list", tab: "songs", songId } satisfies AppHistoryState;
+      } else if (initialSongMatch || initialAlbumMatch) {
+        const directState = { app: "live-set-list", tab: "songs", songId, albumId, songBrowse } satisfies AppHistoryState;
         window.history.replaceState(directState, "", window.location.href);
         applyHistoryState(directState);
       } else {
         window.history.replaceState({ app: "live-set-list", tab: "home" } satisfies AppHistoryState, "", window.location.href);
       }
+    } else if (initialSongMatch || initialAlbumMatch) {
+      const current = window.history.state as AppHistoryState;
+      if (current.tab === "songs") applyHistoryState(current);
     }
     const onPopState = (event: PopStateEvent) => {
       if (isAppHistoryState(event.state)) {
@@ -1335,7 +1353,7 @@ function App() {
   };
 
   const handleBackFromDetail = () => {
-    if (previousTab === "venue_detail") {
+    if (previousTab === "venue_detail" || previousTab === "songs") {
       window.history.back();
       return;
     }
@@ -1560,9 +1578,19 @@ function App() {
             }}
           />
         ) : tab === "songs" ? (
-          <SongCatalog songId={songId} browse={songBrowse}
-            onBrowseChange={browse => { setSongBrowse(browse); window.history.replaceState({ ...window.history.state, songBrowse: browse }, "", window.location.href); }}
+          <SongCatalog songId={songId} albumId={albumId} browse={songBrowse} scrollY={songScrollY}
+            onBrowseChange={browse => {
+              setSongBrowse(browse); setSongScrollY(0);
+              window.history.replaceState({ ...window.history.state, songBrowse: browse, songScrollY: 0 }, "", songCatalogHref(songId, albumId, browse));
+            }}
             onSongSelect={id => pushHistoryState({ app: "live-set-list", tab: "songs", songId: id })}
+            onAlbumSelect={id => pushHistoryState({ app: "live-set-list", tab: "songs", songId, albumId: id })}
+            backLabel={(window.history.state as AppHistoryState | null)?.songBackLabel ?? "歌曲资料"}
+            backHref={(window.history.state as AppHistoryState | null)?.songReturnHref}
+            onBack={() => {
+              if ((window.history.state as AppHistoryState | null)?.songReturnHref) window.history.back();
+              else pushHistoryState({ app: "live-set-list", tab: "songs", songId: null });
+            }}
             onLiveSelect={live => pushHistoryState({ app: "live-set-list", tab: "detail", previousTab: "songs", detailLiveId: live.live_id, detailFallback: { liveTitle: live.live_title, liveDate: live.live_date, url: null } })} />
         ) : showTourDetailPanel && detailTourId !== null && tourFallback !== null ? (
           <TourDetailPage

@@ -121,7 +121,7 @@ def normalize_song_lookup_text(value: str) -> str:
 
 def song_lookup_sql(column: str) -> tuple[str, tuple[str, ...]]:
     """Build the same punctuation equivalence for a trusted catalog column."""
-    if column not in {"g.group_name", "s.song_name", "s.version_label"}:
+    if column not in {"g.group_name", "s.song_name", "s.version_label", "b.band_name"}:
         raise ValueError("Unsupported song search column")
     expression = f"translate(normalize({column}, NFKC), %s, %s)"
     for replacement in (r"\1", r"\1", r"\1\2", r"\1\2"):

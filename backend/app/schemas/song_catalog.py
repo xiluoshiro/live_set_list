@@ -227,11 +227,18 @@ class SongMutation(BaseModel):
     item: SongVersion
 
 
+class SongDisplayCover(BaseModel):
+    url: str
+    album_id: int
+    album_name: str
+
+
 class SongGroup(BaseModel):
     group_id: int
     group_name: str
     revision: int
     versions: list[SongVersion]
+    display_cover: SongDisplayCover | None
 
 
 class GroupSummary(BaseModel):
@@ -239,6 +246,20 @@ class GroupSummary(BaseModel):
     group_name: str
     version_count: int
     matched_song_ids: list[int]
+    first_release_date: date | None
+    first_release_albums: list[AlbumSummary]
+    performance_count: int
+    latest_performance_date: date | None
+    display_cover: SongDisplayCover | None
+
+
+class BandSongCount(BandRef):
+    song_count: int
+
+
+class SongFacets(BaseModel):
+    total: int
+    bands: list[BandSongCount]
 
 
 class CatalogPagination(BaseModel):
@@ -251,6 +272,7 @@ class CatalogPagination(BaseModel):
 class GroupPage(BaseModel):
     items: list[GroupSummary]
     pagination: CatalogPagination
+    facets: SongFacets
 
 
 class AlbumPage(CatalogPagination):
@@ -285,3 +307,4 @@ class Performance(BaseModel):
 class PerformancePage(BaseModel):
     items: list[Performance]
     pagination: CatalogPagination
+    available_years: list[int]

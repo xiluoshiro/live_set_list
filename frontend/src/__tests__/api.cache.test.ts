@@ -66,6 +66,61 @@ describe("api cache behavior", () => {
     expect(await api.getSongVersion(1)).toEqual({ song_id: 1, revision: 3 });
   });
 
+  // 测试点：目录摘要保留 facets，各排序、页码和页大小独立缓存，年份参数不串用演出结果。
+  test("song directory and performance parameters isolate caches", async () => {
+    fetchMock.mockImplementation(async (input: string) => {
+      const query = new URL(input, "https://example.test").searchParams;
+      return makeJsonResponse({ items: [{ group_name: input }],
+        pagination: { page: Number(query.get("page") || 1), page_size: Number(query.get("page_size") || 30), total: 60, total_pages: 6 },
+        facets: { total: 60, bands: [{ band_id: 1, band_name: "甲", song_count: 40 }] }, available_years: [2025, 2024] });
+    });
+    const api = await import("../api");
+    const first = await api.getSongGroups("甲", 1, 1, undefined, { sort: "plays", pageSize: 10 });
+    expect(first.facets).toEqual({ total: 60, bands: [{ band_id: 1, band_name: "甲", song_count: 40 }] });
+    expect(await api.getSongGroups("甲", 1, 1, undefined, { sort: "plays", pageSize: 10 })).toEqual(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await api.getSongGroups("甲", 2, 1, undefined, { sort: "plays", pageSize: 10 });
+    await api.getSongGroups("甲", 1, 1, undefined, { sort: "release", pageSize: 10 });
+    await api.getSongGroups("甲", 1, 1, undefined, { sort: "plays", pageSize: 50 });
+    const years = await api.getSongPerformances(7, 1, { year: 2024, pageSize: 10 });
+    expect(years.available_years).toEqual([2025, 2024]);
+    await api.getSongPerformances(7, 1, { year: 2024, pageSize: 10 });
+    await api.getSongPerformances(7, 1, { year: 2025, pageSize: 10 });
+    await api.getSongPerformances(7, 2, { year: 2024, pageSize: 10 });
+    await api.getSongPerformances(7, 1, { year: 2024, pageSize: 50 });
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(new Set(fetchMock.mock.calls.map(call => call[0])).size).toBe(8);
+  });
+
+  // 测试点：唱片、归属及 Live 变更均刷新目录派生资料，失效前的摘要响应不能污染新缓存。
+  test("catalog and live writes invalidate directory summaries including in-flight results", async () => {
+    const api = await import("../api");
+    const payload = (count: number) => ({ items: [{ group_id: 1, performance_count: count,
+      first_release_date: count === 1 ? null : "2018-12-12", display_cover: count === 1 ? null : { url: "https://example.test/cover.png", album_id: 8, album_name: "首发" } }],
+      pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 }, facets: { total: 1, bands: [{ band_id: 2, band_name: "乙", song_count: count }] } });
+    const read = () => api.getSongGroups("", 1, undefined, undefined, { sort: "plays", pageSize: 10 });
+    const stale = deferred<Response>();
+    fetchMock.mockReturnValueOnce(stale.promise);
+    const old = read();
+    api.invalidateSongCatalog();
+    fetchMock.mockResolvedValueOnce(makeJsonResponse(payload(2)));
+    const fresh = await read();
+    stale.resolve(makeJsonResponse(payload(1)));
+    await old;
+    expect(await read()).toEqual(fresh);
+    expect(fresh.items[0]).toMatchObject({ performance_count: 2, first_release_date: "2018-12-12", display_cover: { album_id: 8 } });
+    for (const [path, body] of [["/albums/8", { release_date: "2019-01-01" }], ["/albums/8", { cover_urls: [] }],
+      ["/albums/8", { tracks: [] }], ["/songs/1", { ownership: { mode: "pending" } }]] as const) {
+      fetchMock.mockResolvedValueOnce(makeJsonResponse({ ok: true }));
+      await api.songCatalogWrite(path, "PUT", body, "csrf");
+      fetchMock.mockResolvedValueOnce(makeJsonResponse(payload(3)));
+      expect((await read()).items[0].performance_count).toBe(3);
+    }
+    api.clearLiveDataCaches();
+    fetchMock.mockResolvedValueOnce(makeJsonResponse(payload(4)));
+    expect((await read()).items[0].performance_count).toBe(4);
+  });
+
   test("getLives 相同参数命中缓存，不重复请求", async () => {
     // 测试点：列表页缓存命中（page/page_size 维度）。
     fetchMock.mockResolvedValue(

@@ -16,7 +16,7 @@
 
 ## 当前设计
 
-- [歌曲概览、歌曲详情与唱片详情交付标准](design/song-catalog-three-page-delivery.md)：三页改版待实施清单、摘要与统计口径、API 增量、数据准备及具体验收场景。
+- [歌曲概览、歌曲详情与唱片详情交付标准](design/song-catalog-three-page-delivery.md)：三页改版交付基线、摘要与统计口径、API 增量、数据准备及具体验收场景。
 - [歌曲资料、歌曲组与专辑实现设计](design/song-catalog-and-albums.md)：版本与归属数据模型、逐条演奏统计、公共及 Console API、专辑子项与迁移；主体已有实现，增量封面方案见专项文档。
 - [专辑页面链接与多封面实现方案](design/album-links-and-covers.md)：两个 URL 字段、默认封面与切换、后台手工维护、迁移兼容和本地验证记录。
 - [全站 Stage Ledger 视觉重构方案](design/site-wide-stage-ledger-ui-refactor.md)：以演出流程和新首页首屏为双参考，定义全站视觉系统、组件库边界、页面迁移批次与视觉回归门禁。

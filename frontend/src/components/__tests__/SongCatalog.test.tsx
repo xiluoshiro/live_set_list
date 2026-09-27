@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -17,31 +17,45 @@ const version = (id = 1, count = 2): SongVersion => ({ song_id: id, song_name: "
   ownership: { mode: "bands", band_ids: [1], member_groups: [], bands: [{ band_id: 1, band_name: "乐队甲" }], groups: [] },
   performance_count: count, albums: [{ album_id: 1, album_name: "收录盘", release_label: "special disc", release_date: null, album_url: null, cover_urls: [], revision: 1 }] });
 const page = <T,>(items: T[], index = 1, pages = 1) => ({ items, page: index, page_size: 30, total: items.length, total_pages: pages });
+function PublicPage() {
+  const [target, setTarget] = useState({ songId: 1, albumId: null as number | null });
+  const history = useRef<typeof target[]>([]);
+  const navigate = (next: typeof target) => { history.current.push(target); setTarget(next); };
+  return <SongCatalog {...target} onSongSelect={songId => navigate({ songId, albumId: null })}
+    onAlbumSelect={albumId => navigate({ ...target, albumId })} onLiveSelect={vi.fn()}
+    onBack={() => { const previous = history.current.pop(); if (previous) setTarget(previous); }} backLabel="返回" />;
+}
 beforeEach(() => {
   vi.resetAllMocks();
-  api.getSongGroups.mockResolvedValue(page([{ group_id: 1, group_name: "合唱曲", version_count: 2 }]));
-  api.getSongGroup.mockResolvedValue({ group_id: 1, group_name: "合唱曲", revision: 1, versions: [version(), version(2)] });
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  api.getSongGroups.mockResolvedValue({ ...page([{ group_id: 1, group_name: "合唱曲", version_count: 2,
+    matched_song_ids: [1, 2], first_release_date: null, first_release_albums: [], performance_count: 2,
+    latest_performance_date: null, display_cover: null }]), facets: { total: 1, bands: [{ band_id: 1, band_name: "乐队甲", song_count: 1 }] } });
+  api.getSongGroup.mockResolvedValue({ group_id: 1, group_name: "合唱曲", revision: 1, versions: [version(), version(2)], display_cover: null });
   api.getSongVersion.mockImplementation((id: number) => Promise.resolve(version(id)));
-  api.getSongPerformances.mockResolvedValue(page([{ setlist_id: "row-1", live_id: 1, live_title: "Live 1", live_date: "2026-01-01", segment_type: "M", sub_order: 1, absolute_order: 1, is_short: true, live_cover: "original" }]));
+  api.getSongPerformances.mockResolvedValue({ ...page([{ setlist_id: "row-1", live_id: 1, live_title: "Live 1", live_date: "2026-01-01", segment_type: "M", sub_order: 1, absolute_order: 1, is_short: true, live_cover: "original" }]), available_years: [2026] });
   api.getCatalogConsole.mockImplementation((path: string) => Promise.resolve(path === "/members" ? { items: [] } : path === "/songs/1" ? version() : page([{ song_id: 1, song_name: "合唱曲", band_id: null, band_name: "乐队甲", version_label: "普通版" }])));
   api.songCatalogWrite.mockResolvedValue({ item: version() });
 });
 
-// 测试点：空说明不加括号，发行及合作前缀在专辑卡片和展开标题中一致展示。
+// 测试点：歌曲的唱片链接进入独立页，名称及发行说明完整保留，空说明不制造额外标题。
 test.each([
   ["劇場版「BanG Dream! Episode of Roselia」Theme Songs Collection", "", "劇場版「BanG Dream! Episode of Roselia」Theme Songs Collection"],
   ["Yes! BanG_Dream!", "Poppin'Party 1st Single", "Poppin'Party 1st Single「Yes! BanG_Dream!」"],
   ["ピコっと！パピっと！！ガルパ☆ピコ！！！", "香澄×蘭×彩×友希那×こころ", "香澄×蘭×彩×友希那×こころ「ピコっと！パピっと！！ガルパ☆ピコ！！！」"],
-])("album title: %s", async (album_name, release_label, title) => {
+])("album title: %s", async (album_name, release_label, _title) => {
   const user = userEvent.setup();
   const album = { ...version().albums[0], album_name, release_label, release_date: "2021-06-30" };
   api.getSongVersion.mockResolvedValue({ ...version(), albums: [album] });
   api.getAlbumDetail.mockResolvedValue({ ...album, tracks: [] });
-  render(<SongCatalog songId={1} onSongSelect={vi.fn()} onLiveSelect={vi.fn()} />);
-  const card = await screen.findByRole("button", { name: `${title} 2021-06-30` });
-  expect(within(card).getByText(title, { exact: true })).toBeInTheDocument();
+  render(<PublicPage />);
+  const card = await screen.findByRole("link", { name: `查看唱片 ${album_name}` });
+  expect(card).toHaveAttribute("href", "/albums/1");
+  expect(within(card).getByText(album_name, { exact: true })).toBeInTheDocument();
+  if (release_label) expect(within(card).getByText(release_label, { exact: true })).toBeInTheDocument();
   await user.click(card);
-  expect(await screen.findByRole("heading", { level: 4, name: title })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { level: 1, name: album_name })).toBeInTheDocument();
+  if (release_label) expect(screen.getByText(release_label, { exact: true })).toBeInTheDocument();
 });
 
 // 测试点：整队与固定成员可同时选择，确认和提交保留两类归属。
@@ -78,19 +92,113 @@ test("mixed ownership submits bands and selected members", async () => {
 // 测试点：切换版本仍显示歌曲组次数，Instrumental 点击定位收录的具体版本。
 test("song group list, version counts and instrumental target", async () => {
   const user = userEvent.setup();
-  function Page() { const [id, setId] = useState<number | null>(1); return <SongCatalog songId={id} onSongSelect={setId} onLiveSelect={vi.fn()} />; }
   api.getAlbumDetail.mockResolvedValue({ ...version().albums[0], tracks: [{ album_track_id: 1, song_id: 1, song_name: "合唱曲", track_order: 1, edition_label: "Instrumental", version_label: "普通版", group_id: 1 }] });
-  render(<Page />);
-  const detail = screen.getByRole("article", { name: "歌曲详情" });
+  render(<PublicPage />);
+  const detail = await screen.findByRole("article", { name: "歌曲详情" });
   await within(detail).findByText("2");
-  expect(within(screen.getByRole("complementary", { name: "歌曲组列表" })).queryByText("演奏次数")).not.toBeInTheDocument();
   await user.click(within(detail).getByRole("button", { name: "合唱版" }));
-  await within(detail).findByText("2");
-  expect(await within(detail).findByText("短版")).toBeInTheDocument();
-  await user.click(within(detail).getByRole("button", { name: /收录盘/ }));
-  await user.click(await screen.findByRole("button", { name: "合唱曲 · 普通版 · Instrumental" }));
-  await within(detail).findByText("2");
-  expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 1);
+  expect(await screen.findByText("短版")).toBeInTheDocument();
+  await user.click(await screen.findByRole("link", { name: "查看唱片 收录盘" }));
+  await user.click(await screen.findByRole("link", { name: "合唱曲 · 普通版 · Instrumental" }));
+  await within(await screen.findByRole("article", { name: "歌曲详情" })).findByText("2");
+  expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 1, { year: undefined, pageSize: 8 });
+});
+
+// 测试点：概览向服务端传递分页、搜索和排序，筛选回到第一页，并定位命中的版本。
+test("directory filters paginate and select a matching version", async () => {
+  const user = userEvent.setup();
+  const select = vi.fn();
+  api.getSongGroups.mockImplementation(async (_q, index) => ({
+    items: [{ group_id: 1, group_name: "合唱曲", version_count: 2, matched_song_ids: [2],
+      first_release_date: "2018-12-12", first_release_albums: [version().albums[0]],
+      performance_count: 36, latest_performance_date: "2025-05-03", display_cover: null }],
+    page: index, page_size: 12, total: 25, total_pages: 3,
+    facets: { total: 25, bands: [{ band_id: 1, band_name: "乐队甲", song_count: 14 }] },
+  }));
+  render(<SongCatalog songId={null} onSongSelect={select} onLiveSelect={vi.fn()} />);
+  expect(await screen.findByText("2018.12.12", { selector: "time" })).toBeInTheDocument();
+  expect(screen.getByText("2025.05.03")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "下一页" }));
+  await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("", 2, undefined, undefined, { sort: "plays", pageSize: 12 }));
+  await user.click(await screen.findByRole("button", { name: "乐队甲 14" }));
+  await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("", 1, 1, undefined, { sort: "plays", pageSize: 12 }));
+  await user.selectOptions(screen.getByLabelText("歌曲排序"), "release");
+  await user.type(screen.getByLabelText("搜索歌曲、乐队"), "乐队甲");
+  await user.click(screen.getByRole("button", { name: "搜索" }));
+  await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("乐队甲", 1, 1, undefined, { sort: "release", pageSize: 12 }));
+  await user.click(await screen.findByRole("link", { name: "合唱曲" }));
+  await waitFor(() => expect(select).toHaveBeenCalledWith(2));
+});
+
+// 测试点：10/50 行概览只读取批量目录，渲染每行不会触发歌曲、唱片或演出详情请求。
+test.each([10, 50])("directory %i rows use one batch request", async pageSize => {
+  api.getSongGroups.mockResolvedValue({ items: Array.from({ length: pageSize }, (_, index) => ({
+    group_id: index + 1, group_name: `目录歌曲 ${index + 1}`, version_count: 1, matched_song_ids: [index + 1],
+    first_release_date: null, first_release_albums: [], performance_count: 0, latest_performance_date: null, display_cover: null,
+  })), page: 1, page_size: pageSize, total: 60, total_pages: Math.ceil(60 / pageSize), facets: { total: 60, bands: [] } });
+  render(<SongCatalog songId={null} browse={{ pageSize }} onSongSelect={vi.fn()} onLiveSelect={vi.fn()} />);
+  await screen.findByRole("link", { name: `目录歌曲 ${pageSize}` });
+  expect(screen.getAllByRole("link", { name: /^目录歌曲 / })).toHaveLength(pageSize);
+  expect(api.getSongGroups).toHaveBeenCalledTimes(1);
+  expect(api.getSongVersion).not.toHaveBeenCalled();
+  expect(api.getSongGroup).not.toHaveBeenCalled();
+  expect(api.getAlbumDetail).not.toHaveBeenCalled();
+  expect(api.getSongPerformances).not.toHaveBeenCalled();
+});
+
+// 测试点：年份筛选与翻页不改变组总次数，完整年份选项在空结果及加载期间仍可用。
+test("performance years retain choices and group total across pages", async () => {
+  const user = userEvent.setup();
+  api.getSongVersion.mockResolvedValue(version(1, 20));
+  api.getSongPerformances.mockImplementation(async (_id, index, options) => ({
+    items: options.year === 2023 ? [] : [{ setlist_id: `record-${index}`, live_id: index,
+      live_title: `演出 ${options.year ?? 2025} 第${index}页`, live_date: `${options.year ?? 2025}-01-01`,
+      segment_type: "M", sub_order: 1, absolute_order: 1, is_short: false, live_cover: "original" }],
+    page: index, page_size: 8, total: options.year === 2023 ? 0 : 17,
+    total_pages: options.year === 2023 ? 1 : 3, available_years: [2025, 2024, 2023],
+  }));
+  render(<PublicPage />);
+  await screen.findByText("演出 2025 第1页");
+  await user.selectOptions(screen.getByLabelText("演出年份"), "2024");
+  await screen.findByText("演出 2024 第1页");
+  await user.click(screen.getByRole("button", { name: "下一页" }));
+  expect(await screen.findByText("演出 2024 第2页")).toBeInTheDocument();
+  expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 2, { year: 2024, pageSize: 8 });
+  expect(screen.getByText("20", { exact: false, selector: ".song-performance-total strong" })).toHaveTextContent("20 次");
+  await user.selectOptions(screen.getByLabelText("演出年份"), "2023");
+  expect(await screen.findByText("暂无演奏记录")).toBeInTheDocument();
+  expect(within(screen.getByLabelText("演出年份")).getAllByRole("option").map(option => option.textContent))
+    .toEqual(["全部年份", "2025 年", "2024 年", "2023 年"]);
+});
+
+// 测试点：唱片按接口分区顺序完整展示重复收录，非默认版本与 Instrumental 指向同一个具体版本。
+test("album exposes every section and repeated track in release order", async () => {
+  const select = vi.fn();
+  api.getAlbumDetail.mockResolvedValue({ ...version().albums[0], tracks: [
+    { album_track_id: 11, song_id: 2, group_id: 1, song_name: "合唱曲", version_label: "合唱版", section_name: "Disc 2", track_order: 1, edition_label: "" },
+    { album_track_id: 12, song_id: 2, group_id: 1, song_name: "合唱曲", version_label: "合唱版", section_name: "Disc 1", track_order: 1, edition_label: "Instrumental" },
+    { album_track_id: 13, song_id: 1, group_id: 1, song_name: "附加曲", version_label: "", section_name: "限定版", track_order: 1, edition_label: "" },
+  ] });
+  render(<SongCatalog songId={null} albumId={1} onSongSelect={select} onLiveSelect={vi.fn()} />);
+  const album = await screen.findByRole("article", { name: "唱片详情" });
+  expect(within(album).getAllByRole("heading", { level: 3 }).map(item => item.textContent)).toEqual(["Disc 2", "Disc 1", "限定版"]);
+  expect(within(album).getAllByRole("listitem")).toHaveLength(3);
+  expect(within(album).getByText("3 首")).toBeInTheDocument();
+  const instrumental = within(album).getByRole("link", { name: "合唱曲 · 合唱版 · Instrumental" });
+  expect(instrumental).toHaveAttribute("href", "/songs/2");
+  await userEvent.click(instrumental);
+  expect(select).toHaveBeenCalledWith(2);
+});
+
+// 测试点：成员及混合归属详情显示固定成员资料，pending 保留未知状态。
+test.each(["members", "mixed", "pending"] as const)("detail ownership %s", async mode => {
+  const members = { band_id: 2, band_name: "乐队乙", members: [{ member_id: 8, display_name: "固定成员" }] };
+  api.getSongVersion.mockResolvedValue({ ...version(), ownership: { mode,
+    band_ids: mode === "mixed" ? [1] : [], member_groups: mode === "pending" ? [] : [{ band_id: 2, member_ids: [8] }],
+    bands: mode === "mixed" ? [{ band_id: 1, band_name: "乐队甲" }] : [], groups: mode === "pending" ? [] : [members] } });
+  render(<PublicPage />);
+  expect(await screen.findByText(mode === "pending" ? "待回填" : mode === "mixed" ? "乐队甲 / 乐队乙：固定成员" : "乐队乙：固定成员")).toBeInTheDocument();
+  await screen.findByText("短版");
 });
 
 // 测试点：新增页直接填写，确认后 POST 创建；保留草稿连续提交也不会切换为 PUT。
@@ -174,19 +282,18 @@ test("manage loads details and protects unsaved changes", async () => {
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/songs/1", "PUT", { song_name: "再次修改", version_label: "普通版", expected_revision: 1 }, "csrf");
 });
 
-// 测试点：卡片采用第一张，详情本地切图遵守边界，坏图仍可切换和访问来源，重开及换版本恢复默认。
-test("album gallery switches locally and resets on reopening or version change", async () => {
+// 测试点：独立唱片页本地切图遵守边界，坏图仍可切换及访问来源，离开再进入恢复默认图。
+test("album gallery switches locally and resets on reopening", async () => {
   const user = userEvent.setup();
   const covers = ["https://img.example.test/first", "https://img.example.test/second"];
   const album = { ...version().albums[0], album_url: "https://example.test/album", cover_urls: covers, tracks: [] };
   api.getSongVersion.mockImplementation(async (id: number) => ({ ...version(id), albums: [album] }));
   api.getAlbumDetail.mockResolvedValue(album);
-  function Page() { const [id, setId] = useState<number | null>(1); return <SongCatalog songId={id} onSongSelect={setId} onLiveSelect={vi.fn()} />; }
-  render(<Page />);
-  const card = await screen.findByRole("button", { name: /收录盘/ });
-  expect(within(card).getByRole("presentation")).toHaveAttribute("src", covers[0]);
+  render(<PublicPage />);
+  const card = await screen.findByRole("link", { name: "查看唱片 收录盘" });
+  expect(within(card).getByRole("img")).toHaveAttribute("src", covers[0]);
   await user.click(card);
-  const detail = await screen.findByRole("region", { name: "专辑详情" });
+  const detail = await screen.findByRole("article", { name: "唱片详情" });
   const gallery = within(detail).getByRole("group", { name: "专辑封面" });
   expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[0]);
   expect(within(gallery).getByRole("button", { name: "上一张" })).toBeDisabled();
@@ -197,19 +304,14 @@ test("album gallery switches locally and resets on reopening or version change",
   expect(within(gallery).getByRole("button", { name: "下一张" })).toBeDisabled();
   fireEvent.error(within(gallery).getByRole("img"));
   expect(within(gallery).getByRole("status")).toHaveTextContent("封面无法显示");
-  expect(within(detail).getByRole("link", { name: "专辑页面" })).toHaveAttribute("href", album.album_url);
+  expect(within(detail).getByRole("link", { name: /专辑页面/ })).toHaveAttribute("href", album.album_url);
   await user.click(within(gallery).getByRole("button", { name: "上一张" }));
   expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[0]);
   expect(api.getAlbumDetail).toHaveBeenCalledTimes(requestsBefore);
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
   await user.click(within(gallery).getByRole("button", { name: "下一张" }));
-  await user.click(within(detail).getByRole("button", { name: "收起" }));
-  await user.click(card);
-  expect(await screen.findByText("1 / 2")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "下一张" }));
-  await user.click(screen.getByRole("button", { name: "合唱版" }));
-  await waitFor(() => expect(screen.queryByRole("region", { name: "专辑详情" })).not.toBeInTheDocument());
-  await user.click(await screen.findByRole("button", { name: /收录盘/ }));
+  await user.click(screen.getByRole("link", { name: "← 返回" }));
+  await user.click(await screen.findByRole("link", { name: "查看唱片 收录盘" }));
   expect(await screen.findByText("1 / 2")).toBeInTheDocument();
 });
 

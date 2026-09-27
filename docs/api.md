@@ -424,6 +424,18 @@
   - 更新使用完整目标集合替换，并与 `performance_group_create/performance_group_update` 审计写入处于同一事务
   - 第一版不提供活动组删除、合并或拆分接口
 
+## 公共歌曲三页查询
+
+- `GET /api/song-groups`：匿名可读；保留 `q / band_id / album_id / owner_mode / member_id / page / page_size`，新增 `sort=name|plays|recent|release`，省略时为 `name`。页面显式使用 `plays`。日期排序空值最后，所有排序以规范化名称和组 ID 稳定决胜；未知排序返回 422。
+- 搜索覆盖组名、歌名、版本名及归属乐队名，沿用标点规范化。组合条件须命中同一版本，之后按组去重；`matched_song_ids` 保留命中的具体版本。
+- 摘要增加 `first_release_date / first_release_albums / performance_count / latest_performance_date / display_cover`。首次发行取组内所有版本收录唱片的最早非空日期，同日唱片全部保留；无日期返回 null 和空数组。乐队过滤不改变组级摘要口径。
+- `facets: { total, bands: [{ band_id, band_name, song_count }] }` 在去掉当前乐队过滤后统计歌曲组数量，包含成员乐队关系；pending 保留在全部歌曲。数量不受排序、分页或页大小影响。
+- `GET /api/song-groups/{group_id}` 增加 `display_cover: { url, album_id, album_name } | null`，与目录同一规则：关联唱片按 `release_date ASC NULLS LAST, album_id ASC` 选择首个非空 `cover_urls` 的第一张图。后端不探测远端图片可用性。
+- `GET /api/songs/{song_id}/performances` 新增可选 `year`（1..9999），返回完整降序去重 `available_years`，分页总数按所选年份计算。计数、最近日期和年份共用有效演出规则，每条 setlist 一次；不按 Live 去重，不按版本重复累加。
+- `GET /api/albums/{album_id}` 保持全部曲目返回，按分区顺序及曲序排列；不新增曲目分页。`section_name` 是一般收录分区，不表示物理盘类型。本期采用唱片 A，无相关唱片接口或推断发行乐队。
+
+具体空值、排序和身份规则见[三页交付标准](design/song-catalog-three-page-delivery.md)。
+
 ## 专辑页面与封面（V41）
 
 专辑摘要、详情、Console 列表及歌曲/歌曲组内的专辑均返回 `album_url: string | null` 和 `cover_urls: string[]`。封面数组保持顺序，第一项为默认图；没有图片时为 `[]`。
