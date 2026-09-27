@@ -35,9 +35,9 @@ test("album child labels keep independent track numbers", async () => {
   await screen.findByRole("option", { name: "#1 验证曲 / 通常版 / 乐队 A" });
   await user.selectOptions(screen.getByLabelText("收录歌曲"), "1");
   await user.click(screen.getByRole("button", { name: "添加收录" }));
-  fireEvent.change(screen.getByLabelText("第 1 曲碟号／发行版"), { target: { value: "Disc1" } });
+  fireEvent.change(screen.getByLabelText("第 1 曲碟号/发行版"), { target: { value: "Disc1" } });
   await user.click(screen.getByRole("button", { name: "添加收录" }));
-  fireEvent.change(screen.getByLabelText("第 2 曲碟号／发行版"), { target: { value: "限定版" } });
+  fireEvent.change(screen.getByLabelText("第 2 曲碟号/发行版"), { target: { value: "限定版" } });
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认" }));
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums", "POST", expect.objectContaining({ tracks: [
@@ -57,7 +57,7 @@ test("Instrumental 复用已有歌曲，专辑日期可未知，失败保留待�
   await user.click(screen.getByRole("button", { name: "添加收录" }));
   await user.click(screen.getByRole("button", { name: "添加收录" }));
   fireEvent.change(screen.getByLabelText("第 2 曲收录标识"), { target: { value: "Instrumental" } });
-  await user.click(screen.getAllByRole("button", { name: "上移" })[1]);
+  await user.click(within(screen.getByRole("table", { name: "专辑收录曲目" })).getAllByRole("button", { name: "上移" })[1]);
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   const dialog = screen.getByRole("dialog", { name: "确认新增专辑" });
   expect(screen.getByLabelText("第 1 曲收录标识")).toBeDisabled();
@@ -115,14 +115,14 @@ test("cover edits are reviewed, retained on failure and restored", async () => {
   expect(api.getCatalogConsole).toHaveBeenCalledWith("/albums/2");
 });
 
-// 测试点：空白或重复封面阻止确认；修正坏图链接后可以预览并保存，不依赖图片可达性。
+// 测试点：无效或重复封面阻止确认；修正坏图链接后可以预览并保存，不依赖图片可达性。
 test("cover validation and preview recovery", async () => {
   const user = userEvent.setup();
   const url = "https://img.example.test/cover?id=1";
   api.songCatalogWrite.mockResolvedValue({ album_id: 1, album_name: "盘", release_label: "", release_date: null, album_url: null, cover_urls: [url], revision: 1, tracks: [] });
   render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   fireEvent.change(screen.getByLabelText("专辑名称"), { target: { value: "盘" } });
-  await user.click(screen.getByRole("button", { name: "添加封面" }));
+  fireEvent.change(screen.getByLabelText("第 1 张封面 URL"), { target: { value: "http://img.example.test/cover" } });
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   expect(screen.getByRole("alert")).toHaveTextContent("第 1 张封面");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -153,7 +153,7 @@ test("creation retains its mode and release date when keeping the draft", async 
   await user.type(screen.getByLabelText("专辑名称"), "发行盘");
   await user.click(screen.getByRole("checkbox", { name: "日期未知" }));
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
-  await user.type(screen.getByLabelText("发售日期"), "2026-09-27");
+  fireEvent.change(screen.getByLabelText("发售日期"), { target: { value: "2026-09-27" } });
   expect(screen.getByRole("checkbox", { name: "日期未知" })).not.toBeChecked();
   await user.click(screen.getByRole("checkbox", { name: "新增后清空数据" }));
   for (let index = 0; index < 2; index += 1) {
@@ -171,32 +171,50 @@ test("creation retains its mode and release date when keeping the draft", async 
   expect(screen.getByRole("button", { name: "提交插入" })).toBeEnabled();
 });
 
-// 测试点：专辑收录可从第二页选择歌曲，翻页保留选择，搜索重置页码且不丢失已添加曲目。
-test("album song candidates paginate without truncating later songs", async () => {
+// 测试点：查询按钮及回车加载完整候选，包含接口后续页，输入过程不查询且已收录曲目保留。
+test("album song lookup loads all matching candidates on explicit query", async () => {
   const user = userEvent.setup();
   api.getCatalogConsole.mockImplementation(async (path: string) => {
     const params = new URL(path, "http://test").searchParams;
     const page = Number(params.get("page"));
-    return { items: [{ song_id: page === 1 ? 1 : 21, song_name: page === 1 ? "首页曲" : "后页曲", version_label: "", band_name: "乐队" }],
-      page, page_size: 20, total: 21, total_pages: 2 };
+    return { items: [{ song_id: page === 1 ? 1 : 101, song_name: page === 1 ? "首页曲" : "后页曲", version_label: "", band_name: "乐队" }],
+      page, page_size: 100, total: 101, total_pages: 2 };
   });
   render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
-  await screen.findByText("第 1 / 2 页，共 21 条");
-  await user.click(screen.getByRole("button", { name: "下一页" }));
-  await screen.findByText("第 2 / 2 页，共 21 条");
-  expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
-  expect(api.getCatalogConsole).toHaveBeenLastCalledWith("/songs?q=&page=2&limit=20");
-  await user.selectOptions(screen.getByLabelText("收录歌曲"), "21");
-  await user.click(screen.getByRole("button", { name: "上一页" }));
-  await screen.findByText("第 1 / 2 页，共 21 条");
-  expect(screen.getByLabelText("收录歌曲")).toHaveValue("21");
+  await screen.findByRole("option", { name: "#101 后页曲 / 默认版本 / 乐队" });
+  await user.selectOptions(screen.getByLabelText("收录歌曲"), "101");
   await user.click(screen.getByRole("button", { name: "添加收录" }));
   expect(screen.getByRole("table", { name: "专辑收录曲目" })).toHaveTextContent("后页曲");
-  await user.click(screen.getByRole("button", { name: "下一页" }));
-  await screen.findByText("第 2 / 2 页，共 21 条");
+  api.getCatalogConsole.mockClear();
   await user.type(screen.getByLabelText("搜索收录歌曲"), "曲");
-  await waitFor(() => expect(api.getCatalogConsole).toHaveBeenLastCalledWith("/songs?q=%E6%9B%B2&page=1&limit=20"));
+  expect(api.getCatalogConsole).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "查询" }));
+  await screen.findByRole("option", { name: "#101 后页曲 / 默认版本 / 乐队" });
+  expect(api.getCatalogConsole).toHaveBeenCalledWith("/songs?q=%E6%9B%B2&page=1&limit=100");
+  expect(api.getCatalogConsole).toHaveBeenCalledWith("/songs?q=%E6%9B%B2&page=2&limit=100");
+  await user.type(screen.getByLabelText("搜索收录歌曲"), "名{Enter}");
+  await screen.findByRole("option", { name: "#101 后页曲 / 默认版本 / 乐队" });
+  expect(api.getCatalogConsole).toHaveBeenCalledWith("/songs?q=%E6%9B%B2%E5%90%8D&page=1&limit=100");
   expect(screen.getByRole("table", { name: "专辑收录曲目" })).toHaveTextContent("后页曲");
+});
+
+// 测试点：封面默认一空行，删除全部后显示空状态，可重新添加；未填写的行不作为封面提交。
+test("cover rows start ready to edit and can be removed and re-added", async () => {
+  const user = userEvent.setup();
+  api.songCatalogWrite.mockResolvedValue({ album_id: 1, album_name: "无封面盘", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 1, tracks: [] });
+  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
+  const table = screen.getByRole("table", { name: "专辑封面" });
+  expect(within(table).getByLabelText("第 1 张封面 URL")).toHaveValue("");
+  await user.click(within(table).getByRole("button", { name: "移除" }));
+  expect(table).toHaveTextContent("暂无专辑封面");
+  await user.click(screen.getByRole("button", { name: "添加封面" }));
+  expect(within(table).getByLabelText("第 1 张封面 URL")).toHaveValue("");
+  await user.type(screen.getByLabelText("专辑名称"), "无封面盘");
+  await user.click(screen.getByRole("button", { name: "提交插入" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认" }));
+  await screen.findByText("已新增专辑 #1 无封面盘");
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums", "POST", expect.objectContaining({ cover_urls: [] }), "csrf");
+  expect(within(table).getByLabelText("第 1 张封面 URL")).toHaveValue("");
 });
 
 // 测试点：专辑翻页和查询不丢弃当前编辑草稿，搜索通过按钮或回车从第一页重新查询。
