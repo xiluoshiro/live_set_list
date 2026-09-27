@@ -253,12 +253,17 @@ class GroupPage(BaseModel):
     pagination: CatalogPagination
 
 
+class AlbumPage(CatalogPagination):
+    items: list[AlbumSummary]
+
+
 class AlbumTrack(AlbumTrackWrite):
     album_track_id: int
     track_order: int
     song_name: str
     version_label: str
     group_id: int
+    band_name: str
 
 
 class AlbumDetail(AlbumSummary):

@@ -3367,10 +3367,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         />
       )}
 
-      <AlbumAdminSection variant="create" active={mode === "album_create"}
-        registerLeaveGuard={guard => { albumLeaveGuard.current = guard; }} />
-      <AlbumAdminSection variant="edit" active={mode === "album_edit"}
-        registerLeaveGuard={guard => { albumLeaveGuard.current = guard; }} />
+      <AlbumAdminSection variant={mode === "album_create" ? "create" : "edit"}
+        active={mode === "album_create" || mode === "album_edit"}
+        registerLeaveGuard={guard => { albumLeaveGuard.current = guard; }}
+        onManage={() => setMode("album_edit")} />
       <SongCatalogAdmin
         active={mode === "song_create" || mode === "song_edit" || mode === "song"}
         variant={mode === "song_create" ? "create" : "edit"}

@@ -2420,7 +2420,7 @@ export type AlbumSummary = {
 };
 export type AlbumTrackWrite = { album_track_id?: number | null; song_id: number; track_order: number; edition_label: string; section_name?: string };
 export type AlbumDetail = AlbumSummary & { tracks: (AlbumTrackWrite & {
-  album_track_id: number; song_name: string; version_label: string; group_id: number;
+  album_track_id: number; song_name: string; version_label: string; group_id: number; band_name: string;
 })[] };
 export type SongVersion = {
   song_id: number; song_name: string; group_id: number; group_name: string;

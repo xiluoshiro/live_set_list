@@ -59,12 +59,12 @@ export function ConsoleChoiceSelect({ id, label, options, value, selectedLabel, 
   </>;
 }
 
-export function ConsoleCandidatePager({ page, totalPages, total, loading, onPage }: {
-  page: number; totalPages: number; total: number; loading: boolean; onPage: (page: number) => void;
+export function ConsoleCandidatePager({ page, totalPages, total, loading, disabled = false, onPage }: {
+  page: number; totalPages: number; total: number; loading: boolean; disabled?: boolean; onPage: (page: number) => void;
 }) {
   return <div className="tour-candidate-pager">
+    <button type="button" className="console-ghost-btn" disabled={disabled || loading || page <= 1} onClick={() => onPage(page - 1)}>上一页</button>
     <span className="live-page-status" aria-live="polite">{loading ? "加载中…" : `第 ${page} / ${totalPages} 页，共 ${total} 条`}</span>
-    <button type="button" className="console-ghost-btn" disabled={loading || page <= 1} onClick={() => onPage(page - 1)}>上一页</button>
-    <button type="button" className="console-ghost-btn" disabled={loading || page >= totalPages} onClick={() => onPage(page + 1)}>下一页</button>
+    <button type="button" className="console-ghost-btn" disabled={disabled || loading || page >= totalPages} onClick={() => onPage(page + 1)}>下一页</button>
   </div>;
 }

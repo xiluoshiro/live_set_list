@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { getCatalogConsole, songCatalogWrite, type CatalogPage, type AlbumDetail, type AlbumDraft, type AlbumSummary, type AlbumTrackWrite, type ConsoleSongItem } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { ConsoleDateInput } from "./ConsoleDateInput";
@@ -11,6 +11,17 @@ import { albumLinksError } from "../../albumLinks";
 
 const emptyAlbum = (): AlbumDraft => ({ album_name: "", release_label: "", release_date: null, album_url: null, cover_urls: [], tracks: [] });
 const coverSummary = (urls: string[]) => urls.map((url, i) => `${i + 1}${i === 0 ? "（默认）" : ""}. ${url}`).join("\n");
+const songLabel = (song: Pick<ConsoleSongItem, "song_id" | "song_name" | "version_label" | "band_name">) =>
+  `#${song.song_id} ${song.song_name} / ${song.version_label || "默认版本"} / ${song.band_name ?? "待回填"}`;
+const fields = (album: AlbumDetail): AlbumDraft => ({
+  album_name: album.album_name, release_label: album.release_label, release_date: album.release_date,
+  album_url: album.album_url, cover_urls: [...album.cover_urls],
+  tracks: album.tracks.map(t => ({ album_track_id: t.album_track_id, song_id: t.song_id, track_order: t.track_order,
+    edition_label: t.edition_label, section_name: t.section_name ?? "" })),
+});
+const trackSummary = (track: AlbumTrackWrite | undefined, label: string) => track
+  ? `${track.section_name ? `${track.section_name} · ` : ""}${track.track_order}. ${label}${track.edition_label ? ` / ${track.edition_label}` : ""}` : "";
+type HistoryEntry = { album: AlbumDetail; action: "create" | "update" };
 const numberTracks = (tracks: AlbumTrackWrite[]) => {
   const counts = new Map<string, number>();
   return tracks.map(track => {
@@ -20,38 +31,48 @@ const numberTracks = (tracks: AlbumTrackWrite[]) => {
     return { ...track, section_name: section, track_order: order };
   });
 };
-export function AlbumAdminSection({ variant, active, registerLeaveGuard }: {
+export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManage }: {
   variant: "create" | "edit";
   active: boolean;
   registerLeaveGuard: (guard: ((proceed: () => void) => void) | null) => void;
+  onManage: () => void;
 }) {
   const creating = variant === "create";
   const { csrfToken } = useAuth();
   const formId = useId();
-  const [albums, setAlbums] = useState<AlbumSummary[]>([]);
+  const [albumResults, setAlbumResults] = useState<CatalogPage<AlbumSummary> | null>(null);
+  const [albumsLoading, setAlbumsLoading] = useState(false);
+  const [albumsError, setAlbumsError] = useState("");
+  const [albumQuery, setAlbumQuery] = useState("");
+  const [albumSearch, setAlbumSearch] = useState({ query: "", page: 1, refresh: 0 });
+  const albums = albumResults?.items ?? [];
   const [original, setOriginal] = useState<AlbumDetail | null>(null);
-  const [draft, setDraft] = useState(emptyAlbum);
+  const [createDraft, setCreateDraft] = useState(emptyAlbum);
+  const [editDraft, setEditDraft] = useState(emptyAlbum);
+  const draft = creating ? createDraft : editDraft;
+  const setDraft = creating ? setCreateDraft : setEditDraft;
   const [songPage, setSongPage] = useState(1);
   const [songResults, setSongResults] = useState<CatalogPage<ConsoleSongItem> | null>(null);
   const [songsLoading, setSongsLoading] = useState(false);
+  const [songsError, setSongsError] = useState("");
   const songs = songResults?.items ?? [];
   const [songQuery, setSongQuery] = useState("");
   const [selectedSong, setSelectedSong] = useState("");
-  const [names, setNames] = useState<Record<number, string>>({});
+  const [songLabels, setSongLabels] = useState<Record<number, string>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [clearAfterCreate, setClearAfterCreate] = useState(true);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loadingAlbum, setLoadingAlbum] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const loadGeneration = useRef(0);
   const locked = busy || confirm;
   const [discard, setDiscard] = useState<(() => void) | null>(null);
-  const fields = (album: AlbumDetail): AlbumDraft => ({ album_name: album.album_name, release_label: album.release_label,
-    release_date: album.release_date, album_url: album.album_url, cover_urls: [...album.cover_urls],
-    tracks: album.tracks.map(t => ({ album_track_id: t.album_track_id, song_id: t.song_id, track_order: t.track_order, edition_label: t.edition_label, section_name: t.section_name ?? "" })) });
-  const dirty = JSON.stringify(draft) !== JSON.stringify(original ? fields(original) : emptyAlbum());
-  const guard = (next: () => void) => { if (dirty) setDiscard(() => next); else next(); };
-  const refresh = () => getCatalogConsole<{ items: AlbumSummary[] }>("/albums").then(result => setAlbums(result.items));
-  useEffect(() => { setConfirm(false); setDiscard(null); }, [active]);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(!creating && original ? fields(original) : emptyAlbum());
+  const guard = (next: () => void) => { if (!creating && dirty) setDiscard(() => next); else next(); };
+  const queryAlbums = () => setAlbumSearch(value => ({ query: albumQuery.trim(), page: 1, refresh: value.refresh + 1 }));
+  useEffect(() => { setConfirm(false); setDiscard(null); setMessage(""); setError(""); }, [active, creating]);
   useEffect(() => {
     if (!active || creating) return;
     registerLeaveGuard(guard);
@@ -60,27 +81,33 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard }: {
   useEffect(() => {
     if (!active || creating) return;
     let current = true;
-    void getCatalogConsole<{ items: AlbumSummary[] }>("/albums")
-      .then(result => { if (current) setAlbums(result.items); }).catch(e => { if (current) setError(String(e)); });
+    setAlbumsLoading(true); setAlbumsError(""); setAlbumResults(null);
+    void getCatalogConsole<CatalogPage<AlbumSummary>>(`/albums?q=${encodeURIComponent(albumSearch.query)}&page=${albumSearch.page}&limit=20`)
+      .then(result => { if (current) setAlbumResults(result); })
+      .catch(e => { if (current) setAlbumsError(String(e)); })
+      .finally(() => { if (current) setAlbumsLoading(false); });
     return () => { current = false; };
-  }, [active, creating]);
+  }, [active, creating, albumSearch]);
   useEffect(() => {
     if (!active || (!creating && !original)) return;
     let current = true;
-    setSongsLoading(true); setSongResults(null);
+    setSongsLoading(true); setSongsError(""); setSongResults(null);
     void getCatalogConsole<CatalogPage<ConsoleSongItem>>(`/songs?q=${encodeURIComponent(songQuery)}&page=${songPage}&limit=20`).then(result => {
-      if (current) { setSongResults(result); setNames(value => ({ ...value, ...Object.fromEntries(result.items.map(s => [s.song_id, s.song_name])) })); }
-    }).catch(e => { if (current) setError(String(e)); })
+      if (current) { setSongResults(result); setSongLabels(value => ({ ...value, ...Object.fromEntries(result.items.map(s => [s.song_id, songLabel(s)])) })); }
+    }).catch(e => { if (current) setSongsError(String(e)); })
       .finally(() => { if (current) setSongsLoading(false); });
     return () => { current = false; };
   }, [active, creating, original?.album_id, songQuery, songPage]);
   const load = async (id: number) => {
-    setBusy(true); setError("");
+    const generation = ++loadGeneration.current;
+    setBusy(true); setLoadingAlbum(true); setError(""); setMessage("");
     try {
       const album = await getCatalogConsole<AlbumDetail>(`/albums/${id}`);
-      setOriginal(album); setDraft(fields(album));
-      setNames(value => ({ ...value, ...Object.fromEntries(album.tracks.map(t => [t.song_id, t.song_name])) }));
-    } catch (e) { setError(String(e)); } finally { setBusy(false); }
+      if (generation !== loadGeneration.current) return;
+      setOriginal(album); setEditDraft(fields(album)); setSelectedSong("");
+      setSongLabels(value => ({ ...value, ...Object.fromEntries(album.tracks.map(t => [t.song_id, songLabel(t)])) }));
+    } catch (e) { if (generation === loadGeneration.current) setError(String(e)); }
+    finally { if (generation === loadGeneration.current) { setBusy(false); setLoadingAlbum(false); } }
   };
   const save = async () => {
     if (!csrfToken) return;
@@ -88,13 +115,15 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard }: {
     try {
       const album = await songCatalogWrite<AlbumDetail>(creating ? "/albums" : `/albums/${original!.album_id}`, creating ? "POST" : "PUT",
         { ...draft, ...(!creating ? { expected_revision: original!.revision } : {}) }, csrfToken);
+      setHistory(value => [...value, { album, action: creating ? "create" : "update" }]);
+      setMessage(`已${creating ? "新增" : "更新"}专辑 #${album.album_id} ${albumTitle(album)}`);
       if (creating) {
-        setMessage(`已新增专辑 #${album.album_id} ${albumTitle(album)}`);
-        if (clearAfterCreate) { setDraft(emptyAlbum()); setSelectedSong(""); }
+        if (clearAfterCreate) { setCreateDraft(emptyAlbum()); setSelectedSong(""); }
       } else {
-        setOriginal(album); setDraft(fields(album)); await refresh();
+        setOriginal(album); setEditDraft(fields(album));
       }
       setConfirm(false);
+      setAlbumSearch(value => ({ ...value, refresh: value.refresh + 1 }));
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   };
   const move = (index: number, direction: number) => {
@@ -112,6 +141,8 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard }: {
     setError(problem);
     if (!problem) setConfirm(true);
   };
+  const visibleHistory = history.filter(entry => entry.action === (creating ? "create" : "update"));
+  const originalTracks = creating ? [] : original?.tracks ?? [];
   const albumNameInput = <input aria-label="专辑名称" placeholder="请输入专辑名称" disabled={locked} value={draft.album_name} onChange={e => setDraft({ ...draft, album_name: e.target.value })} />;
   const releaseLabelInput = <input aria-label="发行标识" disabled={locked} value={draft.release_label} placeholder="10th single / best album" onChange={e => setDraft({ ...draft, release_label: e.target.value })} />;
   const albumUrlInput = <input aria-label="专辑页面" type="url" maxLength={2048} disabled={locked} value={draft.album_url ?? ""} placeholder="https://" onChange={e => setDraft({ ...draft, album_url: e.target.value || null })} />;
@@ -126,17 +157,37 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard }: {
     { field: "日期", before: original?.release_date ?? "未知", after: draft.release_date ?? "未知" },
     { field: "专辑页面", before: original?.album_url ?? "", after: draft.album_url ?? "" },
     { field: "封面", before: coverSummary(original?.cover_urls ?? []), after: coverSummary(draft.cover_urls) },
-    { field: "曲目", before: original?.tracks.map(t => `${t.section_name || ""} ${t.track_order}. ${t.song_name} ${t.edition_label}`).join(" / ") ?? "", after: draft.tracks.map(t => `${t.section_name || ""} ${t.track_order}. ${names[t.song_id] ?? t.song_id} ${t.edition_label}`).join(" / ") },
+    ...Array.from({ length: Math.max(originalTracks.length, draft.tracks.length) }, (_, index) => ({
+      field: `曲目 ${index + 1}`,
+      before: trackSummary(originalTracks[index], originalTracks[index] ? songLabel(originalTracks[index]) : ""),
+      after: trackSummary(draft.tracks[index], draft.tracks[index] ? songLabels[draft.tracks[index].song_id] ?? `#${draft.tracks[index].song_id}` : ""),
+    })),
   ];
   if (!active) return null;
   return <section className="tour-admin-section" aria-label={creating ? "新增专辑" : "专辑管理"}>
     {error && <p role="alert">{error}</p>}
     {message && <p className="console-admin-hint" role="status">{message}</p>}
-    {!creating && <div className="tour-admin-toolbar">
+    {!creating && <div>
+    <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar" role="search" aria-label="查询专辑">
       <label className="live-management-label" htmlFor={`${formId}-album`}>已有专辑</label>
-      <select id={`${formId}-album`} className="console-entity-select" value={original?.album_id ?? ""} disabled={locked}
+      <input id={`${formId}-album-query`} className="venue-query-input live-management-primary-control" aria-label="搜索专辑"
+        placeholder="输入专辑 ID、名称或发行标识" value={albumQuery} disabled={locked}
+        onChange={e => setAlbumQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") queryAlbums(); }} />
+      <button type="button" className="console-ghost-btn" disabled={locked || albumsLoading} onClick={queryAlbums}>查询</button>
+      <select id={`${formId}-album`} aria-label="已有专辑" value={original?.album_id ?? ""} disabled={locked || albumsLoading || !albums.length}
         onChange={e => { const id = Number(e.target.value); if (id) guard(() => void load(id)); }}>
-        <option value="">请选择</option>{albums.map(a => <option key={a.album_id} value={a.album_id}>{albumTitle(a)}</option>)}</select>
+        <option value="">选择要编辑的专辑</option>
+        {original && !albums.some(a => a.album_id === original.album_id) && <option value={original.album_id}>{albumTitle(original)}</option>}
+        {albums.map(a => <option key={a.album_id} value={a.album_id}>{albumTitle(a)}</option>)}
+      </select>
+      <ConsoleCandidatePager page={albumResults?.page ?? albumSearch.page} totalPages={albumResults?.total_pages ?? 1}
+        total={albumResults?.total ?? 0} loading={albumsLoading} disabled={locked || !albumResults}
+        onPage={page => setAlbumSearch(value => ({ ...value, page }))} />
+    </div>
+    {albumsError && <p role="alert">专辑查询失败：{albumsError}</p>}
+    {!albumsLoading && albumResults && !albums.length && <p className="console-admin-hint" role="status">没有匹配的专辑。</p>}
+    {!original && !loadingAlbum && <p className="console-admin-hint">请先选择要编辑的专辑。</p>}
+    {loadingAlbum && <p className="console-admin-hint" role="status">正在加载专辑…</p>}
     </div>}
     {(creating || original) && <>
     {!creating ? <fieldset disabled={locked} className="tour-admin-fields tour-band-field">
@@ -151,8 +202,9 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard }: {
         <tbody><tr><td>{albumNameInput}</td><td>{releaseLabelInput}</td><td>{releaseDateField}</td><td>{albumUrlInput}</td></tr></tbody>
       </table>
     </div>}
-    <div>
-      <div className="tour-admin-toolbar"><button type="button" className="console-ghost-btn" disabled={locked || draft.cover_urls.length >= 20}
+    <section aria-labelledby={`${formId}-covers`}>
+      <div className="live-admin-status-head"><h3 id={`${formId}-covers`}>专辑封面</h3>
+        <button type="button" className="console-ghost-btn" disabled={locked || draft.cover_urls.length >= 20}
         onClick={() => setDraft({ ...draft, cover_urls: [...draft.cover_urls, ""] })}>添加封面</button></div>
       {draft.cover_urls.length > 0 && <div className="console-table-wrap setlist-input-wrap"><table className="console-admin-table album-cover-editor" aria-label="专辑封面">
         <colgroup><col className="album-cover-preview-column" /><col /><col className="album-cover-actions-column" /></colgroup>
@@ -168,35 +220,54 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard }: {
         </div></td>
       </tr>)}
     </tbody></table></div>}
-    </div>
-    <div>
-      <div className="tour-admin-toolbar live-admin-toolbar">
+    </section>
+    <section aria-label="收录曲目">
+      <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar" role="search" aria-label="查询收录歌曲">
         <label className="live-management-label" htmlFor={`${formId}-song-select`}>收录歌曲</label>
         <input id={`${formId}-song-query`} className="venue-query-input live-management-primary-control" disabled={locked}
           aria-label="搜索收录歌曲" placeholder="歌曲名称" value={songQuery} onChange={e => { setSongQuery(e.target.value); setSongPage(1); setSelectedSong(""); }} />
-        <select id={`${formId}-song-select`} className="console-entity-select" disabled={locked || songsLoading} aria-label="收录歌曲" value={selectedSong} onChange={e => setSelectedSong(e.target.value)}><option value="">请选择歌曲版本</option>{selectedSong && !songs.some(s => s.song_id === Number(selectedSong)) && <option value={selectedSong}>#{selectedSong} {names[Number(selectedSong)]}</option>}{songs.map(s => <option value={s.song_id} key={s.song_id}>#{s.song_id} {s.song_name} / {s.version_label || "默认版本"} / {s.band_name ?? "待回填"}</option>)}</select>
+        <select id={`${formId}-song-select`} disabled={locked || songsLoading || (!songs.length && !selectedSong)} aria-label="收录歌曲" value={selectedSong} onChange={e => setSelectedSong(e.target.value)}>
+          <option value="">请选择歌曲版本</option>
+          {selectedSong && !songs.some(s => s.song_id === Number(selectedSong)) && <option value={selectedSong}>{songLabels[Number(selectedSong)]}</option>}
+          {songs.map(s => <option value={s.song_id} key={s.song_id}>{songLabel(s)}</option>)}
+        </select>
         <button type="button" className="console-ghost-btn" disabled={!selectedSong || locked} onClick={() => setDraft({ ...draft, tracks: numberTracks([...draft.tracks, { song_id: Number(selectedSong), track_order: 1, edition_label: "", section_name: draft.tracks[draft.tracks.length - 1]?.section_name ?? "" }]) })}>添加收录</button>
-        <ConsoleCandidatePager page={songPage} totalPages={songResults?.total_pages ?? songPage} total={songResults?.total ?? 0}
-          loading={songsLoading} onPage={setSongPage} />
+        <ConsoleCandidatePager page={songResults?.page ?? songPage} totalPages={songResults?.total_pages ?? 1} total={songResults?.total ?? 0}
+          loading={songsLoading} disabled={locked || !songResults} onPage={setSongPage} />
       </div>
+      {songsError && <p role="alert">歌曲查询失败：{songsError}</p>}
+      {!songsLoading && songResults && !songs.length && <p className="console-admin-hint" role="status">没有匹配的歌曲。</p>}
       <div className="console-table-wrap"><table className="console-admin-table album-track-editor" aria-label="专辑收录曲目">
         <colgroup><col className="album-track-section-column" /><col className="album-track-order-column" /><col /><col className="album-track-edition-column" /><col className="album-track-actions-column" /></colgroup>
         <thead><tr><th scope="col">碟号／发行版</th><th scope="col">曲序</th><th scope="col">歌曲</th><th scope="col">收录标识</th><th scope="col">操作</th></tr></thead><tbody>
-      {draft.tracks.map((track, index) => <tr key={index}><td><input disabled={locked} aria-label={`第 ${index + 1} 曲碟号／发行版`} placeholder="Disc 1 / 限定版" value={track.section_name ?? ""} onChange={e => setDraft({ ...draft, tracks: numberTracks(draft.tracks.map((t, i) => i === index ? { ...t, section_name: e.target.value } : t)) })} /></td><td>{track.track_order}</td><td>#{track.song_id} {names[track.song_id]}</td><td><input disabled={locked} aria-label={`第 ${index + 1} 曲收录标识`} placeholder="Instrumental" value={track.edition_label} onChange={e => setDraft({ ...draft, tracks: draft.tracks.map((t, i) => i === index ? { ...t, edition_label: e.target.value } : t) })} /></td>
+      {!draft.tracks.length && <tr><td colSpan={5} className="empty-cell">暂无收录曲目</td></tr>}
+      {draft.tracks.map((track, index) => <tr key={index}><td><input disabled={locked} aria-label={`第 ${index + 1} 曲碟号／发行版`} placeholder="Disc 1 / 限定版" value={track.section_name ?? ""} onChange={e => setDraft({ ...draft, tracks: numberTracks(draft.tracks.map((t, i) => i === index ? { ...t, section_name: e.target.value } : t)) })} /></td><td>{track.track_order}</td><td>{songLabels[track.song_id] ?? `#${track.song_id}`}</td><td><input disabled={locked} aria-label={`第 ${index + 1} 曲收录标识`} placeholder="Instrumental" value={track.edition_label} onChange={e => setDraft({ ...draft, tracks: draft.tracks.map((t, i) => i === index ? { ...t, edition_label: e.target.value } : t) })} /></td>
         <td><div className="tour-admin-toolbar venue-create-actions">
           <button type="button" className="console-ghost-btn" disabled={locked || index === 0} onClick={() => move(index, -1)}>上移</button>
           <button type="button" className="console-ghost-btn" disabled={locked || index === draft.tracks.length - 1} onClick={() => move(index, 1)}>下移</button>
           <button type="button" className="console-ghost-btn" disabled={locked} onClick={() => setDraft({ ...draft, tracks: numberTracks(draft.tracks.filter((_, i) => i !== index)) })}>移除</button>
         </div></td></tr>)}
     </tbody></table></div>
-      <div className="console-submit-row venue-create-actions">
+    </section>
+      <div className="console-submit-row live-admin-insert-row venue-create-actions">
         {creating && <label className="live-clear-after-create-option"><input type="checkbox" disabled={locked}
           checked={clearAfterCreate} onChange={e => setClearAfterCreate(e.target.checked)} />新增后清空数据</label>}
-        <button type="button" className="console-ghost-btn" disabled={locked} onClick={() => { setDraft(creating ? emptyAlbum() : fields(original!)); setError(""); setMessage(""); }}>{creating ? "清空数据" : "恢复原值"}</button>
+        <button type="button" className="console-ghost-btn" disabled={locked} onClick={() => { setDraft(creating ? emptyAlbum() : fields(original!)); setSelectedSong(""); setError(""); setMessage(""); }}>{creating ? "清空数据" : "恢复原值"}</button>
         <button type="button" className="console-submit-btn" disabled={locked || !dirty || !draft.album_name.trim() || draft.release_date === ""} onClick={review}>{creating ? "提交插入" : "保存修改"}</button>
       </div>
-    </div>
+    {!creating && dirty && <p className="console-admin-hint" role="status">专辑 #{original!.album_id} 有未保存修改</p>}
     </>}
+    <div className="console-table-wrap live-history-wrap">
+      <table className="console-admin-table live-history-table" aria-label="专辑操作记录">
+        <thead><tr><th>ID</th><th>专辑</th><th>发售日期</th><th>曲目数</th><th>操作</th></tr></thead>
+        <tbody>{!visibleHistory.length ? <tr><td colSpan={5} className="empty-cell">暂无专辑{creating ? "新增" : "更新"}记录</td></tr>
+          : visibleHistory.map((entry, index) => <tr key={index}>
+            <td>{entry.album.album_id}</td><td>{albumTitle(entry.album)}</td><td>{entry.album.release_date ?? "未知"}</td><td>{entry.album.tracks.length}</td>
+            <td><button type="button" className="console-ghost-btn" disabled={locked} onClick={() => guard(() => { onManage(); void load(entry.album.album_id); })}>编辑</button></td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
     {(confirm || discard) && <div className="modal-mask"><div className="modal compact console-confirm-modal" role="dialog" aria-modal="true" aria-label={discard ? "放弃专辑修改" : creating ? "确认新增专辑" : "确认修改专辑"}>
       <div className="modal-head"><h2>{discard ? "放弃专辑修改" : creating ? "确认新增专辑" : "确认修改专辑"}</h2></div>
       {!discard && <div className="console-confirm-body">

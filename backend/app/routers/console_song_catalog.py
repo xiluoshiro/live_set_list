@@ -8,7 +8,7 @@ from app.auth import AuthSessionContext, assert_valid_csrf, get_current_auth_con
 from app.db import get_db_connection, get_write_db_connection
 from app.routers.console_write import _write_console_audit_log
 from app.schemas.song_catalog import (
-    AlbumDetail, AlbumUpdate, AlbumWrite, AlbumTracksUpdate, GroupCreate, GroupMove, GroupUpdate,
+    AlbumDetail, AlbumPage, AlbumUpdate, AlbumWrite, AlbumTracksUpdate, GroupCreate, GroupMove, GroupUpdate,
     MemberUpdate, MemberWrite, OwnershipUpdate, SongMutation, SongVersion, VersionCreate, VersionUpdate,
 )
 from app.song_catalog import catalog_errors, lock_revision, one, read_album, read_song, rows, save_ownership
@@ -138,12 +138,25 @@ def move_group(payload: GroupMove, request: Request, song_id: int = Path(ge=1), 
         return {"ok": True, "item": read_song(cur, song_id)}
 
 
-@router.get("/albums")
-def list_albums(q: str = Query("", max_length=255)):
+@router.get("/albums", response_model=AlbumPage)
+def list_albums(
+    q: str = Query("", max_length=255),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+):
+    query = q.strip()
+    pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    where = "album_name ILIKE %s OR release_label ILIKE %s OR id::text = %s"
+    params = (pattern, pattern, query)
     with catalog_errors(), get_db_connection() as conn, conn.cursor() as cur:
-        cur.execute("""SELECT id AS album_id, album_name, release_label, release_date, album_url, cover_urls, revision
-            FROM albums WHERE album_name ILIKE %s ORDER BY release_date DESC NULLS LAST, id DESC LIMIT 500""", ("%" + q + "%",))
-        return {"items": rows(cur)}
+        cur.execute(f"SELECT count(*) FROM albums WHERE {where}", params)
+        total = cur.fetchone()[0]
+        total_pages = max(1, (total + limit - 1) // limit)
+        safe_page = min(page, total_pages)
+        cur.execute(f"""SELECT id AS album_id, album_name, release_label, release_date, album_url, cover_urls, revision
+            FROM albums WHERE {where} ORDER BY release_date DESC NULLS LAST, id DESC LIMIT %s OFFSET %s""",
+                    (*params, limit, (safe_page - 1) * limit))
+        return {"items": rows(cur), "page": safe_page, "page_size": limit, "total": total, "total_pages": total_pages}
 
 
 @router.get("/albums/{album_id}", response_model=AlbumDetail)

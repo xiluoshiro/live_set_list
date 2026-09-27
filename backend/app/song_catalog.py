@@ -122,7 +122,13 @@ def read_album(cur: Any, album_id: int) -> dict[str, Any]:
         revision FROM albums WHERE id = %s""", (album_id,))
     album = one(cur)
     cur.execute("""SELECT t.id AS album_track_id, t.song_id, t.track_order, t.edition_label, section.section_name,
-        s.song_name, s.version_label, s.group_id FROM album_tracks t
+        s.song_name, s.version_label, s.group_id,
+        COALESCE((SELECT string_agg(b.band_name, ' / ' ORDER BY owner.display_order, owner.band_id)
+            FROM (SELECT band_id, display_order FROM song_bands WHERE song_id = s.id
+                  UNION ALL SELECT band_id, display_order FROM song_member_groups WHERE song_id = s.id) owner
+            JOIN band_attrs b ON b.id = owner.band_id),
+            (SELECT band_name FROM band_attrs WHERE id = s.band_id), '待回填') AS band_name
+        FROM album_tracks t
         JOIN song_list s ON s.id = t.song_id
         JOIN album_sections section ON section.id = t.section_id
         WHERE t.album_id = %s ORDER BY section.display_order, t.track_order, t.id""", (album_id,))

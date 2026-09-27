@@ -4,6 +4,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { AlbumAdminSection } from "../console/AlbumAdminSection";
 
 const api = vi.hoisted(() => ({ getCatalogConsole: vi.fn(), songCatalogWrite: vi.fn() }));
+const pageOf = (items: unknown[], page = 1, total = items.length) => ({ items, page, total, page_size: 20, total_pages: Math.max(1, Math.ceil(total / 20)) });
 vi.mock("../../api", () => api);
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ csrfToken: "csrf" }) }));
 
@@ -18,7 +19,7 @@ test("album selection displays the release title without changing stored fields"
   const user = userEvent.setup();
   const album = { album_id: 1, album_name: "Yes! BanG_Dream!", release_label: "Poppin'Party 1st Single", release_date: null, album_url: null, cover_urls: [], revision: 1, tracks: [] };
   api.getCatalogConsole.mockImplementation(async (path: string) => path === "/albums/1" ? album : { items: path.startsWith("/albums") ? [album] : [] });
-  render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} />);
+  render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   const option = await screen.findByRole("option", { name: "Poppin'Party 1st Single「Yes! BanG_Dream!」" });
   await user.selectOptions(screen.getByRole("combobox", { name: "已有专辑" }), option);
   expect(await screen.findByDisplayValue("Yes! BanG_Dream!")).toBeInTheDocument();
@@ -29,7 +30,7 @@ test("album selection displays the release title without changing stored fields"
 test("album child labels keep independent track numbers", async () => {
   const user = userEvent.setup();
   api.songCatalogWrite.mockRejectedValue(new Error("review"));
-  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} />);
+  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.type(screen.getByLabelText("专辑名称"), "多子项专辑");
   await screen.findByRole("option", { name: "#1 验证曲 / 通常版 / 乐队 A" });
   await user.selectOptions(screen.getByLabelText("收录歌曲"), "1");
@@ -49,7 +50,7 @@ test("Instrumental 复用已有歌曲，专辑日期可未知，失败保留待�
   // 测试点：同歌曲两条收录可排序；不创建新 song_id；保存失败仍显示确认内容与错误。
   const user = userEvent.setup();
   api.songCatalogWrite.mockRejectedValue(new Error("资料已被修改，请重新加载后编辑"));
-  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} />);
+  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   fireEvent.change(screen.getByLabelText("专辑名称"), { target: { value: "测试专辑" } });
   await screen.findByRole("option", { name: "#1 验证曲 / 通常版 / 乐队 A" });
   await user.selectOptions(screen.getByLabelText("收录歌曲"), "1");
@@ -78,7 +79,7 @@ test("cover edits are reviewed, retained on failure and restored", async () => {
   const otherAlbum = { ...album, album_id: 2, album_name: "另一张专辑" };
   api.getCatalogConsole.mockImplementation(async (path: string) => path === "/albums/1" ? album : path === "/albums/2" ? otherAlbum : { items: path.startsWith("/albums") ? [album, otherAlbum] : [] });
   api.songCatalogWrite.mockRejectedValue(new Error("资料已被修改"));
-  render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} />);
+  render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "封面盘" }));
   await screen.findByDisplayValue(covers[0]);
   const table = screen.getByRole("table", { name: "专辑封面" });
@@ -119,7 +120,7 @@ test("cover validation and preview recovery", async () => {
   const user = userEvent.setup();
   const url = "https://img.example.test/cover?id=1";
   api.songCatalogWrite.mockResolvedValue({ album_id: 1, album_name: "盘", release_label: "", release_date: null, album_url: null, cover_urls: [url], revision: 1, tracks: [] });
-  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} />);
+  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   fireEvent.change(screen.getByLabelText("专辑名称"), { target: { value: "盘" } });
   await user.click(screen.getByRole("button", { name: "添加封面" }));
   await user.click(screen.getByRole("button", { name: "提交插入" }));
@@ -148,7 +149,7 @@ test("cover validation and preview recovery", async () => {
 test("creation retains its mode and release date when keeping the draft", async () => {
   const user = userEvent.setup();
   api.songCatalogWrite.mockResolvedValue({ album_id: 9, album_name: "发行盘", release_label: "", release_date: "2026-09-27", album_url: null, cover_urls: [], revision: 1, tracks: [] });
-  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} />);
+  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.type(screen.getByLabelText("专辑名称"), "发行盘");
   await user.click(screen.getByRole("checkbox", { name: "日期未知" }));
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
@@ -179,7 +180,7 @@ test("album song candidates paginate without truncating later songs", async () =
     return { items: [{ song_id: page === 1 ? 1 : 21, song_name: page === 1 ? "首页曲" : "后页曲", version_label: "", band_name: "乐队" }],
       page, page_size: 20, total: 21, total_pages: 2 };
   });
-  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} />);
+  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   await screen.findByText("第 1 / 2 页，共 21 条");
   await user.click(screen.getByRole("button", { name: "下一页" }));
   await screen.findByText("第 2 / 2 页，共 21 条");
@@ -196,4 +197,102 @@ test("album song candidates paginate without truncating later songs", async () =
   await user.type(screen.getByLabelText("搜索收录歌曲"), "曲");
   await waitFor(() => expect(api.getCatalogConsole).toHaveBeenLastCalledWith("/songs?q=%E6%9B%B2&page=1&limit=20"));
   expect(screen.getByRole("table", { name: "专辑收录曲目" })).toHaveTextContent("后页曲");
+});
+
+// 测试点：专辑翻页和查询不丢弃当前编辑草稿，搜索通过按钮或回车从第一页重新查询。
+test("album search and paging preserve the selected draft", async () => {
+  const user = userEvent.setup();
+  const first = { album_id: 1, album_name: "首页专辑", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 1, tracks: [] };
+  const second = { ...first, album_id: 21, album_name: "后页专辑" };
+  api.getCatalogConsole.mockImplementation(async (path: string) => {
+    if (path === "/albums/21") return second;
+    if (path.startsWith("/songs")) return pageOf([]);
+    const params = new URL(path, "http://test").searchParams;
+    if (params.get("q")) return pageOf([]);
+    const page = Number(params.get("page"));
+    return pageOf([page === 1 ? first : second], page, 21);
+  });
+  render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
+  const search = within(screen.getByRole("search", { name: "查询专辑" }));
+  expect(screen.getByText("请先选择要编辑的专辑。")).toBeInTheDocument();
+  await search.findByText("第 1 / 2 页，共 21 条");
+  await user.click(search.getByRole("button", { name: "下一页" }));
+  await search.findByText("第 2 / 2 页，共 21 条");
+  await user.selectOptions(search.getByLabelText("已有专辑"), "21");
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "专辑名称" })).toHaveValue("后页专辑"));
+  fireEvent.change(screen.getByLabelText("专辑名称"), { target: { value: "待保存资料" } });
+  await user.click(search.getByRole("button", { name: "上一页" }));
+  await search.findByText("第 1 / 2 页，共 21 条");
+  expect(search.getByLabelText("已有专辑")).toHaveValue("21");
+  expect(screen.getByLabelText("专辑名称")).toHaveValue("待保存资料");
+  await user.type(search.getByLabelText("搜索专辑"), "没有结果{Enter}");
+  await screen.findByText("没有匹配的专辑。");
+  expect(api.getCatalogConsole).toHaveBeenCalledWith("/albums?q=%E6%B2%A1%E6%9C%89%E7%BB%93%E6%9E%9C&page=1&limit=20");
+  expect(screen.getByLabelText("专辑名称")).toHaveValue("待保存资料");
+  expect(search.getByLabelText("已有专辑")).toHaveValue("21");
+  await user.clear(search.getByLabelText("搜索专辑"));
+  await user.click(search.getByRole("button", { name: "查询" }));
+  await search.findByRole("option", { name: "首页专辑" });
+  expect(search.getByLabelText("已有专辑")).toHaveValue("21");
+  expect(api.songCatalogWrite).not.toHaveBeenCalled();
+});
+
+// 测试点：首次加载禁用候选，查询失败可重试，空结果和失败状态互不混淆。
+test("album lookup recovers from loading and failure", async () => {
+  const user = userEvent.setup();
+  let rejectLookup!: (reason: Error) => void;
+  api.getCatalogConsole.mockImplementationOnce(() => new Promise((_, reject) => { rejectLookup = reject; }));
+  render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
+  expect(screen.getByText("加载中…")).toBeInTheDocument();
+  expect(screen.getByLabelText("已有专辑")).toBeDisabled();
+  rejectLookup(new Error("查询暂时失败"));
+  expect(await screen.findByRole("alert")).toHaveTextContent("查询暂时失败");
+  api.getCatalogConsole.mockResolvedValue(pageOf([]));
+  await user.click(screen.getByRole("button", { name: "查询" }));
+  await screen.findByText("没有匹配的专辑。");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
+  expect(screen.getByRole("table", { name: "专辑操作记录" })).toHaveTextContent("暂无专辑更新记录");
+});
+
+// 测试点：同名不同版本在收录及确认中可辨认，更新成功留下记录，即使候选刷新失败也不误报保存失败。
+test("version labels survive editing and successful updates are recorded", async () => {
+  const user = userEvent.setup();
+  const album = { album_id: 1, album_name: "版本盘", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 1,
+    tracks: [
+      { album_track_id: 1, song_id: 1, song_name: "同名曲", version_label: "通常版", band_name: "乐队 A", group_id: 1, section_name: "Disc 1", track_order: 1, edition_label: "" },
+      { album_track_id: 2, song_id: 2, song_name: "同名曲", version_label: "Acoustic", band_name: "乐队 B", group_id: 1, section_name: "Disc 1", track_order: 2, edition_label: "" },
+    ] };
+  let listLoads = 0;
+  api.getCatalogConsole.mockImplementation(async (path: string) => {
+    if (path === "/albums/1") return album;
+    if (path.startsWith("/albums?")) {
+      if (++listLoads > 1) throw new Error("候选刷新失败");
+      return pageOf([album]);
+    }
+    return pageOf([]);
+  });
+  api.songCatalogWrite.mockResolvedValue({ ...album, album_name: "更新后的盘", revision: 2 });
+  render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
+  await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "版本盘" }));
+  const tracks = await screen.findByRole("table", { name: "专辑收录曲目" });
+  expect(tracks).toHaveTextContent("同名曲 / 通常版 / 乐队 A");
+  expect(tracks).toHaveTextContent("同名曲 / Acoustic / 乐队 B");
+  fireEvent.change(screen.getByLabelText("专辑名称"), { target: { value: "更新后的盘" } });
+  expect(screen.getByText("专辑 #1 有未保存修改")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  const dialog = screen.getByRole("dialog", { name: "确认修改专辑" });
+  expect(within(dialog).getByRole("row", { name: /曲目 1/ })).toHaveTextContent("通常版 / 乐队 A");
+  expect(within(dialog).getByRole("row", { name: /曲目 2/ })).toHaveTextContent("Acoustic / 乐队 B");
+  await user.click(within(dialog).getByRole("button", { name: "确认" }));
+  await screen.findByText("已更新专辑 #1 更新后的盘");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByText("专辑 #1 有未保存修改")).not.toBeInTheDocument();
+  const history = within(screen.getByRole("table", { name: "专辑操作记录" }));
+  expect(history.getByRole("cell", { name: "更新后的盘" })).toBeInTheDocument();
+  expect(history.getByRole("cell", { name: "2" })).toBeInTheDocument();
+  expect(history.getByRole("button", { name: "编辑" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+  expect(await screen.findByRole("alert")).toHaveTextContent("专辑查询失败");
 });
