@@ -112,7 +112,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard }: {
     setError(problem);
     if (!problem) setConfirm(true);
   };
-  const albumNameInput = <input aria-label="专辑名称" disabled={locked} value={draft.album_name} onChange={e => setDraft({ ...draft, album_name: e.target.value })} />;
+  const albumNameInput = <input aria-label="专辑名称" placeholder="请输入专辑名称" disabled={locked} value={draft.album_name} onChange={e => setDraft({ ...draft, album_name: e.target.value })} />;
   const releaseLabelInput = <input aria-label="发行标识" disabled={locked} value={draft.release_label} placeholder="10th single / best album" onChange={e => setDraft({ ...draft, release_label: e.target.value })} />;
   const albumUrlInput = <input aria-label="专辑页面" type="url" maxLength={2048} disabled={locked} value={draft.album_url ?? ""} placeholder="https://" onChange={e => setDraft({ ...draft, album_url: e.target.value || null })} />;
   const releaseDateField = <div className="album-release-date">
@@ -182,7 +182,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard }: {
       <div className="console-table-wrap"><table className="console-admin-table album-track-editor" aria-label="专辑收录曲目">
         <colgroup><col className="album-track-section-column" /><col className="album-track-order-column" /><col /><col className="album-track-edition-column" /><col className="album-track-actions-column" /></colgroup>
         <thead><tr><th scope="col">碟号／发行版</th><th scope="col">曲序</th><th scope="col">歌曲</th><th scope="col">收录标识</th><th scope="col">操作</th></tr></thead><tbody>
-      {draft.tracks.map((track, index) => <tr key={index}><td><input disabled={locked} aria-label={`第 ${index + 1} 曲碟号／发行版`} value={track.section_name ?? ""} onChange={e => setDraft({ ...draft, tracks: numberTracks(draft.tracks.map((t, i) => i === index ? { ...t, section_name: e.target.value } : t)) })} /></td><td>{track.track_order}</td><td>#{track.song_id} {names[track.song_id]}</td><td><input disabled={locked} aria-label={`第 ${index + 1} 曲收录标识`} placeholder="Instrumental" value={track.edition_label} onChange={e => setDraft({ ...draft, tracks: draft.tracks.map((t, i) => i === index ? { ...t, edition_label: e.target.value } : t) })} /></td>
+      {draft.tracks.map((track, index) => <tr key={index}><td><input disabled={locked} aria-label={`第 ${index + 1} 曲碟号／发行版`} placeholder="Disc 1 / 限定版" value={track.section_name ?? ""} onChange={e => setDraft({ ...draft, tracks: numberTracks(draft.tracks.map((t, i) => i === index ? { ...t, section_name: e.target.value } : t)) })} /></td><td>{track.track_order}</td><td>#{track.song_id} {names[track.song_id]}</td><td><input disabled={locked} aria-label={`第 ${index + 1} 曲收录标识`} placeholder="Instrumental" value={track.edition_label} onChange={e => setDraft({ ...draft, tracks: draft.tracks.map((t, i) => i === index ? { ...t, edition_label: e.target.value } : t) })} /></td>
         <td><div className="tour-admin-toolbar venue-create-actions">
           <button type="button" className="console-ghost-btn" disabled={locked || index === 0} onClick={() => move(index, -1)}>上移</button>
           <button type="button" className="console-ghost-btn" disabled={locked || index === draft.tracks.length - 1} onClick={() => move(index, 1)}>下移</button>

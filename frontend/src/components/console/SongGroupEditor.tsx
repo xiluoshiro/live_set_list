@@ -59,7 +59,7 @@ export function SongGroupEditor({ song, onSaved, onClose }: { song: SongVersion;
         { field: "版本顺序", before: original.versions.map(v => v.version_label || v.song_name).join(" / "), after: draft.versions.map(v => v.version_label || v.song_name).join(" / ") },
       ]} /> : <>
         <div className="tour-admin-fields">
-          <label className="band-admin-members-field">歌曲组名称<input value={draft.group_name} onChange={e => setDraft({ ...draft, group_name: e.target.value })} /></label>
+          <label className="band-admin-members-field">歌曲组名称<input placeholder="请输入歌曲组名称" value={draft.group_name} onChange={e => setDraft({ ...draft, group_name: e.target.value })} /></label>
         </div>
         <div className="console-table-wrap">
           <table className="console-admin-table console-compact-table" aria-label="歌曲版本顺序">
@@ -79,12 +79,12 @@ export function SongGroupEditor({ song, onSaved, onClose }: { song: SongVersion;
         <div className="tour-admin-block">
           <h3>更正当前版本归组</h3>
           <div className="tour-admin-fields">
-            <label>搜索歌曲组<input value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} /></label>
+            <label>搜索歌曲组<input placeholder="歌曲组名称" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} /></label>
             <fieldset className="tour-band-field"><legend>目标歌曲组</legend><ConsoleChoiceSelect label="目标歌曲组" value={Number(target) || null} selectedLabel={targetLabel} disabled={loading}
               options={(groups?.items ?? []).filter(g => g.group_id !== song.group_id).map(g => ({ id: g.group_id, label: g.group_name }))}
               onChange={id => { setTarget(String(id)); setTargetLabel(groups?.items.find(g => g.group_id === id)?.group_name ?? ""); }} /></fieldset>
             <div className="band-admin-members-field"><ConsoleCandidatePager page={page} totalPages={groups?.total_pages ?? page} total={groups?.total ?? 0} loading={loading} onPage={setPage} /></div>
-            <label className="band-admin-members-field">更正原因<input value={reason} onChange={e => setReason(e.target.value)} /></label>
+            <label className="band-admin-members-field">更正原因<input placeholder="请输入更正原因" value={reason} onChange={e => setReason(e.target.value)} /></label>
           </div>
           <div className="console-submit-row">
             <button type="button" className="console-submit-btn" disabled={!target || !reason.trim()} onClick={() => setConfirm("move")}>更正归组</button>

@@ -144,8 +144,10 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const hasBands = ownership.mode === "bands" || ownership.mode === "mixed";
   const hasMembers = ownership.mode === "members" || ownership.mode === "mixed";
   const songNameField = <input aria-label="歌曲名称" disabled={fieldsDisabled} value={draft.song_name}
+    placeholder="请输入歌曲名称"
     onChange={event => setDraft({ ...draft, song_name: event.target.value })} />;
   const versionField = <input aria-label="版本标识" disabled={fieldsDisabled || (creating && newGroup) || (!creating && original?.version_label === "")}
+    placeholder={(creating && newGroup) || (!creating && original?.version_label === "") ? "默认版本" : "请输入版本标识"}
     value={creating && newGroup ? "" : draft.version_label} onChange={event => setDraft({ ...draft, version_label: event.target.value })} />;
   const ownershipModeField = <select aria-label="归属模式" disabled={fieldsDisabled} value={ownership.mode} onChange={event => {
     const mode = event.target.value as SongOwnership["mode"];
@@ -257,7 +259,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
           <label>归属模式{ownershipModeField}</label>
           {hasBands && bandPicker}
           {hasMembers && <>{memberBandPicker}{memberPickers}</>}
-          <label>更正原因<input value={reason} onChange={event => setReason(event.target.value)} /></label>
+          <label>更正原因<input placeholder="请输入更正原因" value={reason} onChange={event => setReason(event.target.value)} /></label>
         </>}
       </fieldset>
       {!correcting && <div className="tour-admin-toolbar">
