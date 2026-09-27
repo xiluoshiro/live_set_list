@@ -18,15 +18,18 @@ beforeEach(() => {
 
 afterEach(() => vi.useRealTimers());
 
-// 测试点：管理候选使用完整发行标题，选择后保留原始名称、发行说明及未知日期。
+// 测试点：管理候选和资料表显示专辑 ID，选择后保留原始名称、发行说明及未知日期。
 test("album selection displays the release title without changing stored fields", async () => {
   const user = userEvent.setup();
   const album = { album_id: 1, album_name: "Yes! BanG_Dream!", release_label: "Poppin'Party 1st Single", release_date: null, album_url: null, cover_urls: [], revision: 1, tracks: [] };
   api.getCatalogConsole.mockImplementation(async (path: string) => path === "/albums/1" ? album : { items: path.startsWith("/albums") ? [album] : [] });
   render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
-  const option = await screen.findByRole("option", { name: "Poppin'Party 1st Single「Yes! BanG_Dream!」" });
+  const option = await screen.findByRole("option", { name: "#1 Poppin'Party 1st Single「Yes! BanG_Dream!」" });
   await user.selectOptions(screen.getByRole("combobox", { name: "已有专辑" }), option);
   expect(await screen.findByDisplayValue("Yes! BanG_Dream!")).toBeInTheDocument();
+  const details = within(screen.getByRole("table", { name: "专辑资料" }));
+  expect(details.getByRole("columnheader", { name: "album_id" })).toBeInTheDocument();
+  expect(details.getByRole("cell", { name: "1" })).toBeInTheDocument();
   expect(screen.getByLabelText("发售日期")).toHaveValue("");
   expect(screen.getByRole("checkbox", { name: "日期未知" })).toBeChecked();
   expect(screen.getByLabelText("发行标识")).toHaveValue("Poppin'Party 1st Single");
@@ -52,8 +55,8 @@ test("album child labels keep independent track numbers", async () => {
   ] }), "csrf");
 });
 
+// 测试点：勾选 Instrumental 仍复用原歌曲，勾选状态随曲目排序，保存失败保留草稿和错误。
 test("Instrumental 复用已有歌曲，专辑日期可未知，失败保留待提交曲目", async () => {
-  // 测试点：同歌曲两条收录可排序；不创建新 song_id；保存失败仍显示确认内容与错误。
   const user = userEvent.setup();
   api.songCatalogWrite.mockRejectedValue(new Error("资料已被修改，请重新加载后编辑"));
   render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
@@ -63,11 +66,13 @@ test("Instrumental 复用已有歌曲，专辑日期可未知，失败保留待�
   await user.selectOptions(screen.getByLabelText("收录歌曲"), "1");
   await user.click(screen.getByRole("button", { name: "添加收录" }));
   await user.click(screen.getByRole("button", { name: "添加收录" }));
-  fireEvent.change(screen.getByLabelText("第 2 曲收录标识"), { target: { value: "Instrumental" } });
+  expect(within(screen.getByRole("table", { name: "专辑收录曲目" })).getByRole("columnheader", { name: "器乐" })).toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: "第 1 曲器乐" })).not.toBeChecked();
+  await user.click(screen.getByRole("checkbox", { name: "第 2 曲器乐" }));
   await user.click(within(screen.getByRole("table", { name: "专辑收录曲目" })).getAllByRole("button", { name: "上移" })[1]);
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   const dialog = screen.getByRole("dialog", { name: "确认新增专辑" });
-  expect(screen.getByLabelText("第 1 曲收录标识")).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: "第 1 曲器乐" })).toBeDisabled();
   await user.click(within(dialog).getByRole("button", { name: "确认" }));
   await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent("资料已被修改"));
   expect(api.songCatalogWrite).toHaveBeenCalledTimes(1);
@@ -75,10 +80,11 @@ test("Instrumental 复用已有歌曲，专辑日期可未知，失败保留待�
     album_name: "测试专辑", release_label: "", release_date: null, album_url: null, cover_urls: [],
     tracks: [{ song_id: 1, track_order: 1, edition_label: "Instrumental", section_name: "" }, { song_id: 1, track_order: 2, edition_label: "", section_name: "" }],
   }, "csrf");
-  expect(screen.getByLabelText("第 1 曲收录标识")).toHaveValue("Instrumental");
+  expect(screen.getByRole("checkbox", { name: "第 1 曲器乐" })).toBeChecked();
+  expect(screen.getByRole("checkbox", { name: "第 2 曲器乐" })).not.toBeChecked();
 });
 
-// 测试点：封面默认项、排序和移除仅改草稿，确认提交有序数组；失败、放弃取消及恢复均保留正确资料。
+// 测试点：封面编辑仅改草稿；离开提示说明损失，Escape 保留草稿，明确放弃才加载另一张专辑。
 test("cover edits are reviewed, retained on failure and restored", async () => {
   const user = userEvent.setup();
   const covers = ["https://img.example.test/a", "https://img.example.test/b", "https://img.example.test/c"];
@@ -87,7 +93,7 @@ test("cover edits are reviewed, retained on failure and restored", async () => {
   api.getCatalogConsole.mockImplementation(async (path: string) => path === "/albums/1" ? album : path === "/albums/2" ? otherAlbum : { items: path.startsWith("/albums") ? [album, otherAlbum] : [] });
   api.songCatalogWrite.mockRejectedValue(new Error("资料已被修改"));
   render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
-  await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "封面盘" }));
+  await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "#1 封面盘" }));
   await screen.findByDisplayValue(covers[0]);
   const table = screen.getByRole("table", { name: "专辑封面" });
   await user.click(within(table).getAllByRole("button", { name: "设为默认" })[1]);
@@ -100,7 +106,11 @@ test("cover edits are reviewed, retained on failure and restored", async () => {
   await user.clear(screen.getByLabelText("专辑页面"));
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
   await user.selectOptions(screen.getByLabelText("已有专辑"), "2");
-  await user.click(within(screen.getByRole("dialog", { name: "放弃专辑修改" })).getByRole("button", { name: "取消" }));
+  const leaveDialog = screen.getByRole("dialog", { name: "未保存的修改" });
+  expect(leaveDialog).toHaveAccessibleDescription("专辑 #1 有未保存修改。离开后将丢弃这些修改。");
+  expect(within(leaveDialog).getByRole("button", { name: "继续编辑" })).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(screen.getByLabelText("已有专辑")).toHaveValue("1");
   expect(screen.getByLabelText("第 2 张封面 URL")).toHaveValue(covers[1]);
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   const dialog = screen.getByRole("dialog", { name: "确认修改专辑" });
@@ -117,7 +127,7 @@ test("cover edits are reviewed, retained on failure and restored", async () => {
   // 确认放弃后必须加载刚选中的专辑，不能读取已被受控下拉框恢复的旧值。
   await user.clear(screen.getByLabelText("专辑名称"));
   await user.selectOptions(screen.getByLabelText("已有专辑"), "2");
-  await user.click(within(screen.getByRole("dialog", { name: "放弃专辑修改" })).getByRole("button", { name: "确认" }));
+  await user.click(within(screen.getByRole("dialog", { name: "未保存的修改" })).getByRole("button", { name: "放弃修改" }));
   await waitFor(() => expect(screen.getByLabelText("专辑名称")).toHaveValue("另一张专辑"));
   expect(api.getCatalogConsole).toHaveBeenCalledWith("/albums/2");
 });
@@ -281,7 +291,8 @@ test("album search and paging preserve the selected draft", async () => {
   expect(search.getByLabelText("已有专辑")).toHaveValue("21");
   await user.clear(search.getByLabelText("搜索专辑"));
   await user.click(search.getByRole("button", { name: "查询" }));
-  await search.findByRole("option", { name: "首页专辑" });
+  await search.findByRole("option", { name: "#1 首页专辑" });
+  expect(search.getByRole("option", { name: "#21 后页专辑" })).toBeInTheDocument();
   expect(search.getByLabelText("已有专辑")).toHaveValue("21");
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
 });
@@ -305,12 +316,12 @@ test("album lookup recovers from loading and failure", async () => {
   expect(screen.getByRole("table", { name: "专辑操作记录" })).toHaveTextContent("暂无专辑更新记录");
 });
 
-// 测试点：同名不同版本在收录及确认中可辨认，更新成功留下记录，即使候选刷新失败也不误报保存失败。
+// 测试点：编辑回显及恢复 Instrumental，取消勾选提交空标识；版本仍可辨认，列表刷新失败不误报保存失败。
 test("version labels survive editing and successful updates are recorded", async () => {
   const user = userEvent.setup();
   const album = { album_id: 1, album_name: "版本盘", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 1,
     tracks: [
-      { album_track_id: 1, song_id: 1, song_name: "同名曲", version_label: "通常版", band_name: "乐队 A", group_id: 1, section_name: "Disc 1", track_order: 1, edition_label: "" },
+      { album_track_id: 1, song_id: 1, song_name: "同名曲", version_label: "通常版", band_name: "乐队 A", group_id: 1, section_name: "Disc 1", track_order: 1, edition_label: "Instrumental" },
       { album_track_id: 2, song_id: 2, song_name: "同名曲", version_label: "Acoustic", band_name: "乐队 B", group_id: 1, section_name: "Disc 1", track_order: 2, edition_label: "" },
     ] };
   let listLoads = 0;
@@ -322,12 +333,19 @@ test("version labels survive editing and successful updates are recorded", async
     }
     return pageOf([]);
   });
-  api.songCatalogWrite.mockResolvedValue({ ...album, album_name: "更新后的盘", revision: 2 });
+  api.songCatalogWrite.mockResolvedValue({ ...album, album_name: "更新后的盘", revision: 2, tracks: album.tracks.map(track => ({ ...track, edition_label: "" })) });
   render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
-  await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "版本盘" }));
+  await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "#1 版本盘" }));
   const tracks = await screen.findByRole("table", { name: "专辑收录曲目" });
   expect(tracks).toHaveTextContent("同名曲 / 通常版 / 乐队 A");
   expect(tracks).toHaveTextContent("同名曲 / Acoustic / 乐队 B");
+  const instrumental = screen.getByRole("checkbox", { name: "第 1 曲器乐" });
+  expect(instrumental).toBeChecked();
+  await user.click(instrumental);
+  expect(instrumental).not.toBeChecked();
+  await user.click(screen.getByRole("button", { name: "恢复原值" }));
+  expect(instrumental).toBeChecked();
+  await user.click(instrumental);
   fireEvent.change(screen.getByLabelText("专辑名称"), { target: { value: "更新后的盘" } });
   expect(screen.getByText("专辑 #1 有未保存修改")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "保存修改" }));
@@ -336,6 +354,11 @@ test("version labels survive editing and successful updates are recorded", async
   expect(within(dialog).getByRole("row", { name: /曲目 2/ })).toHaveTextContent("Acoustic / 乐队 B");
   await user.click(within(dialog).getByRole("button", { name: "确认" }));
   await screen.findByText("已更新专辑 #1 更新后的盘");
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums/1", "PUT", expect.objectContaining({ expected_revision: 1, tracks: [
+    { album_track_id: 1, song_id: 1, track_order: 1, edition_label: "", section_name: "Disc 1" },
+    { album_track_id: 2, song_id: 2, track_order: 2, edition_label: "", section_name: "Disc 1" },
+  ] }), "csrf");
+  expect(instrumental).not.toBeChecked();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByText("专辑 #1 有未保存修改")).not.toBeInTheDocument();
   const history = within(screen.getByRole("table", { name: "专辑操作记录" }));

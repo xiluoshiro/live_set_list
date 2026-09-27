@@ -371,7 +371,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByRole("tab", { name: "地理质量" })).not.toBeInTheDocument();
   });
 
-  // 测试点：专辑新增和管理独立保留资料；管理未保存时切页可取消，确认放弃后恢复原值。
+  // 测试点：专辑无修改可直接切页；未保存时继续编辑保留草稿，明确放弃后恢复原值。
   test("专辑新增与管理分开，切换时保护编辑草稿", async () => {
     const user = userEvent.setup();
     const album = { album_id: 11, album_name: "已有专辑", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 3, tracks: [] };
@@ -380,14 +380,18 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByLabelText("专辑名称"), "新增草稿");
     await user.click(screen.getByRole("tab", { name: "专辑管理" }));
     expect(screen.queryByLabelText("专辑名称")).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "已有专辑" }));
+    await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "#11 已有专辑" }));
     expect(await screen.findByRole("textbox", { name: "专辑名称" })).toHaveValue("已有专辑");
+    await user.click(screen.getByRole("tab", { name: "新增专辑" }));
+    expect(screen.getByLabelText("专辑名称")).toHaveValue("新增草稿");
+    await user.click(screen.getByRole("tab", { name: "专辑管理" }));
+    expect(screen.getByLabelText("专辑名称")).toHaveValue("已有专辑");
     fireEvent.change(screen.getByLabelText("专辑名称"), { target: { value: "编辑草稿" } });
     await user.click(screen.getByRole("tab", { name: "新增专辑" }));
-    await user.click(within(screen.getByRole("dialog", { name: "放弃专辑修改" })).getByRole("button", { name: "取消" }));
+    await user.click(within(screen.getByRole("dialog", { name: "未保存的修改" })).getByRole("button", { name: "继续编辑" }));
     expect(screen.getByLabelText("专辑名称")).toHaveValue("编辑草稿");
     await user.click(screen.getByRole("tab", { name: "新增专辑" }));
-    await user.click(within(screen.getByRole("dialog", { name: "放弃专辑修改" })).getByRole("button", { name: "确认" }));
+    await user.click(within(screen.getByRole("dialog", { name: "未保存的修改" })).getByRole("button", { name: "放弃修改" }));
     expect(screen.getByRole("tab", { name: "新增专辑" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByLabelText("专辑名称")).toHaveValue("新增草稿");
     await user.click(screen.getByRole("tab", { name: "专辑管理" }));

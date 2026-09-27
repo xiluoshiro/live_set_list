@@ -1240,10 +1240,11 @@
   width: min(var(--console-live-management-control-width), 100%);
 }
 
-.album-create-form-table { min-width: 1000px; table-layout: fixed; }
-.album-create-name-column { width: 25%; }
-.album-create-release-column { width: 190px; }
-.album-create-date-column { width: 264px; }
+.album-form-table { min-width: 1200px; table-layout: fixed; }
+.album-id-column { width: 88px; }
+.album-name-column { width: 25%; }
+.album-url-column { width: 340px; }
+.album-date-column { width: 264px; }
 .album-release-date { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .album-release-date > input { flex: 0 1 160px; min-width: 0; }
 .album-release-date .live-clear-after-create-option { display: inline-flex; white-space: nowrap; }
@@ -1251,7 +1252,7 @@
 .album-track-editor td { overflow-wrap: anywhere; }
 .album-track-section-column { width: 180px; }
 .album-track-order-column { width: 72px; }
-.album-track-edition-column { width: 200px; }
+.album-track-edition-column { width: 120px; }
 .album-track-actions-column { width: 230px; }
 
 .venue-create-actions { flex-wrap: wrap; }

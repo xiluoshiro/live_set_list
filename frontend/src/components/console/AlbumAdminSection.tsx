@@ -72,7 +72,8 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
   const [discard, setDiscard] = useState<(() => void) | null>(null);
   const payload = albumPayload(draft);
   const dirty = JSON.stringify(payload) !== JSON.stringify(albumPayload(!creating && original ? fields(original) : emptyAlbum()));
-  const guard = (next: () => void) => { if (!creating && dirty) setDiscard(() => next); else next(); };
+  const guard = (next: () => void) => { if (!creating && original && dirty) setDiscard(() => next); else next(); };
+  const closeConfirmation = () => { if (!busy) { setConfirm(false); setDiscard(null); } };
   const queryAlbums = () => setAlbumSearch(value => ({ query: albumQuery.trim(), page: 1, refresh: value.refresh + 1 }));
   const querySongs = () => {
     setSelectedSong("");
@@ -191,8 +192,8 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
       <select id={`${formId}-album`} aria-label="已有专辑" value={original?.album_id ?? ""} disabled={locked || albumsLoading || !albums.length}
         onChange={e => { const id = Number(e.target.value); if (id) guard(() => void load(id)); }}>
         <option value="">选择要编辑的专辑</option>
-        {original && !albums.some(a => a.album_id === original.album_id) && <option value={original.album_id}>{albumTitle(original)}</option>}
-        {albums.map(a => <option key={a.album_id} value={a.album_id}>{albumTitle(a)}</option>)}
+        {original && !albums.some(a => a.album_id === original.album_id) && <option value={original.album_id}>#{original.album_id} {albumTitle(original)}</option>}
+        {albums.map(a => <option key={a.album_id} value={a.album_id}>#{a.album_id} {albumTitle(a)}</option>)}
       </select>
       <ConsoleCandidatePager page={albumResults?.page ?? albumSearch.page} totalPages={albumResults?.total_pages ?? 1}
         total={albumResults?.total ?? 0} loading={albumsLoading} disabled={locked || !albumResults}
@@ -204,18 +205,22 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     {loadingAlbum && <p className="console-admin-hint" role="status">正在加载专辑…</p>}
     </div>}
     {(creating || original) && <>
-    {!creating ? <fieldset disabled={locked} className="tour-admin-fields tour-band-field">
-      <label>专辑名称{albumNameInput}</label>
-      <label>发行标识{releaseLabelInput}</label>
-      <fieldset className="tour-band-field"><legend>发售日期</legend>{releaseDateField}</fieldset>
-      <label>专辑页面{albumUrlInput}</label>
-    </fieldset> : <div className="console-table-wrap">
-      <table className="console-admin-table album-create-form-table" aria-label="新增专辑资料">
-        <colgroup><col className="album-create-name-column" /><col className="album-create-release-column" /><col className="album-create-date-column" /><col /></colgroup>
-        <thead><tr><th scope="col">专辑名称</th><th scope="col">发行标识</th><th scope="col">发售日期</th><th scope="col">专辑页面</th></tr></thead>
-        <tbody><tr><td>{albumNameInput}</td><td>{releaseLabelInput}</td><td>{releaseDateField}</td><td>{albumUrlInput}</td></tr></tbody>
+    <div className="console-table-wrap">
+      <table className="console-admin-table album-form-table" aria-label={creating ? "新增专辑资料" : "专辑资料"}>
+        <colgroup>
+          {!creating && <col className="album-id-column" />}
+          <col className="album-name-column" /><col /><col className="album-date-column" /><col className="album-url-column" />
+        </colgroup>
+        <thead><tr>
+          {!creating && <th scope="col">album_id</th>}
+          <th scope="col">专辑名称</th><th scope="col">发行标识</th><th scope="col">发售日期</th><th scope="col">专辑页面</th>
+        </tr></thead>
+        <tbody><tr>
+          {!creating && <td><span className="readonly-cell">{original!.album_id}</span></td>}
+          <td>{albumNameInput}</td><td>{releaseLabelInput}</td><td>{releaseDateField}</td><td>{albumUrlInput}</td>
+        </tr></tbody>
       </table>
-    </div>}
+    </div>
     <section aria-labelledby={`${formId}-covers`}>
       <div className="live-admin-status-head setlist-paste-head"><h3 id={`${formId}-covers`}>专辑封面</h3>
         <button type="button" className="console-submit-btn" disabled={locked || draft.cover_urls.length >= 20}
@@ -254,9 +259,13 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
       {!songsLoading && songResults && !songs.length && <p className="console-admin-hint" role="status">没有匹配的歌曲。</p>}
       <div className="console-table-wrap"><table className="console-admin-table album-track-editor" aria-label="专辑收录曲目">
         <colgroup><col className="album-track-section-column" /><col className="album-track-order-column" /><col /><col className="album-track-edition-column" /><col className="album-track-actions-column" /></colgroup>
-        <thead><tr><th scope="col">碟号/发行版</th><th scope="col">曲序</th><th scope="col">歌曲</th><th scope="col">收录标识</th><th scope="col">操作</th></tr></thead><tbody>
+        <thead><tr><th scope="col">碟号/发行版</th><th scope="col">曲序</th><th scope="col">歌曲</th><th scope="col">器乐</th><th scope="col">操作</th></tr></thead><tbody>
       {!draft.tracks.length && <tr><td colSpan={5} className="empty-cell">暂无收录曲目</td></tr>}
-      {draft.tracks.map((track, index) => <tr key={index}><td><input disabled={locked} aria-label={`第 ${index + 1} 曲碟号/发行版`} placeholder="Disc1/限定版" value={track.section_name ?? ""} onChange={e => setDraft({ ...draft, tracks: numberTracks(draft.tracks.map((t, i) => i === index ? { ...t, section_name: e.target.value } : t)) })} /></td><td>{track.track_order}</td><td>{songLabels[track.song_id] ?? `#${track.song_id}`}</td><td><input disabled={locked} aria-label={`第 ${index + 1} 曲收录标识`} placeholder="Instrumental" value={track.edition_label} onChange={e => setDraft({ ...draft, tracks: draft.tracks.map((t, i) => i === index ? { ...t, edition_label: e.target.value } : t) })} /></td>
+      {draft.tracks.map((track, index) => <tr key={index}><td><input disabled={locked} aria-label={`第 ${index + 1} 曲碟号/发行版`} placeholder="Disc1/限定版" value={track.section_name ?? ""} onChange={e => setDraft({ ...draft, tracks: numberTracks(draft.tracks.map((t, i) => i === index ? { ...t, section_name: e.target.value } : t)) })} /></td><td>{track.track_order}</td><td>{songLabels[track.song_id] ?? `#${track.song_id}`}</td><td>
+        <input className="is-short-check" type="checkbox" disabled={locked} aria-label={`第 ${index + 1} 曲器乐`}
+          checked={track.edition_label === "Instrumental"}
+          onChange={e => setDraft({ ...draft, tracks: draft.tracks.map((t, i) => i === index ? { ...t, edition_label: e.target.checked ? "Instrumental" : "" } : t) })} />
+      </td>
         <td><div className="tour-admin-toolbar venue-create-actions">
           <button type="button" className="console-ghost-btn" disabled={locked || index === 0} onClick={() => move(index, -1)}>上移</button>
           <button type="button" className="console-ghost-btn" disabled={locked || index === draft.tracks.length - 1} onClick={() => move(index, 1)}>下移</button>
@@ -274,7 +283,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     </>}
     <div className="console-table-wrap live-history-wrap">
       <table className="console-admin-table live-history-table" aria-label="专辑操作记录">
-        <thead><tr><th>ID</th><th>专辑</th><th>发售日期</th><th>曲目数</th><th>操作</th></tr></thead>
+        <thead><tr><th>album_id</th><th>专辑</th><th>发售日期</th><th>曲目数</th><th>操作</th></tr></thead>
         <tbody>{!visibleHistory.length ? <tr><td colSpan={5} className="empty-cell">暂无专辑{creating ? "新增" : "更新"}记录</td></tr>
           : visibleHistory.map((entry, index) => <tr key={index}>
             <td>{entry.album.album_id}</td><td>{albumTitle(entry.album)}</td><td>{entry.album.release_date ?? "未知"}</td><td>{entry.album.tracks.length}</td>
@@ -283,17 +292,26 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
         </tbody>
       </table>
     </div>
-    {(confirm || discard) && <div className="modal-mask"><div className="modal compact console-confirm-modal" role="dialog" aria-modal="true" aria-label={discard ? "放弃专辑修改" : creating ? "确认新增专辑" : "确认修改专辑"}>
-      <div className="modal-head"><h2>{discard ? "放弃专辑修改" : creating ? "确认新增专辑" : "确认修改专辑"}</h2></div>
-      {!discard && <div className="console-confirm-body">
-        {error && <p role="alert">{error}</p>}
-        {creating ? <CompactConfirmationTable rows={changes.map(({ field, after }) => [field, after] as const)} /> : <UpdateDiffTable changes={changes} />}
-      </div>}
+    {(confirm || discard) && <div className="modal-mask" onClick={closeConfirmation}><div className="modal compact console-confirm-modal" role="dialog" aria-modal="true"
+      aria-label={discard ? "未保存的修改" : creating ? "确认新增专辑" : "确认修改专辑"}
+      aria-describedby={discard ? `${formId}-discard-description` : undefined}
+      onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === "Escape") closeConfirmation(); }}>
+      <div className="modal-head"><h2>{discard ? "未保存的修改" : creating ? "确认新增专辑" : "确认修改专辑"}</h2>
+        <div className="modal-actions"><button type="button" className="modal-action-btn close" aria-label="关闭" disabled={busy} onClick={closeConfirmation}>
+          <span className="modal-action-glyph close">✕</span>
+        </button></div>
+      </div>
+      <div className="console-confirm-body">
+        {discard ? <p id={`${formId}-discard-description`} className="console-admin-hint">专辑 #{original!.album_id} 有未保存修改。离开后将丢弃这些修改。</p> : <>
+          {error && <p role="alert">{error}</p>}
+          {creating ? <CompactConfirmationTable rows={changes.map(({ field, after }) => [field, after] as const)} /> : <UpdateDiffTable changes={changes} />}
+        </>}
+      </div>
       <div className="console-confirm-actions">
-        <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => { setConfirm(false); setDiscard(null); }}>取消</button>
+        <button type="button" className="console-ghost-btn" disabled={busy} autoFocus={!!discard} onClick={closeConfirmation}>{discard ? "继续编辑" : "取消"}</button>
         <button type="button" className="console-submit-btn" disabled={busy} onClick={() => {
           if (discard) { setDraft(original ? fields(original) : emptyAlbum()); discard(); setDiscard(null); } else void save();
-        }}>确认</button>
+        }}>{discard ? "放弃修改" : "确认"}</button>
       </div>
     </div></div>}
   </section>;
