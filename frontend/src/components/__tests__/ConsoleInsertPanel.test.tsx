@@ -355,7 +355,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(content).getByRole("tab", { name: "歌曲管理" })).toHaveTextContent("管理");
     expect(within(content).getByRole("tab", { name: "新增歌曲" })).toHaveTextContent("新增");
     expect(within(content).getAllByRole("tab").map((tab) => tab.getAttribute("aria-label"))).toEqual([
-      "新增演出", "演出管理", "新增歌单", "歌单管理", "新增歌曲", "歌曲管理", "专辑管理", "巡演管理", "活动组管理", "乐队管理", "新增场馆", "场馆管理", "新增地区",
+      "新增演出", "演出管理", "新增歌单", "歌单管理", "新增歌曲", "歌曲管理", "新增专辑", "专辑管理", "巡演管理", "活动组管理", "乐队管理", "新增场馆", "场馆管理", "新增地区",
     ]);
 
     await user.click(within(content).getByRole("tab", { name: "场馆管理" }));
@@ -369,6 +369,31 @@ describe("ConsoleInsertPanel", () => {
 
     expect(screen.queryByRole("navigation", { name: "控制台工具" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "地理质量" })).not.toBeInTheDocument();
+  });
+
+  // 测试点：专辑新增和管理独立保留资料；管理未保存时切页可取消，确认放弃后恢复原值。
+  test("专辑新增与管理分开，切换时保护编辑草稿", async () => {
+    const user = userEvent.setup();
+    const album = { album_id: 11, album_name: "已有专辑", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 3, tracks: [] };
+    apiMocks.getCatalogConsole.mockImplementation(async (path: string) => path === "/albums/11" ? album : { items: path === "/albums" ? [album] : [] });
+    render(<ConsoleInsertPanel initialMode="album_create" />);
+    await user.type(screen.getByLabelText("专辑名称"), "新增草稿");
+    await user.click(screen.getByRole("tab", { name: "专辑管理" }));
+    expect(screen.queryByLabelText("专辑名称")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "已有专辑" }));
+    expect(await screen.findByRole("textbox", { name: "专辑名称" })).toHaveValue("已有专辑");
+    fireEvent.change(screen.getByLabelText("专辑名称"), { target: { value: "编辑草稿" } });
+    await user.click(screen.getByRole("tab", { name: "新增专辑" }));
+    await user.click(within(screen.getByRole("dialog", { name: "放弃专辑修改" })).getByRole("button", { name: "取消" }));
+    expect(screen.getByLabelText("专辑名称")).toHaveValue("编辑草稿");
+    await user.click(screen.getByRole("tab", { name: "新增专辑" }));
+    await user.click(within(screen.getByRole("dialog", { name: "放弃专辑修改" })).getByRole("button", { name: "确认" }));
+    expect(screen.getByRole("tab", { name: "新增专辑" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("专辑名称")).toHaveValue("新增草稿");
+    await user.click(screen.getByRole("tab", { name: "专辑管理" }));
+    expect(screen.getByLabelText("专辑名称")).toHaveValue("已有专辑");
+    expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+    expect(apiMocks.songCatalogWrite).not.toHaveBeenCalled();
   });
 
   // 测试点：低频夏令时重复钟点只由后端校验兜底，不在常规 Live 表单暴露 fold 控件。

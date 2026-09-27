@@ -116,7 +116,7 @@ const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; labe
   { title: "演出", create: { value: "live_create", label: "新增演出" }, manage: { value: "live_edit", label: "演出管理" } },
   { title: "歌单", create: { value: "setlist", label: "新增歌单" }, manage: { value: "setlist_edit", label: "歌单管理" } },
   { title: "歌曲", create: { value: "song_create", label: "新增歌曲" }, manage: { value: "song_edit", label: "歌曲管理" } },
-  { title: "专辑", manage: { value: "album", label: "专辑管理" } },
+  { title: "专辑", create: { value: "album_create", label: "新增专辑" }, manage: { value: "album_edit", label: "专辑管理" } },
   { title: "巡演", manage: { value: "tour", label: "巡演管理" } },
   { title: "活动组", manage: { value: "performance_group", label: "活动组管理" } },
   { title: "乐队", manage: { value: "band", label: "乐队管理" } },
@@ -1513,8 +1513,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   };
 
   const songLeaveGuard = useRef<((proceed: () => void) => void) | null>(null);
+  const albumLeaveGuard = useRef<((proceed: () => void) => void) | null>(null);
 
   const changeConsoleMode = (nextMode: ConsoleMode, confirmed = false) => {
+    if (!confirmed && nextMode !== mode && mode === "album_edit") {
+      albumLeaveGuard.current?.(() => changeConsoleMode(nextMode, true));
+      if (albumLeaveGuard.current) return;
+    }
     if (!confirmed && nextMode !== mode && (mode === "song_edit" || mode === "song")) {
       songLeaveGuard.current?.(() => changeConsoleMode(nextMode, true));
       if (songLeaveGuard.current) return;
@@ -3362,7 +3367,10 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         />
       )}
 
-      {mode === "album" && <AlbumAdminSection />}
+      <AlbumAdminSection variant="create" active={mode === "album_create"}
+        registerLeaveGuard={guard => { albumLeaveGuard.current = guard; }} />
+      <AlbumAdminSection variant="edit" active={mode === "album_edit"}
+        registerLeaveGuard={guard => { albumLeaveGuard.current = guard; }} />
       <SongCatalogAdmin
         active={mode === "song_create" || mode === "song_edit" || mode === "song"}
         variant={mode === "song_create" ? "create" : "edit"}

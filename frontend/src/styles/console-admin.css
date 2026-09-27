@@ -1240,6 +1240,18 @@
   width: min(var(--console-live-management-control-width), 100%);
 }
 
+.album-create-form-table { min-width: 1000px; table-layout: fixed; }
+.album-create-date-column { width: 300px; }
+.album-release-date { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.album-release-date > input { flex: 0 1 160px; min-width: 0; }
+.album-release-date .live-clear-after-create-option { display: inline-flex; white-space: nowrap; }
+.album-track-editor { table-layout: fixed; }
+.album-track-editor td { overflow-wrap: anywhere; }
+.album-track-section-column { width: 180px; }
+.album-track-order-column { width: 72px; }
+.album-track-edition-column { width: 200px; }
+.album-track-actions-column { width: 230px; }
+
 .venue-create-actions { flex-wrap: wrap; }
 .venue-create-actions > button { flex-shrink: 0; white-space: nowrap; }
 

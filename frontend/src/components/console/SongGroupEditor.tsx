@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { getSongGroup, getSongGroups, songCatalogWrite, type SongGroup, type SongGroupSummary, type SongVersion } from "../../api";
+import { getSongGroup, getSongGroups, songCatalogWrite, type CatalogPage, type SongGroup, type SongGroupSummary, type SongVersion } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
+import { ConsoleChoiceSelect, ConsoleCandidatePager } from "./ConsoleChoiceSelect";
 import { UpdateDiffTable } from "./UpdateDiffTable";
 
 export function SongGroupEditor({ song, onSaved, onClose }: { song: SongVersion; onSaved: () => void; onClose: () => void }) {
@@ -8,7 +9,10 @@ export function SongGroupEditor({ song, onSaved, onClose }: { song: SongVersion;
   const [original, setOriginal] = useState<SongGroup | null>(null);
   const [draft, setDraft] = useState<SongGroup | null>(null);
   const [query, setQuery] = useState("");
-  const [groups, setGroups] = useState<SongGroupSummary[]>([]);
+  const [groups, setGroups] = useState<CatalogPage<SongGroupSummary> | null>(null);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [targetLabel, setTargetLabel] = useState("");
   const [target, setTarget] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
@@ -21,9 +25,11 @@ export function SongGroupEditor({ song, onSaved, onClose }: { song: SongVersion;
   }, [song.group_id]);
   useEffect(() => {
     let current = true;
-    void getSongGroups(query).then(result => { if (current) setGroups(result.items); }).catch(e => { if (current) setError(String(e)); });
+    setLoading(true); setGroups(null);
+    void getSongGroups(query, page).then(result => { if (current) setGroups(result); }).catch(e => { if (current) setError(String(e)); })
+      .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [query]);
+  }, [query, page]);
   const save = async () => {
     if (!csrfToken || !draft || !original || !confirm) return;
     setBusy(true); setError("");
@@ -46,7 +52,7 @@ export function SongGroupEditor({ song, onSaved, onClose }: { song: SongVersion;
     {error && <p role="alert">{error}</p>}
     {draft && original && <div className="console-confirm-body">
       {confirm ? <UpdateDiffTable changes={confirm === "move" ? [
-        { field: "歌曲组", before: original.group_name, after: groups.find(g => String(g.group_id) === target)?.group_name ?? target },
+        { field: "歌曲组", before: original.group_name, after: targetLabel || target },
         { field: "原因", before: "", after: reason },
       ] : [
         { field: "组名", before: original.group_name, after: draft.group_name },
@@ -73,8 +79,11 @@ export function SongGroupEditor({ song, onSaved, onClose }: { song: SongVersion;
         <div className="tour-admin-block">
           <h3>更正当前版本归组</h3>
           <div className="tour-admin-fields">
-            <label>搜索歌曲组<input value={query} onChange={e => { setQuery(e.target.value); setTarget(""); }} /></label>
-            <label>目标歌曲组<select value={target} onChange={e => setTarget(e.target.value)}><option value="">请选择</option>{groups.filter(g => g.group_id !== song.group_id).map(g => <option key={g.group_id} value={g.group_id}>{g.group_name}</option>)}</select></label>
+            <label>搜索歌曲组<input value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} /></label>
+            <fieldset className="tour-band-field"><legend>目标歌曲组</legend><ConsoleChoiceSelect label="目标歌曲组" value={Number(target) || null} selectedLabel={targetLabel} disabled={loading}
+              options={(groups?.items ?? []).filter(g => g.group_id !== song.group_id).map(g => ({ id: g.group_id, label: g.group_name }))}
+              onChange={id => { setTarget(String(id)); setTargetLabel(groups?.items.find(g => g.group_id === id)?.group_name ?? ""); }} /></fieldset>
+            <div className="band-admin-members-field"><ConsoleCandidatePager page={page} totalPages={groups?.total_pages ?? page} total={groups?.total ?? 0} loading={loading} onPage={setPage} /></div>
             <label className="band-admin-members-field">更正原因<input value={reason} onChange={e => setReason(e.target.value)} /></label>
           </div>
           <div className="console-submit-row">

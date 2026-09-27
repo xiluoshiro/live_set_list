@@ -126,10 +126,11 @@ test("create adds a version to the selected song group", async () => {
   expect(screen.getByLabelText("版本标识")).toBeDisabled();
   await user.selectOptions(screen.getByLabelText("歌曲组", { exact: true }), "existing");
   await user.type(screen.getByLabelText("搜索歌曲组"), "合唱");
-  await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("合唱"));
+  await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("合唱", 1));
   await user.type(screen.getByLabelText("版本标识"), "新版");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
-  await user.selectOptions(screen.getByLabelText("选择歌曲组"), "1");
+  await user.click(screen.getByRole("button", { name: "选择歌曲组" }));
+  await user.click(await screen.findByRole("radio", { name: "合唱曲" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).toBeEnabled());
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   const dialog = screen.getByRole("dialog", { name: "确认新增歌曲" });
@@ -232,4 +233,51 @@ test("group editor reviews name and version order before saving", async () => {
   await user.click(screen.getByRole("button", { name: "确认保存" }));
   await waitFor(() => expect(onSaved).toHaveBeenCalled());
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/song-groups/1", "PUT", { expected_revision: 1, group_name: "新组名", song_ids: [2, 1] }, "csrf");
+});
+
+// 测试点：歌曲组翻到后续页可选择，翻页保留已选组，搜索从第一页重新请求。
+test("group picker exposes every page and retains the selection", async () => {
+  const user = userEvent.setup();
+  api.getSongGroups.mockImplementation(async (q: string, index: number) => ({
+    items: [{ group_id: index, group_name: `${q || "歌曲组"} ${index}`, version_count: 1 }],
+    page: index, page_size: 20, total: 41, total_pages: 3,
+  }));
+  render(<SongCatalogAdmin variant="create" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  await user.selectOptions(screen.getByLabelText("歌曲组", { exact: true }), "existing");
+  await screen.findByText("第 1 / 3 页，共 41 条");
+  expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "下一页" }));
+  await screen.findByText("第 2 / 3 页，共 41 条");
+  await user.click(screen.getByRole("button", { name: "下一页" }));
+  await screen.findByText("第 3 / 3 页，共 41 条");
+  expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "选择歌曲组" }));
+  await user.click(screen.getByRole("radio", { name: "歌曲组 3" }));
+  await user.click(screen.getByRole("button", { name: "上一页" }));
+  await screen.findByText("第 2 / 3 页，共 41 条");
+  expect(screen.getByRole("button", { name: "选择歌曲组" })).toHaveTextContent("歌曲组 3");
+  await user.type(screen.getByLabelText("搜索歌曲组"), "目标");
+  await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("目标", 1));
+  await screen.findByText("第 1 / 3 页，共 41 条");
+});
+
+// 测试点：归组更正可选择第二页的目标组，回到第一页后确认仍提交该目标。
+test("group correction selects a target beyond the first page", async () => {
+  const user = userEvent.setup();
+  api.getSongGroups.mockImplementation(async (_q: string, index: number) => ({
+    items: [{ group_id: index === 1 ? 1 : 21, group_name: index === 1 ? "合唱曲" : "目标组", version_count: 1 }],
+    page: index, page_size: 20, total: 21, total_pages: 2,
+  }));
+  render(<SongGroupEditor song={version()} onClose={vi.fn()} onSaved={vi.fn()} />);
+  await screen.findByText("第 1 / 2 页，共 21 条");
+  await user.click(screen.getByRole("button", { name: "下一页" }));
+  await screen.findByText("第 2 / 2 页，共 21 条");
+  await user.click(screen.getByRole("button", { name: "目标歌曲组" }));
+  await user.click(screen.getByRole("radio", { name: "目标组" }));
+  await user.click(screen.getByRole("button", { name: "上一页" }));
+  await user.type(screen.getByLabelText("更正原因"), "归组修正");
+  await user.click(screen.getByRole("button", { name: "更正归组" }));
+  expect(screen.getByRole("row", { name: "歌曲组 合唱曲 目标组" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "确认保存" }));
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/songs/1/group", "PUT", { group_id: 21, expected_revision: 1, reason: "归组修正" }, "csrf");
 });

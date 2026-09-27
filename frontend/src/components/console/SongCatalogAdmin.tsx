@@ -10,6 +10,7 @@ import { ownershipLabel } from "../SongCatalog";
 import type { BandOption } from "./types";
 import { UpdateDiffTable } from "./UpdateDiffTable";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
+import { ConsoleChoiceSelect, ConsoleCandidatePager } from "./ConsoleChoiceSelect";
 import { ConsoleMultiSelect } from "./ConsoleMultiSelect";
 
 const emptyFields = (): SongVersionDraft => ({ song_name: "", version_label: "" });
@@ -34,7 +35,9 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const [groupId, setGroupId] = useState<number | null>(null);
   const [selectedGroupName, setSelectedGroupName] = useState("");
   const [groupQuery, setGroupQuery] = useState("");
-  const [groups, setGroups] = useState<SongGroupSummary[]>([]);
+  const [groups, setGroups] = useState<CatalogPage<SongGroupSummary> | null>(null);
+  const [groupPage, setGroupPage] = useState(1);
+  const [groupsLoading, setGroupsLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [bandFilter, setBandFilter] = useState("");
@@ -83,10 +86,12 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   useEffect(() => {
     if (!active || !creating || newGroup) return;
     let current = true;
-    void getSongGroups(groupQuery).then(result => { if (current) setGroups(result.items); })
-      .catch(e => { if (current) setError(String(e)); });
+    setGroupsLoading(true); setGroups(null);
+    void getSongGroups(groupQuery, groupPage).then(result => { if (current) setGroups(result); })
+      .catch(e => { if (current) setError(String(e)); })
+      .finally(() => { if (current) setGroupsLoading(false); });
     return () => { current = false; };
-  }, [active, creating, newGroup, groupQuery]);
+  }, [active, creating, newGroup, groupQuery, groupPage]);
   useEffect(() => {
     let current = true;
     setGroupRevision(null);
@@ -107,7 +112,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     } catch (e) { if (generation === loadGeneration.current) setError(String(e)); }
     finally { if (generation === loadGeneration.current) setBusy(false); }
   };
-  const clear = () => { setCreateDraft(emptyFields()); setCreateOwner(emptyOwner()); setGroupName(""); setGroupId(null); setNewGroup(true); };
+  const clear = () => { setCreateDraft(emptyFields()); setCreateOwner(emptyOwner()); setGroupName(""); setGroupId(null); setSelectedGroupName(""); setNewGroup(true); };
   const submit = async () => {
     if (!csrfToken) return;
     setBusy(true); setError("");
@@ -208,19 +213,15 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         <div className="live-id-selector live-create-query-row">
           <label className="live-management-label" htmlFor={`${formId}-group-query`}>搜索歌曲组</label>
           <input id={`${formId}-group-query`} className="venue-query-input live-management-primary-control" disabled={fieldsDisabled}
-            placeholder="歌曲组名称" value={groupQuery} onChange={event => setGroupQuery(event.target.value)} />
+            placeholder="歌曲组名称" value={groupQuery} onChange={event => { setGroupQuery(event.target.value); setGroupPage(1); }} />
         </div>
         <div className="live-id-selector live-create-tools">
           <label className="live-management-label" htmlFor={`${formId}-group-select`}>选择歌曲组</label>
-          <select id={`${formId}-group-select`} className="live-management-primary-control" disabled={fieldsDisabled} value={groupId ?? ""}
-            onChange={event => {
-              const id = Number(event.target.value) || null;
-              setGroupId(id); setSelectedGroupName(groups.find(group => group.group_id === id)?.group_name ?? "");
-            }}>
-            <option value="">请选择</option>
-            {groupId && !groups.some(group => group.group_id === groupId) && <option value={groupId}>{selectedGroupName}</option>}
-            {groups.map(group => <option key={group.group_id} value={group.group_id}>{group.group_name}</option>)}
-          </select>
+          <ConsoleChoiceSelect id={`${formId}-group-select`} label="选择歌曲组" disabled={fieldsDisabled || groupsLoading}
+            value={groupId} selectedLabel={selectedGroupName} options={(groups?.items ?? []).map(group => ({ id: group.group_id, label: group.group_name }))}
+            onChange={id => { setGroupId(id); setSelectedGroupName(groups?.items.find(group => group.group_id === id)?.group_name ?? ""); }} />
+          <ConsoleCandidatePager page={groupPage} totalPages={groups?.total_pages ?? groupPage} total={groups?.total ?? 0}
+            loading={groupsLoading} onPage={setGroupPage} />
         </div>
       </>}
       <div className="console-table-wrap">

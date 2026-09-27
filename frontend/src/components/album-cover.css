@@ -5,5 +5,6 @@
 .album-cover-error { font-size: 0.85em; }
 .album-cover-editor .album-cover-image { width: 64px; height: 64px; }
 .album-cover-editor input { min-width: 220px; width: 100%; box-sizing: border-box; }
-.album-cover-editor td:nth-child(2) { width: 100%; }
-.album-cover-editor td:last-child { min-width: 200px; }
+.album-cover-editor { table-layout: fixed; }
+.album-cover-preview-column { width: 88px; }
+.album-cover-actions-column { width: 320px; }
