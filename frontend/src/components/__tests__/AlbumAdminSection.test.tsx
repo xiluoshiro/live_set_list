@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { AlbumAdminSection } from "../console/AlbumAdminSection";
 
 const api = vi.hoisted(() => ({ getCatalogConsole: vi.fn(), songCatalogWrite: vi.fn() }));
@@ -9,12 +9,16 @@ vi.mock("../../api", () => api);
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ csrfToken: "csrf" }) }));
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 8, 27, 0, 30));
   vi.clearAllMocks();
   api.getCatalogConsole.mockImplementation(async (path: string) => ({ items: path.startsWith("/songs")
     ? [{ song_id: 1, song_name: "验证曲", version_label: "通常版", band_name: "乐队 A" }] : [] }));
 });
 
-// 测试点：管理候选使用完整发行标题，选择后仍分别编辑原始名称和发行说明。
+afterEach(() => vi.useRealTimers());
+
+// 测试点：管理候选使用完整发行标题，选择后保留原始名称、发行说明及未知日期。
 test("album selection displays the release title without changing stored fields", async () => {
   const user = userEvent.setup();
   const album = { album_id: 1, album_name: "Yes! BanG_Dream!", release_label: "Poppin'Party 1st Single", release_date: null, album_url: null, cover_urls: [], revision: 1, tracks: [] };
@@ -23,6 +27,8 @@ test("album selection displays the release title without changing stored fields"
   const option = await screen.findByRole("option", { name: "Poppin'Party 1st Single「Yes! BanG_Dream!」" });
   await user.selectOptions(screen.getByRole("combobox", { name: "已有专辑" }), option);
   expect(await screen.findByDisplayValue("Yes! BanG_Dream!")).toBeInTheDocument();
+  expect(screen.getByLabelText("发售日期")).toHaveValue("");
+  expect(screen.getByRole("checkbox", { name: "日期未知" })).toBeChecked();
   expect(screen.getByLabelText("发行标识")).toHaveValue("Poppin'Party 1st Single");
 });
 
@@ -52,6 +58,7 @@ test("Instrumental 复用已有歌曲，专辑日期可未知，失败保留待�
   api.songCatalogWrite.mockRejectedValue(new Error("资料已被修改，请重新加载后编辑"));
   render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   fireEvent.change(screen.getByLabelText("专辑名称"), { target: { value: "测试专辑" } });
+  await user.click(screen.getByRole("checkbox", { name: "日期未知" }));
   await screen.findByRole("option", { name: "#1 验证曲 / 通常版 / 乐队 A" });
   await user.selectOptions(screen.getByLabelText("收录歌曲"), "1");
   await user.click(screen.getByRole("button", { name: "添加收录" }));
@@ -151,6 +158,9 @@ test("creation retains its mode and release date when keeping the draft", async 
   api.songCatalogWrite.mockResolvedValue({ album_id: 9, album_name: "发行盘", release_label: "", release_date: "2026-09-27", album_url: null, cover_urls: [], revision: 1, tracks: [] });
   render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.type(screen.getByLabelText("专辑名称"), "发行盘");
+  expect(screen.getByLabelText("发售日期")).toHaveValue("2026-09-27");
+  expect(screen.getByRole("checkbox", { name: "日期未知" })).not.toBeChecked();
+  await user.click(screen.getByRole("checkbox", { name: "日期未知" }));
   await user.click(screen.getByRole("checkbox", { name: "日期未知" }));
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("发售日期"), { target: { value: "2026-09-27" } });
@@ -169,6 +179,27 @@ test("creation retains its mode and release date when keeping the draft", async 
   }, "csrf");
   expect(screen.getByLabelText("专辑名称")).toHaveValue("发行盘");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeEnabled();
+});
+
+// 测试点：新增默认使用本地当天，清空及成功后的重置重新取当天，未知日期仍可显式提交。
+test("album creation defaults and resets to the current local date", async () => {
+  const user = userEvent.setup();
+  api.songCatalogWrite.mockResolvedValue({ album_id: 1, album_name: "日期核对", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 1, tracks: [] });
+  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
+  expect(screen.getByLabelText("发售日期")).toHaveValue("2026-09-27");
+  expect(screen.getByRole("checkbox", { name: "日期未知" })).not.toBeChecked();
+  fireEvent.change(screen.getByLabelText("发售日期"), { target: { value: "2025-01-02" } });
+  vi.setSystemTime(new Date(2026, 8, 28, 0, 30));
+  await user.click(screen.getByRole("button", { name: "清空数据" }));
+  expect(screen.getByLabelText("发售日期")).toHaveValue("2026-09-28");
+  await user.type(screen.getByLabelText("专辑名称"), "日期核对");
+  await user.click(screen.getByRole("checkbox", { name: "日期未知" }));
+  await user.click(screen.getByRole("button", { name: "提交插入" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认" }));
+  await screen.findByText("已新增专辑 #1 日期核对");
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums", "POST", expect.objectContaining({ release_date: null }), "csrf");
+  expect(screen.getByLabelText("发售日期")).toHaveValue("2026-09-28");
+  expect(screen.getByRole("checkbox", { name: "日期未知" })).not.toBeChecked();
 });
 
 // 测试点：查询按钮及回车加载完整候选，包含接口后续页，输入过程不查询且已收录曲目保留。

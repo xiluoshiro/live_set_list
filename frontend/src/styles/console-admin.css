@@ -1241,7 +1241,9 @@
 }
 
 .album-create-form-table { min-width: 1000px; table-layout: fixed; }
-.album-create-date-column { width: 300px; }
+.album-create-name-column { width: 25%; }
+.album-create-release-column { width: 190px; }
+.album-create-date-column { width: 264px; }
 .album-release-date { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .album-release-date > input { flex: 0 1 160px; min-width: 0; }
 .album-release-date .live-clear-after-create-option { display: inline-flex; white-space: nowrap; }

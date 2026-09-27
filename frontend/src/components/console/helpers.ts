@@ -2,6 +2,14 @@ import { DEFAULT_BAND_MEMBERS } from "./constants";
 import songLookupPunctuationConfig from "../../../../config/song_lookup_punctuation_groups.json";
 import type { DerivedSegment, OtherMemberDraft, SetlistDraftRow } from "./types";
 
+export function getTodayDateInputValue(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const songLookupPunctuationTranslation = new Map<string, string>(
   songLookupPunctuationConfig.groups.flatMap((group) => group.map((value) => [value, group[0]] as [string, string])),
 );

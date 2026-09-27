@@ -71,6 +71,7 @@ import {
 import {
   buildOtherMemberPayloadObject,
   getDerivedSegments,
+  getTodayDateInputValue,
   normalizeSongLookupText,
 } from "./console/helpers";
 import { EVENT_STATUS_LABELS } from "../liveStatus";
@@ -275,14 +276,6 @@ function formatTimedLabel(value: string | null | undefined): string {
 const DEFAULT_LIVE_OPENING_TIME = "18:00";
 const DEFAULT_LIVE_START_TIME = "19:00";
 const DEFAULT_LIVE_TIMEZONE = "+09:00";
-
-function getTodayDateInputValue(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 function getAllowedLineupContext(
   history: ConsoleBandHistory,

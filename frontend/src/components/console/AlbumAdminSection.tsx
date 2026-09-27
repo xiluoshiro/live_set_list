@@ -7,8 +7,9 @@ import { albumTitle } from "../../albumTitle";
 import { ConsoleCandidatePager } from "./ConsoleChoiceSelect";
 import { AlbumCover } from "../AlbumCover";
 import { albumLinksError } from "../../albumLinks";
+import { getTodayDateInputValue } from "./helpers";
 
-const emptyAlbum = (): AlbumDraft => ({ album_name: "", release_label: "", release_date: null, album_url: null, cover_urls: [""], tracks: [] });
+const emptyAlbum = (): AlbumDraft => ({ album_name: "", release_label: "", release_date: getTodayDateInputValue(), album_url: null, cover_urls: [""], tracks: [] });
 const albumPayload = (draft: AlbumDraft): AlbumDraft => ({ ...draft, cover_urls: draft.cover_urls.filter(url => url.trim()) });
 const coverSummary = (urls: string[]) => urls.map((url, i) => `${i + 1}${i === 0 ? "（默认）" : ""}. ${url}`).join("\n");
 const songLabel = (song: Pick<ConsoleSongItem, "song_id" | "song_name" | "version_label" | "band_name">) =>
@@ -210,7 +211,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
       <label>专辑页面{albumUrlInput}</label>
     </fieldset> : <div className="console-table-wrap">
       <table className="console-admin-table album-create-form-table" aria-label="新增专辑资料">
-        <colgroup><col /><col /><col className="album-create-date-column" /><col /></colgroup>
+        <colgroup><col className="album-create-name-column" /><col className="album-create-release-column" /><col className="album-create-date-column" /><col /></colgroup>
         <thead><tr><th scope="col">专辑名称</th><th scope="col">发行标识</th><th scope="col">发售日期</th><th scope="col">专辑页面</th></tr></thead>
         <tbody><tr><td>{albumNameInput}</td><td>{releaseLabelInput}</td><td>{releaseDateField}</td><td>{albumUrlInput}</td></tr></tbody>
       </table>
