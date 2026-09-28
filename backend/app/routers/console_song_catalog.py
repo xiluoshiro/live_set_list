@@ -143,7 +143,8 @@ def edit_song_catalog(payload: SongEditUpdate, request: Request, song_id: int = 
             raise HTTPException(422, "请填写归属更正原因")
         cover_urls = payload.cover_urls if "cover_urls" in payload.model_fields_set else before["cover_urls"]
         old_order = sorted(existing, key=lambda item: (existing[item], item))
-        group_changed = source.group_name != before["group_name"] or source.song_ids != old_order or target is not None
+        order_changed = source.song_ids != old_order or target is not None
+        group_changed = source.group_name != before["group_name"] or order_changed
         song_changed = ownership_changed or target is not None or any((
             payload.song_name != before["song_name"], payload.version_label != before["version_label"],
             cover_urls != before["cover_urls"],
@@ -151,7 +152,7 @@ def edit_song_catalog(payload: SongEditUpdate, request: Request, song_id: int = 
         if ownership_changed:
             save_ownership(cur, song_id, payload.ownership)
         remaining = [item for item in source.song_ids if not target or item != song_id]
-        new_order = {item: index for index, item in enumerate(remaining, 1)}
+        new_order = {item: index for index, item in enumerate(remaining, 1)} if order_changed else existing
         destination = target.group_id if target else source.group_id
         if target:
             cur.execute("SELECT COALESCE(max(version_order), 0) + 1 FROM song_list WHERE group_id = %s", (destination,))

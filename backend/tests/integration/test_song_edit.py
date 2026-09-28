@@ -140,6 +140,57 @@ def test_move_and_source_group_changes_commit_together(integration_test_client):
     assert client.put(f"/api/console/songs/{source['song_id']}/edit", headers=headers, json=default_payload).status_code == 409
 
 
+# 测试点：旧移组留下序号空缺后，资料或组名修改仍可保存且保留全部版本序号。
+@pytest.mark.parametrize(('field', 'version_index'), [
+    ('song_name', 1), ('song_name', 2), ('version_label', 2),
+    ('cover_urls', 2), ('ownership', 2), ('group_name', 2),
+])
+def test_metadata_edit_preserves_gapped_version_order(integration_test_client, field, version_index):
+    client = integration_test_client
+    headers = auth(client)
+    source = make_group(client, headers, '序号空缺组')
+    moved = add_version(client, headers, source['group_id'], '移出版本')
+    add_version(client, headers, source['group_id'], '第三版本')
+    add_version(client, headers, source['group_id'], '第四版本')
+    destination = make_group(client, headers, '移入组')
+    result = client.put(f"/api/console/songs/{moved['song_id']}/group", headers=headers, json={
+        'group_id': destination['group_id'], 'expected_revision': moved['revision'], 'reason': '归组更正',
+    })
+    assert result.status_code == 200, result.text
+    before = client.get(f"/api/song-groups/{source['group_id']}").json()
+    assert [version['version_order'] for version in before['versions']] == [1, 3, 4]
+    sid = before['versions'][version_index]['song_id']
+    payload = edit_payload(client, sid)
+    if field == 'ownership':
+        payload.update(ownership={'mode': 'bands', 'band_ids': [2]}, ownership_reason='归属核实')
+    elif field == 'cover_urls':
+        payload[field] = ['https://example.test/updated.png']
+    elif field == 'group_name':
+        payload['group'][field] = '更新后的组名'
+    else:
+        payload[field] = '更新后的资料'
+    result = client.put(f'/api/console/songs/{sid}/edit', headers=headers, json=payload)
+    assert result.status_code == 200, result.text
+    saved = result.json()
+    after = client.get(f"/api/song-groups/{source['group_id']}").json()
+    assert after == saved['group']
+    assert [(version['song_id'], version['version_order']) for version in after['versions']] == [
+        (version['song_id'], version['version_order']) for version in before['versions']
+    ]
+    assert saved['item']['revision'] == payload['expected_revision'] + 1
+    assert after['revision'] == before['revision'] + (1 if field == 'group_name' else 0)
+    if field == 'ownership':
+        assert saved['item']['ownership']['band_ids'] == [2]
+    elif field == 'group_name':
+        assert after['group_name'] == payload['group']['group_name']
+    else:
+        assert saved['item'][field] == payload[field]
+    if field != 'group_name':
+        assert [version for version in after['versions'] if version['song_id'] != sid] == [
+            version for version in before['versions'] if version['song_id'] != sid
+        ]
+
+
 def test_edit_requires_auth_csrf_and_valid_group_membership(integration_test_client):
     client = integration_test_client
     assert client.put('/api/console/songs/1/edit', json={}).status_code == 401
