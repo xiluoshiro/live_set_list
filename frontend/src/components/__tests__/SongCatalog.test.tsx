@@ -37,6 +37,44 @@ beforeEach(() => {
   api.songCatalogWrite.mockResolvedValue({ item: version() });
 });
 
+// 测试点：全部收录展示当前版本所有唱片，Escape 关闭后恢复焦点，选中唱片仍进入完整详情。
+test("all releases dialog restores focus and opens the selected album", async () => {
+  const user = userEvent.setup();
+  const albums = Array.from({ length: 5 }, (_, index) => ({ ...version().albums[0], album_id: index + 1, album_name: `唱片 ${index + 1}` }));
+  api.getSongVersion.mockResolvedValue({ ...version(), albums });
+  api.getAlbumDetail.mockResolvedValue({ ...albums[4], tracks: [] });
+  render(<PublicPage />);
+  const trigger = await screen.findByRole("button", { name: "全部收录" });
+  await user.click(trigger);
+  let dialog = within(screen.getByRole("dialog", { name: "收录唱片 5" }));
+  expect(dialog.getAllByRole("link", { name: /^查看唱片 / })).toHaveLength(5);
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+  await user.click(trigger);
+  dialog = within(screen.getByRole("dialog", { name: "收录唱片 5" }));
+  await user.click(dialog.getByRole("link", { name: "查看唱片 唱片 5" }));
+  expect(await screen.findByRole("heading", { name: "唱片 5", level: 1 })).toBeInTheDocument();
+  expect(api.getAlbumDetail).toHaveBeenLastCalledWith(5);
+});
+
+// 测试点：少量演出记录页可直接跳到中间任意页，年份筛选后返回有效的第一页。
+test("detail pagination exposes every page for a short result set", async () => {
+  const user = userEvent.setup();
+  api.getSongPerformances.mockImplementation(async (_id, index, options) => ({
+    items: [], page: index, page_size: 8, total: options.year ? 0 : 48,
+    total_pages: options.year ? 1 : 6, available_years: [2026],
+  }));
+  render(<PublicPage />);
+  const pager = within(await screen.findByRole("navigation", { name: "演出记录分页" }));
+  expect(pager.getAllByRole("button", { name: /^第 \d+ 页$/ })).toHaveLength(6);
+  await user.click(pager.getByRole("button", { name: "第 4 页" }));
+  await waitFor(() => expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 4, { year: undefined, pageSize: 8 }));
+  await user.selectOptions(screen.getByRole("combobox", { name: "演出年份" }), "2026");
+  expect(await screen.findByText("暂无演奏记录")).toBeInTheDocument();
+  expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 1, { year: 2026, pageSize: 8 });
+});
+
 // 测试点：版本自有多图优先且可切换，版本切换重置首图，专辑回退有来源链接，无图使用占位。
 test("version covers switch independently and reset on version navigation", async () => {
   const user = userEvent.setup();

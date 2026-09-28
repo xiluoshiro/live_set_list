@@ -68,43 +68,86 @@
 .song-mobile-release { display: none; }
 
 .song-catalog-single { width: min(1360px, calc(100% - 64px)); padding-top: 14px; }
-.song-detail-overview { display: grid; grid-template-columns: clamp(170px, 16vw, 230px) minmax(0, 1fr); gap: 12px 28px; padding: 8px 0 20px; border-bottom: 1px solid var(--song-section-line); }
-.song-detail-art { grid-row: 1 / 3; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; }
+.song-catalog-song { width: min(1264px, calc(100% - 80px)); padding: 0 0 20px; line-height: 1.5; }
+.song-catalog-song .song-catalog-context { min-height: 48px; padding: 0; }
+.song-detail, .song-releases-dialog { --song-number-font: ui-monospace, SFMono-Regular, Consolas, monospace; --song-cover-radius: 4px; }
+.song-detail h1 { font-size: 32px; letter-spacing: -.03em; overflow-wrap: break-word; line-break: strict; }
+.song-detail h2 { font-size: 21px; line-height: 1.25; letter-spacing: -.02em; }
+.song-detail h2 small { font: 500 12px var(--song-number-font); letter-spacing: 0; }
+.song-detail-overview { --song-detail-cover-size: 200px; display: grid; grid-template-columns: var(--song-detail-cover-size) minmax(0, 1fr); gap: 12px 28px; align-items: start; padding: 10px 0 18px; border-bottom: 1px solid var(--song-section-line); }
+.song-detail-art { grid-row: 1 / 3; aspect-ratio: 1; width: 100%; display: flex; align-items: center; justify-content: center; }
 .song-detail-art > a { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-.song-detail-art .album-cover-image { width: auto; height: auto; max-width: 100%; max-height: 100%; border-radius: 3px; }
-.song-detail-art .song-art-empty { width: 100%; height: 100%; font-size: 60px; border: 1px solid var(--border-normal); border-radius: 4px; }
+.song-detail-art .album-cover-image { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; border: 1px solid var(--border-normal); border-radius: var(--song-cover-radius); }
+.song-detail-art .song-art-empty { width: 100%; height: 100%; font-size: 64px; border: 1px solid var(--border-normal); border-radius: var(--song-cover-radius); }
+.song-detail-art .album-cover-error { width: 100%; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid var(--border-normal); border-radius: var(--song-cover-radius); background: var(--surface-2); }
 .song-detail-art-gallery { aspect-ratio: auto; align-self: start; }
 .song-detail-art .album-cover-gallery { width: 100%; margin: 0; }
-.song-detail-art .album-cover-gallery > .album-cover-image { width: 100%; height: auto; aspect-ratio: 1; }
-.song-detail-heading { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 20px; min-width: 0; align-items: start; }
-.song-owner { margin-top: 10px !important; color: var(--text-secondary); line-height: 1.5; }
-.song-performance-total { border-top: 1px solid var(--border-normal); padding-top: 7px; display: grid; gap: 5px; color: var(--text-muted); font-size: 12px; }
-.song-performance-total strong { font-size: 28px; color: var(--text-heading); }
-.song-performance-total small { font-size: 12px; font-weight: 400; }
-.song-catalog-versions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
-.song-catalog-versions .section-tab-btn { padding: 4px 9px; font-size: 12px; }
-.song-catalog-versions [aria-pressed="true"] { color: var(--text-link); background: var(--surface-chip-soft); }
-.song-release-section { min-width: 0; border-top: 1px solid var(--border-normal); }
-.song-release-section h2 { font-size: 15px; }
-.song-release-section .song-section-heading { min-height: 37px; }
-.song-release-rail { display: flex; gap: 24px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 5px; }
-.song-release { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; flex: 0 0 calc((100% - 48px) / 3); min-width: 220px; align-items: center; }
-.song-release-art { height: 84px; display: flex; align-items: center; justify-content: center; }
-.song-release-art .album-cover-image { max-width: 100%; max-height: 100%; width: auto; height: auto; border-radius: 3px; }
-.song-release-art .song-art-empty { width: 76px; height: 76px; }
-.song-release-copy { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.song-release-copy strong { font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
-.song-release-copy small, .song-release-copy time { font-size: 11px; color: var(--text-muted); }
+.song-detail-art .album-cover-gallery > .album-cover-image { max-height: var(--song-detail-cover-size); margin-inline: auto; }
+.song-detail-heading { display: grid; grid-template-columns: minmax(0, 1fr) 126px; gap: 9px 24px; min-width: 0; align-items: center; }
+.song-detail-byline { grid-column: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 24px; min-width: 0; }
+.song-detail-artist { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.song-owner { color: var(--text-heading); font-weight: 600; overflow-wrap: anywhere; }
+.song-version-count { border-left: 1px solid var(--border-normal); padding-left: 10px; color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+.song-performance-total { grid-column: 2; grid-row: 1 / 3; align-self: start; border-top: 1px solid var(--border-normal); padding-top: 7px; display: flex; flex-direction: column; gap: 3px; color: var(--text-muted); font-size: 11px; }
+.song-performance-total > span { font-family: var(--song-number-font); letter-spacing: .06em; }
+.song-performance-total strong { font: 700 28px/1.15 var(--song-number-font); color: var(--text-heading); font-variant-numeric: tabular-nums; }
+.song-performance-total strong small { margin-left: 7px; font-size: 12px; color: var(--text-secondary); }
+.song-performance-total small { font-family: "Segoe UI", "PingFang SC", sans-serif; font-size: 11px; font-weight: 400; }
+.song-catalog-versions { display: flex; flex-wrap: wrap; gap: 6px 18px; min-width: 0; }
+.song-catalog-versions .section-tab-btn { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 2px 0 4px; background: transparent; color: var(--text-muted); font: inherit; font-size: 12px; overflow-wrap: anywhere; text-align: left; }
+.song-catalog-versions .section-tab-btn:hover { color: var(--text-link); }
+.song-catalog-versions [aria-pressed="true"] { border-bottom-color: var(--accent-primary); color: var(--text-link); font-weight: 600; }
+.song-release-section { grid-column: 2; min-width: 0; border-top: 1px solid var(--border-normal); padding-top: 7px; }
+.song-release-section h2 { font-size: 16px; letter-spacing: 0; }
+.song-release-section .song-section-heading { min-height: 28px; margin-bottom: 8px; }
+.song-release-actions { display: flex; align-items: center; gap: 16px; }
+.song-release-actions .all-lives-button { align-self: auto; margin: 0; padding: 6px 0; text-underline-offset: 3px; }
+.song-release-rail { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 32px) / 3); gap: 16px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: thin; scrollbar-color: var(--border-normal) transparent; padding-bottom: 3px; }
+.song-release { --song-release-art-size: 90px; display: grid; grid-template-columns: var(--song-release-art-size) minmax(0, 1fr); gap: 12px; min-width: 0; align-items: center; scroll-snap-align: start; color: var(--text-heading); }
+.song-release:hover { text-decoration: none; }
+.song-release:hover strong { color: var(--text-link); }
+.song-release:focus-visible { outline-offset: -2px; }
+.song-release-art { width: var(--song-release-art-size); height: var(--song-release-art-size); display: flex; align-items: center; justify-content: center; }
+.song-release-art .album-cover-image { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; border: 1px solid var(--border-normal); border-radius: var(--song-cover-radius); }
+.song-release-art .song-art-empty, .song-release-art .album-cover-error { width: 100%; height: 100%; border: 1px solid var(--border-normal); border-radius: var(--song-cover-radius); }
+.song-release-art .album-cover-error { display: grid; place-items: center; text-align: center; font-size: 11px; color: var(--text-muted); }
+.song-release-copy { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.song-release-copy strong { font-size: 16px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.song-release-copy small { font-size: 11px; line-height: 1.4; color: var(--text-muted); margin-bottom: 4px; overflow-wrap: anywhere; }
+.song-release-copy time { font: 11px/1.4 var(--song-number-font); color: var(--text-muted); margin-top: 7px; font-variant-numeric: tabular-nums; }
+.song-release-link { display: flex; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--text-link); }
 .song-rail-controls { display: flex; gap: 4px; }
-.song-rail-controls button { padding: 2px 8px; }
-.song-performance-section { padding-top: 8px; }
-.song-performance-table th:first-child { width: 120px; }
-.song-performance-table th:last-child { width: 80px; text-align: right; }
-.song-performance-table td:first-child, .song-performance-table td:last-child { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
-.song-performance-table td { height: 42px; line-height: 1.5; }
+.song-rail-controls button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 4px; padding: 0; background: transparent; font-size: 19px; line-height: 1; color: var(--text-muted); }
+.song-rail-controls button:hover { background: var(--surface-chip-soft); color: var(--text-link); }
+.song-performance-section { padding-top: 5px; }
+.song-performance-section > .song-section-heading { min-height: 50px; }
+.song-performance-table th { padding: 4px 0; font-size: 11px; }
+.song-performance-table th:first-child { width: 134px; }
+.song-performance-table th:last-child { width: 84px; text-align: right; }
+.song-performance-table td:first-child, .song-performance-table td:last-child { color: var(--text-muted); font: 400 13px/1.5 var(--song-number-font); white-space: nowrap; }
+.song-performance-table td { height: 42px; padding: 10px 0; line-height: 1.5; }
+.song-performance-table td:nth-child(2) { padding-right: 20px; }
+.song-performance-table td:nth-child(2) a { font-weight: 600; }
 .song-performance-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .song-performance-table td:first-child, .song-performance-table th:first-child { padding-left: 0; }
-.song-record-flags { margin-left: 10px; color: var(--text-muted); font-size: 11px; }
+.song-record-flags { margin-left: 8px; color: var(--text-link); font-size: 10px; white-space: nowrap; }
+.song-detail .song-sort-label { gap: 16px; }
+.song-detail .song-sort-label select { max-width: 125px; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
+.song-detail .song-catalog-pagination { min-height: 48px; padding: 14px 0 20px; gap: 16px; }
+.song-detail .song-catalog-pagination nav, .song-detail .song-catalog-pagination nav > span { gap: 4px; }
+.song-detail .song-catalog-pagination button { height: 32px; min-width: 32px; border: 1px solid transparent; border-radius: 4px; padding: 0 9px; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.song-detail .song-catalog-pagination button:hover:not(:disabled):not([aria-current]) { background: var(--surface-chip-soft); color: var(--text-link); }
+.song-detail .song-catalog-pagination [aria-current="page"] { background: var(--accent-primary-hover); border-color: var(--accent-primary-hover); color: var(--text-on-primary); }
+.song-detail .song-catalog-pagination nav > button { margin-inline: 3px; border-color: var(--border-normal); background: var(--surface-input); font-size: 16px; }
+.modal.song-releases-dialog { width: min(1000px, 96vw); color: var(--text-main); font-size: 14px; line-height: 1.5; }
+.song-releases-dialog > .modal-head { justify-content: space-between; gap: 16px; padding: 0 0 16px; border-bottom: 1px solid var(--border-normal); }
+.song-releases-dialog .modal-head h2 { margin: 0; color: var(--text-heading); font-size: 19px; }
+.song-releases-dialog h2 small { margin-left: 10px; color: var(--text-muted); font: 12px var(--song-number-font); }
+.song-releases-dialog .all-lives-button { align-self: center; margin: 0; }
+.song-all-releases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; overflow-y: auto; padding: 20px 2px 4px; }
+.song-all-releases .song-release { display: flex; flex-direction: column; align-items: stretch; }
+.song-all-releases .song-release-art { width: 100%; height: 160px; }
+.song-all-releases .song-release-art .song-art-empty { max-width: 160px; }
 
 .song-catalog .song-directory-table, .song-catalog .song-performance-table { min-width: 0; }
 
@@ -141,12 +184,6 @@
   .song-directory-table th:first-child { width: 65%; }
   .song-directory-table th:nth-child(2) { width: 22%; }
   .song-directory-table th:nth-child(4) { width: 13%; }
-  .song-detail-overview { grid-template-columns: 150px minmax(0, 1fr); gap: 14px 22px; }
-  .song-detail-art { grid-row: 1; }
-  .song-release-section { grid-column: 1 / -1; }
-  .song-detail-heading { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .song-performance-total { border: 0; padding: 0; display: flex; align-items: baseline; gap: 10px; }
-  .song-performance-total strong { font-size: 22px; }
   .song-album-page { grid-template-columns: minmax(180px, 28%) minmax(0, 1fr); gap: 24px; }
 }
 @media (max-width: 620px) {
@@ -162,17 +199,9 @@
   .song-section-heading h2 { font-size: 17px; }
   .song-sort-label { gap: 5px; font-size: 11px; }
   .song-sort-label select { padding: 5px; max-width: 150px; }
-  .song-detail-overview { grid-template-columns: 88px minmax(0, 1fr); gap: 14px; }
-  .song-detail h1 { font-size: 24px; }
   .song-detail-art .album-cover-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
   .song-detail-art .album-cover-controls span { grid-column: 1 / -1; grid-row: 1; text-align: center; font-size: 11px; }
   .song-detail-art .album-cover-controls button { padding: 6px 2px; font-size: 11px; }
-  .song-owner { font-size: 13px; }
-  .song-release { flex-basis: 78%; min-width: 200px; }
-  .song-performance-table th:first-child { width: 82px; }
-  .song-performance-table th:last-child { width: 56px; }
-  .song-performance-table td { padding: 10px 4px; font-size: 13px; }
-  .song-performance-table td:first-child, .song-performance-table td:last-child { font-size: 10px; }
   .song-sort-label > span { display: none; }
   .song-catalog-pagination { gap: 5px; font-size: 11px; }
   .song-catalog-pagination nav, .song-catalog-pagination nav > span { gap: 3px; }
@@ -183,4 +212,75 @@
   .song-album-art .album-cover-gallery > .album-cover-image { max-height: 280px; max-width: 80%; }
   .song-album-art > .song-art-empty { max-width: 220px; }
   .song-album-facts { margin-top: 18px; }
+}
+
+@media (max-width: 1050px) {
+  .song-catalog-song { width: calc(100% - 40px); padding-top: 0; }
+  .song-detail-overview { --song-detail-cover-size: 160px; gap: 14px 22px; }
+  .song-detail-heading { grid-template-columns: minmax(0, 1fr) 100px; gap: 8px 16px; }
+  .song-detail h1 { font-size: 29px; }
+  .song-release-rail { grid-auto-columns: calc((100% - 16px) / 2); }
+}
+@media (max-width: 640px) {
+  .song-catalog-song { width: calc(100% - 32px); }
+  .song-catalog-song .song-catalog-context { min-height: 49px; font-size: 11px; }
+  .song-detail-overview { --song-detail-cover-size: 86px; gap: 9px 16px; padding: 9px 0 13px; }
+  .song-detail-heading { display: contents; }
+  .song-detail h1 { grid-column: 1 / -1; grid-row: 1; margin-bottom: 6px; font-size: 26px; letter-spacing: -.02em; }
+  .song-detail-art { grid-column: 1; grid-row: 2 / 4; }
+  .song-detail-art .song-art-empty { font-size: 39px; }
+  .song-detail-byline { grid-column: 2; grid-row: 2; gap: 7px; }
+  .song-detail-artist { gap: 8px; font-size: 13px; }
+  .song-version-count { padding-left: 8px; font-size: 11px; }
+  .song-catalog-versions { gap: 6px 14px; }
+  .song-catalog-versions .section-tab-btn { font-size: 11px; padding-block: 1px 3px; }
+  .song-performance-total { grid-column: 2; grid-row: 3; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 5px 8px; border: 0; padding: 0; }
+  .song-performance-total > span { font-size: 10px; letter-spacing: 0; }
+  .song-performance-total strong { font-size: 22px; }
+  .song-performance-total strong small { font-size: 10px; margin-left: 4px; }
+  .song-performance-total small { font-size: 10px; }
+  .song-release-section { grid-column: 1 / -1; grid-row: 4; margin-top: 5px; padding-top: 8px; }
+  .song-release-section h2 { font-size: 17px; }
+  .song-release-rail { grid-auto-columns: 88%; padding-bottom: 6px; }
+  .song-release { --song-release-art-size: 108px; gap: 13px; }
+  .song-release-actions { gap: 10px; }
+  .song-release-actions .all-lives-button { font-size: 11px; }
+  .song-rail-controls button { width: 27px; height: 27px; }
+  .song-performance-section > .song-section-heading { min-height: 48px; }
+  .song-performance-section h2 { font-size: 20px; }
+  .song-detail .song-sort-label { gap: 8px; }
+  .song-detail .song-sort-label > span { display: none; }
+  .song-detail .song-sort-label select { max-width: 106px; font-size: 11px; }
+  .song-performance-table th:first-child { width: 85px; }
+  .song-performance-table th:last-child { width: 54px; }
+  .song-performance-table td { height: 59px; padding-block: 10px; font-size: 13px; }
+  .song-performance-table td:nth-child(2) { padding-right: 10px; }
+  .song-performance-table td:first-child, .song-performance-table td:last-child { font-size: 12px; }
+  .song-detail .song-catalog-pagination { flex-wrap: wrap; gap: 8px; padding: 14px 0 18px; font-size: 10px; }
+  .song-detail .song-catalog-pagination nav { margin-left: auto; }
+  .song-detail .song-catalog-pagination nav, .song-detail .song-catalog-pagination nav > span { gap: 0; }
+  .song-detail .song-catalog-pagination button { height: 30px; min-width: 27px; padding: 0 6px; font-size: 11px; }
+  .song-detail .song-catalog-pagination nav > button { margin-inline: 2px; }
+  .song-all-releases { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 21px 15px; }
+  .song-all-releases .song-release-art { height: 120px; }
+  .song-all-releases .song-release-art .song-art-empty { max-width: 120px; }
+}
+@media (min-width: 1100px) and (min-height: 620px) {
+  .song-detail-overview { --song-detail-cover-size: clamp(196px, 22vh, 230px); gap: 11px 28px; padding: 8px 0 16px; }
+  .song-release-rail .song-release { --song-release-art-size: clamp(80px, 9.5vh, 98px); }
+  .song-performance-section { padding-top: 0; }
+  .song-performance-section > .song-section-heading { min-height: 48px; }
+  .song-performance-table td { height: 40px; padding-block: 9px; }
+  .song-detail .song-catalog-pagination { padding: 7px 0 6px; }
+}
+@media (min-width: 1100px) and (min-height: 620px) and (max-height: 780px) {
+  .song-catalog-song .song-catalog-context { min-height: 32px; }
+  .song-detail-overview { gap: 8px 26px; padding: 6px 0; }
+  .song-detail h1 { font-size: 30px; }
+  .song-performance-total strong { font-size: 26px; }
+  .song-performance-total small { font-size: 10px; }
+  .song-release-section { padding-top: 6px; }
+  .song-release-section .song-section-heading { min-height: 23px; margin-bottom: 7px; }
+  .song-release-copy small, .song-release-copy time { font-size: 10px; }
+  .song-release-copy strong { font-size: 15px; }
 }

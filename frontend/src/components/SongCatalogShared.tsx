@@ -15,11 +15,16 @@ export function CatalogArt({ url, title }: { url?: string; title: string }) {
   return url ? <AlbumCover url={url} alt={title} /> : <span className="song-art-empty" role="img" aria-label={`${title}，暂无封面`}>♪</span>;
 }
 
-export function CatalogPagination({ data, onPage, label, footerRef }: {
+export function CatalogPagination({ data, onPage, label, footerRef, expanded = false }: {
   data: Omit<CatalogPage<unknown>, "items">; onPage: (page: number) => void; label: string;
   footerRef?: RefObject<HTMLDivElement>;
+  expanded?: boolean;
 }) {
-  const choices = [...new Set([1, data.page - 1, data.page, data.page + 1, data.total_pages])]
+  const choices = expanded && data.total_pages <= 7
+    ? Array.from({ length: data.total_pages }, (_, index) => index + 1)
+    : [...new Set([1, data.page - 1, data.page, data.page + 1, data.total_pages,
+      ...(expanded && data.page <= 3 ? [2, 3, 4] : []),
+      ...(expanded && data.page >= data.total_pages - 2 ? [data.total_pages - 3, data.total_pages - 2, data.total_pages - 1] : [])])]
     .filter(page => page > 0 && page <= data.total_pages).sort((a, b) => a - b);
   return <div className="song-catalog-pagination" ref={footerRef}>
     <span>{data.total ? (data.page - 1) * data.page_size + 1 : 0}–{Math.min(data.page * data.page_size, data.total)} / {data.total}</span>
@@ -37,7 +42,7 @@ export function CatalogPagination({ data, onPage, label, footerRef }: {
 
 // Measure actual rendered rows. Remember the tallest row so changing page size cannot oscillate.
 export function useFittedCatalogPage(rowsRef: RefObject<HTMLElement>, footerRef: RefObject<HTMLElement>,
-  size: number, onSize: (size: number) => void) {
+  size: number, onSize: (size: number) => void, layoutRef?: RefObject<HTMLElement>) {
   const measured = useRef({ width: 0, rowHeight: 0 });
   useLayoutEffect(() => {
     const measure = () => {
@@ -58,6 +63,8 @@ export function useFittedCatalogPage(rowsRef: RefObject<HTMLElement>, footerRef:
     window.addEventListener("resize", measure);
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
     if (rowsRef.current?.parentElement) observer?.observe(rowsRef.current.parentElement);
+    // Covers and wrapped metadata can move the table without resizing the table itself.
+    if (layoutRef?.current) observer?.observe(layoutRef.current);
     return () => { window.removeEventListener("resize", measure); observer?.disconnect(); };
   });
 }

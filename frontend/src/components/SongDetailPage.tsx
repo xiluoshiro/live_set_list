@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Dialog } from "radix-ui";
 import { getSongGroup, getSongPerformances, getSongVersion, type SongGroup, type SongPerformance, type SongPerformancePage, type SongVersion } from "../api";
 import { songCatalogHref, type SongBrowseState } from "../songCatalogNavigation";
 import { CatalogArt, CatalogLink, CatalogPagination, catalogDate, useCatalogScroll, useFittedCatalogPage } from "./SongCatalogShared";
@@ -25,13 +26,15 @@ export function SongDetailPage({ songId, browse, revision, onSongSelect, onAlbum
   const [recordsError, setRecordsError] = useState("");
   const [retry, setRetry] = useState(0);
   const groupIdRef = useRef<number | null>(null);
+  const layoutRef = useRef<HTMLElement>(null);
   const rowsRef = useRef<HTMLTableSectionElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
   const [railOverflow, setRailOverflow] = useState(false);
+  const [allReleasesOpen, setAllReleasesOpen] = useState(false);
   useEffect(() => {
     let current = true;
-    setError(""); setDetail(null);
+    setError(""); setDetail(null); setAllReleasesOpen(false);
     void getSongVersion(songId).then(async song => {
       const group = await getSongGroup(song.group_id);
       if (!current) return;
@@ -63,34 +66,44 @@ export function SongDetailPage({ songId, browse, revision, onSongSelect, onAlbum
   }, [detail]);
   useFittedCatalogPage(rowsRef, footerRef, pageSize, size => {
     setPage(Math.floor((page - 1) * pageSize / size) + 1); setPageSize(size);
-  });
+  }, layoutRef);
   useCatalogScroll(detail !== null, scrollY);
   if (error) return <div role="alert">{error} <button className="console-ghost-btn" onClick={() => setRetry(value => value + 1)}>重试</button></div>;
   if (!detail) return <p role="status">加载中…</p>;
   const { song, group } = detail;
   const cover = song.display_cover;
-  return <article className="song-detail" aria-label="歌曲详情">
+  const releases = song.albums.map(album => <CatalogLink className="song-release" key={album.album_id} href={songCatalogHref(songId, album.album_id, browse)}
+    onNavigate={() => { setAllReleasesOpen(false); onAlbumSelect(album.album_id); }} aria-label={`查看唱片 ${album.album_name}`}>
+    <span className="song-release-art"><CatalogArt url={album.cover_urls[0]} title={`${album.album_name} 封面`} /></span>
+    <span className="song-release-copy">{album.release_label && <small>{album.release_label}</small>}<strong>{album.album_name}</strong>
+      <time dateTime={album.release_date ?? undefined}>{catalogDate(album.release_date)}</time><span className="song-release-link">曲目 <span aria-hidden="true">↗</span></span></span>
+  </CatalogLink>);
+  return <article className="song-detail" aria-label="歌曲详情" ref={layoutRef}>
     <div className="song-detail-overview">
       <div className={`song-detail-art${song.cover_urls.length ? " song-detail-art-gallery" : ""}`}>{song.cover_urls.length ? <AlbumCoverGallery key={song.song_id} urls={song.cover_urls} title={song.song_name} label="歌曲封面" /> : cover?.source === "album" ? <CatalogLink href={songCatalogHref(null, cover.album_id, browse)} onNavigate={() => onAlbumSelect(cover.album_id)} title={`封面选自《${cover.album_name}》`}>
         <CatalogArt url={cover.url} title={`歌曲展示封面，选自《${cover.album_name}》`} /></CatalogLink> : <CatalogArt title={group.group_name} />}</div>
-      <header className="song-detail-heading"><div><h1>{group.group_name}</h1><p className="song-owner">{ownershipLabel(song)}</p>
+      <header className="song-detail-heading"><h1>{group.group_name}</h1>
+        <div className="song-detail-byline"><div className="song-detail-artist"><p className="song-owner">{ownershipLabel(song)}</p><span className="song-version-count">{group.versions.length} 个版本</span></div>
         {group.versions.length > 1 && <div className="song-catalog-versions" role="group" aria-label="歌曲版本">
           {group.versions.map(version => <button key={version.song_id} type="button" className="section-tab-btn" aria-pressed={version.song_id === songId}
-            onClick={() => onSongSelect(version.song_id)}>{version.version_label || "默认版本"}</button>)}
+            onClick={() => onSongSelect(version.song_id)}>{version.version_label || "原版"}</button>)}
         </div>}</div>
-        <div className="song-performance-total"><span>演奏次数</span><strong>{song.performance_count}<small> 次</small></strong></div>
+        <div className="song-performance-total"><span>演奏次数</span><strong>{song.performance_count}<small> 次</small></strong><small>全部版本合计</small></div>
       </header>
       <section className="song-release-section" aria-label="收录唱片">
-        <div className="song-section-heading"><h2>收录唱片 <small>{song.albums.length}</small></h2>
-          {railOverflow && <div className="song-rail-controls"><button className="console-ghost-btn" aria-label="上一组唱片" onClick={() => railRef.current?.scrollBy({ left: -railRef.current.clientWidth, behavior: "smooth" })}>←</button>
-            <button className="console-ghost-btn" aria-label="下一组唱片" onClick={() => railRef.current?.scrollBy({ left: railRef.current.clientWidth, behavior: "smooth" })}>→</button></div>}
+        <div className="song-section-heading"><h2>收录唱片 <small>{String(song.albums.length).padStart(2, "0")}</small></h2>
+          <div className="song-release-actions">{railOverflow && <div className="song-rail-controls"><button className="console-ghost-btn" aria-label="上一组唱片" onClick={() => railRef.current?.scrollBy({ left: -railRef.current.clientWidth, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}>←</button>
+            <button className="console-ghost-btn" aria-label="下一组唱片" onClick={() => railRef.current?.scrollBy({ left: railRef.current.clientWidth, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}>→</button></div>}
+          {!!song.albums.length && <Dialog.Root open={allReleasesOpen} onOpenChange={setAllReleasesOpen}>
+            <Dialog.Trigger asChild><button type="button" className="all-lives-button">全部收录 <span aria-hidden="true">↗</span></button></Dialog.Trigger>
+            <Dialog.Portal><Dialog.Overlay className="modal-mask"><Dialog.Content className="modal song-releases-dialog" aria-describedby={undefined}>
+              <div className="modal-head"><Dialog.Title>收录唱片 <small>{song.albums.length}</small></Dialog.Title><Dialog.Close asChild><button type="button" className="all-lives-button">关闭 ×</button></Dialog.Close></div>
+              <div className="song-all-releases">{releases}</div>
+            </Dialog.Content></Dialog.Overlay></Dialog.Portal>
+          </Dialog.Root>}</div>
         </div>
         <div className="song-release-rail" ref={railRef} tabIndex={song.albums.length ? 0 : undefined} aria-label="收录唱片横向列表">
-          {song.albums.map(album => <CatalogLink className="song-release" key={album.album_id} href={songCatalogHref(songId, album.album_id, browse)}
-            onNavigate={() => onAlbumSelect(album.album_id)} aria-label={`查看唱片 ${album.album_name}`}>
-            <span className="song-release-art"><CatalogArt url={album.cover_urls[0]} title={`${album.album_name} 封面`} /></span>
-            <span className="song-release-copy"><small>{album.release_label}</small><strong>{album.album_name}</strong><time dateTime={album.release_date ?? undefined}>{catalogDate(album.release_date)}</time></span>
-          </CatalogLink>)}
+          {releases}
           {!song.albums.length && <p className="song-empty">暂无收录唱片</p>}
         </div>
       </section>
@@ -112,7 +125,7 @@ export function SongDetailPage({ songId, browse, revision, onSongSelect, onAlbum
       </table>
       {!records && !recordsError && <p role="status">加载中…</p>}
       {records?.total === 0 && <p className="song-empty">暂无演奏记录</p>}
-      {records && <CatalogPagination data={records} footerRef={footerRef} label="演出记录分页" onPage={setPage} />}
+      {records && <CatalogPagination data={records} footerRef={footerRef} label="演出记录分页" onPage={setPage} expanded />}
     </section>
   </article>;
 }

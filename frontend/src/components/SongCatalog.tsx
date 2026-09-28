@@ -47,7 +47,7 @@ export function SongCatalog({ songId, albumId = null, onSongSelect, onAlbumSelec
     {error && <p role="alert">{error}</p>}
     <SongCatalogOverview browse={browse} onBrowseChange={changeBrowse} onSelectGroup={item => void selectGroup(item)} onAlbumSelect={selectAlbum} revision={revision} scrollY={scrollY} />
   </>;
-  return <main className="song-catalog song-catalog-single">
+  return <main className={`song-catalog song-catalog-single${albumId === null ? " song-catalog-song" : ""}`}>
     <div className="song-catalog-context"><CatalogLink href={backHref ?? songCatalogHref(null, null, browse)} onNavigate={onBack ?? (() => window.location.assign(songCatalogHref(null, null, browse)))}>← {backLabel}</CatalogLink>
       <span>{albumId !== null ? "唱片详情" : "歌曲详情"}</span></div>
     {albumId !== null ? <AlbumDetailPage albumId={albumId} selectedSongId={songId} browse={browse} revision={revision} onSongSelect={onSongSelect} scrollY={scrollY} /> :
