@@ -123,6 +123,16 @@ def read_song(cur: Any, song_id: int) -> dict[str, Any]:
     return song
 
 
+def read_song_group(cur: Any, group_id: int) -> dict[str, Any]:
+    cur.execute("SELECT id AS group_id, group_name, revision FROM song_groups WHERE id = %s", (group_id,))
+    group = one(cur)
+    cur.execute("SELECT id FROM song_list WHERE group_id = %s ORDER BY version_order, id", (group_id,))
+    group["versions"] = [read_song(cur, song_id) for song_id, in cur.fetchall()]
+    group["display_cover"] = next((version["display_cover"] for version in group["versions"]
+                                   if version["version_label"] == ""), None)
+    return group
+
+
 def read_album(cur: Any, album_id: int) -> dict[str, Any]:
     cur.execute("""SELECT id AS album_id, album_name, release_label, release_date, album_url, cover_urls,
         revision FROM albums WHERE id = %s""", (album_id,))
