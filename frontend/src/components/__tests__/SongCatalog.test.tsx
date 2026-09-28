@@ -229,10 +229,11 @@ test("song group list, version counts and instrumental target", async () => {
   expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 1, { year: undefined, pageSize: 8 });
 });
 
-// 测试点：概览向服务端传递分页、搜索和排序，筛选回到第一页，并定位命中的版本。
+// 测试点：目录行与唱片独立跳转，分页筛选定位匹配版本，清除条件保留排序。
 test("directory filters paginate and select a matching version", async () => {
   const user = userEvent.setup();
   const select = vi.fn();
+  const selectAlbum = vi.fn();
   api.getSongGroups.mockImplementation(async (_q, index) => ({
     items: [{ group_id: 1, group_name: "合唱曲", version_count: 2, matched_song_ids: [2],
       first_release_date: "2018-12-12", first_release_albums: [version().albums[0]],
@@ -240,9 +241,15 @@ test("directory filters paginate and select a matching version", async () => {
     page: index, page_size: 12, total: 25, total_pages: 3,
     facets: { total: 25, bands: [{ band_id: 1, band_name: "乐队甲", song_count: 14 }] },
   }));
-  render(<SongCatalog songId={null} onSongSelect={select} onLiveSelect={vi.fn()} />);
+  render(<SongCatalog songId={null} onSongSelect={select} onAlbumSelect={selectAlbum} onLiveSelect={vi.fn()} />);
   expect(await screen.findByText("2018.12.12", { selector: "time" })).toBeInTheDocument();
   expect(screen.getByText("2025.05.03")).toBeInTheDocument();
+  await user.click(screen.getByText("2018.12.12", { selector: "time" }));
+  await waitFor(() => expect(select).toHaveBeenCalledWith(2));
+  select.mockClear();
+  await user.click(screen.getByRole("link", { name: "收录盘" }));
+  expect(selectAlbum).toHaveBeenCalledWith(1);
+  expect(select).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "下一页" }));
   await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("", 2, undefined, undefined, { sort: "plays", pageSize: 12 }));
   await user.click(await screen.findByRole("button", { name: "乐队甲 14" }));
@@ -253,6 +260,27 @@ test("directory filters paginate and select a matching version", async () => {
   await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("乐队甲", 1, 1, undefined, { sort: "release", pageSize: 12 }));
   await user.click(await screen.findByRole("link", { name: "合唱曲" }));
   await waitFor(() => expect(select).toHaveBeenCalledWith(2));
+  await user.click(screen.getByRole("button", { name: "清除筛选" }));
+  await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("", 1, undefined, undefined, { sort: "release", pageSize: 12 }));
+  expect(screen.getByLabelText("搜索歌曲、乐队")).toHaveValue("");
+  expect(await screen.findByRole("button", { name: "全部歌曲 25" })).toHaveAttribute("aria-pressed", "true");
+});
+
+// 测试点：筛选请求未完成时乐队控制仍可见且保留焦点，结果返回后保留选中状态。
+test("directory retains band controls while filtering", async () => {
+  const user = userEvent.setup();
+  const result = { ...page([]), facets: { total: 1, bands: [{ band_id: 1, band_name: "乐队甲", song_count: 1 }] } };
+  let finish!: (value: typeof result) => void;
+  api.getSongGroups.mockResolvedValueOnce(result).mockImplementationOnce(() => new Promise<typeof result>(resolve => { finish = resolve; }));
+  render(<SongCatalog songId={null} onSongSelect={vi.fn()} onLiveSelect={vi.fn()} />);
+  const band = await screen.findByRole("button", { name: "乐队甲 1" });
+  await user.click(band);
+  expect(band).toHaveFocus();
+  expect(band).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("region", { name: "歌曲列表" })).toHaveAttribute("aria-busy", "true");
+  await act(async () => finish(result));
+  expect(band).toHaveFocus();
+  expect(screen.getByRole("region", { name: "歌曲列表" })).toHaveAttribute("aria-busy", "false");
 });
 
 // 测试点：10/50 行概览只读取批量目录，渲染每行不会触发歌曲、唱片或演出详情请求。
@@ -296,23 +324,41 @@ test("performance years retain choices and group total across pages", async () =
     .toEqual(["全部年份", "2025 年", "2024 年", "2023 年"]);
 });
 
-// 测试点：唱片按接口分区顺序完整展示重复收录，非默认版本与 Instrumental 指向同一个具体版本。
+// 测试点：合辑按接口分区顺序展示每次收录及其归属，非默认版本与 Instrumental 指向同一具体版本。
 test("album exposes every section and repeated track in release order", async () => {
   const select = vi.fn();
   api.getAlbumDetail.mockResolvedValue({ ...version().albums[0], tracks: [
-    { album_track_id: 11, song_id: 2, group_id: 1, song_name: "合唱曲", version_label: "合唱版", section_name: "Disc 2", track_order: 1, edition_label: "" },
-    { album_track_id: 12, song_id: 2, group_id: 1, song_name: "合唱曲", version_label: "合唱版", section_name: "Disc 1", track_order: 1, edition_label: "Instrumental" },
-    { album_track_id: 13, song_id: 1, group_id: 1, song_name: "附加曲", version_label: "", section_name: "限定版", track_order: 1, edition_label: "" },
+    { album_track_id: 11, song_id: 2, group_id: 1, song_name: "合唱曲", version_label: "合唱版", section_name: "Disc 2", track_order: 1, edition_label: "", band_name: "乐队甲" },
+    { album_track_id: 12, song_id: 2, group_id: 1, song_name: "合唱曲", version_label: "合唱版", section_name: "Disc 1", track_order: 1, edition_label: "Instrumental", band_name: "乐队甲" },
+    { album_track_id: 13, song_id: 1, group_id: 1, song_name: "附加曲", version_label: "", section_name: "限定版", track_order: 1, edition_label: "", band_name: "乐队乙" },
   ] });
   render(<SongCatalog songId={null} albumId={1} onSongSelect={select} onLiveSelect={vi.fn()} />);
   const album = await screen.findByRole("article", { name: "唱片详情" });
   expect(within(album).getAllByRole("heading", { level: 3 }).map(item => item.textContent)).toEqual(["Disc 2", "Disc 1", "限定版"]);
   expect(within(album).getAllByRole("listitem")).toHaveLength(3);
   expect(within(album).getByText("3 首")).toBeInTheDocument();
-  const instrumental = within(album).getByRole("link", { name: "合唱曲 · 合唱版 · Instrumental" });
+  expect(within(album).getByRole("link", { name: "附加曲 乐队乙" })).toHaveAttribute("href", "/songs/1");
+  const instrumental = within(album).getByRole("link", { name: "合唱曲 · 合唱版 · Instrumental 乐队甲" });
   expect(instrumental).toHaveAttribute("href", "/songs/2");
   await userEvent.click(instrumental);
   expect(select).toHaveBeenCalledWith(2);
+});
+
+// 测试点：从专辑曲目进入歌曲再返回时，恢复该专辑独立曲目列表的浏览位置。
+test("album track scroll survives a song round trip", async () => {
+  const user = userEvent.setup();
+  api.getAlbumDetail.mockResolvedValue({ ...version().albums[0], tracks: Array.from({ length: 30 }, (_, index) => ({
+    album_track_id: index + 1, song_id: 2, group_id: 1, song_name: `曲目 ${index + 1}`, version_label: "",
+    section_name: "", track_order: index + 1, edition_label: "", band_name: "乐队甲",
+  })) });
+  render(<PublicPage />);
+  await user.click(await screen.findByRole("link", { name: "查看唱片 收录盘" }));
+  const tracks = await screen.findByRole("region", { name: "完整曲目列表" });
+  fireEvent.scroll(tracks, { target: { scrollTop: 600 } });
+  await user.click(within(tracks).getByRole("link", { name: "曲目 30" }));
+  await screen.findByRole("article", { name: "歌曲详情" });
+  await user.click(screen.getByRole("link", { name: "← 返回" }));
+  expect(await screen.findByRole("region", { name: "完整曲目列表" })).toHaveProperty("scrollTop", 600);
 });
 
 // 测试点：成员及混合归属详情显示固定成员资料，pending 保留未知状态。
