@@ -1250,7 +1250,7 @@
 .song-edit-id-column { width: 92px; }
 .song-edit-order-column { width: 64px; }
 .song-edit-actions-column { width: 174px; }
-.song-group-editor, .song-ownership-editor { display: grid; gap: 10px; }
+.song-group-editor, .song-ownership-editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .song-group-editor .live-admin-status-head, .song-ownership-editor .live-admin-status-head { margin-bottom: 0; }
 .song-group-editor summary { cursor: pointer; color: var(--text-secondary); padding: 8px 0; }
 .song-current-version { display: block; color: var(--accent-primary); font-size: 12px; }
