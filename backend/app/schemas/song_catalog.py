@@ -117,6 +117,30 @@ class GroupMove(CatalogModel):
     reason: str = Field(min_length=1, max_length=1000)
 
 
+class SongEditGroup(GroupUpdate):
+    group_id: int = Field(ge=1)
+
+
+class SongEditTarget(GroupMove):
+    # Here the revision belongs to the target group, not the song.
+    pass
+
+
+class SongEditUpdate(VersionUpdate):
+    group: SongEditGroup
+    ownership: Ownership
+    ownership_reason: str = Field(default="", max_length=1000)
+    move_to_group: SongEditTarget | None = None
+
+    @model_validator(mode="after")
+    def validate_group_edit(self):
+        if any(song_id < 1 for song_id in self.group.song_ids) or len(set(self.group.song_ids)) != len(self.group.song_ids):
+            raise ValueError("Provide every group version exactly once")
+        if self.move_to_group and self.move_to_group.group_id == self.group.group_id:
+            raise ValueError("Target group must differ from the current group")
+        return self
+
+
 class AlbumTrackWrite(CatalogModel):
     album_track_id: int | None = Field(default=None, ge=1)
     song_id: int = Field(ge=1)
@@ -252,6 +276,10 @@ class SongGroup(BaseModel):
     revision: int
     versions: list[SongVersion]
     display_cover: SongDisplayCover | None
+
+
+class SongEditMutation(SongMutation):
+    group: SongGroup
 
 
 class GroupSummary(BaseModel):

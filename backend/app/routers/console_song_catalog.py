@@ -9,9 +9,9 @@ from app.db import get_db_connection, get_write_db_connection
 from app.routers.console_write import _write_console_audit_log
 from app.schemas.song_catalog import (
     AlbumDetail, AlbumPage, AlbumUpdate, AlbumWrite, AlbumTracksUpdate, GroupCreate, GroupMove, GroupUpdate,
-    MemberUpdate, MemberWrite, OwnershipUpdate, SongMutation, SongVersion, VersionCreate, VersionUpdate,
+    MemberUpdate, MemberWrite, OwnershipUpdate, SongEditMutation, SongEditUpdate, SongMutation, SongVersion, VersionCreate, VersionUpdate,
 )
-from app.song_catalog import catalog_errors, lock_revision, one, read_album, read_song, rows, save_ownership
+from app.song_catalog import catalog_errors, lock_revision, one, read_album, read_song, read_song_group, rows, save_ownership
 
 router = APIRouter(dependencies=[Depends(require_role("editor"))])
 
@@ -111,6 +111,71 @@ def correct_ownership(payload: OwnershipUpdate, request: Request, song_id: int =
         audit(cur, context, "song_ownership_update", "song", song_id,
               {"before": before, "legacy_band_id": legacy_band_id, "after": payload.ownership.model_dump(), "reason": payload.reason})
         return {"ok": True, "item": read_song(cur, song_id)}
+
+
+@router.put("/songs/{song_id}/edit", response_model=SongEditMutation)
+def edit_song_catalog(payload: SongEditUpdate, request: Request, song_id: int = Path(ge=1),
+                      context: AuthSessionContext = Depends(get_current_auth_context)):
+    """Save the entire editor as one transaction and one audit operation."""
+    assert_valid_csrf(request, context)
+    with catalog_errors(), get_write_db_connection() as conn, conn.cursor() as cur:
+        source = payload.group
+        target = payload.move_to_group
+        # Match the group -> song lock ordering used by create, reorder and move.
+        expected_groups = {source.group_id: source.expected_revision}
+        if target:
+            expected_groups[target.group_id] = target.expected_revision
+        for group_id in sorted(expected_groups):
+            lock_revision(cur, "song_groups", group_id, expected_groups[group_id])
+        cur.execute("SELECT id, version_order FROM song_list WHERE group_id = %s ORDER BY id FOR UPDATE", (source.group_id,))
+        existing = dict(cur.fetchall())
+        if song_id not in existing:
+            raise HTTPException(409, "歌曲归组已被修改，请重新加载后编辑")
+        if sorted(source.song_ids) != sorted(existing):
+            raise HTTPException(422, "Provide every group version exactly once")
+        lock_revision(cur, "song_list", song_id, payload.expected_revision)
+        before = read_song(cur, song_id)
+        if before["version_label"] == "" and (payload.version_label or target):
+            raise HTTPException(409, "默认版本须保留空版本标识并留在所属歌曲组中")
+        old_ownership = {key: before["ownership"][key] for key in ("mode", "band_ids", "member_groups")}
+        ownership_changed = old_ownership != payload.ownership.model_dump()
+        if ownership_changed and not payload.ownership_reason:
+            raise HTTPException(422, "请填写归属更正原因")
+        cover_urls = payload.cover_urls if "cover_urls" in payload.model_fields_set else before["cover_urls"]
+        old_order = sorted(existing, key=lambda item: (existing[item], item))
+        group_changed = source.group_name != before["group_name"] or source.song_ids != old_order or target is not None
+        song_changed = ownership_changed or target is not None or any((
+            payload.song_name != before["song_name"], payload.version_label != before["version_label"],
+            cover_urls != before["cover_urls"],
+        ))
+        if ownership_changed:
+            save_ownership(cur, song_id, payload.ownership)
+        remaining = [item for item in source.song_ids if not target or item != song_id]
+        new_order = {item: index for index, item in enumerate(remaining, 1)}
+        destination = target.group_id if target else source.group_id
+        if target:
+            cur.execute("SELECT COALESCE(max(version_order), 0) + 1 FROM song_list WHERE group_id = %s", (destination,))
+            new_order[song_id] = cur.fetchone()[0]
+        if song_changed or group_changed:
+            cur.execute("""UPDATE song_list SET song_name = %s, version_label = %s, cover_urls = %s,
+                group_id = %s, version_order = %s, revision = revision + 1 WHERE id = %s""",
+                        (payload.song_name, payload.version_label, cover_urls, destination, new_order[song_id], song_id))
+        if group_changed:
+            for other_id in remaining:
+                if other_id != song_id:
+                    cur.execute("UPDATE song_list SET version_order = %s, revision = revision + 1 WHERE id = %s",
+                                (new_order[other_id], other_id))
+            cur.execute("UPDATE song_groups SET group_name = %s, revision = revision + 1 WHERE id = %s",
+                        (source.group_name, source.group_id))
+            if target:
+                cur.execute("UPDATE song_groups SET revision = revision + 1 WHERE id = %s", (destination,))
+        if song_changed or group_changed:
+            audit(cur, context, "song_edit", "song", song_id, {
+                "before": {"song": before, "group": {"group_id": source.group_id,
+                    "group_name": before["group_name"], "song_ids": old_order, "revision": source.expected_revision}},
+                "after": payload.model_dump(mode="json"),
+            })
+        return {"ok": True, "item": read_song(cur, song_id), "group": read_song_group(cur, destination)}
 
 
 @router.put("/songs/{song_id}/group", response_model=SongMutation)

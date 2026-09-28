@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import { SongCatalog } from "../SongCatalog";
 import { SongCatalogAdmin } from "../console/SongCatalogAdmin";
-import { SongGroupEditor } from "../console/SongGroupEditor";
 import type { SongVersion } from "../../api";
 
 const api = vi.hoisted(() => ({ getSongGroups: vi.fn(), getSongGroup: vi.fn(), getSongVersion: vi.fn(),
@@ -93,7 +92,7 @@ test("song cover editor saves ordering and protects the draft", async () => {
   api.songCatalogWrite.mockResolvedValueOnce({ item: { ...song, cover_urls: [...urls].reverse(), revision: 2 } });
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/songs/1", "PUT", expect.objectContaining({ cover_urls: [...urls].reverse(), expected_revision: 1 }), "csrf");
+  expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/songs/1/edit", "PUT", expect.objectContaining({ cover_urls: [...urls].reverse(), expected_revision: 1 }), "csrf");
   await user.click(screen.getAllByRole("button", { name: "移除" })[0]);
   expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(urls[0]);
   await user.click(screen.getByRole("button", { name: "恢复原值" }));
@@ -102,7 +101,7 @@ test("song cover editor saves ordering and protects the draft", async () => {
   await user.click(screen.getByRole("button", { name: "移除" }));
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认提交" }));
-  expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/songs/1", "PUT", expect.objectContaining({ cover_urls: [], expected_revision: 2 }), "csrf");
+  expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/songs/1/edit", "PUT", expect.objectContaining({ cover_urls: [], expected_revision: 2 }), "csrf");
 });
 
 // 测试点：新增歌曲在确认前拦截非法封面，修正后随歌曲一起提交多图。
@@ -351,7 +350,7 @@ test("manage loads details and protects unsaved changes", async () => {
   render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={value => { guard = value; }} onManage={() => {}} />);
   expect(screen.queryByLabelText("歌曲名称")).not.toBeInTheDocument();
   await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
-  await screen.findByDisplayValue("合唱曲");
+  await screen.findByLabelText("歌曲名称");
   expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("歌曲名称"), { target: { value: "修改曲名" } });
   // Trigger the registered navigation guard as the parent navigation does.
@@ -367,7 +366,7 @@ test("manage loads details and protects unsaved changes", async () => {
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(screen.getByLabelText("歌曲名称")).toHaveValue("再次修改"));
-  expect(api.songCatalogWrite).toHaveBeenCalledWith("/songs/1", "PUT", { song_name: "再次修改", version_label: "普通版", cover_urls: [], expected_revision: 1 }, "csrf");
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/songs/1/edit", "PUT", expect.objectContaining({ song_name: "再次修改", version_label: "普通版", cover_urls: [], expected_revision: 1 }), "csrf");
 });
 
 // 测试点：独立唱片页本地切图遵守边界，坏图仍可切换及访问来源，离开再进入恢复默认图。
@@ -403,28 +402,6 @@ test("album gallery switches locally and resets on reopening", async () => {
   expect(await screen.findByText("1 / 2")).toBeInTheDocument();
 });
 
-// 测试点：版本排序和组名修改先展示确认内容，返回编辑保留草稿，确认才写入顺序。
-test("group editor reviews name and version order before saving", async () => {
-  const user = userEvent.setup();
-  const onSaved = vi.fn();
-  render(<SongGroupEditor song={version()} onClose={vi.fn()} onSaved={onSaved} />);
-  await user.clear(await screen.findByLabelText("歌曲组名称"));
-  await user.type(screen.getByLabelText("歌曲组名称"), "新组名");
-  const table = screen.getByRole("table", { name: "歌曲版本顺序" });
-  await user.click(within(within(table).getByRole("row", { name: /普通版/ })).getByRole("button", { name: "下移" }));
-  expect(within(table).getAllByRole("row").slice(1).map(row => within(row).getAllByRole("cell")[0].textContent)).toEqual(["合唱版", "普通版"]);
-  await user.click(screen.getByRole("button", { name: "保存组名与顺序" }));
-  expect(screen.getByRole("row", { name: "组名 合唱曲 新组名" })).toBeInTheDocument();
-  expect(screen.getByRole("row", { name: "版本顺序 普通版 / 合唱版 合唱版 / 普通版" })).toBeInTheDocument();
-  expect(api.songCatalogWrite).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "返回编辑" }));
-  expect(screen.getByLabelText("歌曲组名称")).toHaveValue("新组名");
-  await user.click(screen.getByRole("button", { name: "保存组名与顺序" }));
-  await user.click(screen.getByRole("button", { name: "确认保存" }));
-  await waitFor(() => expect(onSaved).toHaveBeenCalled());
-  expect(api.songCatalogWrite).toHaveBeenCalledWith("/song-groups/1", "PUT", { expected_revision: 1, group_name: "新组名", song_ids: [2, 1] }, "csrf");
-});
-
 // 测试点：歌曲组翻到后续页可选择，翻页保留已选组，搜索从第一页重新请求。
 test("group picker exposes every page and retains the selection", async () => {
   const user = userEvent.setup();
@@ -451,23 +428,104 @@ test("group picker exposes every page and retains the selection", async () => {
   await screen.findByText("第 1 / 3 页，共 41 条");
 });
 
-// 测试点：归组更正可选择第二页的目标组，回到第一页后确认仍提交该目标。
-test("group correction selects a target beyond the first page", async () => {
+
+
+// 测试点：资料、归属、组名和排序共用确认、恢复与单次原子保存。
+test("one save reviews the complete song and group draft", async () => {
+  const user = userEvent.setup();
+  let leave: ((next: () => void) => void) | null = null;
+  render(<SongCatalogAdmin variant="edit" active bands={[{ band_id: 1, band_name: "乐队甲" }, { band_id: 2, band_name: "乐队乙" }]}
+    registerLeaveGuard={guard => { leave = guard; }} onManage={() => {}} />);
+  await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
+  const name = await screen.findByLabelText("歌曲名称");
+  expect(screen.queryByRole("button", { name: "歌曲组管理" })).not.toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "保存修改" })).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: "恢复原值" })).toHaveLength(1);
+  fireEvent.change(name, { target: { value: "新曲名" } });
+  fireEvent.change(screen.getByLabelText("歌曲组名称"), { target: { value: "新组名" } });
+  const table = screen.getByRole("table", { name: "歌曲版本顺序" });
+  await user.click(within(table).getAllByRole("button", { name: "下移" })[0]);
+  await user.click(screen.getByRole("button", { name: "更正归属" }));
+  expect(name).toBeVisible();
+  expect(screen.getByRole("table", { name: "歌曲封面" })).toBeVisible();
+  await user.selectOptions(screen.getByLabelText("归属模式"), "pending");
+  expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+  await user.type(screen.getByLabelText("归属更正原因"), "待核实来源");
+  await user.click(screen.getByRole("button", { name: "收起" }));
+  const next = vi.fn(); act(() => leave?.(next));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "取消" }));
+  expect(next).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  let dialog = within(screen.getByRole("dialog", { name: "确认修改歌曲" }));
+  for (const label of ["歌曲名称", "歌曲组名称（整组）", "版本顺序（整组）", "归属（当前版本）"]) expect(dialog.getByRole("table")).toHaveTextContent(label);
+  expect(api.songCatalogWrite).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("选择要编辑的歌曲")).toBeDisabled();
+  await user.click(dialog.getByRole("button", { name: "取消" }));
+  expect(name).toHaveValue("新曲名");
+  await user.click(screen.getByRole("button", { name: "恢复原值" }));
+  expect(name).toHaveValue("合唱曲");
+  expect(screen.getByLabelText("歌曲组名称")).toHaveValue("合唱曲");
+  expect(within(screen.getByRole("table", { name: "歌曲版本顺序" })).getAllByRole("row")[1]).toHaveTextContent("普通版");
+  expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+  fireEvent.change(name, { target: { value: "新曲名" } });
+  fireEvent.change(screen.getByLabelText("歌曲组名称"), { target: { value: "新组名" } });
+  await user.click(within(screen.getByRole("table", { name: "歌曲版本顺序" })).getAllByRole("button", { name: "下移" })[0]);
+  await user.click(screen.getByRole("button", { name: "更正归属" }));
+  await user.selectOptions(screen.getByLabelText("归属模式"), "pending");
+  await user.type(screen.getByLabelText("归属更正原因"), "待核实来源");
+  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  // A failed unified save preserves every field and can be retried as one operation.
+  api.songCatalogWrite.mockRejectedValueOnce(new Error("资料已被修改"));
+  dialog = within(screen.getByRole("dialog"));
+  await user.click(dialog.getByRole("button", { name: "确认提交" }));
+  expect(await dialog.findByRole("alert")).toHaveTextContent("资料已被修改");
+  expect(name).toHaveValue("新曲名");
+  expect(screen.getByLabelText("歌曲组名称")).toHaveValue("新组名");
+  api.songCatalogWrite.mockResolvedValueOnce({ item: { ...version(), song_name: "新曲名", group_name: "新组名", revision: 2,
+    ownership: { mode: "pending", band_ids: [], member_groups: [], bands: [], groups: [] } },
+    group: { group_id: 1, group_name: "新组名", revision: 2, versions: [version(2), version()], display_cover: null } });
+  await user.click(dialog.getByRole("button", { name: "确认提交" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(api.songCatalogWrite).toHaveBeenCalledTimes(2);
+  expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/songs/1/edit", "PUT", expect.objectContaining({
+    song_name: "新曲名", expected_revision: 1, group: { group_id: 1, expected_revision: 1, group_name: "新组名", song_ids: [2, 1] },
+    ownership: { mode: "pending", band_ids: [], member_groups: [] }, ownership_reason: "待核实来源", move_to_group: null,
+  }), "csrf");
+  expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+  expect(within(screen.getByRole("table", { name: "歌曲操作记录" })).getAllByRole("row")).toHaveLength(2);
+  fireEvent.change(name, { target: { value: "下一次修改" } });
+  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认提交" }));
+  expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/songs/1/edit", "PUT", expect.objectContaining({ expected_revision: 2,
+    group: expect.objectContaining({ expected_revision: 2 }) }), "csrf");
+});
+
+// 测试点：目标组分页选择保留，移组和其他修改共同提交并携带目标 revision。
+test("group correction joins the unified save across target pages", async () => {
   const user = userEvent.setup();
   api.getSongGroups.mockImplementation(async (_q: string, index: number) => ({
     items: [{ group_id: index === 1 ? 1 : 21, group_name: index === 1 ? "合唱曲" : "目标组", version_count: 1 }],
     page: index, page_size: 20, total: 21, total_pages: 2,
   }));
-  render(<SongGroupEditor song={version()} onClose={vi.fn()} onSaved={vi.fn()} />);
-  await screen.findByText("第 1 / 2 页，共 21 条");
-  await user.click(screen.getByRole("button", { name: "下一页" }));
-  await screen.findByText("第 2 / 2 页，共 21 条");
-  await user.click(screen.getByRole("button", { name: "目标歌曲组" }));
+  api.getSongGroup.mockImplementation(async (id: number) => ({ group_id: id, group_name: id === 21 ? "目标组" : "合唱曲",
+    revision: id === 21 ? 7 : 1, versions: [version(), version(2)], display_cover: null }));
+  render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
+  await user.click(await screen.findByText("更正当前版本归组"));
+  const section = within(screen.getByRole("region", { name: "歌曲组与版本" }));
+  await section.findByText("第 1 / 2 页，共 21 条");
+  await user.click(section.getByRole("button", { name: "下一页" }));
+  await section.findByText("第 2 / 2 页，共 21 条");
+  await user.click(section.getByRole("button", { name: "目标歌曲组" }));
   await user.click(screen.getByRole("radio", { name: "目标组" }));
-  await user.click(screen.getByRole("button", { name: "上一页" }));
-  await user.type(screen.getByLabelText("更正原因"), "归组修正");
-  await user.click(screen.getByRole("button", { name: "更正归组" }));
-  expect(screen.getByRole("row", { name: "歌曲组 合唱曲 目标组" })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "确认保存" }));
-  expect(api.songCatalogWrite).toHaveBeenCalledWith("/songs/1/group", "PUT", { group_id: 21, expected_revision: 1, reason: "归组修正" }, "csrf");
+  await waitFor(() => expect(api.getSongGroup).toHaveBeenCalledWith(21));
+  await user.click(section.getByRole("button", { name: "上一页" }));
+  await user.type(screen.getByLabelText("归组更正原因"), "归组修正");
+  fireEvent.change(screen.getByLabelText("歌曲名称"), { target: { value: "更正后的曲名" } });
+  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  expect(within(screen.getByRole("dialog")).getByRole("table")).toHaveTextContent("目标组（移至末尾）");
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认提交" }));
+  expect(api.songCatalogWrite).toHaveBeenCalledTimes(1);
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/songs/1/edit", "PUT", expect.objectContaining({ song_name: "更正后的曲名",
+    move_to_group: { group_id: 21, expected_revision: 7, reason: "归组修正" } }), "csrf");
 });
