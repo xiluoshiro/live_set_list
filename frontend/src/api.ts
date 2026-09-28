@@ -2448,6 +2448,14 @@ export type SongPerformance = {
 };
 export type CatalogMember = { member_id: number; display_name: string; revision: number };
 export type SongVersionDraft = { song_name: string; version_label: string; cover_urls: string[] };
+export type SongEditUpdate = SongVersionDraft & {
+  expected_revision: number;
+  group: { group_id: number; expected_revision: number; group_name: string; song_ids: number[] };
+  ownership: SongOwnership;
+  ownership_reason: string;
+  move_to_group: { group_id: number; expected_revision: number; reason: string } | null;
+};
+export type SongEditMutation = { ok: boolean; item: SongVersion; group: SongGroup };
 export type AlbumDraft = Omit<AlbumSummary, "album_id" | "revision"> & { tracks: AlbumTrackWrite[] };
 export const SONG_CATALOG_CHANGE = "song-catalog-change";
 const songCatalogCache = new LruRequestCache<unknown>(80);

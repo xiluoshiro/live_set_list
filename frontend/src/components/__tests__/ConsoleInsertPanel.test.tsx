@@ -1922,6 +1922,7 @@ describe("ConsoleInsertPanel", () => {
     // 测试点：新增与编辑分离，操作记录按后端 song_id 进入管理。
     const user = userEvent.setup();
     const song = catalogSongFixture(903, "新曲");
+    apiMocks.getSongGroup.mockResolvedValue({ group_id: song.group_id, group_name: song.group_name, revision: 1, versions: [song], display_cover: null });
     apiMocks.songCatalogWrite.mockResolvedValue({ item: song });
     apiMocks.getCatalogConsole.mockImplementation(async (path: string) => path === "/songs/903" ? song : ({ items: [] }));
     render(<ConsoleInsertPanel />);
@@ -1937,7 +1938,7 @@ describe("ConsoleInsertPanel", () => {
     const table = screen.getByRole("table", { name: "歌曲操作记录" });
     expect(within(table).getByText("903")).toBeInTheDocument();
     await user.click(within(table).getByRole("button", { name: "编辑" }));
-    await screen.findByDisplayValue("新曲");
+    await screen.findByLabelText("歌曲名称");
     expect(apiMocks.getCatalogConsole).toHaveBeenCalledWith("/songs/903");
     expect(screen.getByRole("tab", { name: "歌曲管理" })).toHaveAttribute("aria-selected", "true");
   });
@@ -1947,18 +1948,19 @@ describe("ConsoleInsertPanel", () => {
     // 测试点：候选只负责选择，完整详情建立快照；基础修改不重写固定归属。
     const user = userEvent.setup();
     const song = catalogSongFixture(901, "原曲名");
+    apiMocks.getSongGroup.mockResolvedValue({ group_id: song.group_id, group_name: song.group_name, revision: 1, versions: [song], display_cover: null });
     apiMocks.getCatalogConsole.mockImplementation(async (path: string) => path === "/songs/901" ? song : path === "/members" ? { items: [] } : { items: [song], page: 1, total_pages: 1 });
     apiMocks.songCatalogWrite.mockResolvedValue({ item: { ...song, song_name: "改名曲", revision: 2 } });
     render(<ConsoleInsertPanel />);
     await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "901");
-    await screen.findByDisplayValue("原曲名");
+    await screen.findByLabelText("歌曲名称");
     fireEvent.change(screen.getByLabelText("歌曲名称"), { target: { value: "改名曲" } });
     await user.click(screen.getByRole("button", { name: "保存修改" }));
     const dialog = screen.getByRole("dialog", { name: "确认修改歌曲" });
     expect(within(dialog).getByRole("table", { name: "歌曲修改内容" })).toHaveTextContent("原曲名改名曲");
     await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
-    await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/songs/901", "PUT", { song_name: "改名曲", version_label: "普通版", cover_urls: [], expected_revision: 1 }, "csrf-token"));
+    await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/songs/901/edit", "PUT", expect.objectContaining({ song_name: "改名曲", version_label: "普通版", cover_urls: [], expected_revision: 1, group: { group_id: 901, group_name: "原曲名", expected_revision: 1, song_ids: [901] } }), "csrf-token"));
     expect(screen.getByLabelText("歌曲名称")).toHaveValue("改名曲");
   });
 
@@ -1966,12 +1968,13 @@ describe("ConsoleInsertPanel", () => {
   test("歌曲管理显式查询并在翻页时保留条件和已选版本", async () => {
     const user = userEvent.setup();
     const song = catalogSongFixture(902, "搜索命中曲");
+    apiMocks.getSongGroup.mockResolvedValue({ group_id: song.group_id, group_name: song.group_name, revision: 1, versions: [song], display_cover: null });
     apiMocks.getConsoleBands.mockResolvedValue({ items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: [] }] });
     apiMocks.getCatalogConsole.mockImplementation(async (path: string) => path === "/songs/902" ? song : path === "/members" ? { items: [] } : { items: path.includes("page=2") ? [] : [song], page: path.includes("page=2") ? 2 : 1, total_pages: 2 });
     render(<ConsoleInsertPanel />);
     await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "902");
-    await screen.findByDisplayValue("搜索命中曲");
+    await screen.findByLabelText("歌曲名称");
     const query = screen.getByRole("textbox", { name: "搜索歌曲" });
     const filter = screen.getByRole("combobox", { name: "筛选归属乐队" });
     const searchRegion = screen.getByRole("search", { name: "查询已有歌曲" });
@@ -2479,11 +2482,12 @@ describe("ConsoleInsertPanel", () => {
     // 测试点：从歌曲管理导航到其他资料时必须经过未保存保护。
     const user = userEvent.setup();
     const song = catalogSongFixture(1, "旧名");
+    apiMocks.getSongGroup.mockResolvedValue({ group_id: song.group_id, group_name: song.group_name, revision: 1, versions: [song], display_cover: null });
     apiMocks.getCatalogConsole.mockImplementation(async (path: string) => path === "/songs/1" ? song : ({ items: path === "/members" ? [] : [song] }));
     render(<ConsoleInsertPanel />);
     await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
-    await screen.findByDisplayValue("旧名");
+    await screen.findByLabelText("歌曲名称");
     fireEvent.change(screen.getByLabelText("歌曲名称"), { target: { value: "草稿" } });
     await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
     const dialog = screen.getByRole("dialog", { name: "确认放弃歌曲修改" });

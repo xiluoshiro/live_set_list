@@ -4,8 +4,8 @@ from fastapi import APIRouter, Path, Query
 from app.db import get_db_connection
 from app.schemas.song_catalog import AlbumDetail, GroupPage, PerformancePage, SongGroup, SongVersion
 from app.song_catalog import (
-    VALID_PERFORMANCE_SQL, catalog_errors, classify_live_cover, one, read_album,
-    read_song, rows,
+    VALID_PERFORMANCE_SQL, catalog_errors, classify_live_cover, read_album,
+    read_song, read_song_group, rows,
 )
 from app.song_catalog_directory import SongSort, read_group_page
 
@@ -32,13 +32,7 @@ def list_song_groups(
 @router.get("/song-groups/{group_id}", response_model=SongGroup)
 def song_group(group_id: int = Path(ge=1)):
     with catalog_errors(), get_db_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT id AS group_id, group_name, revision FROM song_groups WHERE id = %s", (group_id,))
-        group = one(cur)
-        cur.execute("SELECT id FROM song_list WHERE group_id = %s ORDER BY version_order, id", (group_id,))
-        group["versions"] = [read_song(cur, song_id) for song_id, in cur.fetchall()]
-        group["display_cover"] = next((version["display_cover"] for version in group["versions"]
-                                       if version["version_label"] == ""), None)
-        return group
+        return read_song_group(cur, group_id)
 
 
 @router.get("/songs/{song_id}", response_model=SongVersion)
