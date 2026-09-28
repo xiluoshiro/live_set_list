@@ -12,6 +12,10 @@ export function isExternalHttpsUrl(value: string): boolean {
 
 export function albumLinksError(albumUrl: string | null, covers: string[]): string {
   if (albumUrl && (/[\u0000-\u001f\u007f]/.test(albumUrl) || (albumUrl.trim() && !isExternalHttpsUrl(albumUrl)))) return "专辑页面须为有效的 HTTPS URL";
+  return coverUrlsError(covers);
+}
+
+export function coverUrlsError(covers: string[]): string {
   if (covers.length > 20) return "封面最多 20 张";
   const seen = new Set<string>();
   for (const [index, url] of covers.entries()) {

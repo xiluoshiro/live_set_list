@@ -430,7 +430,7 @@
 - 搜索覆盖组名、歌名、版本名及归属乐队名，沿用标点规范化。组合条件须命中同一版本，之后按组去重；`matched_song_ids` 保留命中的具体版本。
 - 摘要增加 `first_release_date / first_release_albums / performance_count / latest_performance_date / display_cover`。首次发行取组内所有版本收录唱片的最早非空日期，同日唱片全部保留；无日期返回 null 和空数组。乐队过滤不改变组级摘要口径。
 - `facets: { total, bands: [{ band_id, band_name, song_count }] }` 在去掉当前乐队过滤后统计歌曲组数量，包含成员乐队关系；pending 保留在全部歌曲。数量不受排序、分页或页大小影响。
-- `GET /api/song-groups/{group_id}` 增加 `display_cover: { url, album_id, album_name } | null`，与目录同一规则：关联唱片按 `release_date ASC NULLS LAST, album_id ASC` 选择首个非空 `cover_urls` 的第一张图。后端不探测远端图片可用性。
+- `GET /api/song-groups/{group_id}` 和目录摘要的 `display_cover` 与默认版本（`version_label = ''`）一致，具体来源契约见下方 V42 规则。后端不探测远端图片可用性。
 - `GET /api/songs/{song_id}/performances` 新增可选 `year`（1..9999），返回完整降序去重 `available_years`，分页总数按所选年份计算。计数、最近日期和年份共用有效演出规则，每条 setlist 一次；不按 Live 去重，不按版本重复累加。
 - `GET /api/albums/{album_id}` 保持全部曲目返回，按分区顺序及曲序排列；不新增曲目分页。`section_name` 是一般收录分区，不表示物理盘类型。本期采用唱片 A，无相关唱片接口或推断发行乐队。
 
@@ -497,3 +497,14 @@
 平台枚举为 `google`、`apple`、`amap`。关联前须有已确认坐标，位置修订后关联返回 `is_current=false`。本阶段不调用外部地图查询服务；Live 时间由场馆自身 IANA 或 ONLINE 固定偏移解析，不依赖地图在线调用。完整计划见 [地理资料设计](design/venue-location-and-timezone.md)。
 
 访问者日期规则见 [演出时区与访问者日期](design/live-timezone.md)。请求头 `X-Visitor-Timezone` 使用浏览器 IANA 时区；日历条目以 `calendar_date` 归组，`live_date` 保留公告日期。
+
+
+## 歌曲版本多封面（V42）
+
+- `song_list.cover_urls` 保存有序 HTTPS 图片地址，默认 `[]`，第一项是默认封面。与专辑共用 URL、重复项、长度和最多 20 张的校验规则。
+- `POST /api/console/song-groups`、`POST /api/console/songs` 接受 `cover_urls`，省略时为空数组。`PUT /api/console/songs/{song_id}` 省略时保留原值，显式 `[]` 清空，沿用 `expected_revision` 和审计。
+- 公共及 Console 歌曲详情、组内版本均返回 `cover_urls` 及派生的 `display_cover`。自有图片为 `{ source: "song", url }`；专辑回退为 `{ source: "album", url, album_id, album_name }`；无图为 `null`。
+- 版本展示优先自身第一张图片，否则在当前版本的收录专辑中按 `release_date ASC NULLS LAST, album_id ASC` 取第一张有封面的专辑默认图。回退结果不写入歌曲数组。
+- 目录和组详情只使用空 `version_label` 的默认版本的最终封面，不受版本排序、乐队筛选影响，不借用其他版本图片。首次发行等其他摘要仍跨全组版本聚合。
+- 自有多图在歌曲详情可切换，切换版本或封面数组更新后回到首图。专辑回退图保留来源链接；坏图显示失败状态，不自动更改顺序或跨来源回退。
+- 修改歌曲封面、专辑封面、发行日期或收录关系沿用现有歌曲资料缓存失效通知。

@@ -14,14 +14,14 @@ function CoverImage({ url, alt }: { url: string; alt: string }) {
     : <img className="album-cover-image" src={url.trim()} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
 }
 
-export function AlbumCoverGallery({ urls, title }: { urls: string[]; title: string }) {
-  return <CoverGallery key={JSON.stringify(urls)} urls={urls} title={title} />;
+export function AlbumCoverGallery({ urls, title, label = "专辑封面" }: { urls: string[]; title: string; label?: string }) {
+  return <CoverGallery key={JSON.stringify(urls)} urls={urls} title={title} label={label} />;
 }
 
-function CoverGallery({ urls, title }: { urls: string[]; title: string }) {
+function CoverGallery({ urls, title, label }: { urls: string[]; title: string; label: string }) {
   const [index, setIndex] = useState(0);
   if (!urls.length) return null;
-  return <div className="album-cover-gallery" role="group" aria-label="专辑封面">
+  return <div className="album-cover-gallery" role="group" aria-label={label}>
     <AlbumCover url={urls[index]} alt={`${title} 封面 ${index + 1}`} />
     {urls.length > 1 && <div className="album-cover-controls">
       <button className="console-ghost-btn" disabled={index === 0} onClick={() => setIndex(index - 1)}>上一张</button>

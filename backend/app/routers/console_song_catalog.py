@@ -29,9 +29,9 @@ def insert_version(cur: Any, payload: VersionCreate | GroupCreate, group_id: int
         lock_revision(cur, "song_groups", group_id, payload.expected_group_revision)
     cur.execute("SELECT COALESCE(max(version_order), 0) + 1 FROM song_list WHERE group_id = %s", (group_id,))
     version_order = cur.fetchone()[0]
-    cur.execute("""INSERT INTO song_list(song_name, group_id, version_label, version_order)
-        VALUES (%s, %s, %s, %s) RETURNING id""",
-                (payload.song_name, group_id, payload.version_label, version_order))
+    cur.execute("""INSERT INTO song_list(song_name, group_id, version_label, version_order, cover_urls)
+        VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                (payload.song_name, group_id, payload.version_label, version_order, payload.cover_urls))
     song_id = cur.fetchone()[0]
     save_ownership(cur, song_id, payload.ownership)
     if isinstance(payload, VersionCreate):
@@ -54,11 +54,12 @@ def update_version(payload: VersionUpdate, song_id: int, request: Request, conte
         before = read_song(cur, song_id)
         if before["version_label"] == "" and payload.version_label:
             raise HTTPException(409, "歌曲组必须保留空版本的默认项")
-        cur.execute("""UPDATE song_list SET song_name = %s, version_label = %s,
+        cover_urls = payload.cover_urls if "cover_urls" in payload.model_fields_set else before["cover_urls"]
+        cur.execute("""UPDATE song_list SET song_name = %s, version_label = %s, cover_urls = %s,
             revision = revision + 1 WHERE id = %s""",
-                    (payload.song_name, payload.version_label, song_id))
+                    (payload.song_name, payload.version_label, cover_urls, song_id))
         audit(cur, context, "song_update", "song", song_id,
-              {"before": before, "after": payload.model_dump(mode="json")})
+              {"before": before, "after": {**payload.model_dump(mode="json"), "cover_urls": cover_urls}})
         return {"ok": True, "item": read_song(cur, song_id)}
 
 

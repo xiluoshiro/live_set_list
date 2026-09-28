@@ -76,10 +76,17 @@ def read_group_page(
         FROM group_albums a JOIN release_dates r ON r.group_id = a.group_id AND r.first_release_date = a.release_date
         GROUP BY a.group_id
     ), covers AS (
-        SELECT DISTINCT ON (group_id) group_id,
-            jsonb_build_object('url', cover_urls[1], 'album_id', album_id, 'album_name', album_name) AS display_cover
-        FROM group_albums WHERE cardinality(cover_urls) > 0
-        ORDER BY group_id, release_date ASC NULLS LAST, album_id
+        SELECT v.group_id, CASE WHEN cardinality(v.cover_urls) > 0
+            THEN jsonb_build_object('source', 'song', 'url', v.cover_urls[1])
+            ELSE a.display_cover END AS display_cover
+        FROM selected_groups g JOIN song_list v ON v.group_id = g.group_id AND v.version_label = ''
+        LEFT JOIN LATERAL (
+            SELECT jsonb_build_object('source', 'album', 'url', a.cover_urls[1],
+                'album_id', a.id, 'album_name', a.album_name) AS display_cover
+            FROM albums a WHERE cardinality(a.cover_urls) > 0 AND EXISTS(
+                SELECT 1 FROM album_tracks t WHERE t.album_id = a.id AND t.song_id = v.id)
+            ORDER BY a.release_date ASC NULLS LAST, a.id LIMIT 1
+        ) a ON true
     ), plays AS (
         SELECT s.song_group_id AS group_id, count(*) AS performance_count, max(l.live_date) AS latest_performance_date
         FROM live_setlist s JOIN selected_groups g ON g.group_id = s.song_group_id
@@ -103,13 +110,3 @@ def read_group_page(
                        "total_pages": max(1, (counts["total"] + page_size - 1) // page_size)},
         "facets": {"total": counts["facet_total"], "bands": counts["bands"]},
     }
-
-
-def read_group_cover(cur: Any, group_id: int) -> dict[str, Any] | None:
-    cur.execute("""SELECT a.cover_urls[1] AS url, a.id AS album_id, a.album_name FROM albums a
-        WHERE cardinality(a.cover_urls) > 0 AND EXISTS(
-            SELECT 1 FROM album_tracks t JOIN song_list v ON v.id = t.song_id
-            WHERE t.album_id = a.id AND v.group_id = %s)
-        ORDER BY a.release_date ASC NULLS LAST, a.id LIMIT 1""", (group_id,))
-    covers = rows(cur)
-    return covers[0] if covers else None

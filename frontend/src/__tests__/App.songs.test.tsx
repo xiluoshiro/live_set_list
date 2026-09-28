@@ -13,7 +13,7 @@ vi.mock("../api", async importOriginal => ({ ...await importOriginal<typeof impo
 const album = { album_id: 9, album_name: "多盘唱片", release_label: "", release_date: null,
   album_url: null, cover_urls: [], revision: 1 };
 const version: SongVersion = { song_id: 72, song_name: "合唱曲", group_id: 7, group_name: "合唱曲",
-  version_label: "合唱版", version_order: 2, revision: 1, legacy_cover: false, performance_count: 0,
+  version_label: "合唱版", version_order: 2, revision: 1, legacy_cover: false, cover_urls: [], display_cover: null, performance_count: 0,
   ownership: { mode: "pending", band_ids: [], member_groups: [], bands: [], groups: [] }, albums: [album] };
 
 beforeEach(() => {

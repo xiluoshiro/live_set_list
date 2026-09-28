@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.song_catalog import AlbumUpdate, AlbumWrite
+from app.schemas.song_catalog import AlbumUpdate, AlbumWrite, GroupCreate, VersionCreate, VersionUpdate
 
 
 # 测试点：保留带参数的原始 URL 和封面顺序，仅修剪首尾空格，空页面归一为 null。
@@ -19,7 +19,8 @@ def test_album_links_preserve_urls_and_defaults():
     assert {"album_url", "cover_urls"} <= cleared.model_fields_set
 
 
-# 测试点：不接受危险协议、凭据、控制字符、空值或超长地址，并定位出错的封面。
+# 测试点：歌曲各写入口与专辑拒绝危险协议、凭据、控制字符、空值或超长地址，并定位出错的封面。
+@pytest.mark.parametrize("model,fields", [(AlbumWrite, {"album_name": "盘"}), (GroupCreate, {"song_name": "曲", "group_name": "曲", "ownership": {"mode": "pending"}}), (VersionCreate, {"song_name": "曲", "group_id": 1, "expected_group_revision": 1, "ownership": {"mode": "pending"}}), (VersionUpdate, {"song_name": "曲", "expected_revision": 1})])
 @pytest.mark.parametrize("url", [
     "http://example.test/a", "//example.test/a", "data:image/png;base64,abc", "javascript:alert(1)",
     "file:///a.png", "https://", "https://user:pass@example.test/a", "https://@example.test/a",
@@ -27,9 +28,9 @@ def test_album_links_preserve_urls_and_defaults():
     "https://example.test/a b", "https://example.test\\evil", "", "   ", None,
     "https://example.test/" + "a" * 2048,
 ])
-def test_invalid_cover_url_has_item_location(url):
+def test_invalid_cover_url_has_item_location(model, fields, url):
     with pytest.raises(ValidationError) as error:
-        AlbumWrite.model_validate({"album_name": "盘", "cover_urls": ["https://example.test/ok", url]})
+        model.model_validate({**fields, "cover_urls": ["https://example.test/ok", url]})
     assert error.value.errors()[0]["loc"] == ("cover_urls", 1)
 
 

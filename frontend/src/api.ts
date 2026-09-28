@@ -2426,9 +2426,10 @@ export type SongVersion = {
   song_id: number; song_name: string; group_id: number; group_name: string;
   version_label: string; version_order: number; revision: number; legacy_cover: boolean;
   ownership: SongOwnershipDetail; performance_count: number;
-  albums: AlbumSummary[];
+  albums: AlbumSummary[]; cover_urls: string[]; display_cover: SongDisplayCover | null;
 };
-export type SongDisplayCover = { url: string; album_id: number; album_name: string };
+export type SongDisplayCover = { source: "song"; url: string }
+  | { source: "album"; url: string; album_id: number; album_name: string };
 export type SongGroup = { group_id: number; group_name: string; revision: number; versions: SongVersion[]; display_cover: SongDisplayCover | null };
 export type SongGroupSummary = {
   group_id: number; group_name: string; version_count: number; matched_song_ids: number[];
@@ -2446,7 +2447,7 @@ export type SongPerformance = {
   live_cover: "original" | "cover" | "unknown";
 };
 export type CatalogMember = { member_id: number; display_name: string; revision: number };
-export type SongVersionDraft = { song_name: string; version_label: string };
+export type SongVersionDraft = { song_name: string; version_label: string; cover_urls: string[] };
 export type AlbumDraft = Omit<AlbumSummary, "album_id" | "revision"> & { tracks: AlbumTrackWrite[] };
 export const SONG_CATALOG_CHANGE = "song-catalog-change";
 const songCatalogCache = new LruRequestCache<unknown>(80);

@@ -66,7 +66,7 @@ export function SongCatalogOverview({ browse, onBrowseChange, onSelectGroup, onA
           </select></label></div>
         <table className="song-directory-table"><thead><tr><th>歌曲</th><th>首次发行</th><th>首发唱片</th><th>演奏次数</th><th>最近演出</th></tr></thead>
           <tbody ref={rowsRef}>{data?.items.map(item => <tr key={item.group_id}>
-            <td><div className="song-directory-title"><CatalogArt url={item.display_cover?.url} title={item.display_cover ? `封面选自《${item.display_cover.album_name}》` : item.group_name} />
+            <td><div className="song-directory-title"><CatalogArt url={item.display_cover?.url} title={item.display_cover?.source === "album" ? `封面选自《${item.display_cover.album_name}》` : item.group_name} />
               <div><CatalogLink href={songCatalogHref(item.matched_song_ids[0], null, browse)} onNavigate={() => onSelectGroup(item)}>{item.group_name}</CatalogLink>
                 <small className="song-mobile-release">首次发行 {catalogDate(item.first_release_date)}</small></div></div></td>
             <td><time dateTime={item.first_release_date ?? undefined}>{catalogDate(item.first_release_date)}</time></td>

@@ -7,7 +7,7 @@ from app.song_catalog import (
     VALID_PERFORMANCE_SQL, catalog_errors, classify_live_cover, one, read_album,
     read_song, rows,
 )
-from app.song_catalog_directory import SongSort, read_group_cover, read_group_page
+from app.song_catalog_directory import SongSort, read_group_page
 
 router = APIRouter(prefix="/api", tags=["songs"])
 
@@ -36,7 +36,8 @@ def song_group(group_id: int = Path(ge=1)):
         group = one(cur)
         cur.execute("SELECT id FROM song_list WHERE group_id = %s ORDER BY version_order, id", (group_id,))
         group["versions"] = [read_song(cur, song_id) for song_id, in cur.fetchall()]
-        group["display_cover"] = read_group_cover(cur, group_id)
+        group["display_cover"] = next((version["display_cover"] for version in group["versions"]
+                                       if version["version_label"] == ""), None)
         return group
 
 

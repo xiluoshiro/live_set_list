@@ -12,8 +12,12 @@ import { UpdateDiffTable } from "./UpdateDiffTable";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleChoiceSelect, ConsoleCandidatePager } from "./ConsoleChoiceSelect";
 import { ConsoleMultiSelect } from "./ConsoleMultiSelect";
+import { CoverEditor, coverSummary } from "./CoverEditor";
+import { coverUrlsError } from "../../albumLinks";
 
-const emptyFields = (): SongVersionDraft => ({ song_name: "", version_label: "" });
+const emptyFields = (): SongVersionDraft => ({ song_name: "", version_label: "", cover_urls: [] });
+const songFields = (song: SongVersion): SongVersionDraft => ({ song_name: song.song_name, version_label: song.version_label, cover_urls: [...song.cover_urls] });
+const songPayload = (draft: SongVersionDraft): SongVersionDraft => ({ ...draft, cover_urls: draft.cover_urls.filter(url => url.trim()).map(url => url.trim()) });
 const emptyOwner = (): SongOwnership => ({ mode: "pending", band_ids: [], member_groups: [] });
 type HistoryEntry = { song: SongVersion; action: "create" | "update" };
 
@@ -62,7 +66,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const setDraft = creating ? setCreateDraft : setEditDraft;
   const ownership = creating ? createOwner : owner;
   const setOwnership = creating ? setCreateOwner : setOwner;
-  const dirty = !!original && (JSON.stringify(editDraft) !== JSON.stringify({ song_name: original.song_name, version_label: original.version_label }) || correcting);
+  const dirty = !!original && (JSON.stringify(songPayload(editDraft)) !== JSON.stringify(songFields(original)) || correcting);
   const guard = (proceed: () => void) => { if (!creating && dirty) setDiscard(() => proceed); else proceed(); };
   useEffect(() => { setConfirm(false); setDiscard(null); }, [active, variant]);
   useEffect(() => {
@@ -104,7 +108,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     return () => { current = false; };
   }, [groupId]);
   const restore = (song: SongVersion) => {
-    setOriginal(song); setEditDraft({ song_name: song.song_name, version_label: song.version_label });
+    setOriginal(song); setEditDraft(songFields(song));
     setOwner({ mode: song.ownership.mode, band_ids: song.ownership.band_ids, member_groups: song.ownership.member_groups });
     setCorrecting(false); setReason("");
   };
@@ -123,9 +127,9 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     setBusy(true); setError("");
     try {
       const path = creating ? newGroup ? "/song-groups" : "/songs" : `/songs/${original!.song_id}${correcting ? "/ownership" : ""}`;
-      const payload = creating ? { ...draft, version_label: newGroup ? "" : draft.version_label, ownership, ...(newGroup ? { group_name: groupName.trim() || draft.song_name } : { group_id: groupId, expected_group_revision: groupRevision }) }
+      const payload = creating ? { ...songPayload(draft), version_label: newGroup ? "" : draft.version_label, ownership, ...(newGroup ? { group_name: groupName.trim() || draft.song_name } : { group_id: groupId, expected_group_revision: groupRevision }) }
         : correcting ? { ownership, expected_revision: original!.revision, reason }
-        : { ...draft, expected_revision: original!.revision };
+        : { ...songPayload(draft), expected_revision: original!.revision };
       const result = await songCatalogWrite<{ item: SongVersion }>(path, creating ? "POST" : "PUT", payload, csrfToken);
       setHistory(value => [...value, { song: result.item, action: creating ? "create" : "update" }]);
       if (creating) { if (!newGroup) setGroupRevision(value => value === null ? null : value + 1); if (clearAfterCreate) clear(); } else restore(result.item);
@@ -141,7 +145,11 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     ...ownership.member_groups.map(g => `${bands.find(b => b.band_id === g.band_id)?.band_name ?? `#${g.band_id}`}：${g.member_ids.map(id => members.find(m => m.member_id === id)?.display_name ?? `#${id}`).join("、")}`),
   ].join(" / ");
   const changes = correcting ? [{ field: "归属", before: original ? ownershipLabel(original) : "", after: ownerSummary }, { field: "更正原因", before: "", after: reason }]
-    : (Object.keys(draft) as (keyof SongVersionDraft)[]).map(key => ({ field: ({ song_name: "歌曲名称", version_label: "版本标识", version_order: "版本顺序" })[key], before: original ? String(original[key]) : "", after: String(draft[key]) })).filter(change => creating || change.before !== change.after);
+    : [
+      { field: "歌曲名称", before: original?.song_name ?? "", after: draft.song_name },
+      { field: "版本标识", before: original?.version_label ?? "", after: draft.version_label },
+      { field: "封面", before: coverSummary(original?.cover_urls ?? []), after: coverSummary(songPayload(draft).cover_urls) },
+    ].filter(change => creating || change.before !== change.after);
   const bandOptions = bands.filter(band => band.band_id > 0).map(band => ({ id: band.band_id, label: band.band_name }));
   const memberOptions = members.map(member => ({ id: member.member_id, label: member.display_name }));
   const visibleHistory = history.filter(entry => entry.action === (creating ? "create" : "update"));
@@ -176,7 +184,10 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       checked={clearAfterCreate} onChange={event => setClearAfterCreate(event.target.checked)} />新增后清空数据</label>}
     <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => creating ? clear() : restore(original!)}>{creating ? "清空数据" : "恢复原值"}</button>
     <button type="button" className="console-submit-btn" disabled={busy || !draft.song_name.trim() || !ownerValid || (!creating && !dirty) || (creating && !newGroup && (!groupId || !groupRevision)) || (correcting && !reason.trim())}
-      onClick={() => setConfirm(true)}>{creating ? "提交插入" : "保存修改"}</button>
+      onClick={() => {
+        const problem = correcting ? "" : coverUrlsError(draft.cover_urls.filter(url => url.trim()));
+        setError(problem); if (!problem) setConfirm(true);
+      }}>{creating ? "提交插入" : "保存修改"}</button>
   </div>;
   if (!active) return null;
   return <section className="tour-admin-section" aria-label={creating ? "新增歌曲" : "歌曲管理"}>
@@ -255,6 +266,8 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         </table>
       </div>
       {hasMembers && memberPickers.length > 0 && <div className="tour-admin-toolbar song-create-member-fields">{memberPickers}</div>}
+      <CoverEditor title="歌曲封面" urls={draft.cover_urls} locked={fieldsDisabled}
+        onChange={cover_urls => setDraft({ ...draft, cover_urls })} />
       {formActions}
     </div> : original && <>
       <fieldset disabled={fieldsDisabled} className="tour-admin-fields tour-band-field">
@@ -269,6 +282,8 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
           <label>更正原因<input placeholder="请输入更正原因" value={reason} onChange={event => setReason(event.target.value)} /></label>
         </>}
       </fieldset>
+      {!correcting && <CoverEditor title="歌曲封面" urls={draft.cover_urls} locked={fieldsDisabled}
+        onChange={cover_urls => setDraft({ ...draft, cover_urls })} />}
       {!correcting && <div className="tour-admin-toolbar">
         <span>归属：{ownershipLabel(original)}</span>
         <button type="button" className="console-ghost-btn" disabled={dirty || busy} onClick={() => setCorrecting(true)}>更正归属</button>
@@ -294,6 +309,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         {creating ? <CompactConfirmationTable ariaLabel="新增歌曲确认" rows={[
           ["歌曲名称", draft.song_name], ["版本标识", newGroup ? "默认版本" : draft.version_label || "默认版本"],
           ["歌曲组", newGroup ? groupName.trim() || draft.song_name : selectedGroupName],
+          ["封面", coverSummary(songPayload(draft).cover_urls)],
           ["归属模式", { pending: "待回填", mixed: "乐队与成员", bands: "乐队", members: "成员" }[ownership.mode]], ["归属", ownerSummary],
         ]} /> : <UpdateDiffTable changes={changes} ariaLabel="歌曲修改内容" />}
       </div>}

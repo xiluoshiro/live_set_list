@@ -62,7 +62,24 @@ class Ownership(CatalogModel):
         return self
 
 
-class VersionFields(CatalogModel):
+class CoverFields(CatalogModel):
+    cover_urls: list[ExternalHttpsUrl] = Field(default_factory=list, max_length=20)
+
+    @field_validator("cover_urls")
+    @classmethod
+    def unique_covers(cls, values: list[str]) -> list[str]:
+        seen: set[str] = set()
+        for index, value in enumerate(values):
+            if value in seen:
+                raise ValidationError.from_exception_data("cover_urls", [{
+                    "type": "value_error", "loc": (index,), "input": value,
+                    "ctx": {"error": ValueError("Cover URL must not repeat")},
+                }])
+            seen.add(value)
+        return values
+
+
+class VersionFields(CoverFields):
     song_name: str = Field(min_length=1, max_length=255)
     version_label: str = Field(default="", max_length=255)
 
@@ -108,12 +125,11 @@ class AlbumTrackWrite(CatalogModel):
     section_name: str = Field(default="", max_length=255)
 
 
-class AlbumWrite(CatalogModel):
+class AlbumWrite(CoverFields):
     album_name: str = Field(min_length=1, max_length=255)
     release_label: str = Field(default="", max_length=255)
     release_date: date | None = None
     album_url: ExternalHttpsUrl | None = None
-    cover_urls: list[ExternalHttpsUrl] = Field(default_factory=list, max_length=20)
     tracks: list[AlbumTrackWrite] | None = Field(default=None, max_length=500)
 
     @field_validator("release_date", mode="before")
@@ -130,19 +146,6 @@ class AlbumWrite(CatalogModel):
         if isinstance(value, str) and not value.strip() and not any(ord(char) < 32 or ord(char) == 127 for char in value):
             return None
         return value
-
-    @field_validator("cover_urls")
-    @classmethod
-    def unique_covers(cls, values: list[str]) -> list[str]:
-        seen: set[str] = set()
-        for index, value in enumerate(values):
-            if value in seen:
-                raise ValidationError.from_exception_data("cover_urls", [{
-                    "type": "value_error", "loc": (index,), "input": value,
-                    "ctx": {"error": ValueError("Cover URL must not repeat")},
-                }])
-            seen.add(value)
-        return values
 
     @model_validator(mode="after")
     def unique_order(self):
@@ -210,6 +213,21 @@ class SongAlbum(AlbumSummary):
     edition_label: str
 
 
+class SongOwnCover(BaseModel):
+    source: Literal["song"]
+    url: str
+
+
+class SongAlbumCover(BaseModel):
+    source: Literal["album"]
+    url: str
+    album_id: int
+    album_name: str
+
+
+SongDisplayCover = Annotated[SongOwnCover | SongAlbumCover, Field(discriminator="source")]
+
+
 class SongVersion(VersionFields):
     version_order: int
     song_id: int
@@ -220,17 +238,12 @@ class SongVersion(VersionFields):
     legacy_cover: bool
     performance_count: int
     albums: list[AlbumSummary]
+    display_cover: SongDisplayCover | None
 
 
 class SongMutation(BaseModel):
     ok: bool = True
     item: SongVersion
-
-
-class SongDisplayCover(BaseModel):
-    url: str
-    album_id: int
-    album_name: str
 
 
 class SongGroup(BaseModel):

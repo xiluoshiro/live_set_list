@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getSongGroup, getSongPerformances, getSongVersion, type SongGroup, type SongPerformance, type SongPerformancePage, type SongVersion } from "../api";
 import { songCatalogHref, type SongBrowseState } from "../songCatalogNavigation";
 import { CatalogArt, CatalogLink, CatalogPagination, catalogDate, useCatalogScroll, useFittedCatalogPage } from "./SongCatalogShared";
+import { AlbumCoverGallery } from "./AlbumCover";
 
 export function ownershipLabel(song: Pick<SongVersion, "ownership">) {
   const owner = song.ownership;
@@ -67,10 +68,10 @@ export function SongDetailPage({ songId, browse, revision, onSongSelect, onAlbum
   if (error) return <div role="alert">{error} <button className="console-ghost-btn" onClick={() => setRetry(value => value + 1)}>重试</button></div>;
   if (!detail) return <p role="status">加载中…</p>;
   const { song, group } = detail;
-  const cover = group.display_cover;
+  const cover = song.display_cover;
   return <article className="song-detail" aria-label="歌曲详情">
     <div className="song-detail-overview">
-      <div className="song-detail-art">{cover ? <CatalogLink href={songCatalogHref(null, cover.album_id, browse)} onNavigate={() => onAlbumSelect(cover.album_id)} title={`封面选自《${cover.album_name}》`}>
+      <div className={`song-detail-art${song.cover_urls.length ? " song-detail-art-gallery" : ""}`}>{song.cover_urls.length ? <AlbumCoverGallery key={song.song_id} urls={song.cover_urls} title={song.song_name} label="歌曲封面" /> : cover?.source === "album" ? <CatalogLink href={songCatalogHref(null, cover.album_id, browse)} onNavigate={() => onAlbumSelect(cover.album_id)} title={`封面选自《${cover.album_name}》`}>
         <CatalogArt url={cover.url} title={`歌曲展示封面，选自《${cover.album_name}》`} /></CatalogLink> : <CatalogArt title={group.group_name} />}</div>
       <header className="song-detail-heading"><div><h1>{group.group_name}</h1><p className="song-owner">{ownershipLabel(song)}</p>
         {group.versions.length > 1 && <div className="song-catalog-versions" role="group" aria-label="歌曲版本">

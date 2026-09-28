@@ -102,7 +102,7 @@ def read_ownership(cur: Any, song_id: int, mode: str | None) -> dict[str, Any]:
 
 def read_song(cur: Any, song_id: int) -> dict[str, Any]:
     cur.execute("""SELECT s.id AS song_id, s.song_name, s.group_id, g.group_name,
-        s.version_label, s.version_order, s.owner_mode, s.revision, s.is_cover AS legacy_cover
+        s.version_label, s.version_order, s.owner_mode, s.revision, s.is_cover AS legacy_cover, s.cover_urls
         FROM song_list s JOIN song_groups g ON g.id = s.group_id WHERE s.id = %s""", (song_id,))
     song = one(cur)
     song["ownership"] = read_ownership(cur, song_id, song.pop("owner_mode"))
@@ -114,6 +114,12 @@ def read_song(cur: Any, song_id: int) -> dict[str, Any]:
         FROM album_tracks t JOIN albums a ON a.id = t.album_id WHERE t.song_id = %s
         ORDER BY a.release_date NULLS LAST, a.id""", (song_id,))
     song["albums"] = rows(cur)
+    song["display_cover"] = next(({
+        "source": "album", "url": album["cover_urls"][0],
+        "album_id": album["album_id"], "album_name": album["album_name"],
+    } for album in song["albums"] if album["cover_urls"]), None)
+    if song["cover_urls"]:
+        song["display_cover"] = {"source": "song", "url": song["cover_urls"][0]}
     return song
 
 

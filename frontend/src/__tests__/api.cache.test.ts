@@ -92,11 +92,11 @@ describe("api cache behavior", () => {
     expect(new Set(fetchMock.mock.calls.map(call => call[0])).size).toBe(8);
   });
 
-  // 测试点：唱片、归属及 Live 变更均刷新目录派生资料，失效前的摘要响应不能污染新缓存。
+  // 测试点：歌曲封面、唱片、归属及 Live 变更均刷新目录派生资料，失效前的摘要响应不能污染新缓存。
   test("catalog and live writes invalidate directory summaries including in-flight results", async () => {
     const api = await import("../api");
     const payload = (count: number) => ({ items: [{ group_id: 1, performance_count: count,
-      first_release_date: count === 1 ? null : "2018-12-12", display_cover: count === 1 ? null : { url: "https://example.test/cover.png", album_id: 8, album_name: "首发" } }],
+      first_release_date: count === 1 ? null : "2018-12-12", display_cover: count === 1 ? null : { source: "album", url: "https://example.test/cover.png", album_id: 8, album_name: "首发" } }],
       pagination: { page: 1, page_size: 10, total: 1, total_pages: 1 }, facets: { total: 1, bands: [{ band_id: 2, band_name: "乙", song_count: count }] } });
     const read = () => api.getSongGroups("", 1, undefined, undefined, { sort: "plays", pageSize: 10 });
     const stale = deferred<Response>();
@@ -110,7 +110,7 @@ describe("api cache behavior", () => {
     expect(await read()).toEqual(fresh);
     expect(fresh.items[0]).toMatchObject({ performance_count: 2, first_release_date: "2018-12-12", display_cover: { album_id: 8 } });
     for (const [path, body] of [["/albums/8", { release_date: "2019-01-01" }], ["/albums/8", { cover_urls: [] }],
-      ["/albums/8", { tracks: [] }], ["/songs/1", { ownership: { mode: "pending" } }]] as const) {
+      ["/albums/8", { tracks: [] }], ["/songs/1", { cover_urls: ["https://example.test/song.png"] }], ["/songs/1", { ownership: { mode: "pending" } }]] as const) {
       fetchMock.mockResolvedValueOnce(makeJsonResponse({ ok: true }));
       await api.songCatalogWrite(path, "PUT", body, "csrf");
       fetchMock.mockResolvedValueOnce(makeJsonResponse(payload(3)));

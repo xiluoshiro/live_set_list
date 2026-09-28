@@ -88,7 +88,7 @@ vi.mock("../../api", () => ({
 
 function catalogSongFixture(id: number, name: string) {
   return { song_id: id, song_name: name, group_id: id, group_name: name, version_label: "普通版", version_order: 1, revision: 1,
-    legacy_cover: false, performance_count: 0, albums: [], ownership: { mode: "pending", band_ids: [], member_groups: [], bands: [], groups: [] } };
+    legacy_cover: false, cover_urls: [], display_cover: null, performance_count: 0, albums: [], ownership: { mode: "pending", band_ids: [], member_groups: [], bands: [], groups: [] } };
 }
 
 function getTodayDateInputValue(): string {
@@ -1931,7 +1931,7 @@ describe("ConsoleInsertPanel", () => {
     const dialog = screen.getByRole("dialog", { name: "确认新增歌曲" });
     await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
     await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/song-groups", "POST", {
-      group_name: "新曲", song_name: "新曲", version_label: "", ownership: { mode: "pending", band_ids: [], member_groups: [] },
+      group_name: "新曲", song_name: "新曲", version_label: "", cover_urls: [], ownership: { mode: "pending", band_ids: [], member_groups: [] },
     }, "csrf-token"));
     expect(screen.getByRole("tab", { name: "新增歌曲" })).toHaveAttribute("aria-selected", "true");
     const table = screen.getByRole("table", { name: "歌曲操作记录" });
@@ -1958,7 +1958,7 @@ describe("ConsoleInsertPanel", () => {
     const dialog = screen.getByRole("dialog", { name: "确认修改歌曲" });
     expect(within(dialog).getByRole("table", { name: "歌曲修改内容" })).toHaveTextContent("原曲名改名曲");
     await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
-    await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/songs/901", "PUT", { song_name: "改名曲", version_label: "普通版", expected_revision: 1 }, "csrf-token"));
+    await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/songs/901", "PUT", { song_name: "改名曲", version_label: "普通版", cover_urls: [], expected_revision: 1 }, "csrf-token"));
     expect(screen.getByLabelText("歌曲名称")).toHaveValue("改名曲");
   });
 

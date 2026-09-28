@@ -5,13 +5,12 @@ import { UpdateDiffTable } from "./UpdateDiffTable";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { albumTitle } from "../../albumTitle";
 import { ConsoleCandidatePager } from "./ConsoleChoiceSelect";
-import { AlbumCover } from "../AlbumCover";
+import { CoverEditor, coverSummary } from "./CoverEditor";
 import { albumLinksError } from "../../albumLinks";
 import { getTodayDateInputValue } from "./helpers";
 
 const emptyAlbum = (): AlbumDraft => ({ album_name: "", release_label: "", release_date: getTodayDateInputValue(), album_url: null, cover_urls: [""], tracks: [] });
 const albumPayload = (draft: AlbumDraft): AlbumDraft => ({ ...draft, cover_urls: draft.cover_urls.filter(url => url.trim()) });
-const coverSummary = (urls: string[]) => urls.map((url, i) => `${i + 1}${i === 0 ? "（默认）" : ""}. ${url}`).join("\n");
 const songLabel = (song: Pick<ConsoleSongItem, "song_id" | "song_name" | "version_label" | "band_name">) =>
   `#${song.song_id} ${song.song_name} / ${song.version_label || "默认版本"} / ${song.band_name ?? "待回填"}`;
 const fields = (album: AlbumDetail): AlbumDraft => ({
@@ -146,11 +145,6 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     [tracks[index], tracks[index + direction]] = [tracks[index + direction], tracks[index]];
     setDraft({ ...draft, tracks: numberTracks(tracks) });
   };
-  const moveCover = (index: number, target: number) => {
-    const cover_urls = [...draft.cover_urls];
-    cover_urls.splice(target, 0, ...cover_urls.splice(index, 1));
-    setDraft({ ...draft, cover_urls });
-  };
   const review = () => {
     const problem = albumLinksError(payload.album_url, payload.cover_urls);
     setError(problem);
@@ -221,26 +215,8 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
         </tr></tbody>
       </table>
     </div>
-    <section aria-labelledby={`${formId}-covers`}>
-      <div className="live-admin-status-head setlist-paste-head"><h3 id={`${formId}-covers`}>专辑封面</h3>
-        <button type="button" className="console-submit-btn" disabled={locked || draft.cover_urls.length >= 20}
-        onClick={() => setDraft({ ...draft, cover_urls: [...draft.cover_urls, ""] })}>添加封面</button></div>
-      <div className="console-table-wrap setlist-input-wrap"><table className="console-admin-table album-cover-editor" aria-label="专辑封面">
-        <colgroup><col className="album-cover-preview-column" /><col /><col className="album-cover-actions-column" /></colgroup>
-        <thead><tr><th scope="col">预览</th><th scope="col">封面 URL</th><th scope="col">操作</th></tr></thead><tbody>
-      {!draft.cover_urls.length && <tr><td colSpan={3} className="empty-cell">暂无专辑封面</td></tr>}
-      {draft.cover_urls.map((url, index) => <tr key={index}>
-        <td>{url.trim() && <AlbumCover url={url} alt={`封面 ${index + 1} 预览`} />}</td>
-        <td><input type="url" maxLength={2048} disabled={locked} aria-label={`第 ${index + 1} 张封面 URL`} value={url} placeholder="https://" onChange={e => setDraft({ ...draft, cover_urls: draft.cover_urls.map((value, i) => i === index ? e.target.value : value) })} /></td>
-        <td><div className="tour-admin-toolbar venue-create-actions">
-          <button type="button" className="console-ghost-btn" disabled={locked || index === 0} onClick={() => moveCover(index, index - 1)}>上移</button>
-          <button type="button" className="console-ghost-btn" disabled={locked || index === draft.cover_urls.length - 1} onClick={() => moveCover(index, index + 1)}>下移</button>
-          <button type="button" className="console-ghost-btn" disabled={locked || index === 0} onClick={() => moveCover(index, 0)}>{index === 0 ? "默认" : "设为默认"}</button>
-          <button type="button" className="console-ghost-btn" disabled={locked} onClick={() => setDraft({ ...draft, cover_urls: draft.cover_urls.filter((_, i) => i !== index) })}>移除</button>
-        </div></td>
-      </tr>)}
-    </tbody></table></div>
-    </section>
+    <CoverEditor title="专辑封面" urls={draft.cover_urls} locked={locked}
+      onChange={cover_urls => setDraft({ ...draft, cover_urls })} />
     <section aria-label="收录曲目">
       <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar" role="search" aria-label="查询收录歌曲">
         <label className="live-management-label" htmlFor={`${formId}-song-select`}>收录歌曲</label>

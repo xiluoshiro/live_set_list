@@ -35,7 +35,7 @@ def create_album(client: Any, headers: dict[str, str], name: str, song_ids: list
     return response.json()
 
 
-# 测试点：目录按组去重，首发跨全部版本聚合并保留同日唱片，封面回退与组详情一致。
+# 测试点：目录按组去重，首发跨全部版本聚合并保留同日唱片，封面仅取默认版本的收录且与组详情一致。
 def test_directory_release_and_cover_across_versions(integration_test_client):
     client = integration_test_client
     headers = auth(client)
@@ -46,9 +46,9 @@ def test_directory_release_and_cover_across_versions(integration_test_client):
     create_album(client, headers, "未知日期图", [sid], covers=["https://example.test/undated.png"])
     earliest = create_album(client, headers, "首发 A", [sid, sid], "2018-12-12")
     tied = create_album(client, headers, "首发 B", [other["song_id"]], "2018-12-12")
-    cover = create_album(client, headers, "后续封面", [other["song_id"]], "2020-01-01",
+    create_album(client, headers, "后续封面", [other["song_id"]], "2020-01-01",
                          ["https://example.test/default.png", "https://example.test/second.png"])
-    create_album(client, headers, "后续同日", [sid], "2020-01-01", ["https://example.test/tied.png"])
+    cover = create_album(client, headers, "后续同日", [sid], "2020-01-01", ["https://example.test/tied.png"])
     for band in (None, 1, 2):
         params = {"q": "目录验收曲", **({"band_id": band} if band else {})}
         result = client.get("/api/song-groups", params=params)
@@ -62,8 +62,8 @@ def test_directory_release_and_cover_across_versions(integration_test_client):
         assert item["matched_song_ids"] == expected_ids
         assert item["first_release_date"] == "2018-12-12"
         assert [a["album_id"] for a in item["first_release_albums"]] == [earliest["album_id"], tied["album_id"]]
-        assert item["display_cover"] == {"url": "https://example.test/default.png",
-                                          "album_id": cover["album_id"], "album_name": "后续封面"}
+        assert item["display_cover"] == {"source": "album", "url": "https://example.test/tied.png",
+                                          "album_id": cover["album_id"], "album_name": "后续同日"}
         assert item["display_cover"] == client.get(f"/api/song-groups/{gid}").json()["display_cover"]
         assert item["performance_count"] == 0 and item["latest_performance_date"] is None
     # A version must satisfy both filters; group membership alone cannot join unrelated matches.
