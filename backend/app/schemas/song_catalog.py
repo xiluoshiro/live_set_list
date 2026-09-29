@@ -62,20 +62,30 @@ class Ownership(CatalogModel):
         return self
 
 
+class CoverEntry(CatalogModel):
+    url: ExternalHttpsUrl
+    name: str = Field(default="", max_length=255)
+
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_url(cls, value: object) -> object:
+        return {"url": value, "name": ""} if isinstance(value, str) else value
+
+
 class CoverFields(CatalogModel):
-    cover_urls: list[ExternalHttpsUrl] = Field(default_factory=list, max_length=20)
+    cover_urls: list[CoverEntry] = Field(default_factory=list, max_length=20)
 
     @field_validator("cover_urls")
     @classmethod
-    def unique_covers(cls, values: list[str]) -> list[str]:
+    def unique_covers(cls, values: list[CoverEntry]) -> list[CoverEntry]:
         seen: set[str] = set()
         for index, value in enumerate(values):
-            if value in seen:
+            if value.url in seen:
                 raise ValidationError.from_exception_data("cover_urls", [{
-                    "type": "value_error", "loc": (index,), "input": value,
+                    "type": "value_error", "loc": (index, "url"), "input": value.url,
                     "ctx": {"error": ValueError("Cover URL must not repeat")},
                 }])
-            seen.add(value)
+            seen.add(value.url)
         return values
 
 
@@ -228,7 +238,7 @@ class AlbumSummary(BaseModel):
     release_label: str
     release_date: date | None
     album_url: str | None
-    cover_urls: list[str]
+    cover_urls: list[CoverEntry]
     revision: int
 
 
@@ -237,14 +247,12 @@ class SongAlbum(AlbumSummary):
     edition_label: str
 
 
-class SongOwnCover(BaseModel):
+class SongOwnCover(CoverEntry):
     source: Literal["song"]
-    url: str
 
 
-class SongAlbumCover(BaseModel):
+class SongAlbumCover(CoverEntry):
     source: Literal["album"]
-    url: str
     album_id: int
     album_name: str
 

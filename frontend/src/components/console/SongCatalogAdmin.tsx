@@ -13,11 +13,11 @@ import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleChoiceSelect, ConsoleCandidatePager } from "./ConsoleChoiceSelect";
 import { ConsoleMultiSelect } from "./ConsoleMultiSelect";
 import { CoverEditor, coverSummary } from "./CoverEditor";
-import { coverUrlsError } from "../../albumLinks";
+import { coverPayload, coverUrlsError, filledCovers } from "../../albumLinks";
 
 const emptyFields = (): SongVersionDraft => ({ song_name: "", version_label: "", cover_urls: [] });
 const songFields = (song: SongVersion): SongVersionDraft => ({ song_name: song.song_name, version_label: song.version_label, cover_urls: [...song.cover_urls] });
-const songPayload = (draft: SongVersionDraft): SongVersionDraft => ({ ...draft, cover_urls: draft.cover_urls.filter(url => url.trim()).map(url => url.trim()) });
+const songPayload = (draft: SongVersionDraft): SongVersionDraft => ({ ...draft, cover_urls: coverPayload(draft.cover_urls) });
 const emptyOwner = (): SongOwnership => ({ mode: "pending", band_ids: [], member_groups: [] });
 const ownerFields = (song: SongVersion): SongOwnership => ({ mode: song.ownership.mode, band_ids: song.ownership.band_ids, member_groups: song.ownership.member_groups });
 const groupFields = (group: SongGroup) => ({ group_name: group.group_name.trim(), song_ids: group.versions.map(v => v.song_id) });
@@ -218,7 +218,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       (!creating && (!changed || !editGroup?.group_name.trim() || (ownershipChanged && !reason.trim()) ||
         (!!moveTarget.group_id && (!moveTarget.expected_revision || !moveTarget.reason.trim())))) || (creating && !newGroup && (!groupId || !groupRevision))}
       onClick={() => {
-        const problem = coverUrlsError(draft.cover_urls.filter(url => url.trim()));
+        const problem = coverUrlsError(filledCovers(draft.cover_urls));
         setError(problem); if (!problem) setConfirm(true);
       }}>{creating ? "提交插入" : "保存修改"}</button>
   </div>;
@@ -298,7 +298,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         </table>
       </div>
       {hasMembers && memberPickers.length > 0 && <div className="tour-admin-toolbar song-create-member-fields">{memberPickers}</div>}
-      <CoverEditor title="歌曲封面" urls={draft.cover_urls} locked={fieldsDisabled}
+      <CoverEditor title="歌曲封面" covers={draft.cover_urls} locked={fieldsDisabled}
         onChange={cover_urls => setDraft({ ...draft, cover_urls })} />
       {formActions}
     </div> : original && <>
@@ -307,7 +307,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         <thead><tr><th scope="col">song_id</th><th scope="col">歌曲名称</th><th scope="col">版本标识</th><th scope="col">所属歌曲组</th></tr></thead>
         <tbody><tr><td><span className="readonly-cell">{original.song_id}</span></td><td>{songNameField}</td><td>{versionField}</td><td>{editGroup?.group_name ?? original.group_name}</td></tr></tbody>
       </table></div>
-      <CoverEditor title="歌曲封面" urls={draft.cover_urls} locked={fieldsDisabled}
+      <CoverEditor title="歌曲封面" covers={draft.cover_urls} locked={fieldsDisabled}
         onChange={cover_urls => setDraft({ ...draft, cover_urls })} />
       <section className="song-ownership-editor" aria-label="版本归属">
         <div className="live-admin-status-head"><h3>版本归属</h3><span>影响当前版本及其所有引用处</span></div>

@@ -143,7 +143,7 @@ V40 已实现歌曲组歌单引用、混合归属和专辑子项。`live_setlist
 | albums | `release_label text NULL` | 如 10th single；trim 后空串归一为 NULL，不解析或枚举 |
 | albums | `release_date date NULL` | NULL 表示未知；API 只接受 `YYYY-MM-DD` 或 null |
 | albums | `album_url text NULL` | 专辑公告或平台详情页的 HTTPS 地址，未补录时为空 |
-| albums | `cover_urls text[] NOT NULL DEFAULT '{}'::text[]` | 有序 HTTPS 图片地址数组；第一项默认，无图时为空数组 |
+| albums | `cover_urls jsonb NOT NULL DEFAULT '[]'::jsonb` | 有序 `{ url, name }` 封面数组（V43）；名称选填，第一项默认，无图时为空数组 |
 | albums | `revision bigint NOT NULL DEFAULT 1` | 包含曲目关系的编辑版本 |
 | album_tracks | `id bigint identity PK`、`album_id`、`song_id` | 两个外键；删除歌曲 RESTRICT，删除专辑需先显式处理曲目 |
 | album_tracks | `track_order integer > 0`、`edition_label text NULL` | 专辑子项内排序；Instrumental 标识位于 edition_label |

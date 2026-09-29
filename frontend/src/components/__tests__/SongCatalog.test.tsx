@@ -78,43 +78,50 @@ test("detail pagination exposes every page for a short result set", async () => 
 // 测试点：版本自有多图优先且可切换，版本切换重置首图，专辑回退有来源链接，无图使用占位。
 test("version covers switch independently and reset on version navigation", async () => {
   const user = userEvent.setup();
-  const urls = ["https://example.test/front.png", "https://example.test/back.png"];
+  const urls = ["https://example.test/front.png", "https://example.test/back.png"].map((url, index) => ({ url, name: `封面${index + 1}` }));
   api.getSongVersion.mockImplementation(async (id: number) => id === 1
-    ? { ...version(id), cover_urls: urls, display_cover: { source: "song", url: urls[0] } }
-    : { ...version(id), display_cover: { source: "album", url: "https://example.test/album.png", album_id: 8, album_name: "回退专辑" } });
+    ? { ...version(id), cover_urls: urls, display_cover: { source: "song", ...urls[0] } }
+    : { ...version(id), display_cover: { source: "album", url: "https://example.test/album.png", name: "", album_id: 8, album_name: "回退专辑" } });
   render(<PublicPage />);
   let gallery = within(await screen.findByRole("group", { name: "歌曲封面" }));
-  expect(gallery.getByRole("img")).toHaveAttribute("src", urls[0]);
+  expect(gallery.getByRole("img")).toHaveAttribute("src", urls[0].url);
   expect(gallery.queryByRole("link")).not.toBeInTheDocument();
   await user.click(gallery.getByRole("button", { name: "下一张" }));
-  expect(gallery.getByRole("img")).toHaveAttribute("src", urls[1]);
+  expect(gallery.getByRole("img")).toHaveAttribute("src", urls[1].url);
   fireEvent.error(gallery.getByRole("img"));
   expect(gallery.getByRole("status")).toHaveTextContent("封面无法显示");
   await user.click(gallery.getByRole("button", { name: "上一张" }));
-  expect(gallery.getByRole("img")).toHaveAttribute("src", urls[0]);
+  expect(gallery.getByRole("img")).toHaveAttribute("src", urls[0].url);
   await user.click(screen.getByRole("button", { name: "合唱版" }));
   const albumCover = await screen.findByRole("img", { name: "歌曲展示封面，选自《回退专辑》" });
   expect(albumCover.closest("a")).toHaveAttribute("href", expect.stringContaining("/albums/8"));
   await user.click(screen.getByRole("button", { name: "普通版" }));
   gallery = within(await screen.findByRole("group", { name: "歌曲封面" }));
-  expect(gallery.getByRole("img")).toHaveAttribute("src", urls[0]);
+  expect(gallery.getByRole("img")).toHaveAttribute("src", urls[0].url);
   api.getSongVersion.mockResolvedValue(version(2));
   await user.click(screen.getByRole("button", { name: "合唱版" }));
   expect(await screen.findByRole("img", { name: "合唱曲，暂无封面" })).toBeInTheDocument();
 });
 
-// 测试点：仅调整封面默认顺序也需确认和离开保护，保存失败保留草稿，恢复和清空提交正确数组。
+// 测试点：名称修改和默认顺序修改均需确认，排序保留名称，失败、恢复及清空维持完整封面草稿。
 test("song cover editor saves ordering and protects the draft", async () => {
   const user = userEvent.setup();
-  const urls = ["https://example.test/a.png", "https://example.test/b.png"];
+  const urls = ["https://example.test/a.png", "https://example.test/b.png"].map((url, index) => ({ url, name: `封面${index + 1}` }));
   const song = { ...version(), cover_urls: urls };
   api.getCatalogConsole.mockImplementation(async (path: string) => path === "/songs/1" ? song : path === "/members" ? { items: [] } : page([song]));
   let leave: ((next: () => void) => void) | null = null;
   render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={guard => { leave = guard; }} onManage={() => {}} />);
   await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
-  await screen.findByDisplayValue(urls[0]);
+  await screen.findByDisplayValue(urls[0].url);
+  fireEvent.change(screen.getByLabelText("第 1 张封面名称"), { target: { value: "通常盤" } });
+  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  expect(within(screen.getByRole("dialog")).getByRole("table")).toHaveTextContent("通常盤");
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "取消" }));
+  await user.click(screen.getByRole("button", { name: "恢复原值" }));
+  expect(screen.getByLabelText("第 1 张封面名称")).toHaveValue(urls[0].name);
   await user.click(screen.getByRole("button", { name: "设为默认" }));
-  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(urls[1]);
+  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(urls[1].url);
+  expect(screen.getByLabelText("第 1 张封面名称")).toHaveValue(urls[1].name);
   const next = vi.fn();
   act(() => leave?.(next));
   await user.click(within(screen.getByRole("dialog", { name: "确认放弃歌曲修改" })).getByRole("button", { name: "取消" }));
@@ -122,19 +129,19 @@ test("song cover editor saves ordering and protects the draft", async () => {
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   const dialog = within(screen.getByRole("dialog", { name: "确认修改歌曲" }));
   expect(dialog.getByRole("table")).toHaveTextContent("封面");
-  expect(dialog.getByRole("table")).toHaveTextContent(`1（默认）. ${urls[1]}`);
+  expect(dialog.getByRole("table")).toHaveTextContent(`1（默认）. ${urls[1].name} · ${urls[1].url}`);
   api.songCatalogWrite.mockRejectedValueOnce(new Error("保存失败"));
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
   expect(await dialog.findByRole("alert")).toHaveTextContent("保存失败");
-  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(urls[1]);
+  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(urls[1].url);
   api.songCatalogWrite.mockResolvedValueOnce({ item: { ...song, cover_urls: [...urls].reverse(), revision: 2 } });
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/songs/1/edit", "PUT", expect.objectContaining({ cover_urls: [...urls].reverse(), expected_revision: 1 }), "csrf");
   await user.click(screen.getAllByRole("button", { name: "移除" })[0]);
-  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(urls[0]);
+  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(urls[0].url);
   await user.click(screen.getByRole("button", { name: "恢复原值" }));
-  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(urls[1]);
+  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(urls[1].url);
   await user.click(screen.getAllByRole("button", { name: "移除" })[0]);
   await user.click(screen.getByRole("button", { name: "移除" }));
   await user.click(screen.getByRole("button", { name: "保存修改" }));
@@ -142,7 +149,7 @@ test("song cover editor saves ordering and protects the draft", async () => {
   expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/songs/1/edit", "PUT", expect.objectContaining({ cover_urls: [], expected_revision: 2 }), "csrf");
 });
 
-// 测试点：新增歌曲在确认前拦截非法封面，修正后随歌曲一起提交多图。
+// 测试点：新增歌曲拦截非法封面，修正后支持命名与未命名封面混合提交。
 test("new song cover validation and creation", async () => {
   const user = userEvent.setup();
   render(<SongCatalogAdmin variant="create" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
@@ -154,13 +161,14 @@ test("new song cover validation and creation", async () => {
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
   await user.clear(screen.getByLabelText("第 1 张封面 URL"));
   await user.type(screen.getByLabelText("第 1 张封面 URL"), "https://example.test/a.png");
+  await user.type(screen.getByLabelText("第 1 张封面名称"), " 正面 ");
   await user.click(screen.getByRole("button", { name: "添加封面" }));
   await user.type(screen.getByLabelText("第 2 张封面 URL"), "https://example.test/b.png");
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   const dialog = within(screen.getByRole("dialog"));
   expect(dialog.getByRole("table")).toHaveTextContent("https://example.test/b.png");
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
-  expect(api.songCatalogWrite).toHaveBeenCalledWith("/song-groups", "POST", expect.objectContaining({ cover_urls: ["https://example.test/a.png", "https://example.test/b.png"] }), "csrf");
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/song-groups", "POST", expect.objectContaining({ cover_urls: [{ url: "https://example.test/a.png", name: "正面" }, { url: "https://example.test/b.png", name: "" }] }), "csrf");
 });
 
 // 测试点：歌曲的唱片链接进入独立页，名称及发行说明完整保留，空说明不制造额外标题。
@@ -456,28 +464,28 @@ test("manage loads details and protects unsaved changes", async () => {
 // 测试点：独立唱片页本地切图遵守边界，坏图仍可切换及访问来源，离开再进入恢复默认图。
 test("album gallery switches locally and resets on reopening", async () => {
   const user = userEvent.setup();
-  const covers = ["https://img.example.test/first", "https://img.example.test/second"];
+  const covers = ["https://img.example.test/first", "https://img.example.test/second"].map((url, index) => ({ url, name: `封面${index + 1}` }));
   const album = { ...version().albums[0], album_url: "https://example.test/album", cover_urls: covers, tracks: [] };
   api.getSongVersion.mockImplementation(async (id: number) => ({ ...version(id), albums: [album] }));
   api.getAlbumDetail.mockResolvedValue(album);
   render(<PublicPage />);
   const card = await screen.findByRole("link", { name: "查看唱片 收录盘" });
-  expect(within(card).getByRole("img")).toHaveAttribute("src", covers[0]);
+  expect(within(card).getByRole("img")).toHaveAttribute("src", covers[0].url);
   await user.click(card);
   const detail = await screen.findByRole("article", { name: "唱片详情" });
   const gallery = within(detail).getByRole("group", { name: "专辑封面" });
-  expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[0]);
+  expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[0].url);
   expect(within(gallery).getByRole("button", { name: "上一张" })).toBeDisabled();
   const requestsBefore = api.getAlbumDetail.mock.calls.length;
   await user.click(within(gallery).getByRole("button", { name: "下一张" }));
-  expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[1]);
+  expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[1].url);
   expect(within(gallery).getByText("2 / 2")).toBeInTheDocument();
   expect(within(gallery).getByRole("button", { name: "下一张" })).toBeDisabled();
   fireEvent.error(within(gallery).getByRole("img"));
   expect(within(gallery).getByRole("status")).toHaveTextContent("封面无法显示");
   expect(within(detail).getByRole("link", { name: /专辑页面/ })).toHaveAttribute("href", album.album_url);
   await user.click(within(gallery).getByRole("button", { name: "上一张" }));
-  expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[0]);
+  expect(within(gallery).getByRole("img")).toHaveAttribute("src", covers[0].url);
   expect(api.getAlbumDetail).toHaveBeenCalledTimes(requestsBefore);
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
   await user.click(within(gallery).getByRole("button", { name: "下一张" }));

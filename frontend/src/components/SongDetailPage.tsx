@@ -74,13 +74,13 @@ export function SongDetailPage({ songId, browse, revision, onSongSelect, onAlbum
   const cover = song.display_cover;
   const releases = song.albums.map(album => <CatalogLink className="song-release" key={album.album_id} href={songCatalogHref(songId, album.album_id, browse)}
     onNavigate={() => { setAllReleasesOpen(false); onAlbumSelect(album.album_id); }} aria-label={`查看唱片 ${album.album_name}`}>
-    <span className="song-release-art"><CatalogArt url={album.cover_urls[0]} title={`${album.album_name} 封面`} /></span>
+    <span className="song-release-art"><CatalogArt url={album.cover_urls[0]?.url} title={`${album.album_name} ${album.cover_urls[0]?.name || "封面"}`} /></span>
     <span className="song-release-copy">{album.release_label && <small>{album.release_label}</small>}<strong>{album.album_name}</strong>
       <time dateTime={album.release_date ?? undefined}>{catalogDate(album.release_date)}</time><span className="song-release-link">曲目 <span aria-hidden="true">↗</span></span></span>
   </CatalogLink>);
   return <article className="song-detail" aria-label="歌曲详情" ref={layoutRef}>
     <div className="song-detail-overview">
-      <div className={`song-detail-art${song.cover_urls.length ? " song-detail-art-gallery" : ""}`}>{song.cover_urls.length ? <AlbumCoverGallery key={song.song_id} urls={song.cover_urls} title={song.song_name} label="歌曲封面" /> : cover?.source === "album" ? <CatalogLink href={songCatalogHref(null, cover.album_id, browse)} onNavigate={() => onAlbumSelect(cover.album_id)} title={`封面选自《${cover.album_name}》`}>
+      <div className={`song-detail-art${song.cover_urls.length ? " song-detail-art-gallery" : ""}`}>{song.cover_urls.length ? <AlbumCoverGallery key={song.song_id} covers={song.cover_urls} title={song.song_name} label="歌曲封面" /> : cover?.source === "album" ? <CatalogLink href={songCatalogHref(null, cover.album_id, browse)} onNavigate={() => onAlbumSelect(cover.album_id)} title={`封面选自《${cover.album_name}》`}>
         <CatalogArt url={cover.url} title={`歌曲展示封面，选自《${cover.album_name}》`} /></CatalogLink> : <CatalogArt title={group.group_name} />}</div>
       <header className="song-detail-heading"><h1>{group.group_name}</h1>
         <div className="song-detail-byline"><div className="song-detail-artist"><p className="song-owner">{ownershipLabel(song)}</p><span className="song-version-count">{group.versions.length} 个版本</span></div>

@@ -44,6 +44,7 @@ def audit_count(conn, song_id):
         return cur.fetchone()[0]
 
 
+# 测试点：整页保存原子更新资料及命名封面，公开读取一致且重试不能重复审计。
 def test_whole_page_save_updates_public_references_once(integration_test_client, integration_admin_connection):
     client = integration_test_client
     headers = auth(client)
@@ -54,7 +55,7 @@ def test_whole_page_save_updates_public_references_once(integration_test_client,
         'album_name': '引用专辑', 'tracks': [{'song_id': sid}],
     }).json()
     payload = edit_payload(client, sid)
-    payload.update(song_name='全局新名称', cover_urls=['https://example.test/cover.png'],
+    payload.update(song_name='全局新名称', cover_urls=[{'url': 'https://example.test/cover.png', 'name': '通常盤'}],
                    ownership={'mode': 'bands', 'band_ids': [2]}, ownership_reason='官方资料更正')
     payload['group']['group_name'] = '全局新组名'
     payload['group']['song_ids'].reverse()
@@ -65,6 +66,7 @@ def test_whole_page_save_updates_public_references_once(integration_test_client,
     assert saved['group']['revision'] == payload['group']['expected_revision'] + 1
     assert [v['song_id'] for v in saved['group']['versions']] == [sibling['song_id'], sid]
     assert saved['item']['ownership']['band_ids'] == [2]
+    assert saved['item']['cover_urls'] == payload['cover_urls']
     assert client.get(f'/api/songs/{sid}').json() == saved['item']
     assert client.get(f"/api/albums/{album['album_id']}").json()['tracks'][0]['song_name'] == '全局新名称'
     assert client.get(f"/api/songs/{sibling['song_id']}").json()['song_name'] == '版本歌曲'
@@ -164,7 +166,7 @@ def test_metadata_edit_preserves_gapped_version_order(integration_test_client, f
     if field == 'ownership':
         payload.update(ownership={'mode': 'bands', 'band_ids': [2]}, ownership_reason='归属核实')
     elif field == 'cover_urls':
-        payload[field] = ['https://example.test/updated.png']
+        payload[field] = [{'url': 'https://example.test/updated.png', 'name': '更新封面'}]
     elif field == 'group_name':
         payload['group'][field] = '更新后的组名'
     else:
@@ -189,6 +191,32 @@ def test_metadata_edit_preserves_gapped_version_order(integration_test_client, f
         assert [version for version in after['versions'] if version['song_id'] != sid] == [
             version for version in before['versions'] if version['song_id'] != sid
         ]
+
+
+# 测试点：仅改名称会保存并增加歌曲 revision，省略封面保留名称且审计记录实际保存内容。
+def test_name_only_edit_and_omitted_covers(integration_test_client, integration_admin_connection):
+    client = integration_test_client
+    headers = auth(client)
+    song = make_group(client, headers, '命名封面')
+    sid = song['song_id']
+    for name in ('初回限定盤', '通常盤', ''):
+        payload = edit_payload(client, sid)
+        payload['cover_urls'] = [{'url': 'https://example.test/cover.png', 'name': name}]
+        result = client.put(f'/api/console/songs/{sid}/edit', headers=headers, json=payload)
+        assert result.status_code == 200, result.text
+        saved = result.json()['item']
+        assert saved['cover_urls'] == payload['cover_urls']
+        assert saved['revision'] == payload['expected_revision'] + 1
+        assert saved['display_cover']['name'] == name
+        payload = edit_payload(client, sid)
+        del payload['cover_urls']
+        payload['song_name'] += '改'
+        result = client.put(f'/api/console/songs/{sid}/edit', headers=headers, json=payload)
+        assert result.status_code == 200, result.text
+        assert result.json()['item']['cover_urls'] == saved['cover_urls']
+        with integration_admin_connection.cursor() as cur:
+            cur.execute("SELECT payload_json FROM audit_logs WHERE action = 'song_edit' AND resource_id = %s ORDER BY id DESC LIMIT 1", (str(sid),))
+            assert cur.fetchone()[0]['after']['cover_urls'] == saved['cover_urls']
 
 
 def test_edit_requires_auth_csrf_and_valid_group_membership(integration_test_client):

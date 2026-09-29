@@ -128,7 +128,7 @@ V42 已按歌曲版本独立维护封面，以下规则替代三页改版初期�
 | `first_release_albums` | `AlbumSummary[]` | 最早同日唱片的去重集合；未知时 `[]` |
 | `performance_count` | 非负整数 | 第 3.3 节的歌曲组次数 |
 | `latest_performance_date` | `date \| null` | 无有效演出时为 `null` |
-| `display_cover` | `{ source: "song", url } \| { source: "album", url, album_id, album_name } \| null` | 第 3.5 节的图片及真实来源 |
+| `display_cover` | `{ source: "song", url, name } \| { source: "album", url, name, album_id, album_name } \| null` | 第 3.5 节的图片、名称及真实来源 |
 
 目录响应增加 `facets: { total, bands: [{ band_id, band_name, song_count }] }`。`facets.total` 表示去掉当前乐队过滤后的全部歌曲组数；`pagination.total` 仍表示当前所有过滤条件下的列表总数。每个乐队计数遵守第 3.4 节，不能取乐队接口的 `live_count`。
 

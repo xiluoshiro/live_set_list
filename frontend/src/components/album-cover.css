@@ -4,7 +4,8 @@
 .album-cover-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
 .album-cover-error { font-size: 0.85em; }
 .album-cover-editor .album-cover-image { width: 64px; height: 64px; }
-.album-cover-editor input { min-width: 220px; width: 100%; box-sizing: border-box; }
+.album-cover-editor input { min-width: 0; width: 100%; box-sizing: border-box; }
 .album-cover-editor { table-layout: fixed; }
 .album-cover-preview-column { width: 88px; }
+.album-cover-name-column { width: 180px; }
 .album-cover-actions-column { width: 320px; }

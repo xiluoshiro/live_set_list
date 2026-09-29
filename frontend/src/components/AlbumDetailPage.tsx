@@ -31,7 +31,7 @@ export function AlbumDetailPage({ albumId, selectedSongId, browse, revision, onS
   return <article className="song-album-page" aria-label="唱片详情">
     <header className="song-album-heading"><h1>{album.album_name}</h1>{album.release_label && <p>{album.release_label}</p>}</header>
     <aside className="song-album-aside" aria-label="发行资料">
-      <div className="song-album-art">{album.cover_urls.length ? <AlbumCoverGallery urls={album.cover_urls} title={album.album_name} /> : <CatalogArt title={album.album_name} />}</div>
+      <div className="song-album-art">{album.cover_urls.length ? <AlbumCoverGallery covers={album.cover_urls} title={album.album_name} /> : <CatalogArt title={album.album_name} />}</div>
       <div className="song-album-release"><dl className="song-album-facts"><div><dt>发行时间</dt><dd><time dateTime={album.release_date ?? undefined}>{catalogDate(album.release_date)}</time></dd></div>
         <div><dt>收录曲目</dt><dd>{album.tracks.length} 首</dd></div></dl>
       {album.album_url && <a className="song-album-source" href={album.album_url} target="_blank" rel="noopener noreferrer">专辑页面 ↗</a>}</div>

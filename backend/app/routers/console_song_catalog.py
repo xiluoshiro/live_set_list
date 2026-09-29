@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
 from fastapi.encoders import jsonable_encoder
+from psycopg2.extras import Json
 
 from app.auth import AuthSessionContext, assert_valid_csrf, get_current_auth_context, require_role
 from app.db import get_db_connection, get_write_db_connection
@@ -31,7 +32,8 @@ def insert_version(cur: Any, payload: VersionCreate | GroupCreate, group_id: int
     version_order = cur.fetchone()[0]
     cur.execute("""INSERT INTO song_list(song_name, group_id, version_label, version_order, cover_urls)
         VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-                (payload.song_name, group_id, payload.version_label, version_order, payload.cover_urls))
+                (payload.song_name, group_id, payload.version_label, version_order,
+                 Json(payload.model_dump(mode="json")["cover_urls"])))
     song_id = cur.fetchone()[0]
     save_ownership(cur, song_id, payload.ownership)
     if isinstance(payload, VersionCreate):
@@ -54,10 +56,10 @@ def update_version(payload: VersionUpdate, song_id: int, request: Request, conte
         before = read_song(cur, song_id)
         if before["version_label"] == "" and payload.version_label:
             raise HTTPException(409, "歌曲组必须保留空版本的默认项")
-        cover_urls = payload.cover_urls if "cover_urls" in payload.model_fields_set else before["cover_urls"]
+        cover_urls = payload.model_dump(mode="json")["cover_urls"] if "cover_urls" in payload.model_fields_set else before["cover_urls"]
         cur.execute("""UPDATE song_list SET song_name = %s, version_label = %s, cover_urls = %s,
             revision = revision + 1 WHERE id = %s""",
-                    (payload.song_name, payload.version_label, cover_urls, song_id))
+                    (payload.song_name, payload.version_label, Json(cover_urls), song_id))
         audit(cur, context, "song_update", "song", song_id,
               {"before": before, "after": {**payload.model_dump(mode="json"), "cover_urls": cover_urls}})
         return {"ok": True, "item": read_song(cur, song_id)}
@@ -141,7 +143,7 @@ def edit_song_catalog(payload: SongEditUpdate, request: Request, song_id: int = 
         ownership_changed = old_ownership != payload.ownership.model_dump()
         if ownership_changed and not payload.ownership_reason:
             raise HTTPException(422, "请填写归属更正原因")
-        cover_urls = payload.cover_urls if "cover_urls" in payload.model_fields_set else before["cover_urls"]
+        cover_urls = payload.model_dump(mode="json")["cover_urls"] if "cover_urls" in payload.model_fields_set else before["cover_urls"]
         old_order = sorted(existing, key=lambda item: (existing[item], item))
         order_changed = source.song_ids != old_order or target is not None
         group_changed = source.group_name != before["group_name"] or order_changed
@@ -160,7 +162,7 @@ def edit_song_catalog(payload: SongEditUpdate, request: Request, song_id: int = 
         if song_changed or group_changed:
             cur.execute("""UPDATE song_list SET song_name = %s, version_label = %s, cover_urls = %s,
                 group_id = %s, version_order = %s, revision = revision + 1 WHERE id = %s""",
-                        (payload.song_name, payload.version_label, cover_urls, destination, new_order[song_id], song_id))
+                        (payload.song_name, payload.version_label, Json(cover_urls), destination, new_order[song_id], song_id))
         if group_changed:
             for other_id in remaining:
                 if other_id != song_id:
@@ -174,7 +176,7 @@ def edit_song_catalog(payload: SongEditUpdate, request: Request, song_id: int = 
             audit(cur, context, "song_edit", "song", song_id, {
                 "before": {"song": before, "group": {"group_id": source.group_id,
                     "group_name": before["group_name"], "song_ids": old_order, "revision": source.expected_revision}},
-                "after": payload.model_dump(mode="json"),
+                "after": {**payload.model_dump(mode="json"), "cover_urls": cover_urls},
             })
         return {"ok": True, "item": read_song(cur, song_id), "group": read_song_group(cur, destination)}
 
@@ -235,11 +237,11 @@ def edit_album(album_id: int = Path(ge=1)):
 def save_album(payload: AlbumWrite, request: Request, context: AuthSessionContext, album_id: int | None = None):
     assert_valid_csrf(request, context)
     with catalog_errors(), get_write_db_connection() as conn, conn.cursor() as cur:
-        album_url, cover_urls = payload.album_url, payload.cover_urls
+        album_url, cover_urls = payload.album_url, payload.model_dump(mode="json")["cover_urls"]
         fields = (payload.album_name, payload.release_label, payload.release_date)
         if album_id is None:
             cur.execute("""INSERT INTO albums(album_name, release_label, release_date, album_url, cover_urls)
-                VALUES (%s, %s, %s, %s, %s) RETURNING id""", (*fields, album_url, cover_urls))
+                VALUES (%s, %s, %s, %s, %s) RETURNING id""", (*fields, album_url, Json(cover_urls)))
             album_id = cur.fetchone()[0]
             existing_tracks: set[int] = set()
         else:
@@ -253,7 +255,7 @@ def save_album(payload: AlbumWrite, request: Request, context: AuthSessionContex
                 cover_urls = previous_covers
             cur.execute("""UPDATE albums SET album_name = %s, release_label = %s, release_date = %s,
                 album_url = %s, cover_urls = %s, revision = revision + 1 WHERE id = %s""",
-                        (*fields, album_url, cover_urls, album_id))
+                        (*fields, album_url, Json(cover_urls), album_id))
             cur.execute("SELECT id FROM album_tracks WHERE album_id = %s", (album_id,))
             existing_tracks = {row[0] for row in cur.fetchall()}
         if payload.tracks is not None:

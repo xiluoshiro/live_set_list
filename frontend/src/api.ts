@@ -2414,9 +2414,10 @@ export type SongOwnershipDetail = SongOwnership & {
   bands: { band_id: number; band_name: string }[];
   groups: { band_id: number; band_name: string; members: { member_id: number; display_name: string }[] }[];
 };
+export type CoverEntry = { url: string; name: string };
 export type AlbumSummary = {
   album_id: number; album_name: string; release_label: string; release_date: string | null;
-  album_url: string | null; cover_urls: string[]; revision: number;
+  album_url: string | null; cover_urls: CoverEntry[]; revision: number;
 };
 export type AlbumTrackWrite = { album_track_id?: number | null; song_id: number; track_order: number; edition_label: string; section_name?: string };
 export type AlbumDetail = AlbumSummary & { tracks: (AlbumTrackWrite & {
@@ -2426,10 +2427,10 @@ export type SongVersion = {
   song_id: number; song_name: string; group_id: number; group_name: string;
   version_label: string; version_order: number; revision: number; legacy_cover: boolean;
   ownership: SongOwnershipDetail; performance_count: number;
-  albums: AlbumSummary[]; cover_urls: string[]; display_cover: SongDisplayCover | null;
+  albums: AlbumSummary[]; cover_urls: CoverEntry[]; display_cover: SongDisplayCover | null;
 };
-export type SongDisplayCover = { source: "song"; url: string }
-  | { source: "album"; url: string; album_id: number; album_name: string };
+export type SongDisplayCover = CoverEntry & ({ source: "song" }
+  | { source: "album"; album_id: number; album_name: string });
 export type SongGroup = { group_id: number; group_name: string; revision: number; versions: SongVersion[]; display_cover: SongDisplayCover | null };
 export type SongGroupSummary = {
   group_id: number; group_name: string; version_count: number; matched_song_ids: number[];
@@ -2447,7 +2448,7 @@ export type SongPerformance = {
   live_cover: "original" | "cover" | "unknown";
 };
 export type CatalogMember = { member_id: number; display_name: string; revision: number };
-export type SongVersionDraft = { song_name: string; version_label: string; cover_urls: string[] };
+export type SongVersionDraft = { song_name: string; version_label: string; cover_urls: CoverEntry[] };
 export type SongEditUpdate = SongVersionDraft & {
   expected_revision: number;
   group: { group_id: number; expected_revision: number; group_name: string; song_ids: number[] };

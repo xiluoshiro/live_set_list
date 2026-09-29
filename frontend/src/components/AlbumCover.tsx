@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { isExternalHttpsUrl } from "../albumLinks";
+import type { CoverEntry } from "../api";
 import "./album-cover.css";
 
 export function AlbumCover({ url, alt = "" }: { url: string; alt?: string }) {
@@ -14,19 +15,19 @@ function CoverImage({ url, alt }: { url: string; alt: string }) {
     : <img className="album-cover-image" src={url.trim()} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
 }
 
-export function AlbumCoverGallery({ urls, title, label = "专辑封面" }: { urls: string[]; title: string; label?: string }) {
-  return <CoverGallery key={JSON.stringify(urls)} urls={urls} title={title} label={label} />;
+export function AlbumCoverGallery({ covers, title, label = "专辑封面" }: { covers: CoverEntry[]; title: string; label?: string }) {
+  return <CoverGallery key={JSON.stringify(covers)} covers={covers} title={title} label={label} />;
 }
 
-function CoverGallery({ urls, title, label }: { urls: string[]; title: string; label: string }) {
+function CoverGallery({ covers, title, label }: { covers: CoverEntry[]; title: string; label: string }) {
   const [index, setIndex] = useState(0);
-  if (!urls.length) return null;
+  if (!covers.length) return null;
   return <div className="album-cover-gallery" role="group" aria-label={label}>
-    <AlbumCover url={urls[index]} alt={`${title} 封面 ${index + 1}`} />
-    {urls.length > 1 && <div className="album-cover-controls">
+    <AlbumCover url={covers[index].url} alt={`${title} ${covers[index].name || `封面 ${index + 1}`}`} />
+    {covers.length > 1 && <div className="album-cover-controls">
       <button className="console-ghost-btn" disabled={index === 0} onClick={() => setIndex(index - 1)}>上一张</button>
-      <span aria-live="polite">{index + 1} / {urls.length}</span>
-      <button className="console-ghost-btn" disabled={index === urls.length - 1} onClick={() => setIndex(index + 1)}>下一张</button>
+      <span aria-live="polite">{index + 1} / {covers.length}</span>
+      <button className="console-ghost-btn" disabled={index === covers.length - 1} onClick={() => setIndex(index + 1)}>下一张</button>
     </div>}
   </div>;
 }

@@ -26,7 +26,7 @@ def add_version(client: Any, headers: dict[str, str], group_id: int, name: str, 
 
 
 def create_album(client: Any, headers: dict[str, str], name: str, song_ids: list[int],
-                 date: str | None = None, covers: list[str] | None = None) -> dict[str, Any]:
+                 date: str | None = None, covers: list[str] | list[dict[str, str]] | None = None) -> dict[str, Any]:
     response = client.post("/api/console/albums", headers=headers, json={
         "album_name": name, "release_date": date, "cover_urls": covers or [],
         "tracks": [{"song_id": song_id} for song_id in song_ids],
@@ -62,7 +62,7 @@ def test_directory_release_and_cover_across_versions(integration_test_client):
         assert item["matched_song_ids"] == expected_ids
         assert item["first_release_date"] == "2018-12-12"
         assert [a["album_id"] for a in item["first_release_albums"]] == [earliest["album_id"], tied["album_id"]]
-        assert item["display_cover"] == {"source": "album", "url": "https://example.test/tied.png",
+        assert item["display_cover"] == {"source": "album", "url": "https://example.test/tied.png", "name": "",
                                           "album_id": cover["album_id"], "album_name": "后续同日"}
         assert item["display_cover"] == client.get(f"/api/song-groups/{gid}").json()["display_cover"]
         assert item["performance_count"] == 0 and item["latest_performance_date"] is None

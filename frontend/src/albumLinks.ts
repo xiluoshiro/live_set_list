@@ -1,3 +1,5 @@
+import type { CoverEntry } from "./api";
+
 export function isExternalHttpsUrl(value: string): boolean {
   if (/[\u0000-\u001f\u007f]/.test(value)) return false;
   const trimmed = value.trim();
@@ -10,17 +12,21 @@ export function isExternalHttpsUrl(value: string): boolean {
   } catch { return false; }
 }
 
-export function albumLinksError(albumUrl: string | null, covers: string[]): string {
+export const filledCovers = (covers: CoverEntry[]): CoverEntry[] => covers.filter(cover => cover.url.trim() || cover.name.trim());
+export const coverPayload = (covers: CoverEntry[]): CoverEntry[] => filledCovers(covers).map(cover => ({ url: cover.url.trim(), name: cover.name.trim() }));
+
+export function albumLinksError(albumUrl: string | null, covers: CoverEntry[]): string {
   if (albumUrl && (/[\u0000-\u001f\u007f]/.test(albumUrl) || (albumUrl.trim() && !isExternalHttpsUrl(albumUrl)))) return "专辑页面须为有效的 HTTPS URL";
   return coverUrlsError(covers);
 }
 
-export function coverUrlsError(covers: string[]): string {
+export function coverUrlsError(covers: CoverEntry[]): string {
   if (covers.length > 20) return "封面最多 20 张";
   const seen = new Set<string>();
-  for (const [index, url] of covers.entries()) {
+  for (const [index, { url, name }] of covers.entries()) {
     if (!isExternalHttpsUrl(url)) return `第 ${index + 1} 张封面须为有效的 HTTPS URL`;
     if (seen.has(url.trim())) return `第 ${index + 1} 张封面 URL 重复`;
+    if ([...name.trim()].length > 255) return `第 ${index + 1} 张封面名称最多 255 字`;
     seen.add(url.trim());
   }
   return "";

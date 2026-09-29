@@ -84,25 +84,33 @@ test("Instrumental 复用已有歌曲，专辑日期可未知，失败保留待�
   expect(screen.getByRole("checkbox", { name: "第 2 曲器乐" })).not.toBeChecked();
 });
 
-// 测试点：封面编辑仅改草稿；离开提示说明损失，Escape 保留草稿，明确放弃才加载另一张专辑。
+// 测试点：仅改封面名称可确认和恢复，排序携带名称，保存失败与取消离开保留草稿。
 test("cover edits are reviewed, retained on failure and restored", async () => {
   const user = userEvent.setup();
-  const covers = ["https://img.example.test/a", "https://img.example.test/b", "https://img.example.test/c"];
+  const covers = ["https://img.example.test/a", "https://img.example.test/b", "https://img.example.test/c"].map((url, index) => ({ url, name: `封面${index + 1}` }));
   const album = { album_id: 1, album_name: "封面盘", release_label: "", release_date: null, album_url: "https://example.test/album", cover_urls: covers, revision: 3, tracks: [] };
   const otherAlbum = { ...album, album_id: 2, album_name: "另一张专辑" };
   api.getCatalogConsole.mockImplementation(async (path: string) => path === "/albums/1" ? album : path === "/albums/2" ? otherAlbum : { items: path.startsWith("/albums") ? [album, otherAlbum] : [] });
   api.songCatalogWrite.mockRejectedValue(new Error("资料已被修改"));
   render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "#1 封面盘" }));
-  await screen.findByDisplayValue(covers[0]);
+  await screen.findByDisplayValue(covers[0].url);
+  fireEvent.change(screen.getByLabelText("第 1 张封面名称"), { target: { value: "通常盤" } });
+  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  expect(within(screen.getByRole("dialog")).getByRole("table")).toHaveTextContent("通常盤");
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "取消" }));
+  await user.click(screen.getByRole("button", { name: "恢复原值" }));
+  expect(screen.getByLabelText("第 1 张封面名称")).toHaveValue(covers[0].name);
+  expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
   const table = screen.getByRole("table", { name: "专辑封面" });
   await user.click(within(table).getAllByRole("button", { name: "设为默认" })[1]);
-  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(covers[2]);
+  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(covers[2].url);
+  expect(screen.getByLabelText("第 1 张封面名称")).toHaveValue(covers[2].name);
   await user.click(within(table).getAllByRole("button", { name: "下移" })[0]);
   await user.click(within(table).getAllByRole("button", { name: "上移" })[2]);
   await user.click(within(table).getAllByRole("button", { name: "移除" })[2]);
-  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(covers[0]);
-  expect(screen.getByLabelText("第 2 张封面 URL")).toHaveValue(covers[1]);
+  expect(screen.getByLabelText("第 1 张封面 URL")).toHaveValue(covers[0].url);
+  expect(screen.getByLabelText("第 2 张封面 URL")).toHaveValue(covers[1].url);
   await user.clear(screen.getByLabelText("专辑页面"));
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
   await user.selectOptions(screen.getByLabelText("已有专辑"), "2");
@@ -111,18 +119,19 @@ test("cover edits are reviewed, retained on failure and restored", async () => {
   expect(within(leaveDialog).getByRole("button", { name: "继续编辑" })).toHaveFocus();
   await user.keyboard("{Escape}");
   expect(screen.getByLabelText("已有专辑")).toHaveValue("1");
-  expect(screen.getByLabelText("第 2 张封面 URL")).toHaveValue(covers[1]);
+  expect(screen.getByLabelText("第 2 张封面 URL")).toHaveValue(covers[1].url);
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   const dialog = screen.getByRole("dialog", { name: "确认修改专辑" });
-  expect(within(dialog).getByRole("table")).toHaveTextContent(`1（默认）. ${covers[0]}`);
+  expect(within(dialog).getByRole("table")).toHaveTextContent(`1（默认）. ${covers[0].name} · ${covers[0].url}`);
   expect(screen.getByLabelText("第 1 张封面 URL")).toBeDisabled();
+  expect(screen.getByLabelText("第 1 张封面名称")).toBeDisabled();
   await user.click(within(dialog).getByRole("button", { name: "确认" }));
   await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent("资料已被修改"));
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums/1", "PUT", expect.objectContaining({ album_url: null, cover_urls: covers.slice(0, 2), expected_revision: 3 }), "csrf");
   await user.click(within(dialog).getByRole("button", { name: "取消" }));
   await user.click(screen.getByRole("button", { name: "恢复原值" }));
   expect(screen.getByLabelText("专辑页面")).toHaveValue(album.album_url);
-  expect(screen.getByLabelText("第 3 张封面 URL")).toHaveValue(covers[2]);
+  expect(screen.getByLabelText("第 3 张封面 URL")).toHaveValue(covers[2].url);
   expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
   // 确认放弃后必须加载刚选中的专辑，不能读取已被受控下拉框恢复的旧值。
   await user.clear(screen.getByLabelText("专辑名称"));
@@ -136,7 +145,7 @@ test("cover edits are reviewed, retained on failure and restored", async () => {
 test("cover validation and preview recovery", async () => {
   const user = userEvent.setup();
   const url = "https://img.example.test/cover?id=1";
-  api.songCatalogWrite.mockResolvedValue({ album_id: 1, album_name: "盘", release_label: "", release_date: null, album_url: null, cover_urls: [url], revision: 1, tracks: [] });
+  api.songCatalogWrite.mockResolvedValue({ album_id: 1, album_name: "盘", release_label: "", release_date: null, album_url: null, cover_urls: [{ url, name: "" }], revision: 1, tracks: [] });
   render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   fireEvent.change(screen.getByLabelText("专辑名称"), { target: { value: "盘" } });
   fireEvent.change(screen.getByLabelText("第 1 张封面 URL"), { target: { value: "http://img.example.test/cover" } });
@@ -156,7 +165,7 @@ test("cover validation and preview recovery", async () => {
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums", "POST", expect.objectContaining({ cover_urls: [url], album_url: null }), "csrf");
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums", "POST", expect.objectContaining({ cover_urls: [{ url, name: "" }], album_url: null }), "csrf");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
   expect(screen.getByLabelText("专辑名称")).toHaveValue("");
   expect(screen.getByRole("status")).toHaveTextContent("已新增专辑 #1 盘");
@@ -239,7 +248,7 @@ test("album song lookup loads all matching candidates on explicit query", async 
   expect(screen.getByRole("table", { name: "专辑收录曲目" })).toHaveTextContent("后页曲");
 });
 
-// 测试点：封面默认一空行，删除全部后显示空状态，可重新添加；未填写的行不作为封面提交。
+// 测试点：全空封面行不提交，但只填名称必须补充 URL；删除后仍可添加并提交无封面专辑。
 test("cover rows start ready to edit and can be removed and re-added", async () => {
   const user = userEvent.setup();
   api.songCatalogWrite.mockResolvedValue({ album_id: 1, album_name: "无封面盘", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 1, tracks: [] });
@@ -251,6 +260,11 @@ test("cover rows start ready to edit and can be removed and re-added", async () 
   await user.click(screen.getByRole("button", { name: "添加封面" }));
   expect(within(table).getByLabelText("第 1 张封面 URL")).toHaveValue("");
   await user.type(screen.getByLabelText("专辑名称"), "无封面盘");
+  await user.type(screen.getByLabelText("第 1 张封面名称"), "通常盤");
+  await user.click(screen.getByRole("button", { name: "提交插入" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("第 1 张封面须为有效的 HTTPS URL");
+  expect(api.songCatalogWrite).not.toHaveBeenCalled();
+  await user.clear(screen.getByLabelText("第 1 张封面名称"));
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认" }));
   await screen.findByText("已新增专辑 #1 无封面盘");

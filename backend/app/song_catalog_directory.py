@@ -76,14 +76,14 @@ def read_group_page(
         FROM group_albums a JOIN release_dates r ON r.group_id = a.group_id AND r.first_release_date = a.release_date
         GROUP BY a.group_id
     ), covers AS (
-        SELECT v.group_id, CASE WHEN cardinality(v.cover_urls) > 0
-            THEN jsonb_build_object('source', 'song', 'url', v.cover_urls[1])
+        SELECT v.group_id, CASE WHEN jsonb_array_length(v.cover_urls) > 0
+            THEN (v.cover_urls -> 0) || jsonb_build_object('source', 'song')
             ELSE a.display_cover END AS display_cover
         FROM selected_groups g JOIN song_list v ON v.group_id = g.group_id AND v.version_label = ''
         LEFT JOIN LATERAL (
-            SELECT jsonb_build_object('source', 'album', 'url', a.cover_urls[1],
+            SELECT (a.cover_urls -> 0) || jsonb_build_object('source', 'album',
                 'album_id', a.id, 'album_name', a.album_name) AS display_cover
-            FROM albums a WHERE cardinality(a.cover_urls) > 0 AND EXISTS(
+            FROM albums a WHERE jsonb_array_length(a.cover_urls) > 0 AND EXISTS(
                 SELECT 1 FROM album_tracks t WHERE t.album_id = a.id AND t.song_id = v.id)
             ORDER BY a.release_date ASC NULLS LAST, a.id LIMIT 1
         ) a ON true

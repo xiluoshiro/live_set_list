@@ -6,16 +6,16 @@ import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { albumTitle } from "../../albumTitle";
 import { ConsoleCandidatePager } from "./ConsoleChoiceSelect";
 import { CoverEditor, coverSummary } from "./CoverEditor";
-import { albumLinksError } from "../../albumLinks";
+import { albumLinksError, coverPayload, filledCovers } from "../../albumLinks";
 import { getTodayDateInputValue } from "./helpers";
 
-const emptyAlbum = (): AlbumDraft => ({ album_name: "", release_label: "", release_date: getTodayDateInputValue(), album_url: null, cover_urls: [""], tracks: [] });
-const albumPayload = (draft: AlbumDraft): AlbumDraft => ({ ...draft, cover_urls: draft.cover_urls.filter(url => url.trim()) });
+const emptyAlbum = (): AlbumDraft => ({ album_name: "", release_label: "", release_date: getTodayDateInputValue(), album_url: null, cover_urls: [{ url: "", name: "" }], tracks: [] });
+const albumPayload = (draft: AlbumDraft): AlbumDraft => ({ ...draft, cover_urls: coverPayload(draft.cover_urls) });
 const songLabel = (song: Pick<ConsoleSongItem, "song_id" | "song_name" | "version_label" | "band_name">) =>
   `#${song.song_id} ${song.song_name} / ${song.version_label || "默认版本"} / ${song.band_name ?? "待回填"}`;
 const fields = (album: AlbumDetail): AlbumDraft => ({
   album_name: album.album_name, release_label: album.release_label, release_date: album.release_date,
-  album_url: album.album_url, cover_urls: album.cover_urls.length ? [...album.cover_urls] : [""],
+  album_url: album.album_url, cover_urls: album.cover_urls.length ? [...album.cover_urls] : [{ url: "", name: "" }],
   tracks: album.tracks.map(t => ({ album_track_id: t.album_track_id, song_id: t.song_id, track_order: t.track_order,
     edition_label: t.edition_label, section_name: t.section_name ?? "" })),
 });
@@ -146,7 +146,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     setDraft({ ...draft, tracks: numberTracks(tracks) });
   };
   const review = () => {
-    const problem = albumLinksError(payload.album_url, payload.cover_urls);
+    const problem = albumLinksError(draft.album_url, filledCovers(draft.cover_urls));
     setError(problem);
     if (!problem) setConfirm(true);
   };
@@ -215,7 +215,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
         </tr></tbody>
       </table>
     </div>
-    <CoverEditor title="专辑封面" urls={draft.cover_urls} locked={locked}
+    <CoverEditor title="专辑封面" covers={draft.cover_urls} locked={locked}
       onChange={cover_urls => setDraft({ ...draft, cover_urls })} />
     <section aria-label="收录曲目">
       <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar" role="search" aria-label="查询收录歌曲">

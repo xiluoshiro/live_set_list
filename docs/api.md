@@ -438,12 +438,14 @@
 
 ## 专辑页面与封面（V41）
 
-专辑摘要、详情、Console 列表及歌曲/歌曲组内的专辑均返回 `album_url: string | null` 和 `cover_urls: string[]`。封面数组保持顺序，第一项为默认图；没有图片时为 `[]`。
+专辑摘要、详情、Console 列表及歌曲/歌曲组内的专辑均返回 `album_url: string | null` 和 `cover_urls: { url: string, name: string }[]`（V43）。封面数组保持顺序，第一项为默认图；没有图片时为 `[]`。
 
 - `POST /api/console/albums`：省略时页面链接为 `null`，封面为 `[]`。
 - `PUT /api/console/albums/{id}`：要求 `expected_revision`；省略新字段保留原值，显式 `album_url: null` / `cover_urls: []` 分别清空。`PUT /api/console/albums/{id}/tracks` 保留两字段。
 - 两类地址只接受无凭据和控制字符的绝对 HTTPS URL，每项最多 2048 字符；最多 20 张封面，不接受空元素、NULL 元素和修剪后重复的 URL。无效项返回带数组下标的 422。页面空字符串归一为 `null`。
 - 保存只校验 URL，不请求远端图片；管理写入继续要求 editor、session、CSRF 和 revision，访客切图不写库。
+- `name` 为选填名称，修剪首尾空白，最多 255 字，省略时为 `""`；允许不同图片同名。请求兼容旧 URL 字符串，自动转换为 `{ url, name: "" }`，响应始终返回对象。更新时省略整个 `cover_urls` 保留原数组及名称；传入数组时整体替换。
+- 名称与 URL 一起排序、设为默认和删除。仅改名称同样触发 revision、审计和缓存失效；错误定位到 `cover_urls[index].name` 或 `.url`。
 
 完整交互与迁移要求见[专辑页面链接与多封面](design/album-links-and-covers.md)。
 
@@ -501,9 +503,9 @@
 
 ## 歌曲版本多封面（V42）
 
-- `song_list.cover_urls` 保存有序 HTTPS 图片地址，默认 `[]`，第一项是默认封面。与专辑共用 URL、重复项、长度和最多 20 张的校验规则。
+- `song_list.cover_urls` 从 V43 起保存有序 `{ url, name }` 对象，默认 `[]`，第一项是默认封面。与专辑共用 URL、名称、重复项、长度和最多 20 张的校验规则。
 - `POST /api/console/song-groups`、`POST /api/console/songs` 接受 `cover_urls`，省略时为空数组。`PUT /api/console/songs/{song_id}` 省略时保留原值，显式 `[]` 清空，沿用 `expected_revision` 和审计。
-- 公共及 Console 歌曲详情、组内版本均返回 `cover_urls` 及派生的 `display_cover`。自有图片为 `{ source: "song", url }`；专辑回退为 `{ source: "album", url, album_id, album_name }`；无图为 `null`。
+- 公共及 Console 歌曲详情、组内版本均返回 `cover_urls` 及派生的 `display_cover`。自有图片为 `{ source: "song", url, name }`；专辑回退为 `{ source: "album", url, name, album_id, album_name }`；无图为 `null`。名称取自实际选中的封面。
 - 版本展示优先自身第一张图片，否则在当前版本的收录专辑中按 `release_date ASC NULLS LAST, album_id ASC` 取第一张有封面的专辑默认图。回退结果不写入歌曲数组。
 - 目录和组详情只使用空 `version_label` 的默认版本的最终封面，不受版本排序、乐队筛选影响，不借用其他版本图片。首次发行等其他摘要仍跨全组版本聚合。
 - 自有多图在歌曲详情可切换，切换版本或封面数组更新后回到首图。专辑回退图保留来源链接；坏图显示失败状态，不自动更改顺序或跨来源回退。

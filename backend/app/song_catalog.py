@@ -115,11 +115,11 @@ def read_song(cur: Any, song_id: int) -> dict[str, Any]:
         ORDER BY a.release_date NULLS LAST, a.id""", (song_id,))
     song["albums"] = rows(cur)
     song["display_cover"] = next(({
-        "source": "album", "url": album["cover_urls"][0],
+        "source": "album", **album["cover_urls"][0],
         "album_id": album["album_id"], "album_name": album["album_name"],
     } for album in song["albums"] if album["cover_urls"]), None)
     if song["cover_urls"]:
-        song["display_cover"] = {"source": "song", "url": song["cover_urls"][0]}
+        song["display_cover"] = {"source": "song", **song["cover_urls"][0]}
     return song
 
 
