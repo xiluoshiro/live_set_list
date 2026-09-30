@@ -532,8 +532,8 @@ def test_console_create_song_mock_business_errors():
     assert duplicate_response.json()["detail"] == "Song name already exists: Yes! BanG_Dream!"
 
 
-# 测试点：歌曲管理更新会写入三个可编辑属性，并记录 song_update 审计。
-def test_console_update_song_mock_success_persists_and_audits():
+# 测试点：歌曲更新响应及写入参数保留请求的 ID、名称、Band 和翻唱标记。
+def test_console_update_song_mock_returns_updated_fields():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (99,)])
 
@@ -653,8 +653,8 @@ def test_console_create_physical_venue_requires_address(address):
     connection.assert_not_called()
 
 
-# 测试点：无场馆 IANA 时区的 Live 使用默认 +09:00，写入与审计仍规范化钟点。
-def test_console_create_live_mock_success_normalizes_times_and_audits():
+# 测试点：Live 创建响应将场馆当地钟点转换为带偏移的规范时间。
+def test_console_create_live_mock_returns_normalized_times():
     _set_authenticated_role("admin")
     conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (77,)])
 
@@ -874,29 +874,13 @@ def test_console_create_live_mock_rejects_missing_default_band():
     assert response.json()["detail"] == "Band ids not found: 999"
 
 
-# 测试点：当天结束时刻 24:00 仍可保存，但不能通过旧字段覆盖默认 +09:00。
-def test_console_create_live_mock_accepts_24_00_only_with_default_offset():
-    _set_authenticated_role("editor")
-    conn, _ = _build_connection_mock(fetchone_side_effect=[(1,), (78,)])
-
-    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
-        client = TestClient(app)
-        response = client.post(
-            "/api/console/lives",
-            json=_valid_live_payload(opening_time="24:00", start_time="24:00", timezone=None),
-            headers={"X-CSRF-Token": CSRF_TOKEN},
-        )
-
-    assert response.status_code == 422
-    assert "hour" in response.text
-
-
 # 测试点：新增 Live 应拒绝非法时间、非法时区和无效的 Venue/名称版本配对。
 @pytest.mark.parametrize(
     ("payload", "expected_status", "expected_detail"),
     [
         (_valid_live_payload(opening_time="18:0x"), 422, "Invalid isoformat string: '18:0x'"),
         (_valid_live_payload(opening_time="24:01"), 422, "hour must be in 0..23"),
+        (_valid_live_payload(opening_time="24:00", start_time="24:00"), 422, "hour must be in 0..23"),
         (_valid_live_payload(timezone="+14:15"), 422, "非 ONLINE 演出使用场馆自身时区"),
         (_valid_live_payload(timezone="+9"), 422, None),
         (
@@ -1051,8 +1035,8 @@ def test_console_append_setlist_mock_existing_setlist_rejects_with_409():
     assert response.json()["detail"] == "Live id 1 already has setlist data"
 
 
-# 测试点：Setlist 管理更新会在同一事务中校验歌曲、替换完整行集合并写审计。
-def test_console_replace_setlist_mock_replaces_complete_collection():
+# 测试点：Setlist 替换响应返回行数，写入参数保留歌曲备注。
+def test_console_replace_setlist_mock_returns_counts_and_preserves_comment():
     _set_authenticated_role("editor")
     conn, cursor = _build_connection_mock(
         fetchone_side_effect=[(1,), ("scheduled", datetime(2020, 1, 1).date(), datetime(2026, 1, 1).date()), ("setlist-row-1",)],

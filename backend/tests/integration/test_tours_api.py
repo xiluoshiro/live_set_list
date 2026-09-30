@@ -215,6 +215,39 @@ def test_editor_can_create_console_tour_with_audit(
     assert audit[2]["live_ids"] == [41]
 
 
+# 测试点：Live 归属冲突返回所属巡演的 409，巡演、关系及审计记录均保持不变。
+def test_create_console_tour_returns_conflict_without_partial_writes(
+    integration_test_client, integration_admin_connection,
+):
+    csrf_token = _login_and_get_csrf_for(
+        integration_test_client, username="editor_tester", password="editor-test-pass",
+    )
+    tables = ("tour_attrs", "tour_bands", "tour_lives", "audit_logs")
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("UPDATE tour_attrs SET tour_title = 'Existing Tour' WHERE id = 1")
+        before = {}
+        for table in tables:
+            cursor.execute(f"SELECT * FROM {table} ORDER BY 1, 2")
+            before[table] = cursor.fetchall()
+
+    response = integration_test_client.post(
+        "/api/console/tours",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"tour_title": "Conflicting Tour", "band_ids": [1], "stops": [{"live_id": 1}]},
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == {
+        "code": "TOUR_LIVE_CONFLICT",
+        "message": "Live already belongs to another tour: 1",
+        "conflicts": [{"live_id": 1, "tour_id": 1, "tour_title": "Existing Tour"}],
+    }
+    with integration_admin_connection.cursor() as cursor:
+        for table in tables:
+            cursor.execute(f"SELECT * FROM {table} ORDER BY 1, 2")
+            assert cursor.fetchall() == before[table], table
+
+
 # 测试点：更新巡演使用完整目标集合替换关系，并保留当前巡演已有 Live 的合法归属。
 def test_editor_can_replace_console_tour_relations(
     integration_test_client,

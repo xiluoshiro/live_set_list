@@ -24,88 +24,129 @@ wait_for_backend() {
   return 1
 }
 
-if [ "$#" -ne 2 ]; then
-  die "usage: livesetlist-deploy YYYY-MM-DD-NNN SHA256"
-fi
+preserve_failed_release() {
+  local release_dir=$1
+  local current_link=$2
+  local failed_root
 
-VERSION=$1
-EXPECTED_SHA256=$2
-[[ "$VERSION" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{3}$ ]] || die "invalid version: $VERSION"
-[[ "$EXPECTED_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]] || die "invalid SHA-256"
+  [ ! -L "$release_dir" ] || die "release directory is a symlink: $release_dir"
+  [ -e "$release_dir" ] || return 0
+  [ -d "$release_dir" ] || die "release path is not a directory: $release_dir"
+  [ -d "$current_link" ] || die "cannot identify the active release"
+  [ "$(readlink -f "$current_link")" != "$(readlink -f "$release_dir")" ] || die "release is currently active: $release_dir"
 
-readonly RELEASE_NAME="livesetlist-$VERSION"
-readonly ARCHIVE="$ARCHIVE_ROOT/$RELEASE_NAME.tar.gz"
-readonly RELEASE_DIR="$RELEASE_ROOT/$RELEASE_NAME"
-
-[ -f "$ARCHIVE" ] || die "archive not found: $ARCHIVE"
-[ ! -e "$RELEASE_DIR" ] || die "release already exists: $RELEASE_DIR"
-
-actual_sha256="$(sha256sum "$ARCHIVE" | awk '{print $1}')"
-[ "$actual_sha256" = "$EXPECTED_SHA256" ] || die "archive checksum mismatch"
-
-while IFS= read -r entry; do
-  [[ "$entry" == "$RELEASE_NAME/"* ]] || die "unexpected archive entry: $entry"
-  [[ "$entry" != *".."* ]] || die "unsafe archive entry: $entry"
-done < <(tar -tzf "$ARCHIVE")
-
-if ! tar -tvzf "$ARCHIVE" | awk '$1 ~ /^[lh]/ { found = 1 } END { exit found }'; then
-  die "archive contains links"
-fi
-
-[ -x "$RELEASE_MANAGER" ] || die "release manager is not installed: $RELEASE_MANAGER"
-"$RELEASE_MANAGER" verify-deploy "$VERSION" "$EXPECTED_SHA256"
-
-systemctl start "$BACKUP_SERVICE"
-
-previous_release="$(readlink -f "$CURRENT_LINK" || true)"
-if [ -x "$CURRENT_LINK/backend/.venv/bin/python" ]; then
-  readonly PYTHON_BIN="$CURRENT_LINK/backend/.venv/bin/python"
-else
-  readonly PYTHON_BIN=python3
-fi
-
-staging_dir="$(mktemp -d "$RELEASE_ROOT/.deploy.XXXXXX")"
-cleanup_staging() {
-  rm -rf "$staging_dir"
+  failed_root="$(mktemp -d "$(dirname "$release_dir")/.failed-$(basename "$release_dir").XXXXXX")"
+  mv -- "$release_dir" "$failed_root/"
+  echo "preserved previous failed release: $failed_root/$(basename "$release_dir")"
 }
-trap cleanup_staging EXIT
-tar -xzf "$ARCHIVE" -C "$staging_dir"
-[ -d "$staging_dir/$RELEASE_NAME" ] || die "archive root directory missing"
-mv "$staging_dir/$RELEASE_NAME" "$RELEASE_DIR"
-cleanup_staging
-trap - EXIT
 
-"$PYTHON_BIN" -m venv "$RELEASE_DIR/backend/.venv"
-"$RELEASE_DIR/backend/.venv/bin/pip" install --disable-pip-version-check --no-cache-dir -r "$RELEASE_DIR/backend/requirements.txt"
-chown -R root:root "$RELEASE_DIR"
-chmod -R u=rwX,go=rX "$RELEASE_DIR"
+print_backend_diagnostics() {
+  local started_at=$1
+  echo "livesetlist-deploy: backend diagnostics before rollback" >&2
+  systemctl status "$BACKEND_SERVICE" --no-pager --full >&2 || true
+  journalctl -u "$BACKEND_SERVICE" --since "@$started_at" -n 120 --no-pager >&2 || true
+}
 
-install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backend.service" "/etc/systemd/system/$BACKEND_SERVICE"
-install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backup.service" "/etc/systemd/system/$BACKUP_SERVICE"
-install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backup.timer" "/etc/systemd/system/$BACKUP_TIMER"
-systemctl daemon-reload
-systemctl enable "$BACKUP_TIMER"
-
-switched=0
-rollback() {
-  if [ "$switched" -eq 1 ] && [ -n "$previous_release" ]; then
-    ln -s "$previous_release" "$CURRENT_LINK.next"
-    mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
-    systemctl restart "$BACKEND_SERVICE" || true
-    nginx -t && systemctl reload nginx || true
+main() {
+  if [ "$#" -ne 2 ]; then
+    die "usage: livesetlist-deploy YYYY-MM-DD-NNN SHA256"
   fi
+
+  VERSION=$1
+  EXPECTED_SHA256=$2
+  [[ "$VERSION" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{3}$ ]] || die "invalid version: $VERSION"
+  [[ "$EXPECTED_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]] || die "invalid SHA-256"
+
+  readonly RELEASE_NAME="livesetlist-$VERSION"
+  readonly ARCHIVE="$ARCHIVE_ROOT/$RELEASE_NAME.tar.gz"
+  readonly RELEASE_DIR="$RELEASE_ROOT/$RELEASE_NAME"
+
+  [ -f "$ARCHIVE" ] || die "archive not found: $ARCHIVE"
+
+  actual_sha256="$(sha256sum "$ARCHIVE" | awk '{print $1}')"
+  [ "$actual_sha256" = "$EXPECTED_SHA256" ] || die "archive checksum mismatch"
+
+  while IFS= read -r entry; do
+    [[ "$entry" == "$RELEASE_NAME/"* ]] || die "unexpected archive entry: $entry"
+    [[ "$entry" != *".."* ]] || die "unsafe archive entry: $entry"
+  done < <(tar -tzf "$ARCHIVE")
+
+  if ! tar -tvzf "$ARCHIVE" | awk '$1 ~ /^[lh]/ { found = 1 } END { exit found }'; then
+    die "archive contains links"
+  fi
+
+  [ -x "$RELEASE_MANAGER" ] || die "release manager is not installed: $RELEASE_MANAGER"
+  "$RELEASE_MANAGER" verify-deploy "$VERSION" "$EXPECTED_SHA256"
+
+  # Only an authorized, inactive candidate may be moved aside for a fresh retry.
+  preserve_failed_release "$RELEASE_DIR" "$CURRENT_LINK"
+  systemctl start "$BACKUP_SERVICE"
+
+  previous_release="$(readlink -f "$CURRENT_LINK" || true)"
+  if [ -x "$CURRENT_LINK/backend/.venv/bin/python" ]; then
+    readonly PYTHON_BIN="$CURRENT_LINK/backend/.venv/bin/python"
+  else
+    readonly PYTHON_BIN=python3
+  fi
+
+  staging_dir="$(mktemp -d "$RELEASE_ROOT/.deploy.XXXXXX")"
+  cleanup_staging() {
+    rm -rf "$staging_dir"
+  }
+  trap cleanup_staging EXIT
+  tar -xzf "$ARCHIVE" -C "$staging_dir"
+  [ -d "$staging_dir/$RELEASE_NAME" ] || die "archive root directory missing"
+  mv "$staging_dir/$RELEASE_NAME" "$RELEASE_DIR"
+  cleanup_staging
+  trap - EXIT
+
+  "$PYTHON_BIN" -m venv "$RELEASE_DIR/backend/.venv"
+  "$RELEASE_DIR/backend/.venv/bin/pip" install --disable-pip-version-check --no-cache-dir -r "$RELEASE_DIR/backend/requirements.txt"
+  chown -R root:root "$RELEASE_DIR"
+  chmod -R u=rwX,go=rX "$RELEASE_DIR"
+
+  install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backend.service" "/etc/systemd/system/$BACKEND_SERVICE"
+  install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backup.service" "/etc/systemd/system/$BACKUP_SERVICE"
+  install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backup.timer" "/etc/systemd/system/$BACKUP_TIMER"
+  systemctl daemon-reload
+  systemctl enable "$BACKUP_TIMER"
+
+  switched=0
+  deployment_started_at="$(date +%s)"
+  rollback() {
+    local failure_status=$?
+    trap - ERR
+    print_backend_diagnostics "$deployment_started_at"
+    if [ "$switched" -eq 1 ] && [ -n "$previous_release" ]; then
+      ln -s "$previous_release" "$CURRENT_LINK.next"
+      mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
+      systemctl restart "$BACKEND_SERVICE" || true
+      nginx -t && systemctl reload nginx || true
+      if wait_for_backend; then
+        echo "livesetlist-deploy: restored $previous_release; database schema was not rolled back" >&2
+      else
+        echo "livesetlist-deploy: previous release also failed its database health check" >&2
+        print_backend_diagnostics "$deployment_started_at"
+      fi
+    fi
+    exit "$failure_status"
+  }
+  trap rollback ERR
+
+  ln -s "$RELEASE_DIR" "$CURRENT_LINK.next"
+  mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
+  switched=1
+  systemctl restart "$BACKEND_SERVICE"
+  nginx -t
+  systemctl reload nginx
+  wait_for_backend
+  systemctl start "$BACKUP_SERVICE"
+  "$RELEASE_MANAGER" mark-deployed "$VERSION" "$EXPECTED_SHA256"
+  trap - ERR
+
+  echo "deployed $RELEASE_NAME"
 }
-trap rollback ERR
 
-ln -s "$RELEASE_DIR" "$CURRENT_LINK.next"
-mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
-switched=1
-systemctl restart "$BACKEND_SERVICE"
-nginx -t
-systemctl reload nginx
-wait_for_backend
-systemctl start "$BACKUP_SERVICE"
-"$RELEASE_MANAGER" mark-deployed "$VERSION" "$EXPECTED_SHA256"
-trap - ERR
-
-echo "deployed $RELEASE_NAME"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

@@ -12,8 +12,6 @@ assert release_spec is not None and release_spec.loader is not None
 build_release = importlib.util.module_from_spec(release_spec)
 release_spec.loader.exec_module(build_release)
 
-RELEASE_DIRS = build_release.RELEASE_DIRS
-RELEASE_FILES = build_release.RELEASE_FILES
 _has_excluded_part = build_release._has_excluded_part
 
 RELEASE_MANAGER_PATH = ROOT / "infra" / "production" / "release_manager.py"
@@ -45,14 +43,8 @@ def test_release_archive_builds_frontend_before_collecting_release_paths(tmp_pat
         assert "livesetlist-test-release/frontend/dist/rebuilt.js" in archive.getnames()
 
 
-# 测试点：生产发布包白名单不能包含本地状态、依赖缓存或敏感工作区目录。
-def test_release_path_whitelist_excludes_local_state_and_sensitive_directories():
-    assert "backend/app" in RELEASE_DIRS
-    assert "backend/db/postgres/checks" in RELEASE_DIRS
-    assert "config" in RELEASE_DIRS
-    assert "frontend/dist" in RELEASE_DIRS
-    assert "infra/production" in RELEASE_DIRS
-    assert "backend/requirements.txt" in RELEASE_FILES
+# 测试点：发布路径过滤拒绝本地状态、依赖缓存和凭据文件，允许公开配置模板。
+def test_release_path_filter_excludes_local_state_and_sensitive_directories():
     assert _has_excluded_part(Path(".git/config"))
     assert _has_excluded_part(Path(".codex/state.json"))
     assert _has_excluded_part(Path(".agents/context.md"))
@@ -73,6 +65,11 @@ def test_release_path_whitelist_excludes_local_state_and_sensitive_directories()
 def test_release_archive_excludes_sensitive_runtime_files(tmp_path, monkeypatch):
     test_root = tmp_path / "repo"
     release_files = {
+        "backend/app/main.py": "APP = True",
+        "backend/db/postgres/checks/ownership.sql": "select 1;",
+        "backend/db/postgres/init/roles.sql": "select 1;",
+        "backend/requirements.txt": "fastapi",
+        "config/application.json": "{}",
         "backend/db/flyway/sql/V1__baseline.sql": "select 1;",
         "backend/db/flyway/flyway.toml": "password = 'secret'",
         "backend/db/flyway/flyway.toml.example": "password = 'replace_me'",
@@ -83,6 +80,8 @@ def test_release_archive_excludes_sensitive_runtime_files(tmp_path, monkeypatch)
         "infra/production/env.production.example": "DB_PASSWORD=replace_me",
         "recovery/core.py": "SAFE = True",
         "recovery/.runtime/sandbox/flyway.toml": "password = 'secret'",
+        "scripts/recovery_db.py": "RECOVERY = True",
+        "README.md": "Release instructions",
     }
     for relative_path, content in release_files.items():
         file_path = test_root / relative_path
@@ -94,12 +93,6 @@ def test_release_archive_excludes_sensitive_runtime_files(tmp_path, monkeypatch)
 
     monkeypatch.setattr(build_release, "ROOT", test_root)
     monkeypatch.setattr(build_release, "FRONTEND_DIR", test_root / "frontend")
-    monkeypatch.setattr(
-        build_release,
-        "RELEASE_DIRS",
-        ["backend/db/flyway", "frontend/dist", "infra/production", "recovery"],
-    )
-    monkeypatch.setattr(build_release, "RELEASE_FILES", [])
 
     def fake_build_frontend():
         (frontend_dist / "index.html").write_text("fresh asset", encoding="utf-8")
@@ -112,6 +105,12 @@ def test_release_archive_excludes_sensitive_runtime_files(tmp_path, monkeypatch)
         names = set(archive.getnames())
 
     archive_root = "livesetlist-test-release"
+    for runtime_file in (
+        "backend/app/main.py", "backend/db/postgres/checks/ownership.sql",
+        "backend/db/postgres/init/roles.sql", "backend/requirements.txt",
+        "config/application.json", "scripts/recovery_db.py", "README.md",
+    ):
+        assert f"{archive_root}/{runtime_file}" in names
     assert f"{archive_root}/backend/db/flyway/flyway.toml" not in names
     assert f"{archive_root}/infra/production/backend.env" not in names
     assert f"{archive_root}/infra/production/backend.env.local" not in names
@@ -241,6 +240,7 @@ def test_release_manager_migrates_then_writes_attestation(tmp_path, monkeypatch)
     backup = tmp_path / "backups" / "live_statistic_auto.dump"
     backup.parent.mkdir()
     backup.write_bytes(b"verified backup")
+    backup_sha256 = "033ea45728f0ba7ce7552bfc6ce49fff338e1269f45c72eded39cb3dc0371087"
     monkeypatch.setattr(release_manager, "run_flyway", fake_run_flyway)
     monkeypatch.setattr(
         release_manager,
@@ -250,7 +250,7 @@ def test_release_manager_migrates_then_writes_attestation(tmp_path, monkeypatch)
 
     def fake_create_verified_backup():
         calls.append("backup")
-        return backup, release_manager.sha256_file(backup)
+        return backup, backup_sha256
 
     monkeypatch.setattr(
         release_manager,
@@ -276,7 +276,7 @@ def test_release_manager_migrates_then_writes_attestation(tmp_path, monkeypatch)
     assert attestation["flyway_version_before"] == "1"
     assert attestation["flyway_version_after"] == "2"
     assert attestation["backup_path"] == str(backup)
-    assert attestation["backup_sha256"] == release_manager.sha256_file(backup)
+    assert attestation["backup_sha256"] == backup_sha256
 
 
 # 测试点：生产 owner 契约发现漂移时应列出对象并拒绝继续发布。

@@ -46,7 +46,7 @@ test("online venues do not advertise a physical venue timezone fallback", async 
   expect(screen.queryByText(/场馆 IANA 时区：|使用默认 UTC/)).not.toBeInTheDocument();
 });
 
-// 测试点：所在地与地图直接加载且不再折叠，地区时区与缺失坐标如实展示，单个坐标不能提交。
+// 测试点：加载场馆时区与坐标状态，单个坐标不能提交，成对零坐标可提交。
 test("loads directly and validates paired coordinates", async () => {
   const user = await openPanel();
   expect(screen.getByLabelText("场馆精确时区")).toHaveValue("Asia/Tokyo");
@@ -57,8 +57,8 @@ test("loads directly and validates paired coordinates", async () => {
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeEnabled();
 });
 
-// 测试点：清空已保存的成对坐标可直接预览，不再要求填写坐标口径或核验说明。
-test("removes a saved point without verification fields", async () => {
+// 测试点：清空已保存的成对坐标后，预览请求使用两个 null 坐标。
+test("previews clearing a saved point", async () => {
   api.getConsoleVenueLocation.mockResolvedValue({
     ...location, latitude: 35, longitude: 139,
   });
@@ -96,10 +96,11 @@ test("loads region-only localities without a city name", async () => {
 test("keeps an empty location pristine until the editor changes a field", async () => {
   api.getConsoleVenueLocation.mockResolvedValue({
     ...location, locality: null, });
-  await openPanel();
+  const user = await openPanel();
 
   expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeDisabled();
-  expect(screen.queryByLabelText("核验来源（内部审计）")).not.toBeInTheDocument();
+  await user.type(screen.getByLabelText("公开门牌地址"), "New address");
+  expect(screen.getAllByRole("button", { name: "保存修改" })[0]).toBeEnabled();
 });
 
 // 测试点：未公开具体场馆只开放地区选择，不向编辑者暴露门牌、精确点位和地图关联操作。
@@ -113,14 +114,6 @@ test("limits undisclosed venues to the published locality", async () => {
   expect(screen.getByLabelText("场馆精确时区")).toBeEnabled();
   expect(screen.queryByRole("table", { name: "场馆地图链接" })).not.toBeInTheDocument();
   expect(screen.getByText(/登记已公布地区和自身时区/)).toBeInTheDocument();
-});
-
-// 测试点：场馆资料只选择既有地区；地区资料的登记和纠错在独立的地区管理入口处理。
-test("only selects existing localities for the Venue", async () => {
-  await openPanel();
-  expect(screen.queryByRole("button", { name: "登记已核验地区" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "修改已选地区" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "已公布地区" })).toBeInTheDocument();
 });
 
 // 测试点：保存前必须预览，使用预览快照和数据状态令牌提交；失败保留确认框及编辑内容。
@@ -146,8 +139,8 @@ test("previews and confirms a state-bound correction, retaining failed input", a
   expect(api.saveConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({ expected_state_token: "2".repeat(64), address: "New address" }), "csrf");
 });
 
-// 测试点：场馆 IANA 时区变更只更新场馆位置，确认框不再创建 Live 时区复核任务。
-test("updates venue timezone without a live review workflow", async () => {
+// 测试点：场馆时区变更先展示预览，确认后保存新时区与坐标。
+test("previews and saves a venue timezone change", async () => {
   const noLocalityLocation = {
     ...location, locality: null, } satisfies VenueLocation;
   api.getConsoleVenueLocation.mockResolvedValue(noLocalityLocation);
@@ -165,11 +158,13 @@ test("updates venue timezone without a live review workflow", async () => {
   await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
 
   const dialog = await screen.findByRole("dialog", { name: "确认所在地修改" });
-  expect(dialog).toHaveTextContent("新时区America/New_York");
-  expect(dialog).not.toHaveTextContent("人工复核");
+  expect(within(dialog).getByText("America/New_York")).toBeInTheDocument();
   expect(api.saveConsoleVenueLocation).not.toHaveBeenCalled();
   await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("所在地已保存"));
+  expect(api.saveConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({
+    timezone_id: "America/New_York", latitude: 40.7, longitude: -74,
+  }), "csrf");
 });
 
 // 测试点：地区菜单包含后续分页，搜索无结果仍保留已保存地区，更正后可恢复原值。

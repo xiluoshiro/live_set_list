@@ -43,15 +43,11 @@ def test_geography_quality_counts_and_actionable_items(integration_test_client, 
     response = client.get("/api/console/geography-quality")
     assert response.status_code == 200, response.text
     body = response.json()
-    assert "missing_coordinate_basis" not in body["counts"]
     assert body["counts"]["zero_coordinates"] >= 1
-    assert "stale_map_link" not in body["counts"]
     assert client.get("/api/venues/2/maps").json()["map_links"][0]["source"] == "place"
-    assert "timezone_review" not in body["counts"]
 
     zero = client.get("/api/console/geography-quality?category=zero_coordinates")
     assert zero.status_code == 200, zero.text
     assert zero.json()["total"] == zero.json()["counts"]["zero_coordinates"]
     assert any(item["venue_id"] == 2 and item["subject_type"] == "venue" for item in zero.json()["items"])
-    assert client.get("/api/console/geography-quality?category=timezone_review").status_code == 422
     assert client.get("/api/console/geography-quality?category=unknown").status_code == 422

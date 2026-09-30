@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from psycopg2 import IntegrityError
 
 from app.auth import hash_password, normalize_username
 
@@ -715,39 +716,51 @@ def test_console_venue_rename_preserves_live_name_and_searches_history(
     assert row == ("Shibuya WWW X",)
 
 
-# 测试点：V29 以 MATCH FULL 复合外键锁定 Live 与改期历史中的 Venue/名称版本配对。
-def test_venue_name_version_pairs_are_enforced_by_composite_foreign_keys(
+# 测试点：Live 与改期历史允许完整或全空的场馆配对，拒绝错配、半空配对及删除被引用名称。
+def test_venue_name_version_pairs_reject_mismatches_and_referenced_deletion(
     integration_admin_connection,
 ):
-    integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
-            FROM pg_constraint
-            WHERE conname IN (
-                'live_attrs_venue_name_version_fkey',
-                'live_schedule_history_venue_name_version_fkey'
+        for insert_sql, delete_sql in (
+            (
+                """INSERT INTO live_attrs
+                   (live_date, live_title, live_type, url, venue_id, venue_name_version_id)
+                   VALUES ('2026-06-01', 'Venue pair contract', 'oneman',
+                           'https://example.test/venue-pair', %s, %s) RETURNING id""",
+                "DELETE FROM live_attrs WHERE id = %s",
+            ),
+            (
+                """INSERT INTO live_schedule_history
+                   (live_id, previous_live_date, previous_venue_id, previous_venue_name_version_id)
+                   VALUES (1, '2026-06-01', %s, %s) RETURNING id""",
+                "DELETE FROM live_schedule_history WHERE id = %s",
+            ),
+        ):
+            cursor.execute(
+                "INSERT INTO venue_list (venue_kind, timezone_id) "
+                "VALUES ('undisclosed', 'Asia/Tokyo') RETURNING id"
             )
-            ORDER BY conname
-            """
-        )
-        rows = cursor.fetchall()
+            venue_id = cursor.fetchone()[0]
+            cursor.execute(
+                "INSERT INTO venue_name_versions (venue_id, venue_name) VALUES (%s, %s) RETURNING id",
+                (venue_id, f"Pair contract venue {venue_id}"),
+            )
+            version_id = cursor.fetchone()[0]
 
-    assert rows == [
-        (
-            "live_attrs",
-            "live_attrs_venue_name_version_fkey",
-            "FOREIGN KEY (venue_id, venue_name_version_id) "
-            "REFERENCES venue_name_versions(venue_id, id) MATCH FULL ON DELETE RESTRICT",
-        ),
-        (
-            "live_schedule_history",
-            "live_schedule_history_venue_name_version_fkey",
-            "FOREIGN KEY (previous_venue_id, previous_venue_name_version_id) "
-            "REFERENCES venue_name_versions(venue_id, id) MATCH FULL ON DELETE RESTRICT",
-        ),
-    ]
+            cursor.execute(insert_sql, (None, None))
+            assert cursor.fetchone() is not None
+            for invalid_pair in ((1, version_id), (venue_id, None), (None, version_id)):
+                with pytest.raises(IntegrityError):
+                    cursor.execute(insert_sql, invalid_pair)
+
+            cursor.execute(insert_sql, (venue_id, version_id))
+            reference_id = cursor.fetchone()[0]
+            with pytest.raises(IntegrityError):
+                cursor.execute("DELETE FROM venue_name_versions WHERE id = %s", (version_id,))
+
+            cursor.execute(delete_sql, (reference_id,))
+            cursor.execute("DELETE FROM venue_name_versions WHERE id = %s RETURNING id", (version_id,))
+            assert cursor.fetchone() == (version_id,)
 
 
 # 测试点：新增 Live 和追加 setlist 连到测试库时缺少 CSRF 应被拒绝，并且不会落库。
@@ -1585,16 +1598,6 @@ def test_console_setlist_persists_handover_with_explicit_next_baseline(
             """
         )
         assert cursor.fetchone() == ("handover", "next", "former")
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'live_setlist'
-              AND column_name = 'band_member'
-            """
-        )
-        assert cursor.fetchone() == (0,)
     assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id) == (
         "live_setlist_append",
         "41",

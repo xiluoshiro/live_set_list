@@ -8,8 +8,8 @@ from app.geography import coordinate_url, place_url, resolve_local_time, validat
 from app.schemas.geography import LocationWrite, MapLinkWrite
 
 
-# 测试点：夏令时不存在和重复钟点均拒绝保存，不保留重复次数入口。
-def test_local_clock_rejects_gap_and_requires_fold():
+# 测试点：夏令时跳时形成的不存在钟点和回拨形成的重复钟点均拒绝保存。
+def test_local_clock_rejects_nonexistent_and_ambiguous_times():
     with pytest.raises(ValueError, match="不存在"):
         resolve_local_time(date(2024, 3, 10), time(2, 30), "America/New_York")
     with pytest.raises(ValueError, match="重复"):
@@ -26,13 +26,12 @@ def test_normal_clock_and_timezone_validation():
             validate_timezone(invalid)
 
 
-# 测试点：坐标成对、范围和源坐标系均被校验，零坐标可保存且无需附加口径。
+# 测试点：坐标成对、范围和源坐标系均被校验，零坐标可保存。
 def test_location_schema_validates_coordinate_contract():
     point = LocationWrite(expected_state_token="a" * 64, latitude=0, longitude=0)
     assert point.latitude == 0 and point.longitude == 0
     for fields in ({"latitude": 10}, {"latitude": 91, "longitude": 0},
                    {"latitude": float("nan"), "longitude": 0}, {"coordinate_system": "GCJ02"},
-                   {"coordinate_basis": "center"}, {"verification_source": "official"},
                    {"address": 123}, {"timezone_id": 123}):
         with pytest.raises(ValidationError):
             LocationWrite.model_validate({"expected_state_token": "a" * 64, **fields})

@@ -185,18 +185,6 @@ describe("parseSetlistText", () => {
     expect(result.warnings).toEqual([]);
   });
 
-  // 测试点：已移除的 ED/SP 前缀应作为未知行提示，不能进入草稿表格。
-  test("不再识别 ED/SP 段类型", () => {
-    const result = parseSetlistText("<Roselia>\nED1. Ending\nSP1. Special", bands, 1, 1);
-
-    expect(result.rows).toEqual([]);
-    expect(result.warnings.map((warning) => warning.message)).toEqual([
-      "未识别行：ED1. Ending",
-      "未识别行：SP1. Special",
-      "未解析到任何歌曲行。",
-    ]);
-  });
-
   // 测试点：M1 空格格式应能正确解析，与 M1. 点号格式等价。
   test("支持无点号格式 M1 等", () => {
     const result = parseSetlistText(

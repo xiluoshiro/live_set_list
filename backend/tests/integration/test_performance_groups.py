@@ -46,62 +46,97 @@ def _get_latest_audit_row(conn, *, user_id: int):
     return row
 
 
-# 测试点：V14 创建的 performance_group_attrs 和 performance_group_lives 表应存在且具有正确的列结构。
-def test_v14_tables_exist_and_have_correct_structure(integration_db_config):
-    conn = psycopg2.connect(
-        host=integration_db_config["host"],
-        port=int(integration_db_config["port"]),
-        dbname=integration_db_config["dbname"],
-        user=integration_db_config["user"],
-        password=integration_db_config["password"],
-        connect_timeout=5,
+# 测试点：标题搜索不区分大小写，ID 搜索精确匹配，候选总数与分页均排除已归属活动组的场次。
+@pytest.mark.parametrize("search_by", ["title", "id"])
+def test_performance_group_candidates_search_count_and_page(
+    integration_test_client, integration_admin_connection, search_by,
+):
+    _login_and_get_csrf_for(
+        integration_test_client, username="editor_tester", password="editor-test-pass",
     )
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT column_name, data_type
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'performance_group_attrs'
-                ORDER BY ordinal_position
-            """)
-            pg_attrs_cols = {row[0]: row[1] for row in cursor.fetchall()}
-            assert "id" in pg_attrs_cols
-            assert "group_title" in pg_attrs_cols
+    with integration_admin_connection.cursor() as cursor:
+        live_ids = []
+        for day, title in (
+            ("2026-06-01", "Candidate Needle A"),
+            ("2026-06-02", "candidate needle B"),
+            ("2026-06-03", "Unrelated Live"),
+            ("2026-06-04", "Candidate Needle Occupied"),
+        ):
+            cursor.execute(
+                "INSERT INTO live_attrs (live_date, live_title, live_type, url) "
+                "VALUES (%s, %s, 'oneman', 'https://example.test/candidate') RETURNING id",
+                (day, title),
+            )
+            live_ids.append(cursor.fetchone()[0])
+        cursor.execute(
+            "INSERT INTO live_attrs (id, live_date, live_title, live_type, url) "
+            "VALUES (%s, '2026-06-05', 'Partial ID distractor', 'oneman', 'https://example.test/partial')",
+            (live_ids[0] * 1000,),
+        )
+        cursor.execute(
+            "INSERT INTO performance_group_attrs (group_title) VALUES ('Occupied Group') RETURNING id"
+        )
+        group_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT INTO performance_group_lives (group_id, live_id) VALUES (%s, %s)",
+            (group_id, live_ids[3]),
+        )
 
-            cursor.execute("""
-                SELECT column_name, data_type
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'performance_group_lives'
-                ORDER BY ordinal_position
-            """)
-            pg_lives_cols = {row[0]: row[1] for row in cursor.fetchall()}
-            assert "group_id" in pg_lives_cols
-            assert "live_id" in pg_lives_cols
-    finally:
-        conn.close()
+    query = "candidate needle" if search_by == "title" else str(live_ids[0])
+    expected_ids = [live_ids[1], live_ids[0]] if search_by == "title" else [live_ids[0]]
+    for page, expected_id in enumerate(expected_ids, start=1):
+        response = integration_test_client.get(
+            "/api/console/performance-groups/live-candidates",
+            params={"q": query, "page": page, "page_size": 1},
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["total"] == len(expected_ids)
+        assert payload["total_pages"] == len(expected_ids)
+        assert payload["page"] == page
+        assert [item["live_id"] for item in payload["items"]] == [expected_id]
 
 
-# 测试点：只读角色仅有 SELECT 权限于 performance_group 表。
-def test_readonly_role_has_select_only_on_performance_group_tables(integration_db_config):
-    conn = psycopg2.connect(
-        host=integration_db_config["host"],
-        port=int(integration_db_config["port"]),
-        dbname=integration_db_config["dbname"],
-        user=integration_db_config["user"],
-        password=integration_db_config["password"],
-        connect_timeout=5,
+# 测试点：控制台活动组详情将乱序关联的场次按日期、开演时间和 ID 返回。
+def test_get_console_performance_group_returns_sorted_lives(
+    integration_test_client, integration_admin_connection,
+):
+    _login_and_get_csrf_for(
+        integration_test_client, username="editor_tester", password="editor-test-pass",
     )
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) FROM performance_group_attrs")
-            assert cursor.fetchone() is not None
-            cursor.execute("SELECT COUNT(*) FROM performance_group_lives")
-            assert cursor.fetchone() is not None
-        conn.commit()
-    finally:
-        conn.close()
+    with integration_admin_connection.cursor() as cursor:
+        live_ids = []
+        for day, clock, title in (
+            ("2026-06-02", "15:00+09", "Next Day"),
+            ("2026-06-01", "19:00+09", "Late Show"),
+            ("2026-06-01", "15:00+09", "Early Show A"),
+            ("2026-06-01", "15:00+09", "Early Show B"),
+        ):
+            cursor.execute(
+                """INSERT INTO live_attrs
+                   (live_date, live_title, start_time, venue_id, venue_name_version_id, live_type, url)
+                   VALUES (%s, %s, %s, 1, 1, 'oneman', 'https://example.test/sorted') RETURNING id""",
+                (day, title, clock),
+            )
+            live_ids.append(cursor.fetchone()[0])
+        cursor.execute(
+            "INSERT INTO performance_group_attrs (group_title) VALUES ('Sorted Group') RETURNING id"
+        )
+        group_id = cursor.fetchone()[0]
+        for live_id in (live_ids[3], live_ids[0], live_ids[1], live_ids[2]):
+            cursor.execute(
+                "INSERT INTO performance_group_lives (group_id, live_id) VALUES (%s, %s)",
+                (group_id, live_id),
+            )
+
+    response = integration_test_client.get(f"/api/console/performance-groups/{group_id}")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["group_id"] == group_id
+    assert payload["group_title"] == "Sorted Group"
+    assert [live["live_id"] for live in payload["lives"]] == [
+        live_ids[2], live_ids[3], live_ids[1], live_ids[0],
+    ]
 
 
 # 测试点：super_ro 角色应具有 SELECT、INSERT、UPDATE 权限，并对 performance_group_lives 有 DELETE 权限。

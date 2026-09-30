@@ -82,34 +82,8 @@ def test_get_performance_group_live_candidates_maps_paginated_results():
     assert payload["items"][0]["start_time"] == "13:00:00+09:00"
 
 
-# 测试点：标题和数字关键词均绑定到候选总数/分页 SQL 的标题匹配与精确 ID 分支。
-@pytest.mark.parametrize(
-    ("query", "live_id", "title"),
-    [pytest.param("Special", 201, "Special Live", id="title"), pytest.param("42", 42, "Some Live", id="id")],
-)
-def test_performance_group_candidates_bind_search_to_count_and_page(query, live_id, title):
-    _authenticate_editor()
-    conn, cursor = _connection_mock()
-    cursor.fetchone.return_value = (1,)
-    cursor.fetchall.return_value = [(live_id, date(2026, 6, 1), title, "17:00:00+09:00", "Venue", [1])]
-    with patch("app.routers.console_performance_groups.get_db_connection", return_value=conn):
-        response = TestClient(app).get(
-            "/api/console/performance-groups/live-candidates", params={"q": query, "page": 1, "page_size": 20},
-        )
-    assert response.status_code == 200
-    payload = response.json()
-    assert len(payload["items"]) == 1
-    assert payload["items"][0]["live_id"] == live_id
-    assert payload["items"][0]["live_title"] == title
-    assert cursor.execute.call_count == 2
-    for call_args in cursor.execute.call_args_list:
-        assert "(l.live_title ILIKE %s OR CAST(l.id AS text) = %s)" in str(call_args.args[0])
-    assert cursor.execute.call_args_list[0].args[1] == (f"%{query}%", query)
-    assert cursor.execute.call_args_list[1].args[1] == (f"%{query}%", query, 20, 0)
-
-
-# 测试点：控制台活动组列表返回全部可编辑组，不依赖公共演出分页。
-def test_get_console_performance_groups_returns_all_editable_groups():
+# 测试点：控制台活动组列表完整映射数据库返回的组 ID 和名称。
+def test_get_console_performance_groups_maps_all_returned_groups():
     _authenticate_editor()
     conn, cursor = _connection_mock()
     cursor.fetchall.return_value = [(2, "Group B"), (1, "Group A")]
@@ -122,29 +96,6 @@ def test_get_console_performance_groups_returns_all_editable_groups():
         {"group_id": 2, "group_title": "Group B"},
         {"group_id": 1, "group_title": "Group A"},
     ]
-    assert "ORDER BY group_title ASC, id ASC" in str(cursor.execute.call_args.args[0])
-
-
-# 测试点：console GET 应返回活动组编辑数据，lives 按日期、开演时间、ID 排序。
-def test_get_console_performance_group_returns_200_with_sorted_lives():
-    _authenticate_editor()
-    conn, cursor = _connection_mock()
-    cursor.fetchone.return_value = ("Test Group",)
-    cursor.fetchall.return_value = [
-        (101, date(2026, 6, 1), "Early Show", "15:00:00+09", "Venue A", [1]),
-        (102, date(2026, 6, 1), "Late Show", "19:00:00+09", "Venue A", [1]),
-        (103, date(2026, 6, 2), "Next Day", "15:00:00+09", "Venue B", [2]),
-    ]
-
-    with patch("app.routers.console_performance_groups.get_db_connection", return_value=conn):
-        response = TestClient(app).get("/api/console/performance-groups/1")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["group_id"] == 1
-    assert payload["group_title"] == "Test Group"
-    live_ids = [live["live_id"] for live in payload["lives"]]
-    assert live_ids == [101, 102, 103]
 
 
 # 测试点：console GET 对不存在的活动组应返回 404。

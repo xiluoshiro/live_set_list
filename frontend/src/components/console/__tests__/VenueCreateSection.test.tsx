@@ -55,7 +55,6 @@ test("creates complete location after preview and retains selection across searc
   }));
   expect(screen.getByLabelText("名称")).toHaveValue("");
   expect(onMessage).toHaveBeenCalledWith("已新增场馆 #88 New Hall，名称和所在地资料已保存。");
-  expect(screen.queryByRole("button", { name: "继续完善所在地与地图链接" })).not.toBeInTheDocument();
 });
 
 // 测试点：切换未公开会丢弃不允许的位置字段且新增类型不提供线上，不能把隐藏草稿提交到服务器。
@@ -91,27 +90,18 @@ test("preserves draft on failure and distinguishes refresh failure", async () =>
   expect(screen.getByLabelText("名称")).toHaveValue("New Hall");
 });
 
-// 测试点：新增场馆以六列表头和单行值录入，不查询历史场馆，地图辅助默认收起。
-test("uses a single input row without venue management controls", async () => {
+// 测试点：新增场馆可直接填写资料，不请求历史场馆列表，地图辅助可展开及收起。
+test("provides editable venue fields and toggles the map helper", async () => {
   const user = await setup();
-  const table = within(screen.getByRole("table", { name: "新增场馆资料" }));
-  expect(table.getAllByRole("columnheader").map(cell => cell.textContent)).toEqual([
-    "名称", "类型", "公开门牌地址", "纬度（WGS84）", "经度（WGS84）", "场馆精确时区",
-  ]);
-  expect(table.getAllByRole("row")).toHaveLength(2);
-  const row = within(table.getAllByRole("row")[1]);
-  expect(row.getAllByRole("cell")).toHaveLength(6);
   for (const label of ["名称", "类型", "公开门牌地址", "纬度（WGS84）", "经度（WGS84）", "场馆精确时区"]) {
-    expect(row.getByLabelText(label)).toBeInTheDocument();
+    expect(screen.getByLabelText(label)).toBeEnabled();
   }
-  expect(table.queryByLabelText("已公布地区")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "查询已有场馆" })).not.toBeInTheDocument();
   expect(api.getConsoleVenuePage).not.toHaveBeenCalled();
   expect(screen.queryByText("地图选点组件")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "地图选点" }));
   expect(screen.getByText("地图选点组件")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "收起地图" })).toBeInTheDocument();
-  expect(table.queryByText("地图选点组件")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "收起地图" }));
+  expect(screen.queryByText("地图选点组件")).not.toBeInTheDocument();
 });
 
 // 测试点：场馆时区独立于地区，允许填写不同 IANA。
@@ -162,10 +152,9 @@ test("finds default Tokyo on a later page without external pagination", async ()
   expect(screen.getByLabelText("已公布地区")).toHaveAttribute("aria-expanded", "false");
 });
 
-// 测试点：加载失败保留错误文案，不增加专用重新加载按钮。
-test("shows loading failure without a retry button", async () => {
+// 测试点：地区资料加载失败时展示可访问的错误提示。
+test("announces a locality loading failure", async () => {
   api.getConsoleLocalities.mockRejectedValue(new Error("登录状态已失效，请重新登录"));
   render(<VenueCreateSection onMessage={vi.fn()} onVenuesChanged={vi.fn()} />);
   expect(await screen.findByRole("alert")).toHaveTextContent("登录状态已失效，请重新登录");
-  expect(screen.queryByRole("button", { name: "重新加载地区与时区" })).not.toBeInTheDocument();
 });

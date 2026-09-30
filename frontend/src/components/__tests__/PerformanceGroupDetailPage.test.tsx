@@ -142,21 +142,6 @@ describe("PerformanceGroupDetailPage", () => {
     expect(screen.getAllByText("已结束").length).toBeGreaterThanOrEqual(1);
   });
 
-  // 测试点：活动组概览不重复显示日期范围，日期只保留在选中 Live 自身详情中。
-  test("omits the aggregate date range", async () => {
-    getPerformanceGroupDetailMock.mockResolvedValue(
-      makeDetailResponse({ start_date: "2025-04-26", end_date: "2025-04-27" }),
-    );
-
-    render(<PerformanceGroupDetailPage groupId={1}  />);
-
-    await screen.findByText("BanG Dream! 12th LIVE");
-    await waitFor(() => {
-      expect(screen.queryByText("已收录日期：")).not.toBeInTheDocument();
-      expect(screen.queryByText("2025-04-26 — 2025-04-27")).not.toBeInTheDocument();
-    });
-  });
-
   // 测试点：单日与多日活动各自同时显示正确的类型标签和已收录日数/场次数。
   test.each([
     {

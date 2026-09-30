@@ -1,5 +1,6 @@
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -60,31 +61,39 @@ def test_setup_logging_app_log_level_valid_and_invalid():
         root_logger.setLevel.assert_called_once_with(expected_level)
 
 
-def test_setup_logging_file_handler_rotation_config():
-    # 测试点：RotatingFileHandler 的参数应为 1MB、3份、UTF-8。
-    root_logger = MagicMock()
-    root_logger.handlers = []
-    console_handler = MagicMock()
-    file_handler = MagicMock()
-    fake_log_file = MagicMock()
+# 测试点：文件日志保留中文内容，达到容量上限时自动归档并继续写入当前文件。
+def test_setup_logging_writes_unicode_and_rotates_files(tmp_path, monkeypatch):
+    root_logger = logging.Logger("rotation-test")
+    log_file = tmp_path / "logs" / "app.log"
+    monkeypatch.setenv("APP_LOG_LEVEL", "INFO")
+    monkeypatch.setattr(logging_config, "_LOGGING_CONFIGURED", False)
+    monkeypatch.setattr(logging_config, "log_file_path", lambda: log_file)
+    monkeypatch.setattr(logging_config.logging, "getLogger", lambda: root_logger)
 
-    with patch("app.logging_config._LOGGING_CONFIGURED", False), patch(
-        "app.logging_config.log_file_path", return_value=fake_log_file
-    ), patch(
-        "app.logging_config.logging.getLogger", return_value=root_logger
-    ), patch(
-        "app.logging_config.logging.StreamHandler", return_value=console_handler
-    ), patch(
-        "app.logging_config.RotatingFileHandler", return_value=file_handler
-    ) as file_handler_ctor:
+    try:
         logging_config.setup_logging()
+        file_handler = next(
+            handler for handler in root_logger.handlers
+            if isinstance(handler, RotatingFileHandler)
+        )
+        assert file_handler.maxBytes > 0
+        assert file_handler.backupCount > 0
+        root_logger.info("归档前的场馆日志")
+        assert "归档前的场馆日志" in log_file.read_text(encoding="utf-8")
 
-    file_handler_ctor.assert_called_once_with(
-        fake_log_file,
-        maxBytes=1_048_576,
-        backupCount=3,
-        encoding="utf-8",
-    )
+        # 控制触发边界，避免测试生成生产容量的日志文件。
+        file_handler.maxBytes = log_file.stat().st_size + 1
+        root_logger.info("归档后的新日志")
+
+        current = log_file.read_text(encoding="utf-8")
+        assert "归档后的新日志" in current
+        assert "归档前的场馆日志" not in current
+        archives = list(log_file.parent.glob("app.log.*"))
+        assert len(archives) == 1
+        assert "归档前的场馆日志" in archives[0].read_text(encoding="utf-8")
+    finally:
+        for handler in root_logger.handlers:
+            handler.close()
 
 
 def test_log_file_path_uses_app_log_file_env(tmp_path, monkeypatch):

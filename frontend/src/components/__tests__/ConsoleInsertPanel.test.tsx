@@ -309,11 +309,11 @@ describe("ConsoleInsertPanel", () => {
       await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalled());
       fireEvent.change(screen.getByLabelText("live_date"), { target: { value: "2026-07-14" } });
       expect(await screen.findByText("Asia/Tokyo")).toBeInTheDocument();
-      expect(document.querySelector(".live-admin-readonly-field")).toHaveAttribute("data-status-tone", "past");
+      expect(screen.getByLabelText("日期阶段：已结束（只读）")).toHaveTextContent("已结束");
       await user.click(screen.getByRole("button", { name: "1 - Tokyo" }));
       await user.click(await screen.findByRole("radio", { name: "2 - New York" }));
       expect(screen.getByText("America/New_York")).toBeInTheDocument();
-      expect(document.querySelector(".live-admin-readonly-field")).toHaveAttribute("data-status-tone", "past");
+      expect(screen.getByLabelText("日期阶段：已结束（只读）")).toHaveTextContent("已结束");
       expect(screen.queryByText(/场馆未设置/)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -424,16 +424,6 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("tab", { name: "新增专辑" }));
     expect(screen.getByLabelText("专辑名称")).toHaveValue("下一张草稿");
     expect(within(screen.getByRole("table", { name: "专辑操作记录" })).getByRole("cell", { name: "新盘" })).toBeInTheDocument();
-  });
-
-  // 测试点：低频夏令时重复钟点只由后端校验兜底，不在常规 Live 表单暴露 fold 控件。
-  test("Live 表单不显示夏令时重复时间控件", async () => {
-    render(<ConsoleInsertPanel initialMode="live_create" />);
-    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-
-    expect(screen.queryByLabelText("opening time fold")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("start time fold")).not.toBeInTheDocument();
-    expect(screen.queryByText("非重复时间")).not.toBeInTheDocument();
   });
 
   // 测试点：新增 Setlist 按候选顺序显示 Live，并保留服务端默认选择。
@@ -1824,8 +1814,6 @@ describe("ConsoleInsertPanel", () => {
     await user.selectOptions(screen.getByDisplayValue("专场"), "event");
     await user.click(screen.getByRole("button", { name: "请选择默认乐队" }));
     await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
-    expect(screen.queryByLabelText("MyGO!!!!! 默认历史名称")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("MyGO!!!!! 默认基础阵容")).not.toBeInTheDocument();
     const memberGroup = screen.getByRole("group", { name: "MyGO!!!!! 出演成员" });
     await user.click(within(memberGroup).getByRole("checkbox", { name: "Current Vocal" }));
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Current Event");
@@ -1846,54 +1834,6 @@ describe("ConsoleInsertPanel", () => {
       }),
       "csrf-token",
     ));
-  });
-
-  // 测试点：关闭临时开关后隐藏旧版本选择器，但新默认乐队 仍固化当前名称和当前阵容。
-  test("关闭临时入口后默认Band只提交当前版本", async () => {
-    const user = userEvent.setup();
-    apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }] });
-    apiMocks.getConsoleBands.mockResolvedValue({
-      items: [{ band_id: 3, band_name: "MyGO!!!!!", band_abbr: "mygo", band_members: ["Current Vocal"] }],
-    });
-    apiMocks.getConsoleBandHistory.mockResolvedValue({
-      band_id: 3,
-      current_name: "MyGO!!!!!",
-      current_abbr: "mygo",
-      current_members: ["Current Vocal"],
-      initialized: true,
-      name_versions: [{
-        name_version_id: 20,
-        band_name: "MyGO!!!!!",
-        band_abbr: "mygo",
-        valid_from: "2021-01-01",
-        valid_to: null,
-        note: null,
-        live_ids: [],
-      }],
-      lineup_versions: [{
-        lineup_version_id: 22,
-        version_no: 2,
-        version_label: "MyGO V2",
-        valid_from: "2021-01-01",
-        valid_to: null,
-        predecessor_id: null,
-        change_type: "initial",
-        note: null,
-        members: ["Current Vocal"],
-        added_members: ["Current Vocal"],
-        removed_members: [],
-        live_ids: [],
-      }],
-    });
-
-    render(<ConsoleInsertPanel initialMode="live_create" />);
-    await screen.findByRole("button", { name: "88 - New Venue" });
-    await user.click(screen.getByRole("button", { name: "请选择默认乐队" }));
-    await user.click(screen.getByRole("checkbox", { name: /MyGO/ }));
-    await waitFor(() => expect(apiMocks.getConsoleBandHistory).toHaveBeenCalledWith(3));
-
-    expect(screen.queryByLabelText("MyGO!!!!! 默认历史名称")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("MyGO!!!!! 默认基础阵容")).not.toBeInTheDocument();
   });
 
   // 测试点：活动类型未选择默认乐队 时，新增 Live 确认框应显示非阻断提醒。

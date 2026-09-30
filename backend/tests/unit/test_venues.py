@@ -1,8 +1,8 @@
 from unittest.mock import MagicMock, call, patch
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi.testclient import TestClient
 
-from app.geography import coordinate_url, place_url
 from app.main import app
 from app.routers.venues import (
     VENUE_HEADER_QUERY,
@@ -52,12 +52,24 @@ def test_get_venue_detail_returns_venue_and_map_sources():
     assert payload["venue_name"] == "日本武道館"
     assert payload["address"] == "北の丸公園2-3"
     assert payload["timezone_id"] == "Asia/Tokyo"
-    assert "timezone_source" not in payload
-    assert payload["map_links"] == [
-        {"provider": "google", "url": place_url("google", "ChIJ-current", "日本武道館"), "source": "place"},
-        {"provider": "apple", "url": coordinate_url("apple", 35.693317, 139.749885, "日本武道館"), "source": "coordinates"},
-        {"provider": "amap", "url": coordinate_url("amap", 35.693317, 139.749885, "日本武道館"), "source": "coordinates"},
+    assert [(link["provider"], link["source"]) for link in payload["map_links"]] == [
+        ("google", "place"), ("apple", "coordinates"), ("amap", "coordinates"),
     ]
+    urls = {link["provider"]: urlsplit(link["url"]) for link in payload["map_links"]}
+    assert all(url.scheme == "https" for url in urls.values())
+    assert urls["google"].netloc == "www.google.com"
+    assert urls["google"].path == "/maps/search/"
+    assert parse_qs(urls["google"].query) == {
+        "api": ["1"], "query": ["日本武道館"], "query_place_id": ["ChIJ-current"],
+    }
+    assert urls["apple"].netloc == "maps.apple.com"
+    assert parse_qs(urls["apple"].query) == {"ll": ["35.693317,139.749885"], "q": ["日本武道館"]}
+    assert urls["amap"].netloc == "uri.amap.com"
+    assert urls["amap"].path == "/marker"
+    assert parse_qs(urls["amap"].query) == {
+        "position": ["139.749885,35.693317"], "name": ["日本武道館"],
+        "coordinate": ["wgs84"], "src": ["LiveSetList"],
+    }
     assert payload["lives"][0]["live_id"] == 51
     assert payload["pagination"] == {"page": 1, "page_size": 20, "total": 1, "total_pages": 1}
     assert cursor.execute.call_args_list == [

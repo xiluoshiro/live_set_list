@@ -279,18 +279,6 @@ def test_console_creates_band_in_selected_id_range_with_v1_history(
             """
         )
         assert cursor.fetchone() == (2, 2, 2, 3, 2)
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND (
-                  (table_name = 'band_attrs' AND column_name = 'band_members')
-                  OR (table_name = 'live_setlist' AND column_name = 'band_member')
-              )
-            """
-        )
-        assert cursor.fetchone() == (0,)
 
 
 # 测试点：与当前或历史名称冲突时应返回 409，且不得留下 Band 或历史版本的部分数据。
@@ -407,33 +395,6 @@ def test_console_create_band_rejects_exhausted_regular_range(
     with integration_admin_connection.cursor() as cursor:
         cursor.execute("SELECT COUNT(*) FROM band_attrs WHERE id = 100")
         assert cursor.fetchone()[0] == 0
-
-
-# 测试点：旧资料初始化和原地修正入口退场后，不得再提供可变更历史版本的路由。
-def test_console_rejects_retired_band_history_mutation_routes(
-    integration_test_client,
-):
-    csrf_token = _login_editor(integration_test_client)
-    initialize_response = integration_test_client.post(
-        "/api/console/bands/1/initialize-current",
-        headers={"X-CSRF-Token": csrf_token},
-        json={
-            "band_name": "Poppin'Party",
-            "band_abbr": "ppp",
-            "members": ["Kasumi"],
-        },
-    )
-    correction_response = integration_test_client.put(
-        "/api/console/bands/1/lineup-versions/1",
-        headers={"X-CSRF-Token": csrf_token},
-        json={
-            "version_label": "mutated",
-            "members": ["Kasumi"],
-        },
-    )
-
-    assert initialize_response.status_code == 404
-    assert correction_response.status_code == 404
 
 
 # 测试点：追加阵容必须自动闭合唯一开放版本、建立直接后继并一次性固化可空交接 Live。

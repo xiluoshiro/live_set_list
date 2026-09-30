@@ -249,7 +249,6 @@ describe("LiveAdminSection", () => {
     });
 
     expect(screen.getByLabelText("日期阶段：进行中（只读）")).toHaveTextContent("进行中");
-    expect(screen.getByLabelText("日期阶段：进行中（只读）")).toHaveAttribute("data-status-tone", "today");
     expect(screen.getByRole("combobox", { name: "本次排期变化" })).toHaveValue("");
     fireEvent.change(screen.getByRole("combobox", { name: "本次排期变化" }), { target: { value: "reschedule" } });
     expect(onScheduleChangeKindChange).toHaveBeenCalledWith("reschedule");

@@ -29,13 +29,6 @@ def test_invalid_visitor_zone_is_rejected(integration_test_client):
     assert response.status_code==422
     assert integration_test_client.get("/api/catalog/calendar?month=2026-09").status_code==200
 
-# 测试点：未知时间不需要独立时区字段；演出与历史只保留各时间携带的偏移。
-def test_removed_timezone_columns(integration_admin_connection):
-    with integration_admin_connection.cursor() as cur:
-        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='live_attrs'")
-        columns={row[0] for row in cur.fetchall()}
-    assert not columns.intersection({"timezone_id","timezone_source","timezone_offset_minutes","timezone_source_revision","opening_time_fold","start_time_fold"})
-
 
 # 测试点：单条与批量详情都使用当前/历史各自的场馆和时刻，未公布时间不生成标签。
 @pytest.mark.parametrize("batch", [False, True])

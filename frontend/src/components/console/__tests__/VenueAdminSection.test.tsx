@@ -168,8 +168,6 @@ describe("VenueAdminSection", () => {
     const user = userEvent.setup();
     renderSection();
     await screen.findByLabelText("名称");
-    expect(screen.queryByRole("heading", { name: "当前场馆资料" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "重新加载" })).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("类型"), "undisclosed");
     await user.clear(screen.getByLabelText("名称"));
     await user.type(screen.getByLabelText("名称"), "Renamed Hall");
@@ -189,13 +187,11 @@ describe("VenueAdminSection", () => {
   });
 
   // 测试点：只能提交当前名称的正式更名，失败保留草稿，恢复原值不写入。
-  test("preserves a failed formal rename draft without a historical editor", async () => {
+  test("preserves a failed formal rename draft and restores original values", async () => {
     const user = userEvent.setup();
     apiMocks.saveConsoleVenueEdit.mockRejectedValueOnce(new Error("write failed"));
     renderSection();
     await screen.findByLabelText("名称");
-    expect(screen.queryByLabelText("名称版本")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("本次名称变化")).not.toBeInTheDocument();
     await user.clear(screen.getByLabelText("名称"));
     await user.type(screen.getByLabelText("名称"), "New Hall");
     await user.type(screen.getByLabelText("生效日期"), "2026-09-04");
@@ -211,7 +207,7 @@ describe("VenueAdminSection", () => {
     expect(screen.queryByLabelText("生效日期")).not.toBeInTheDocument();
   });
 
-  // 测试点：首次加载失败可通过现有查询按钮恢复，不新增重新加载入口。
+  // 测试点：首次加载失败后，查询操作可恢复场馆列表及历史名称展示。
   test("recovers from a failed initial load through the query action", async () => {
     const user = userEvent.setup();
     const onMessage = vi.fn();

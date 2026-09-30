@@ -1,5 +1,5 @@
 import hashlib
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -87,28 +87,6 @@ def test_console_tour_rejects_duplicate_relation_values(overrides):
         headers={"X-CSRF-Token": CSRF_TOKEN},
     )
     assert response.status_code == 422
-
-
-# 测试点：Live 已属于其他巡演时应返回包含冲突归属的 409，且不创建巡演主记录。
-def test_create_console_tour_returns_structured_live_conflict():
-    _authenticate_editor()
-    conn, cursor = _connection_mock()
-    cursor.fetchall.side_effect = [[(1,), (2,)], [(41,)], [(41, 3, "Existing Tour")]]
-
-    with patch("app.routers.console_tours.get_write_db_connection", return_value=conn):
-        response = TestClient(app).post(
-            "/api/console/tours",
-            json=_payload(),
-            headers={"X-CSRF-Token": CSRF_TOKEN},
-        )
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == {
-        "code": "TOUR_LIVE_CONFLICT",
-        "message": "Live already belongs to another tour: 41",
-        "conflicts": [{"live_id": 41, "tour_id": 3, "tour_title": "Existing Tour"}],
-    }
-    assert not any("INSERT INTO tour_attrs" in str(call.args[0]) for call in cursor.execute.call_args_list)
 
 
 # 测试点：显式参与乐队必须真实出现在至少一场所选 Live 中，空乐队列表则允许自动聚合。

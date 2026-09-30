@@ -112,7 +112,7 @@ describe("BandAdminSection", () => {
     expect(onBandsChanged).toHaveBeenCalledTimes(1);
   });
 
-  // 测试点：阵容日期采用 ISO 输入，交接查询保持紧凑分组且确认回显完整变化。
+  // 测试点：追加阵容时确认生效日期、成员变化及选定的交接 Live，再提交直接后继。
   test("appends a locked successor with an optional transition Live", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBandTransitionLiveCandidates.mockResolvedValue([
@@ -147,8 +147,7 @@ describe("BandAdminSection", () => {
       />,
     );
 
-    expect(await screen.findByRole("table", { name: "乐队阵容时间线" })).not.toHaveTextContent("资料修正");
-    await user.type(screen.getByLabelText("版本标签"), "Poppin'Party V4");
+    await user.type(await screen.findByLabelText("版本标签"), "Poppin'Party V4");
     await user.selectOptions(screen.getByLabelText("变化类型"), "addition");
     await user.type(screen.getByLabelText("生效日期"), "2026-07-29");
     await user.type(screen.getByLabelText("新版本成员（每行一人）"), "\nNew Member");

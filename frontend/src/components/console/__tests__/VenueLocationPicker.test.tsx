@@ -100,14 +100,12 @@ test("POI click directly fills Google place data", async () => {
   expect(api.resolveGooglePlace).toHaveBeenCalledWith("place-1", expect.stringMatching(/^place-1-/), null, "csrf", expect.any(AbortSignal));
 });
 
-// 测试点：坐标解析成功后直接覆盖已有时区，不要求用户处理冲突提示。
+// 测试点：坐标解析成功后填入对应时区，解析完成时允许保存。
 test("resolved timezone replaces an existing timezone", async () => {
   render(<Harness initialTimezone="America/New_York" />);
   fireEvent.click(await screen.findByRole("button", { name: "测试点选" }));
   await waitFor(() => expect(screen.getByLabelText("当前时区")).toHaveValue("Asia/Tokyo"));
   expect(screen.getByText("Asia/Tokyo")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "采用建议时区" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "保留当前时区" })).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getByRole("button", { name: "模拟保存" })).toBeEnabled());
 });
 
@@ -148,10 +146,9 @@ test("map point resolves address without overwriting an intervening edit", async
       locality_name: null, provider_place_id: null, provider_url: null }],
   } }));
   expect(screen.getByLabelText("当前地址")).toHaveValue("手工纠正");
-  expect(screen.queryByRole("button", { name: "解析此位置" })).not.toBeInTheDocument();
 });
 
-// 测试点：地图选点解析成功后直接采用地址和最匹配的已登记地区，不增加确认步骤。
+// 测试点：地图选点解析成功后填入地址和匹配的已登记地区。
 test("map point automatically fills address and locality", async () => {
   api.resolveGeography.mockImplementation((point: LocationPoint, parts: string, id: string) => Promise.resolve(parts === "timezone" ? resolved(point, id) : {
     ...resolved(point, id),
@@ -166,7 +163,6 @@ test("map point automatically fills address and locality", async () => {
   await waitFor(() => expect(screen.getByLabelText("当前地址")).toHaveValue("東京都千代田区千代田1-1"));
   expect(screen.getByLabelText("当前地区")).toHaveTextContent("18");
   expect(screen.getByText("地址与地区已自动解析")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /采用/ })).not.toBeInTheDocument();
 });
 
 // 测试点：清空或复位后放弃自动填充的旧时区，组件卸载取消在途请求。

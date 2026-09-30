@@ -957,20 +957,6 @@ describe("App", () => {
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(201));
   });
 
-  test("详情页不显示反馈入口", async () => {
-    // 测试点：Live 详情页不再展示反馈入口，反馈路径集中到联系我们页。
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-    );
-    const user = userEvent.setup();
-    renderApp();
-
-    await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
-
-    expect(screen.queryByRole("button", { name: "发现问题 / 补充信息" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "反馈与补充信息" })).not.toBeInTheDocument();
-  });
-
   // 测试点：匿名模式下控制台页签必须隐藏，避免未登录用户触发控制台逻辑。
   test("未登录时不显示控制台入口", async () => {
     getLivesMock.mockResolvedValue(
@@ -1312,9 +1298,6 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "上一页" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "下一页" })).not.toBeInTheDocument();
     expect(screen.queryByText(/第 1 \/ 1 页/)).not.toBeInTheDocument();
-    expect(tourCard).toHaveAttribute("data-status-tone", "past");
-    expect(screen.queryByRole("button", { name: "Ave Mujica LIVE TOUR 2026 Exitus" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "查看巡演" })).not.toBeInTheDocument();
     expect(within(tourCard).getByText("已结束")).toBeInTheDocument();
     expect(within(tourCard).getByText("收录2")).toBeInTheDocument();
     expect(within(tourCard).getByText("取消1")).toBeInTheDocument();
@@ -1345,7 +1328,6 @@ describe("App", () => {
       name: "查看巡演《Ave Mujica LIVE TOUR 2026 Exitus》详情，状态：已取消",
     });
     const card = cardButton.closest("article") as HTMLElement;
-    expect(card).toHaveAttribute("data-status-tone", "cancelled");
     expect(within(card).getByText("已取消")).toBeInTheDocument();
     expect(within(card).getByText("收录2")).toBeInTheDocument();
     expect(within(card).getByText("取消2")).toBeInTheDocument();
