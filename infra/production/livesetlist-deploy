@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 readonly RELEASE_ROOT=/opt/livesetlist/releases
 readonly CURRENT_LINK=/opt/livesetlist/current
@@ -15,13 +15,66 @@ die() {
 }
 
 wait_for_backend() {
-  for attempt in {1..20}; do
+  local started_at=$SECONDS
+  local next_report=$((SECONDS + 30))
+  local service_state key value active substate pid restarts invocation
+  local initial_pid= initial_restarts= initial_invocation=
+
+  echo "waiting for backend database health while the service starts"
+  while true; do
+    if ! service_state=$(systemctl show "$BACKEND_SERVICE" \
+      --property=ActiveState,SubState,MainPID,NRestarts,InvocationID); then
+      echo "livesetlist-deploy: cannot read backend service state" >&2
+      return 1
+    fi
+    active= substate= pid= restarts= invocation=
+    while IFS='=' read -r key value; do
+      case "$key" in
+        ActiveState) active=$value ;;
+        SubState) substate=$value ;;
+        MainPID) pid=$value ;;
+        NRestarts) restarts=$value ;;
+        InvocationID) invocation=$value ;;
+      esac
+    done <<< "$service_state"
+    case "$active/$substate" in
+      active/running|activating/start|activating/start-pre|activating/start-post) ;;
+      *) echo "livesetlist-deploy: backend stopped starting ($active/$substate)" >&2; return 1 ;;
+    esac
+    if [[ ! "$pid" =~ ^[0-9]+$ || ! "$restarts" =~ ^[0-9]+$ ]]; then
+      echo "livesetlist-deploy: incomplete backend process state" >&2
+      return 1
+    fi
+    if { [ -n "$initial_pid" ] && [ "$pid" != "$initial_pid" ]; } ||
+       { [ -n "$initial_restarts" ] && [ "$restarts" != "$initial_restarts" ]; } ||
+       { [ -n "$initial_invocation" ] && [ "$invocation" != "$initial_invocation" ]; }; then
+      echo "livesetlist-deploy: backend process exited or restarted before becoming healthy" >&2
+      return 1
+    fi
+    if [ "$pid" != 0 ]; then initial_pid=$pid; fi
+    initial_restarts=$restarts
+    initial_invocation=$invocation
     if curl --fail --silent --max-time 2 http://127.0.0.1:8000/api/health/db >/dev/null; then
+      echo "backend database health passed after $((SECONDS - started_at))s"
       return 0
+    fi
+    if (( SECONDS >= next_report )); then
+      echo "backend is still starting ($active/$substate, PID $pid, $((SECONDS - started_at))s elapsed)"
+      next_report=$((SECONDS + 30))
     fi
     sleep 1
   done
-  return 1
+}
+
+switch_current_release() {
+  local target=$1
+  # Replace a stale temporary symlink left by an interrupted invocation.
+  if [ -e "$CURRENT_LINK.next" ] && [ ! -L "$CURRENT_LINK.next" ]; then
+    echo "livesetlist-deploy: unexpected current.next path" >&2
+    return 1
+  fi
+  ln -sfnT -- "$target" "$CURRENT_LINK.next" || return $?
+  mv -Tf -- "$CURRENT_LINK.next" "$CURRENT_LINK"
 }
 
 preserve_failed_release() {
@@ -56,6 +109,11 @@ main() {
   EXPECTED_SHA256=$2
   [[ "$VERSION" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{3}$ ]] || die "invalid version: $VERSION"
   [[ "$EXPECTED_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]] || die "invalid SHA-256"
+  EXPECTED_SHA256=${EXPECTED_SHA256,,}
+
+  # An SSH disconnect can leave the first deploy running; serialize the entire retry.
+  exec 8>/var/lock/livesetlist-deploy.lock
+  flock 8
 
   readonly RELEASE_NAME="livesetlist-$VERSION"
   readonly ARCHIVE="$ARCHIVE_ROOT/$RELEASE_NAME.tar.gz"
@@ -76,50 +134,64 @@ main() {
   fi
 
   [ -x "$RELEASE_MANAGER" ] || die "release manager is not installed: $RELEASE_MANAGER"
-  "$RELEASE_MANAGER" verify-deploy "$VERSION" "$EXPECTED_SHA256"
+  verification_output=$("$RELEASE_MANAGER" verify-deploy "$VERSION" "$EXPECTED_SHA256")
+  printf '%s\n' "$verification_output"
+  deployment_mode=$(sed -n 's/^deployment_mode=//p' <<< "$verification_output")
+  previous_release=$(sed -n 's/^previous_release=//p' <<< "$verification_output")
+  case "$deployment_mode" in
+    fresh|resume|complete) ;;
+    *) die "release manager must provide a valid deployment plan; update both deployment entrypoints" ;;
+  esac
+  [ -n "$previous_release" ] || die "release manager did not provide the previous release"
 
-  # Only an authorized, inactive candidate may be moved aside for a fresh retry.
-  preserve_failed_release "$RELEASE_DIR" "$CURRENT_LINK"
-  systemctl start "$BACKUP_SERVICE"
-
-  previous_release="$(readlink -f "$CURRENT_LINK" || true)"
-  if [ -x "$CURRENT_LINK/backend/.venv/bin/python" ]; then
-    readonly PYTHON_BIN="$CURRENT_LINK/backend/.venv/bin/python"
-  else
-    readonly PYTHON_BIN=python3
+  deployment_started_at="$(date +%s)"
+  if [ "$deployment_mode" = complete ]; then
+    if ! wait_for_backend; then
+      print_backend_diagnostics "$deployment_started_at"
+      return 1
+    fi
+    echo "already deployed $RELEASE_NAME"
+    return 0
   fi
 
-  staging_dir="$(mktemp -d "$RELEASE_ROOT/.deploy.XXXXXX")"
-  cleanup_staging() {
-    rm -rf "$staging_dir"
-  }
-  trap cleanup_staging EXIT
-  tar -xzf "$ARCHIVE" -C "$staging_dir"
-  [ -d "$staging_dir/$RELEASE_NAME" ] || die "archive root directory missing"
-  mv "$staging_dir/$RELEASE_NAME" "$RELEASE_DIR"
-  cleanup_staging
-  trap - EXIT
+  if [ "$deployment_mode" = fresh ]; then
+    # Only an authorized, inactive candidate may be moved aside for a fresh retry.
+    preserve_failed_release "$RELEASE_DIR" "$CURRENT_LINK"
+    systemctl start "$BACKUP_SERVICE"
+    if [ -x "$CURRENT_LINK/backend/.venv/bin/python" ]; then
+      readonly PYTHON_BIN="$CURRENT_LINK/backend/.venv/bin/python"
+    else
+      readonly PYTHON_BIN=python3
+    fi
 
-  "$PYTHON_BIN" -m venv "$RELEASE_DIR/backend/.venv"
-  "$RELEASE_DIR/backend/.venv/bin/pip" install --disable-pip-version-check --no-cache-dir -r "$RELEASE_DIR/backend/requirements.txt"
-  chown -R root:root "$RELEASE_DIR"
-  chmod -R u=rwX,go=rX "$RELEASE_DIR"
+    staging_dir="$(mktemp -d "$RELEASE_ROOT/.deploy.XXXXXX")"
+    cleanup_staging() {
+      rm -rf "$staging_dir"
+    }
+    trap cleanup_staging EXIT
+    tar -xzf "$ARCHIVE" -C "$staging_dir"
+    [ -d "$staging_dir/$RELEASE_NAME" ] || die "archive root directory missing"
+    mv "$staging_dir/$RELEASE_NAME" "$RELEASE_DIR"
+    cleanup_staging
+    trap - EXIT
 
-  install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backend.service" "/etc/systemd/system/$BACKEND_SERVICE"
-  install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backup.service" "/etc/systemd/system/$BACKUP_SERVICE"
-  install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backup.timer" "/etc/systemd/system/$BACKUP_TIMER"
-  systemctl daemon-reload
-  systemctl enable "$BACKUP_TIMER"
+    "$PYTHON_BIN" -m venv "$RELEASE_DIR/backend/.venv"
+    "$RELEASE_DIR/backend/.venv/bin/pip" install --disable-pip-version-check --no-cache-dir -r "$RELEASE_DIR/backend/requirements.txt"
+    chown -R root:root "$RELEASE_DIR"
+    chmod -R u=rwX,go=rX "$RELEASE_DIR"
+  fi
 
   switched=0
-  deployment_started_at="$(date +%s)"
+  if [ "$deployment_mode" = resume ]; then switched=1; fi
   rollback() {
     local failure_status=$?
     trap - ERR
     print_backend_diagnostics "$deployment_started_at"
     if [ "$switched" -eq 1 ] && [ -n "$previous_release" ]; then
-      ln -s "$previous_release" "$CURRENT_LINK.next"
-      mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
+      if ! switch_current_release "$previous_release"; then
+        echo "livesetlist-deploy: could not restore current to $previous_release" >&2
+        exit "$failure_status"
+      fi
       systemctl restart "$BACKEND_SERVICE" || true
       nginx -t && systemctl reload nginx || true
       if wait_for_backend; then
@@ -133,16 +205,26 @@ main() {
   }
   trap rollback ERR
 
-  ln -s "$RELEASE_DIR" "$CURRENT_LINK.next"
-  mv -Tf "$CURRENT_LINK.next" "$CURRENT_LINK"
+  install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backend.service" "/etc/systemd/system/$BACKEND_SERVICE"
+  install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backup.service" "/etc/systemd/system/$BACKUP_SERVICE"
+  install -o root -g root -m 644 "$RELEASE_DIR/infra/production/livesetlist-backup.timer" "/etc/systemd/system/$BACKUP_TIMER"
+  systemctl daemon-reload
+  systemctl enable "$BACKUP_TIMER"
+
+  switch_current_release "$RELEASE_DIR"
   switched=1
   systemctl restart "$BACKEND_SERVICE"
   nginx -t
   systemctl reload nginx
   wait_for_backend
   systemctl start "$BACKUP_SERVICE"
-  "$RELEASE_MANAGER" mark-deployed "$VERSION" "$EXPECTED_SHA256"
+  # From here the candidate is healthy. A lost finalize response must not roll
+  # back an already committed release; the next invocation can resume or confirm it.
   trap - ERR
+  if ! "$RELEASE_MANAGER" mark-deployed "$VERSION" "$EXPECTED_SHA256"; then
+    echo "livesetlist-deploy: finalization failed; healthy candidate kept active for retry" >&2
+    return 1
+  fi
 
   echo "deployed $RELEASE_NAME"
 }

@@ -88,12 +88,14 @@ git push origin v2026-07-14-007
 `/usr/local/sbin/livesetlist-deploy <version> <sha256>` 会：
 
 1. 校验版本格式、归档 SHA-256、归档路径和链接文件。
-2. 调用 release manager 校验 prepared 状态；migration release 还必须匹配 root-only attestation、SQL 树 hash 和生产 Flyway version。
-3. 已通过 release state、归档与 migration attestation 校验后，若同名 release 目录是上一次失败留下的非当前目录，将其完整移动到同级唯一的 `.failed-livesetlist-<version>.*` 目录；当前运行版本、符号链接和异常路径仍拒绝覆盖。随后启动一次数据库备份任务。
+2. 持有整个部署过程的独立锁，避免 SSH 断线后重试与尚未退出的部署互相覆盖。调用 release manager 校验 release state；migration release 还必须匹配 root-only attestation、SQL 树 hash 和生产 Flyway version。
+3. 按当前版本与记录选择重试路径：旧版本仍在运行时，完整保留并移开同名非当前残留目录，再启动一次数据库备份；候选已经切换但尚未登记成功时，核对其文件与原归档一致，保留活动目录及 venv 并继续收尾；同一候选已经登记成功时，只复核文件和现有服务后返回，不重建或重启。版本、SHA-256 或活动目录不匹配仍拒绝。
 4. 解压到新的 release 目录，使用当前 release 的 Python 创建 venv 并安装依赖。
 5. root 化 release，安装 systemd unit，原子切换 `current`，重启后端与 Nginx。
-6. 最多等待 20 秒，直到 `http://127.0.0.1:8000/api/health/db` 成功。
-7. 成功后再执行一次备份并把服务器状态标记为 deployed；切换失败时先输出本次启动的 systemd 状态和 journal，再将 `current` 指回上一 release、重启后端并检查数据库健康接口。schema 不自动回滚，旧应用仍须兼容已经完成的迁移；健康接口的 `SELECT 1` 成功不能证明歌曲、专辑等业务查询兼容。
+6. 探测 `http://127.0.0.1:8000/api/health/db`，成功后立即继续；单次请求最多 2 秒，探测间隔 1 秒。只要同一服务进程仍在启动或运行，就继续等待并定期输出状态，不因经过固定秒数回滚；服务失败、停止、退出或自动重启时立即判失败。
+7. 成功后再执行一次备份并把服务器状态标记为 deployed；切换失败时先输出本次启动的 systemd 状态和 journal，再将 `current` 指回准备记录中的上一 release、重启后端并检查数据库健康接口。健康检查和备份已成功后的登记失败会保留候选，允许再次收尾或确认已完成，避免登记已写入却因响应丢失而回滚。schema 不自动回滚，旧应用仍须兼容已经完成的迁移；健康接口的 `SELECT 1` 成功不能证明歌曲、专辑等业务查询兼容。
+
+继续部署会跳过第 4 步的解压与依赖安装；已完成部署会跳过第 4–7 步。需要同时更新 `/usr/local/sbin/livesetlist-deploy` 和 `/usr/local/sbin/livesetlist-release-manager`；新版入口依赖 manager 返回的 `deployment_mode` 与 `previous_release`，仅重跑 Actions 不会更新这两个 root 管理的入口。
 
 ## GitHub Environment 与 VM 前置条件
 
@@ -337,12 +339,12 @@ curl.exe -I <PUBLIC_BASE_URL>/openapi.json
 | prepare 解压报 `extractall() got an unexpected keyword argument 'filter'` | VM Python 的 `tarfile` 尚未提供 extraction filter | release manager 改为手工解压已验证的普通文件/目录，保持 Python 3.11 兼容与路径安全校验 |
 | Flyway 命令读取 env 报 `unbound variable` 或 Compose 提示变量未设置 | 用 Bash `source` 或 Compose 读取含 `$` 的密码 | 用 `python-dotenv(interpolate=False)` 读取并由 Python 将变量传给 Docker |
 | Setlist 前端测试偶发找不到 textarea | 等待条件在异步检查出现前提前通过 | 等待目标 textarea 实际渲染 |
-| 部署后立即 health check 失败 | systemd 返回时 Uvicorn 尚未监听端口 | 部署脚本最多等待 20 秒 |
-| 重试报 `release already exists` | 旧部署脚本在失败回滚后留下同名目录 | 先查看首次尝试的启动日志；管理员安装新版部署入口后，使用原 version/SHA-256 重试 deploy，脚本仅在授权校验成功后保留并移开非当前残留目录，不必重跑已完成的 migration |
+| 新后端已经正常启动却紧接着被回滚 | systemd 返回不代表 Uvicorn 已监听；慢启动可能超过旧脚本的 20 轮探测窗口 | 新入口根据服务状态持续探测，就绪即继续，进程失败才回滚 |
+| 重试报 `release already exists` 或 `current release changed` | 旧入口未区分失败残留、已经切换和已完成部署 | 管理员安装新版 deploy 与 release-manager 后，使用原 version/SHA-256 重试 deploy；入口保留非当前残留目录，继续活动候选，或复核已完成版本，不必重跑已完成的 migration |
 | VM 本机无法 curl 公网地址 | hairpin 路由不可靠 | 使用外部工作站 / GitHub 进行公网验证 |
 | V13 创建外键时报 `permission denied for table band_attrs` | 生产业务表历史 owner 全部漂移为 `live_project_flyway`，`SET ROLE live_project_owner` 后没有 `REFERENCES` 权限 | 在 Flyway 外按 V3 的过滤逻辑收口业务对象 owner、排除 `flyway_schema_history`；CI 和 release manager 增加共享 owner 契约 |
 
-若后端在 20 秒后仍未就绪，读取：
+若服务持续运行但一直未就绪，部署会继续探测；活着但卡死的进程无法仅凭时间与慢启动区分。可检查状态和日志后人工取消，流水线自身的执行期限仍适用；取消后以相同 version/SHA-256 重试。服务明确失败时入口会自动输出诊断，也可读取：
 
 ```bash
 sudo journalctl -u livesetlist-backend -n 120 -l --no-pager

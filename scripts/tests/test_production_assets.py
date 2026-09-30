@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import shutil
 import subprocess
 import tarfile
 
@@ -123,7 +124,7 @@ def test_release_archive_excludes_sensitive_runtime_files(tmp_path, monkeypatch)
     assert f"{archive_root}/frontend/dist/index.html" in names
 
 
-def _prepare_migration_candidate(tmp_path, monkeypatch):
+def _prepare_migration_candidate(tmp_path, monkeypatch, *, app_only=False):
     version = "2026-07-17-001"
     upload_root = tmp_path / "uploads"
     archive_store = tmp_path / "archives"
@@ -140,7 +141,11 @@ def _prepare_migration_candidate(tmp_path, monkeypatch):
     candidate_sql = candidate_source / "backend" / "db" / "flyway" / "sql"
     candidate_sql.mkdir(parents=True)
     (candidate_sql / "V1__baseline.sql").write_text("select 1;", encoding="utf-8")
-    (candidate_sql / "V2__new.sql").write_text("select 2;", encoding="utf-8")
+    if not app_only:
+        (candidate_sql / "V2__new.sql").write_text("select 2;", encoding="utf-8")
+    candidate_app = candidate_source / "backend" / "app" / "main.py"
+    candidate_app.parent.mkdir(parents=True)
+    candidate_app.write_text("APP = True", encoding="utf-8")
 
     upload_root.mkdir()
     archive = upload_root / f"livesetlist-{version}.tar.gz"
@@ -166,12 +171,137 @@ def _prepare_migration_candidate(tmp_path, monkeypatch):
         "archive_sha256": archive_sha256,
         "archive_store": archive_store,
         "attestation_root": attestation_root,
+        "current": current,
         "release_root": release_root,
         "release_type": release_type,
         "staging_root": staging_root,
         "state_root": state_root,
         "version": version,
     }
+
+
+def _prepare_app_candidate(tmp_path, monkeypatch, *, active=False):
+    prepared = _prepare_migration_candidate(tmp_path, monkeypatch, app_only=True)
+    monkeypatch.setattr(release_manager, "run_ownership_contract", lambda path: None)
+    monkeypatch.setattr(release_manager, "run_flyway", lambda *args: pytest.fail("unexpected Flyway execution"))
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: pytest.fail("unexpected external command"))
+    candidate = prepared["release_root"] / f"livesetlist-{prepared['version']}"
+    if active:
+        shutil.copytree(prepared["staging_root"] / candidate.name, candidate)
+        monkeypatch.setattr(release_manager, "CURRENT_LINK", candidate)
+    prepared["candidate"] = candidate
+    return prepared
+
+
+# 测试点：回滚后再次部署同版本仍获授权，校验阶段保留未激活候选中的文件。
+def test_release_manager_allows_app_retry_after_rollback(tmp_path, monkeypatch):
+    prepared = _prepare_app_candidate(tmp_path, monkeypatch)
+    candidate = prepared["candidate"]
+    candidate.mkdir()
+    evidence = candidate / "previous-attempt.log"
+    evidence.write_text("failed attempt", encoding="utf-8")
+
+    result = release_manager.verify_deploy(prepared["version"], prepared["archive_sha256"])
+
+    assert result == {
+        "release_type": "app-only",
+        "deployment_mode": "fresh",
+        "previous_release": str(prepared["current"].resolve()),
+    }
+    assert evidence.read_text(encoding="utf-8") == "failed attempt"
+
+
+# 测试点：已切换但尚未登记成功的同版本可继续收尾，并保留应用文件和生成的运行环境。
+def test_release_manager_resumes_active_app_candidate(tmp_path, monkeypatch):
+    prepared = _prepare_app_candidate(tmp_path, monkeypatch, active=True)
+    runtime_file = prepared["candidate"] / "backend" / ".venv" / "pyvenv.cfg"
+    runtime_file.parent.mkdir()
+    runtime_file.write_text("existing runtime", encoding="utf-8")
+    state_file = prepared["state_root"] / f"{prepared['version']}.json"
+    original_state = state_file.read_bytes()
+
+    result = release_manager.verify_deploy(prepared["version"], prepared["archive_sha256"])
+
+    assert result == {
+        "release_type": "app-only",
+        "deployment_mode": "resume",
+        "previous_release": str(prepared["current"].resolve()),
+    }
+    assert state_file.read_bytes() == original_state
+    assert runtime_file.read_text(encoding="utf-8") == "existing runtime"
+    assert (prepared["candidate"] / "backend" / "app" / "main.py").read_text(encoding="utf-8") == "APP = True"
+
+
+# 测试点：已成功部署的同版本可重复准备与确认，旧版本已清理也不改写首次部署记录。
+def test_release_manager_repeats_completed_app_deployment_without_stage(tmp_path, monkeypatch):
+    prepared = _prepare_app_candidate(tmp_path, monkeypatch, active=True)
+    version, checksum = prepared["version"], prepared["archive_sha256"]
+    monkeypatch.setattr(release_manager, "utc_now", lambda: "2026-09-30T00:00:00+00:00")
+    release_manager.mark_deployed(version, checksum)
+    state_file = prepared["state_root"] / f"{version}.json"
+    completed_state = state_file.read_bytes()
+    assert not (prepared["staging_root"] / prepared["candidate"].name).exists()
+    shutil.rmtree(prepared["current"])
+    monkeypatch.setattr(release_manager, "utc_now", lambda: "2026-10-01T00:00:00+00:00")
+
+    result = release_manager.verify_deploy(version, checksum)
+    assert result["deployment_mode"] == "complete"
+    assert release_manager.prepare_release(version, checksum) == "app-only"
+    release_manager.mark_deployed(version, checksum)
+
+    assert state_file.read_bytes() == completed_state
+    assert (prepared["candidate"] / "backend" / "app" / "main.py").read_text(encoding="utf-8") == "APP = True"
+
+
+# 测试点：继续部署前须拒绝归档内应用文件被替换或丢失，且不能覆盖现场文件。
+@pytest.mark.parametrize("file_change", ["modified", "missing"])
+def test_release_manager_rejects_active_app_file_changes(tmp_path, monkeypatch, file_change):
+    prepared = _prepare_app_candidate(tmp_path, monkeypatch, active=True)
+    app_file = prepared["candidate"] / "backend" / "app" / "main.py"
+    if file_change == "modified":
+        app_file.write_text("APP = None", encoding="utf-8")
+    else:
+        app_file.unlink()
+    state_file = prepared["state_root"] / f"{prepared['version']}.json"
+    original_state = state_file.read_bytes()
+
+    with pytest.raises(release_manager.ReleaseError, match="does not match archive"):
+        release_manager.verify_deploy(prepared["version"], prepared["archive_sha256"])
+
+    assert state_file.read_bytes() == original_state
+    if file_change == "modified":
+        assert app_file.read_text(encoding="utf-8") == "APP = None"
+    else:
+        assert not app_file.exists()
+
+
+# 测试点：重试授权仍拒绝错误归档、未知状态、无关活动版本及无效回滚目标，且保留当前应用。
+@pytest.mark.parametrize("invalid_state", ["checksum", "status", "active", "previous-outside", "previous-missing"])
+def test_release_manager_rejects_invalid_app_retry(tmp_path, monkeypatch, invalid_state):
+    prepared = _prepare_app_candidate(tmp_path, monkeypatch, active=True)
+    version, checksum = prepared["version"], prepared["archive_sha256"]
+    state_file = prepared["state_root"] / f"{version}.json"
+    state = release_manager.read_json(state_file)
+    if invalid_state == "checksum":
+        checksum = "0" * 64
+    elif invalid_state == "status":
+        state["status"] = "unknown"
+    elif invalid_state == "active":
+        unrelated = prepared["release_root"] / "unrelated"
+        unrelated.mkdir()
+        monkeypatch.setattr(release_manager, "CURRENT_LINK", unrelated)
+    elif invalid_state == "previous-outside":
+        state["current_release"] = str(tmp_path)
+    else:
+        shutil.rmtree(prepared["current"])
+    release_manager.write_json(state_file, state)
+    original_state = state_file.read_bytes()
+
+    with pytest.raises(release_manager.ReleaseError):
+        release_manager.verify_deploy(version, checksum)
+
+    assert state_file.read_bytes() == original_state
+    assert (prepared["candidate"] / "backend" / "app" / "main.py").read_text(encoding="utf-8") == "APP = True"
 
 
 # 测试点：服务器应以 current 的 SQL 文件树为事实来源，将新增 migration 的候选包分类并持久化为待迁移状态。

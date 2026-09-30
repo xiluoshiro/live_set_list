@@ -169,6 +169,49 @@ def extract_archive(path: Path, version: str, destination: Path) -> None:
         raise ReleaseError("archive root directory missing after extraction")
 
 
+def validate_active_release(version: str, active_release: Path, state: dict[str, Any]) -> None:
+    expected_release = RELEASE_ROOT.resolve() / release_name(version)
+    if active_release != expected_release or expected_release.is_symlink():
+        raise ReleaseError("current link does not point to the expected candidate directory")
+    try:
+        with tarfile.open(archive_path(version), "r:gz") as archive:
+            for member in archive.getmembers():
+                if not member.isfile():
+                    continue
+                target = active_release
+                for part in PurePosixPath(member.name).parts[1:]:
+                    target = target / part
+                    if target.is_symlink():
+                        raise ReleaseError(f"active release contains a link: {member.name}")
+                if not target.is_file() or target.stat().st_size != member.size:
+                    raise ReleaseError(f"active release does not match archive: {member.name}")
+                source = archive.extractfile(member)
+                if source is None:
+                    raise ReleaseError(f"cannot read archive entry: {member.name}")
+                digest = hashlib.sha256()
+                with source:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                if sha256_file(target) != digest.hexdigest():
+                    raise ReleaseError(f"active release does not match archive: {member.name}")
+    except (tarfile.TarError, OSError) as exc:
+        raise ReleaseError(f"cannot verify active release: {exc}") from exc
+    active_hash = sql_tree_sha256(active_release / "backend" / "db" / "flyway" / "sql")
+    if active_hash != state.get("candidate_sql_sha256"):
+        raise ReleaseError("active Flyway SQL does not match prepared candidate")
+
+
+def previous_release_dir(state: dict[str, Any], *, require_exists: bool) -> Path:
+    previous = Path(str(state.get("current_release", "")))
+    release_root = RELEASE_ROOT.resolve()
+    resolved = previous.resolve()
+    if not previous.is_absolute() or resolved == release_root or not resolved.is_relative_to(release_root):
+        raise ReleaseError("previous release is outside the release directory")
+    if require_exists and not resolved.is_dir():
+        raise ReleaseError("previous release directory is missing")
+    return resolved
+
+
 def ensure_runtime_dirs() -> None:
     for path in (RELEASE_ROOT, STAGING_ROOT, STATE_ROOT, ATTESTATION_ROOT, ARCHIVE_STORE):
         path.mkdir(parents=True, exist_ok=True)
@@ -256,7 +299,10 @@ def prepare_release(version: str, expected_sha256: str) -> str:
     if existing_state_path.exists():
         state = load_state(version, expected_sha256)
         if state.get("status") == "deployed":
-            raise ReleaseError("release has already been deployed")
+            deployment = verify_deploy(version, expected_sha256)
+            if deployment["deployment_mode"] != "complete":
+                raise ReleaseError("deployed release is no longer active")
+            return deployment["release_type"]
         if not stage.is_dir():
             raise ReleaseError("release state exists but staged release is missing")
         candidate_hash = sql_tree_sha256(stage / "backend" / "db" / "flyway" / "sql")
@@ -542,19 +588,35 @@ def migrate_release(version: str, expected_sha256: str) -> None:
     write_json(state_path(version), state)
 
 
-def verify_deploy(version: str, expected_sha256: str) -> str:
+def verify_deploy(version: str, expected_sha256: str) -> dict[str, str]:
     expected_sha256 = validate_inputs(version, expected_sha256)
     state = load_state(version, expected_sha256)
     validate_archive(archive_path(version), version, expected_sha256)
-    _, stage = validate_state_files(state)
+    active_release = current_release_dir()
+    expected_release = RELEASE_ROOT.resolve() / release_name(version)
+    if active_release == expected_release:
+        deployment_mode = "complete" if state.get("status") == "deployed" else "resume"
+        validate_active_release(version, active_release, state)
+        release_files = active_release
+    else:
+        deployment_mode = "fresh"
+        _, release_files = validate_state_files(state)
+    previous = previous_release_dir(state, require_exists=deployment_mode != "complete")
     release_type = str(state["release_type"])
+    deployment = {
+        "release_type": release_type,
+        "deployment_mode": deployment_mode,
+        "previous_release": str(previous),
+    }
     if release_type == "app-only":
-        if state.get("status") != "prepared":
+        expected_status = "deployed" if deployment_mode == "complete" else "prepared"
+        if state.get("status") != expected_status:
             raise ReleaseError("app-only release is not in prepared state")
-        run_ownership_contract(stage)
-        return release_type
+        run_ownership_contract(release_files)
+        return deployment
 
-    if state.get("status") != "migrated":
+    expected_status = "deployed" if deployment_mode == "complete" else "migrated"
+    if state.get("status") != expected_status:
         raise ReleaseError("migration release has no completed migration state")
     attestation = read_json(attestation_path(version))
     expected_fields = {
@@ -566,12 +628,12 @@ def verify_deploy(version: str, expected_sha256: str) -> str:
     }
     if any(attestation.get(key) != value for key, value in expected_fields.items()):
         raise ReleaseError("migration attestation does not authorize this deployment")
-    info = run_flyway("info", stage)
+    info = run_flyway("info", release_files)
     current_db_version = assert_flyway_info_ready(info)
     if current_db_version != attestation.get("flyway_version_after"):
         raise ReleaseError("database version does not match migration attestation")
-    run_ownership_contract(stage)
-    return release_type
+    run_ownership_contract(release_files)
+    return deployment
 
 
 def mark_deployed(version: str, expected_sha256: str) -> None:
@@ -584,6 +646,12 @@ def mark_deployed(version: str, expected_sha256: str) -> None:
     active_hash = sql_tree_sha256(active_release / "backend" / "db" / "flyway" / "sql")
     if active_hash != state.get("candidate_sql_sha256"):
         raise ReleaseError("active Flyway SQL does not match prepared candidate")
+    if state.get("status") == "deployed":
+        verify_deploy(version, expected_sha256)
+        return
+    expected_status = "prepared" if state["release_type"] == "app-only" else "migrated"
+    if state.get("status") != expected_status:
+        raise ReleaseError("release is not ready to finalize")
     deployed_at = utc_now()
     if state.get("release_type") == "migration-needed":
         attestation = read_json(attestation_path(version))
@@ -615,8 +683,9 @@ def main() -> int:
                 migrate_release(args.version, args.sha256)
                 print(f"migrated livesetlist-{args.version}")
             elif args.action == "verify-deploy":
-                release_type = verify_deploy(args.version, args.sha256)
-                print(f"release_type={release_type}")
+                deployment = verify_deploy(args.version, args.sha256)
+                for key, value in deployment.items():
+                    print(f"{key}={value}")
             else:
                 mark_deployed(args.version, args.sha256)
                 print(f"finalized livesetlist-{args.version}")

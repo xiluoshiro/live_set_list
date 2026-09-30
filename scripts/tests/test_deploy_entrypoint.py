@@ -28,6 +28,93 @@ def run_deploy_functions(tmp_path: Path, commands: str) -> subprocess.CompletedP
     )
 
 
+# 测试点：同一进程仍在启动时，即使机器很慢也继续探测；用虚拟时间推进，不实际等待。
+def test_backend_health_wait_allows_slow_startup(tmp_path: Path):
+    result = run_deploy_functions(tmp_path, '''
+SECONDS=0
+poll=0
+systemctl() {
+  printf '%s\\n' ActiveState=active SubState=running MainPID=42 NRestarts=0 InvocationID=first
+}
+sleep() { poll=$((poll + 1)); SECONDS=$((SECONDS + 3600)); }
+curl() { [ "$poll" -ge 2 ]; }
+wait_for_backend
+printf '%s' "$SECONDS" > "$fixture_root/elapsed"
+''')
+
+    assert result.returncode == 0, result.stderr
+    assert int((tmp_path / "elapsed").read_text(encoding="utf-8")) >= 7200
+
+
+# 测试点：服务已经就绪时应立即完成检查，不额外等待一个完整启动窗口。
+def test_backend_health_wait_returns_as_soon_as_ready(tmp_path: Path):
+    result = run_deploy_functions(tmp_path, '''
+systemctl() {
+  printf '%s\\n' ActiveState=active SubState=running MainPID=42 NRestarts=0 InvocationID=first
+}
+curl() { return 0; }
+sleep() { echo "unexpected wait" >&2; return 97; }
+wait_for_backend
+''')
+
+    assert result.returncode == 0, result.stderr
+    assert "unexpected wait" not in result.stderr
+
+
+# 测试点：服务停止、失败或进入自动重启时直接失败，不继续等待健康接口。
+@pytest.mark.parametrize("state", ["failed/failed", "inactive/dead", "deactivating/stop", "activating/auto-restart"])
+def test_backend_health_wait_stops_when_service_fails(tmp_path: Path, state: str):
+    active, substate = state.split("/")
+    result = run_deploy_functions(tmp_path, f'''
+systemctl() {{
+  printf '%s\\n' ActiveState={active} SubState={substate} MainPID=0 NRestarts=0 InvocationID=first
+}}
+curl() {{ echo "unexpected probe" >&2; return 0; }}
+sleep() {{ echo "unexpected wait" >&2; return 97; }}
+wait_for_backend
+''')
+
+    assert result.returncode == 1, result.stderr
+    assert "unexpected probe" not in result.stderr
+    assert "unexpected wait" not in result.stderr
+
+
+# 测试点：探测间隙发生进程退出或重启，也要识别失败，不能把另一个进程当作原启动成功。
+@pytest.mark.parametrize("change", ["MainPID=43", "NRestarts=1", "InvocationID=second"])
+def test_backend_health_wait_rejects_replaced_process(tmp_path: Path, change: str):
+    result = run_deploy_functions(tmp_path, f'''
+poll=0
+systemctl() {{
+  printf '%s\\n' ActiveState=active SubState=running MainPID=42 NRestarts=0 InvocationID=first
+  if [ "$poll" -gt 0 ]; then printf '%s\\n' {change}; fi
+}}
+curl() {{
+  if [ "$poll" -gt 0 ]; then echo "unexpected probe after restart" >&2; return 0; fi
+  return 7
+}}
+sleep() {{ poll=$((poll + 1)); }}
+wait_for_backend
+''')
+
+    assert result.returncode == 1, result.stderr
+    assert "exited or restarted" in result.stderr
+    assert "unexpected probe" not in result.stderr
+
+
+# 测试点：无法查询服务状态时保留失败，不能仅凭端口响应认定部署成功。
+def test_backend_health_wait_requires_service_state(tmp_path: Path):
+    result = run_deploy_functions(tmp_path, '''
+systemctl() { return 1; }
+curl() { return 0; }
+sleep() { echo "unexpected wait" >&2; return 97; }
+wait_for_backend
+''')
+
+    assert result.returncode == 1, result.stderr
+    assert "cannot read backend service state" in result.stderr
+    assert "unexpected wait" not in result.stderr
+
+
 # 测试点：失败版本的残留目录应完整保留到独立位置，让同一版本可以重新解压且不修改当前应用。
 def test_retry_preserves_inactive_release_and_frees_its_destination(tmp_path: Path):
     current = tmp_path / "current"
