@@ -92,8 +92,20 @@ git push origin v2026-07-14-007
 3. 先启动一次数据库备份任务。
 4. 解压到新的 release 目录，使用当前 release 的 Python 创建 venv 并安装依赖。
 5. root 化 release，安装 systemd unit，原子切换 `current`，重启后端与 Nginx。
-6. 最多等待 20 秒，直到 `http://127.0.0.1:8000/api/health/db` 成功。
+6. 最多探测 20 次 `http://127.0.0.1:8000/api/health/db`，每次请求超时 2 秒、失败间隔 1 秒；总等待时间可能超过 20 秒。
 7. 成功后再执行一次备份并把服务器状态标记为 deployed；失败则将 `current` 指回上一 release 并重启后端，schema 不自动回滚。
+
+### 5. 部署失败后的诊断与重试
+
+部署入口在解压后至最终落状态期间失败，会输出失败步骤与原始退出码。若已切换 `current`，会在回滚重启前输出 backend 的 `systemctl status` 和本次部署期间最近 100 行 journal；两个诊断命令各限时 10 秒，诊断失败不会阻断回滚或覆盖原始退出码。诊断不读取 env 文件，也不打印命令行变量；服务自身日志仍可能含敏感内容，转发前应检查。
+
+清理仅限本次调用独占创建的 release 目录。切换前失败，或切换后回滚命令全部成功且确认 `current` 已不指向候选目录时，会删除该不完整目录及临时路径。同版本、同 SHA-256 的后续尝试仍须完整通过原有归档、state、attestation、SQL 与数据库版本检查。回滚命令成功不等于旧版本健康已恢复，仍需单独验收；schema 不会回滚。
+
+若回滚失败、旧版本不存在或 `current` 无法确认，保留候选目录供排查。已存在的 release（包括悬空链接）始终拒绝自动覆盖或删除。因此旧版脚本遗留的 `livesetlist-2026-09-30-001` 不会仅凭目录名称被判定为可删除：管理员需先核对 `current`、backend 实际进程、release state、归档 SHA-256 和 migration attestation，确认它既非活动版本也未成功标记为 deployed，再在后续获准的维护中将残留目录移至隔离路径，保留取证及撤销能力。不得删除归档、migration attestation 或迁移状态来绕过校验，也不得重新执行 migration 以修复应用启动失败。
+
+SIGINT / SIGTERM 也会触发清理；断电或 SIGKILL 等不可捕获的中断仍可能留下目录，按上述人工核验路径处理。重试原失败归档不意味着移动或重建 tag；若发布内容改变，应创建新的递增版本。
+
+仅合并仓库补丁不会更新 VM 上 root 持有的部署入口；更新入口、隔离旧残留和重新部署均是后续独立的生产操作。
 
 ## GitHub Environment 与 VM 前置条件
 
