@@ -1426,7 +1426,7 @@ function App() {
     || (tab === "detail" && (previousTab === "tours" || previousTab === "tour_detail"));
 
   return (
-    <main className="page">
+    <main className={`page${tab === "songs" && songId !== null && albumId === null ? " page-song-detail" : ""}`}>
       <section className="panel">
         <header className="site-topbar">
           <button type="button" className="site-title" onClick={() => handleTabChange("home")}>

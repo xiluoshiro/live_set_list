@@ -75,14 +75,88 @@ test("detail pagination exposes every page for a short result set", async () => 
   expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 1, { year: 2026, pageSize: 8 });
 });
 
-// 测试点：版本自有多图优先且可切换，版本切换重置首图，专辑回退有来源链接，无图使用占位。
+// 测试点：缩放、版本切换和临时滚动条均不丢失阅读位置，长行触发重新分页后能稳定显示。
+test("fitted records preserve their reading anchor through repeated resizes", async () => {
+  const user = userEvent.setup();
+  let availableHeight = 322;
+  let widerLayout = false;
+  const originalStyle = window.getComputedStyle.bind(window);
+  const styleSpy = vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
+    const style = originalStyle(element, pseudo);
+    if (element.getAttribute("aria-label") === "歌曲详情") style.setProperty("--song-fit", "1");
+    return style;
+  });
+  const boundsSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const width = widerLayout ? 700 : 600;
+    const scrollBarWidth = widerLayout && this.tagName === "TBODY" && this.children.length > 4 ? 15 : 0;
+    const rowHeight = widerLayout && this.querySelector("a")?.textContent === "阅读记录 1" ? 112 : 100;
+    return new DOMRect(0, 0, width - scrollBarWidth, this.tagName === "TR" ? rowHeight : this.tagName === "THEAD" ? 20 : 0);
+  });
+  const heightSpy = vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
+    return this.getAttribute("aria-label") === "演出记录列表" ? availableHeight : 0;
+  });
+  const items = Array.from({ length: 12 }, (_, index) => ({ setlist_id: `fit-${index}`, live_id: index + 1,
+    live_title: `阅读记录 ${index + 1}`, live_date: "2026-01-01", segment_type: "M", sub_order: 1, absolute_order: 1,
+    is_short: false, live_cover: "original" }));
+  api.getSongPerformances.mockImplementation(async (_id, index, options) => ({
+    items: items.slice((index - 1) * options.pageSize, index * options.pageSize), page: index,
+    page_size: options.pageSize, total: items.length, total_pages: Math.ceil(items.length / options.pageSize), available_years: [2026],
+  }));
+  const view = render(<PublicPage />);
+  try {
+    await waitFor(() => expect(screen.getAllByRole("link", { name: /^阅读记录 / })).toHaveLength(3));
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await screen.findByRole("link", { name: "阅读记录 4" });
+    for (const [height, count] of [[222, 2], [422, 4], [222, 2], [322, 3]]) {
+      availableHeight = height;
+      fireEvent(window, new Event("resize"));
+      await waitFor(() => expect(screen.getAllByRole("link", { name: /^阅读记录 / })).toHaveLength(count));
+      expect(screen.getByRole("link", { name: "阅读记录 4" })).toBeInTheDocument();
+    }
+    await user.click(screen.getByRole("button", { name: "合唱版" }));
+    expect(await screen.findByRole("link", { name: "阅读记录 4" })).toBeInTheDocument();
+    availableHeight = 422;
+    fireEvent(window, new Event("resize"));
+    await waitFor(() => expect(screen.getAllByRole("link", { name: /^阅读记录 / })).toHaveLength(4));
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await screen.findByRole("link", { name: "阅读记录 5" });
+    widerLayout = true;
+    availableHeight = 522;
+    fireEvent(window, new Event("resize"));
+    await waitFor(() => expect(api.getSongPerformances).toHaveBeenCalledWith(2, 1, { year: undefined, pageSize: 5 }));
+    await waitFor(() => expect(api.getSongPerformances).toHaveBeenLastCalledWith(2, 2, { year: undefined, pageSize: 4 }));
+    expect(await screen.findByRole("link", { name: "阅读记录 5" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /^阅读记录 / })).toHaveLength(4);
+  } finally {
+    view.unmount(); styleSpy.mockRestore(); boundsSpy.mockRestore(); heightSpy.mockRestore();
+  }
+});
+
+// 测试点：页面按已知发行时间展示唱片，未知日期置后，每张唱片仍链接到自身详情。
+test("discography puts the earliest dated release first", async () => {
+  api.getSongVersion.mockResolvedValue({ ...version(), albums: [
+    { ...version().albums[0], album_id: 3, album_name: "日期未知", release_date: null },
+    { ...version().albums[0], album_id: 2, album_name: "后续专辑", release_date: "2020-01-01" },
+    { ...version().albums[0], album_id: 1, album_name: "首张收录", release_date: "2018-01-01" },
+  ] });
+  render(<PublicPage />);
+  const list = within(await screen.findByRole("region", { name: "收录唱片列表" }));
+  const links = list.getAllByRole("link");
+  expect(links.map(link => link.getAttribute("aria-label"))).toEqual(["查看唱片 首张收录", "查看唱片 后续专辑", "查看唱片 日期未知"]);
+  expect(links.map(link => link.getAttribute("href"))).toEqual(["/albums/1", "/albums/2", "/albums/3"]);
+});
+
+// 测试点：歌曲封面入口支持切图及失败恢复，关闭恢复焦点，切换版本后重置首图，收录唱片可独立打开。
 test("version covers switch independently and reset on version navigation", async () => {
   const user = userEvent.setup();
   const urls = ["https://example.test/front.png", "https://example.test/back.png"].map((url, index) => ({ url, name: `封面${index + 1}` }));
   api.getSongVersion.mockImplementation(async (id: number) => id === 1
     ? { ...version(id), cover_urls: urls, display_cover: { source: "song", ...urls[0] } }
-    : { ...version(id), display_cover: { source: "album", url: "https://example.test/album.png", name: "", album_id: 8, album_name: "回退专辑" } });
+    : { ...version(id), albums: [{ ...version().albums[0], album_id: 8, album_name: "回退专辑", cover_urls: [{ url: "https://example.test/album.png", name: "" }] }],
+      display_cover: { source: "album", url: "https://example.test/album.png", name: "", album_id: 8, album_name: "回退专辑" } });
   render(<PublicPage />);
+  const coverTrigger = await screen.findByRole("button", { name: "歌曲封面" });
+  await user.click(coverTrigger);
   let gallery = within(await screen.findByRole("group", { name: "歌曲封面" }));
   expect(gallery.getByRole("img")).toHaveAttribute("src", urls[0].url);
   expect(gallery.queryByRole("link")).not.toBeInTheDocument();
@@ -92,15 +166,15 @@ test("version covers switch independently and reset on version navigation", asyn
   expect(gallery.getByRole("status")).toHaveTextContent("封面无法显示");
   await user.click(gallery.getByRole("button", { name: "上一张" }));
   expect(gallery.getByRole("img")).toHaveAttribute("src", urls[0].url);
+  await user.keyboard("{Escape}");
+  expect(coverTrigger).toHaveFocus();
   await user.click(screen.getByRole("button", { name: "合唱版" }));
-  const albumCover = await screen.findByRole("img", { name: "歌曲展示封面，选自《回退专辑》" });
+  const albumCover = await screen.findByRole("img", { name: "回退专辑 封面" });
   expect(albumCover.closest("a")).toHaveAttribute("href", expect.stringContaining("/albums/8"));
   await user.click(screen.getByRole("button", { name: "普通版" }));
+  await user.click(await screen.findByRole("button", { name: "歌曲封面" }));
   gallery = within(await screen.findByRole("group", { name: "歌曲封面" }));
   expect(gallery.getByRole("img")).toHaveAttribute("src", urls[0].url);
-  api.getSongVersion.mockResolvedValue(version(2));
-  await user.click(screen.getByRole("button", { name: "合唱版" }));
-  expect(await screen.findByRole("img", { name: "合唱曲，暂无封面" })).toBeInTheDocument();
 });
 
 // 测试点：名称修改和默认顺序修改均需确认，排序保留名称，失败、恢复及清空维持完整封面草稿。
@@ -228,12 +302,12 @@ test("song group list, version counts and instrumental target", async () => {
   api.getAlbumDetail.mockResolvedValue({ ...version().albums[0], tracks: [{ album_track_id: 1, song_id: 1, song_name: "合唱曲", track_order: 1, edition_label: "Instrumental", version_label: "普通版", group_id: 1 }] });
   render(<PublicPage />);
   const detail = await screen.findByRole("article", { name: "歌曲详情" });
-  await within(detail).findByText("2");
+  await within(detail).findByRole("heading", { name: "演出记录 2 次 · 全部版本" });
   await user.click(within(detail).getByRole("button", { name: "合唱版" }));
   expect(await screen.findByText("短版")).toBeInTheDocument();
   await user.click(await screen.findByRole("link", { name: "查看唱片 收录盘" }));
   await user.click(await screen.findByRole("link", { name: "合唱曲 · 普通版 · Instrumental" }));
-  await within(await screen.findByRole("article", { name: "歌曲详情" })).findByText("2");
+  await within(await screen.findByRole("article", { name: "歌曲详情" })).findByRole("heading", { name: "演出记录 2 次 · 全部版本" });
   expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 1, { year: undefined, pageSize: 8 });
 });
 
@@ -325,7 +399,7 @@ test("performance years retain choices and group total across pages", async () =
   await user.click(screen.getByRole("button", { name: "下一页" }));
   expect(await screen.findByText("演出 2024 第2页")).toBeInTheDocument();
   expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 2, { year: 2024, pageSize: 8 });
-  expect(screen.getByText("20", { exact: false, selector: ".song-performance-total strong" })).toHaveTextContent("20 次");
+  expect(screen.getByRole("heading", { name: "演出记录 20 次 · 全部版本" })).toBeInTheDocument();
   await user.selectOptions(screen.getByLabelText("演出年份"), "2023");
   expect(await screen.findByText("暂无演奏记录")).toBeInTheDocument();
   expect(within(screen.getByLabelText("演出年份")).getAllByRole("option").map(option => option.textContent))
