@@ -12,8 +12,9 @@
 .modal {
   width: min(1180px, 96vw);
   background: var(--surface-overlay);
-  border-radius: var(--radius-card);
-  padding: 18px 20px;
+  border: 1px solid var(--border-normal);
+  border-radius: var(--radius-control);
+  padding: 24px;
   box-shadow: var(--shadow-modal);
   height: auto;
   max-height: 100%;
@@ -47,17 +48,22 @@
 .modal-head {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   position: relative;
+  gap: 16px;
   padding-right: 76px;
+  padding-bottom: 16px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-normal);
 }
 
 .modal h2 {
-  margin: 0 0 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
+  margin: 0;
+  min-width: 0;
+  font-size: 22px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 .detail-title-link {
@@ -70,9 +76,8 @@
 }
 
 .detail-title-link span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .detail-title-link:hover {
@@ -153,21 +158,14 @@
   color: var(--accent-neutral-hover-text);
 }
 
-.modal-action-btn.close {
-  color: var(--accent-danger);
-  border-color: var(--accent-danger-soft-border);
-  background: var(--accent-danger-soft);
-}
-
 .modal-action-btn.close:hover {
-  background: var(--accent-danger-strong);
-  color: var(--text-on-primary);
-  border-color: var(--accent-danger-strong);
+  color: var(--text-heading);
+  border-color: var(--text-heading);
 }
 
 .modal p {
   margin: 8px 0;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .detail-row {
@@ -254,8 +252,7 @@
 .detail-table-wrap {
   margin: 14px 0 0;
   overflow: auto;
-  border: 1px solid var(--border-table-head);
-  border-radius: var(--radius-card);
+  border-top: 1px solid var(--border-normal);
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -274,15 +271,12 @@
   font-size: 13px;
 }
 
-.detail-table th:not(:last-child),
-.detail-table td:not(:last-child) {
-  border-right: 1px solid var(--border-soft);
-}
-
 .detail-table thead th {
   position: sticky;
   top: 0;
-  background: var(--surface-table-head);
+  background: var(--surface-overlay);
+  color: var(--text-muted);
+  font-weight: 400;
   z-index: var(--z-base);
 }
 
@@ -297,9 +291,11 @@
 }
 
 .console-table-wrap {
-  border: 1px solid var(--border-table-head);
-  border-radius: 10px;
+  min-width: 0;
+  border-top: 1px solid var(--border-normal);
   overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-normal) transparent;
 }
 
 .console-table {
@@ -342,14 +338,10 @@
   width: 170px;
 }
 
-.console-table th:not(:last-child),
-.console-table td:not(:last-child) {
-  border-right: 1px solid var(--border-soft);
-}
-
 .console-table thead th {
-  background: var(--surface-table-head);
-  color: var(--text-table-head);
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .console-table tbody tr:hover {
@@ -549,9 +541,12 @@
 .console-band-modal {
   width: min(760px, 96vw);
   background: var(--surface-overlay);
-  border-radius: 12px;
+  border: 1px solid var(--border-normal);
+  border-radius: var(--radius-control);
   padding: 16px;
-  box-shadow: var(--shadow-modal);
+  box-shadow: var(--shadow-popover);
+  max-height: 85dvh;
+  overflow-y: auto;
 }
 
 .console-band-modal-head {
@@ -560,6 +555,8 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-normal);
 }
 
 .console-band-modal-head h4 {
@@ -575,10 +572,8 @@
 }
 
 .console-band-card {
-  border: 1px solid var(--border-table-head);
-  border-radius: 8px;
-  padding: 10px;
-  background: var(--surface-table-hover);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 10px 0;
 }
 
 .console-band-card-head {
@@ -589,8 +584,8 @@
 }
 
 .console-band-card-head strong {
-  font-size: 13px;
-  color: var(--text-secondary);
+  font-size: 14px;
+  color: var(--text-heading);
 }
 
 .console-band-status {
@@ -605,4 +600,10 @@
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.45;
+}
+
+@media (max-width: 620px) {
+  .modal-mask { padding: 12px; }
+  .modal { padding: 18px 16px; }
+  .modal h2 { font-size: 19px; }
 }

@@ -1,34 +1,42 @@
-.statistics-panel { padding: 24px; display: flex; flex-direction: column; gap: 18px; }
-.statistics-panel .statistics-filter-panel { margin: 0; }
+.statistics-panel { width: min(var(--page-max), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding: 32px 0 40px; display: flex; flex-direction: column; gap: 28px; font-size: 15px; line-height: 1.6; }
+.statistics-panel > .page-title { padding-bottom: 24px; border-bottom: var(--rule-heading); }
+.statistics-panel .statistics-filter-panel { margin: 0; padding: 0 0 20px; border: 0; border-bottom: 1px solid var(--border-normal); border-radius: 0; background: transparent; box-shadow: none; }
 .statistics-controls { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)) auto; align-items: end; gap: 12px; }
-.statistics-controls .secondary-btn { min-height: 38px; font: inherit; }
-.statistics-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.statistics-overview article { padding: 18px; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-1); }
-.statistics-overview strong { display: block; color: var(--text-heading); font-size: 28px; }
-.statistics-overview span { color: var(--text-secondary); }
-.statistics-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
-.statistics-card { padding: 18px; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-1); }
-.statistics-card h2 { margin: 0 0 14px; color: var(--text-heading); font-size: 18px; }
-.statistics-bars { display: grid; gap: 9px; }
-.statistics-bar-row { display: grid; grid-template-columns: 60px minmax(10px, 1fr) 36px; align-items: center; gap: 8px; color: var(--text-secondary); }
-.statistics-bar-row i { height: 8px; border-radius: var(--radius-pill); background: var(--accent-primary); }
+.statistics-controls :is(select, .secondary-btn) { height: 38px; min-height: 38px; padding-block: 0; font: inherit; line-height: 20px; }
+.statistics-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.statistics-overview article { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
+.statistics-overview strong { color: var(--text-heading); font-size: 32px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.statistics-overview span { color: var(--text-muted); font-size: 14px; }
+.statistics-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; }
+.statistics-card { min-width: 0; padding-top: 18px; border-top: 1px solid var(--border-normal); }
+.statistics-card h2 { margin: 0 0 16px; color: var(--text-heading); font-size: 25px; font-weight: 700; line-height: 1.4; }
+.statistics-bars { display: grid; gap: 12px; }
+.statistics-bar-row { display: grid; grid-template-columns: 60px minmax(10px, 1fr) 42px; align-items: center; gap: 12px; color: var(--text-secondary); font-size: 14px; font-variant-numeric: tabular-nums; }
+.statistics-bar-row strong { text-align: right; font-weight: 550; }
+.statistics-bar-row i { height: 6px; background: var(--accent-primary); }
 .statistics-dimension-list, .statistics-song-list { list-style: none; margin: 0; padding: 0; }
-.statistics-dimension-list li { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--border-table-row); }
+.statistics-dimension-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border-subtle); }
+.statistics-dimension-list strong { font-weight: 550; text-align: right; font-variant-numeric: tabular-nums; }
 .statistics-song-list { counter-reset: rank; }
-.statistics-song-list li { counter-increment: rank; display: grid; grid-template-columns: minmax(0, 1fr) 70px 140px; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border-table-row); }
-.statistics-song-list li::before { content: counter(rank); color: var(--text-muted); }
-.statistics-song-list li { grid-template-columns: 28px minmax(0, 1fr) 70px 140px; }
+.statistics-song-list li { counter-increment: rank; display: grid; grid-template-columns: 28px minmax(0, 1fr) 70px 160px; align-items: baseline; gap: 18px; padding: 14px 0; border-bottom: 1px solid var(--border-subtle); }
+.statistics-song-list li::before { content: counter(rank); color: var(--text-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.statistics-song-list strong { font-size: 16px; font-weight: 550; overflow-wrap: anywhere; }
+.statistics-song-list a { color: var(--text-heading); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--text-muted) 45%, transparent); text-underline-offset: 4px; }
+.statistics-song-list a:hover { color: var(--text-link); text-decoration-color: currentColor; }
 .statistics-song-list div span { display: block; margin-top: 3px; color: var(--text-muted); font-size: 13px; }
-.statistics-song-list button { border: 0; background: transparent; color: var(--text-link); text-align: right; cursor: pointer; }
+.statistics-song-list b { color: var(--text-secondary); font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+.statistics-song-list button { border: 0; padding: 4px 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; text-align: right; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--text-muted) 45%, transparent); text-underline-offset: 4px; }
+.statistics-song-list button:hover { color: var(--text-link); text-decoration-color: currentColor; }
 .statistics-state { margin: 0; color: var(--text-secondary); }
 .statistics-state.error { color: var(--accent-danger); }
 @media (max-width: 720px) {
-  .statistics-panel { padding: 16px; }
+  .statistics-panel { padding: 24px 0 32px; gap: 24px; }
   .statistics-controls { grid-template-columns: 1fr 1fr; }
   .statistics-controls .secondary-btn { align-self: end; }
   .statistics-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .statistics-grid { grid-template-columns: 1fr; }
-  .statistics-song-list li { grid-template-columns: 24px minmax(0, 1fr) 56px; }
+  .statistics-grid { grid-template-columns: 1fr; gap: 26px; }
+  .statistics-card h2 { font-size: 23px; }
+  .statistics-song-list li { grid-template-columns: 22px minmax(0, 1fr) 58px; gap: 6px 10px; }
   .statistics-song-list button { grid-column: 2 / -1; text-align: left; }
 }
 

@@ -89,6 +89,9 @@ export function HomeLiveCalendar({ onOpenLive, onShowAll, refreshKey = 0 }: Home
         <div className="calendar-heading">
           <h2 id="home-calendar-title">Live 日历</h2>
         </div>
+        <button type="button" className="all-lives-button" onClick={onShowAll}>
+          查看全部 Live <span aria-hidden="true">→</span>
+        </button>
       </header>
 
       <div className="calendar-workspace">
@@ -165,7 +168,6 @@ export function HomeLiveCalendar({ onOpenLive, onShowAll, refreshKey = 0 }: Home
             selectedDate={selectedDate}
             items={month.items}
             onOpenLive={onOpenLive}
-            onShowAll={onShowAll}
           />
         )}
 

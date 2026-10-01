@@ -83,7 +83,7 @@ function SearchForm({ query, onSearch }: { query: string; onSearch: (query: stri
       }}
     >
       <label htmlFor="catalog-search-input">搜索资料库</label>
-      <div className="catalog-search-row">
+      <div className="home-search-row">
         <input
           id="catalog-search-input"
           type="search"

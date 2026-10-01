@@ -1,9 +1,7 @@
 .detail-page {
-  margin: 24px 24px 0;
-  padding: 18px 20px;
-  background: var(--surface-1);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-card);
+  width: min(var(--page-max), calc(100% - var(--page-gutter) * 2));
+  margin: 28px auto 0;
+  padding: 0 0 32px;
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -13,18 +11,21 @@
 .detail-page-head {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   position: relative;
-  padding-left: 36px;
-  margin-bottom: 12px;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: var(--rule-heading);
 }
 
 .detail-page-head h2 {
   margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
+  min-width: 0;
+  font-size: clamp(28px, 3.4vw, 48px);
+  font-weight: 760;
+  line-height: 1.24;
+  overflow-wrap: anywhere;
 }
 
 .live-status-panel {
@@ -86,11 +87,8 @@
 }
 
 .detail-back-btn {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  border: 1px solid var(--accent-primary);
+  flex: 0 0 auto;
+  border: 1px solid var(--border-normal);
   background: var(--surface-1);
   color: var(--accent-primary);
   border-radius: var(--radius-control);
@@ -119,20 +117,24 @@
 .detail-tour-link {
   border: 0;
   background: transparent;
-  color: var(--text-link);
+  color: var(--text-heading);
+  text-decoration: underline;
+  text-decoration-color: var(--text-muted);
+  text-underline-offset: 4px;
   padding: 0;
   font: inherit;
   cursor: pointer;
 }
 
 .detail-tour-link:hover {
-  text-decoration: underline;
+  color: var(--text-link);
+  text-decoration-color: currentColor;
 }
 
 @media (max-width: 720px) {
   .detail-page {
-    margin: 12px 12px 0;
-    padding: 14px 16px;
+    margin-top: 18px;
+    padding-bottom: 24px;
   }
 
   .detail-page-head {

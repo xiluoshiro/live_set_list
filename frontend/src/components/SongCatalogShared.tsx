@@ -41,31 +41,39 @@ export function CatalogPagination({ data, onPage, label, footerRef, expanded = f
 }
 
 // Measure actual rendered rows. Remember the tallest row so changing page size cannot oscillate.
-export function useFittedCatalogPage(rowsRef: RefObject<HTMLElement>, footerRef: RefObject<HTMLElement>,
+export function useFittedCatalogPage(rowsRef: RefObject<HTMLElement>, viewportRef: RefObject<HTMLElement>,
   size: number, onSize: (size: number) => void, layoutRef?: RefObject<HTMLElement>) {
   const measured = useRef({ width: 0, rowHeight: 0 });
   useLayoutEffect(() => {
+    let frame = 0;
     const measure = () => {
       const body = rowsRef.current;
-      if (!body || window.innerWidth < 1000) return;
-      const bounds = body.getBoundingClientRect();
-      if (!bounds.width) return; // Layout is unavailable in SSR/jsdom.
-      if (measured.current.width !== bounds.width) measured.current = { width: bounds.width, rowHeight: 0 };
+      const viewport = viewportRef.current;
+      // Loading temporarily removes the rows and pagination; wait for the
+      // completed page rather than fitting against that transient extra space.
+      if (!body?.children.length || !viewport) return;
+      // A provisional oversized page may add a scrollbar; its width must not
+      // reset the tallest-row history and cause alternating page capacities.
+      const width = viewport.getBoundingClientRect().width;
+      if (!width || !viewport.clientHeight) return; // Layout is unavailable in SSR/jsdom.
+      if (measured.current.width !== width) measured.current = { width, rowHeight: 0 };
       const heights = Array.from(body.children, child => child.getBoundingClientRect().height);
       measured.current.rowHeight = Math.max(measured.current.rowHeight, ...heights);
       if (!measured.current.rowHeight) return;
-      const footerHeight = footerRef.current?.getBoundingClientRect().height ?? 48;
-      const available = window.innerHeight - bounds.top - footerHeight - 28;
+      const headHeight = body.closest("table")?.tHead?.getBoundingClientRect().height ?? 0;
+      const available = viewport.clientHeight - headHeight - 2;
       const capacity = Math.max(1, Math.min(100, Math.floor(available / measured.current.rowHeight)));
       if (capacity !== size) onSize(capacity);
     };
+    const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure); };
     measure();
-    window.addEventListener("resize", measure);
-    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
-    if (rowsRef.current?.parentElement) observer?.observe(rowsRef.current.parentElement);
+    window.addEventListener("resize", schedule);
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+    if (rowsRef.current) observer?.observe(rowsRef.current);
+    if (viewportRef.current) observer?.observe(viewportRef.current);
     // Covers and wrapped metadata can move the table without resizing the table itself.
     if (layoutRef?.current) observer?.observe(layoutRef.current);
-    return () => { window.removeEventListener("resize", measure); observer?.disconnect(); };
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", schedule); observer?.disconnect(); };
   });
 }
 

@@ -4,15 +4,20 @@
   --console-live-type-control-width: 86px;
   --console-entity-select-width: 420px;
 
-  padding: 24px;
+  width: min(var(--page-max), calc(100% - 2 * var(--page-gutter)));
+  min-width: 0;
+  margin: 0 auto;
+  padding: 32px 0 48px;
 }
 
 .console-admin > .page-title {
-  margin-bottom: 12px;
+  margin-bottom: 24px;
 }
 
 .console-mode-nav {
-  margin-bottom: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: var(--rule-heading);
 }
 
 .console-mode-scroll {
@@ -20,45 +25,36 @@
 }
 
 .console-mode-grid {
-  display: flex;
-  flex-wrap: wrap;
-  width: fit-content;
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 12px 16px;
+  width: 100%;
   max-width: 100%;
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-control);
-  background: var(--surface-1);
+  padding: 2px;
 }
 
 .console-mode-cell {
   display: flex;
-  flex: 0 0 125px;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0;
+  gap: 4px;
   min-width: 0;
-  padding: 4px 2px;
-  border-right: 1px solid var(--border-subtle);
+  padding: 4px 0;
   text-align: center;
   white-space: nowrap;
 }
 
-.console-mode-grid > :last-child {
-  border-right: 0;
-}
-
 .console-mode-heading {
-  color: var(--accent-primary);
+  color: var(--text-heading);
   font-size: 15px;
   font-weight: 700;
   line-height: 18px;
 }
 
 .console-mode-actions {
-  color: var(--text-tab);
+  color: var(--text-muted);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 18px;
 }
 
@@ -74,6 +70,11 @@
 .console-mode-button.active {
   border-color: transparent;
   background: transparent;
+  color: var(--accent-primary);
+  font-weight: 650;
+}
+
+.console-mode-button:hover {
   color: var(--accent-primary);
 }
 
@@ -95,10 +96,8 @@
 
 .live-admin-status-section {
   margin: 12px 0;
-  padding: 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-control);
-  background: var(--surface-1);
+  padding: 16px 0;
+  border-top: 1px solid var(--border-normal);
 }
 
 .live-admin-state-grid {
@@ -106,10 +105,11 @@
   grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
   gap: 12px;
   align-items: stretch;
+  margin: 12px 0;
 }
 
 .live-admin-state-grid > .live-admin-status-section {
-  margin: 12px 0;
+  margin: 0;
 }
 
 .console-admin-table.live-schedule-status-table,
@@ -173,7 +173,7 @@
 .live-schedule-attention-counts button[data-active="true"] {
   border-color: var(--accent-primary);
   color: var(--text-main);
-  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+  background: var(--surface-chip-soft);
 }
 
 .live-schedule-attention-counts button[data-empty="true"] {
@@ -199,9 +199,10 @@
   justify-content: space-between;
   gap: 12px;
   padding: 9px 10px;
-  border: 1px solid var(--border-subtle);
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
   border-left: 3px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--surface-input);
 }
 
@@ -244,7 +245,7 @@
 }
 
 .live-schedule-missing-tags small {
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   padding: 2px 7px;
   background: var(--surface-chip-soft);
   color: var(--text-secondary);
@@ -255,13 +256,15 @@
   display: flex;
   align-items: baseline;
   gap: 10px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
 }
 
 .live-admin-status-head h3 {
   margin: 0;
   color: var(--text-heading);
-  font-size: 14px;
+  font-size: 18px;
+  font-weight: 650;
 }
 
 .live-admin-status-head span {
@@ -315,7 +318,7 @@
 .live-admin-status-fields input {
   width: 100%;
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 6px 8px;
   background: var(--surface-input);
   color: var(--text-main);
@@ -379,11 +382,11 @@
   width: max-content;
   max-width: min(520px, calc(100vw - 32px));
   border: 1px solid color-mix(in srgb, var(--accent-warning-strip) 36%, var(--border-normal));
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   padding: 10px 16px;
   background: var(--surface-overlay);
   color: var(--text-main);
-  box-shadow: 0 8px 24px rgb(15 23 42 / 18%);
+  box-shadow: var(--shadow-popover);
   font-size: 13px;
   pointer-events: none;
   transform: translateX(-50%);
@@ -416,26 +419,29 @@
 .console-admin-table td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-table-row);
-  border-right: 1px solid var(--border-soft);
   text-align: left;
   font-size: 13px;
   vertical-align: middle;
-}
-
-.console-admin-table th:last-child,
-.console-admin-table td:last-child {
-  border-right: none;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
 .console-admin-table thead th {
-  background: var(--surface-table-head);
-  color: var(--text-table-head);
+  border-bottom-color: var(--border-normal);
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.console-admin-table tbody tr:hover {
+  background: var(--surface-table-hover);
 }
 
 .console-admin-table input {
   width: 100%;
   border: 1px solid var(--border-normal);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 6px 8px;
   font-size: 13px;
   background: var(--surface-input);
@@ -453,7 +459,7 @@
 .console-admin-table select {
   width: 100%;
   border: 1px solid var(--border-normal);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 6px 8px;
   font-size: 13px;
   font-family: inherit;
@@ -464,11 +470,18 @@
 .console-submit-btn {
   border: none;
   padding: 7px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--accent-primary);
   color: var(--text-on-primary);
   cursor: pointer;
   font-size: 13px;
+  font-family: inherit;
+  line-height: 18px;
+  min-height: var(--console-control-height, 32px);
+}
+
+.console-submit-btn:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
 }
 
 .tour-admin-section {
@@ -683,7 +696,7 @@
 .tour-stop-table input,
 .tour-admin-toolbar select {
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   min-height: 31px;
   padding: 6px 8px;
   background: var(--surface-input);
@@ -693,14 +706,19 @@
 }
 
 .tour-admin-block {
-  padding: 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--surface-1);
+  padding: 18px 0 0;
+  border-top: 1px solid var(--border-normal);
 }
 
 .tour-admin-block h3 {
   margin: 0 0 12px;
+  color: var(--text-heading);
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.tour-admin-block > h3:not(:first-child) {
+  margin-top: 24px;
 }
 
 .tour-band-validation {
@@ -728,6 +746,21 @@
   height: auto;
   max-height: 100%;
   overflow: hidden;
+}
+
+.console-confirm-modal > .modal-head {
+  justify-content: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-normal);
+}
+
+.console-confirm-modal > .modal-head h2 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: 20px;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
 }
 
 .console-confirm-modal.compact {
@@ -847,7 +880,7 @@
 .bands-picker-trigger {
   width: 100%;
   border: 1px solid var(--border-normal);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 6px 8px;
   cursor: pointer;
   user-select: none;
@@ -868,7 +901,7 @@
 .live-id-selector select {
   min-width: 280px;
   border: 1px solid var(--border-normal);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 6px 8px;
   font-size: 13px;
   background: var(--surface-input);
@@ -891,10 +924,8 @@
 
 .setlist-paste-panel {
   margin: 12px 0;
-  padding: 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: 12px;
-  background: var(--surface-1);
+  padding: 16px 0;
+  border-block: 1px solid var(--border-normal);
 }
 
 .setlist-paste-head {
@@ -928,7 +959,7 @@
   width: 100%;
   min-height: 132px;
   border: 1px solid var(--border-normal);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   padding: 10px 12px;
   resize: vertical;
   background: var(--surface-input);
@@ -940,8 +971,8 @@
 .setlist-paste-preview {
   margin-top: 10px;
   padding: 10px;
-  border-radius: 10px;
-  background: var(--surface-chip-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
 }
 
 .setlist-paste-summary {
@@ -968,7 +999,7 @@
 
 .setlist-paste-preview-list span {
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   padding: 3px 8px;
   background: var(--surface-input);
   color: var(--text-secondary);
@@ -982,7 +1013,7 @@
 
 .setlist-preview-more-btn {
   border: 1px solid var(--border-normal);
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   padding: 3px 10px;
   background: var(--surface-input);
   color: var(--accent-primary);
@@ -1047,7 +1078,7 @@
   border: 1px solid var(--border-normal);
   background: var(--surface-chip-soft);
   color: var(--text-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   padding: 2px 8px;
   font-size: 12px;
   cursor: pointer;
@@ -1061,7 +1092,7 @@
 .band-member-trigger {
   width: 100%;
   border: 1px solid var(--border-normal);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 6px 8px;
   background: var(--surface-input);
   color: var(--text-secondary);
@@ -1072,7 +1103,7 @@
 .other-member-trigger {
   width: 100%;
   border: 1px solid var(--border-normal);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 6px 8px;
   background: var(--surface-input);
   color: var(--text-secondary);
@@ -1114,7 +1145,7 @@
   border: 1px solid var(--border-normal);
   background: var(--surface-chip-soft);
   color: var(--text-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   font-size: 12px;
   line-height: 1;
   padding: 0;
@@ -1134,12 +1165,21 @@
 
 .console-ghost-btn {
   border: 1px solid var(--border-normal);
-  background: var(--surface-chip-soft);
+  background: var(--surface-input);
   color: var(--text-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 6px 12px;
   font-size: 13px;
+  font-family: inherit;
+  line-height: 18px;
   cursor: pointer;
+  min-height: var(--console-control-height, 32px);
+}
+
+.console-ghost-btn:hover:not(:disabled) {
+  border-color: var(--text-muted);
+  background: var(--surface-hover);
+  color: var(--text-heading);
 }
 
 .console-submit-row {
@@ -1215,7 +1255,7 @@
 .timezone-input-group {
   display: flex;
   width: 100%;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
 }
 
 /* Reuse the Live input table; only field-specific column widths differ. */
@@ -1230,6 +1270,7 @@
 .venue-create-timezone-column { width: 220px; }
 
 .song-create-form-table { table-layout: fixed; }
+.song-create-form > section { margin-top: 16px; }
 .song-create-form-table[data-ownership="bands"] { min-width: 1100px; }
 .song-create-form-table[data-ownership="members"] { min-width: 1100px; }
 .song-create-form-table[data-ownership="mixed"] { min-width: 1340px; }
@@ -1255,7 +1296,7 @@
 .song-group-editor summary { cursor: pointer; color: var(--text-secondary); padding: 8px 0; }
 .song-current-version { display: block; color: var(--accent-primary); font-size: 12px; }
 .song-correction-reason { display: grid; gap: 6px; margin-top: 10px; color: var(--text-secondary); }
-.song-correction-reason input { width: 100%; border: 1px solid var(--border-normal); border-radius: 7px; padding: 6px 8px; background: var(--surface-input); color: var(--text-main); }
+.song-correction-reason input { width: 100%; border: 1px solid var(--border-normal); border-radius: var(--radius-control); padding: 6px 8px; background: var(--surface-input); color: var(--text-main); }
 .song-version-table td { overflow-wrap: anywhere; }
 
 .album-form-table { min-width: 1200px; table-layout: fixed; }
@@ -1297,14 +1338,14 @@
 
 .console-admin-table .timezone-input-group select {
   min-width: 0;
-  border-radius: 7px 0 0 7px;
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
 }
 
 .timezone-minute-btn {
   flex: 0 0 50px;
   border: 1px solid var(--border-normal);
   border-left: 0;
-  border-radius: 0 7px 7px 0;
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
   background: var(--surface-input);
   color: var(--text-main);
   cursor: pointer;
@@ -1342,7 +1383,7 @@
 
 .venue-query-input {
   border: 1px solid var(--border-normal);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 6px 8px;
   font-size: 13px;
   background: var(--surface-input);
@@ -1484,16 +1525,16 @@
 }
 
 .live-history-table thead th {
-  background: var(--surface-success-head);
-  color: var(--accent-success);
+  background: transparent;
+  color: var(--text-muted);
 }
 
 .live-history-table td {
-  background: var(--surface-1);
+  background: transparent;
 }
 
 .live-history-table tr:hover td {
-  background: var(--surface-success-row-hover);
+  background: var(--surface-table-hover);
 }
 
 .setlist-table th:nth-child(1),
@@ -1566,7 +1607,7 @@
   overflow: auto;
   background: var(--surface-overlay);
   border: 1px solid var(--border-normal);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-popover);
   padding: 8px;
   display: grid;
@@ -1588,7 +1629,7 @@
   overflow: auto;
   background: var(--surface-overlay);
   border: 1px solid var(--border-normal);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-popover);
   padding: 10px;
   display: grid;
@@ -1602,7 +1643,7 @@
   overflow: auto;
   background: var(--surface-overlay);
   border: 1px solid var(--border-normal);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-popover);
   padding: 10px;
 }
@@ -1624,7 +1665,7 @@
   overflow-x: hidden;
   background: var(--surface-overlay);
   border: 1px solid var(--border-normal);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-popover);
   padding: 12px;
 }
@@ -1637,14 +1678,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
-  color: var(--text-secondary);
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-normal);
+  color: var(--text-heading);
 }
 
 .band-member-block {
-  border: 1px solid var(--border-table-head);
-  border-radius: 8px;
-  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 10px 0;
 }
 
 .band-member-main {
@@ -1697,9 +1740,93 @@
   font-size: 12px;
 }
 
-@media (max-width: 620px) {
+@media (max-width: 1100px) {
+  .console-mode-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
   .console-admin {
-    padding: 12px;
+    padding-block: 24px 32px;
+  }
+
+  .console-mode-grid {
+    column-gap: 8px;
+  }
+
+  .live-id-selector.live-create-query-row {
+    flex-wrap: wrap;
+  }
+
+  .live-id-selector.live-create-query-row > .live-management-label,
+  .live-admin-toolbar > .live-management-label {
+    flex-basis: 100%;
+  }
+
+  .live-id-selector.live-create-query-row > .venue-query-input.live-management-primary-control,
+  .live-admin-toolbar > .venue-query-input.live-management-primary-control,
+  .tour-candidate-search > input {
+    flex: 1 1 calc(100% - 64px);
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .live-id-selector.live-create-query-row > .console-ghost-btn,
+  .live-admin-toolbar > .console-ghost-btn,
+  .tour-candidate-search > .console-ghost-btn {
+    flex-shrink: 0;
+  }
+
+  .live-admin-toolbar > .song-band-filter,
+  .tour-candidate-search > .song-band-filter {
+    flex: 1 1 calc(100% - 64px);
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .live-schedule-attention-summary,
+  .setlist-paste-head {
+    flex-wrap: wrap;
+  }
+
+  .live-schedule-attention-counts {
+    flex-basis: 100%;
+  }
+
+  .live-schedule-attention-counts button {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 6px 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .live-schedule-attention-counts button strong {
+    margin-left: 0;
+  }
+
+  .console-submit-row,
+  .setlist-actions-row,
+  .console-confirm-actions {
+    flex-wrap: wrap;
+  }
+
+  .console-submit-row > .live-clear-after-create-option {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 359px) {
+  .console-mode-grid {
+    column-gap: 4px;
+  }
+
+  .console-mode-actions {
+    font-size: 12px;
   }
 }
 .venue-location-picker-block {
@@ -1771,7 +1898,7 @@
   width: 100%;
   padding: 12px 11px;
   border: 1px solid transparent;
-  border-radius: var(--radius-card);
+  border-bottom-color: var(--border-subtle);
   background: transparent;
   color: inherit;
   text-align: left;
@@ -1785,8 +1912,8 @@
 }
 
 .venue-location-result.active {
-  border-color: rgba(233, 72, 125, 0.36);
-  background: rgba(233, 72, 125, 0.12);
+  border-color: var(--accent-primary);
+  background: var(--surface-chip-soft);
 }
 
 .venue-location-place-icon {
@@ -1795,7 +1922,7 @@
   height: 36px;
   place-items: center;
   border-radius: var(--radius-control);
-  background: var(--surface-2);
+  background: transparent;
   color: var(--text-secondary);
 }
 
@@ -1873,7 +2000,7 @@
 .venue-location-selection {
   padding: 16px 18px 18px;
   border-top: 1px solid var(--border-subtle);
-  background: var(--surface-2);
+  background: var(--surface-1);
 }
 
 .venue-location-selection-label {
@@ -1891,7 +2018,6 @@
   height: 7px;
   border-radius: 50%;
   background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
 }
 
 .venue-location-selection h4 {
@@ -1920,7 +2046,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #d9e6dc;
+  background: var(--surface-2);
 }
 
 .venue-location-map {
@@ -1942,7 +2068,7 @@
   display: grid;
   height: 100%;
   place-items: center;
-  color: #324257;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -1955,7 +2081,7 @@
   margin: 0;
   padding: 10px 12px;
   border-radius: var(--radius-control);
-  background: rgba(16, 27, 43, 0.9);
+  background: rgb(24 24 27 / 90%);
   color: #fff;
   font-size: 12px;
 }

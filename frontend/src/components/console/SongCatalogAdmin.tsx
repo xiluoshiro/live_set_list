@@ -253,7 +253,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     {!creating && !original && !busy && <p className="console-admin-hint">请先选择要编辑的歌曲。</p>}
     {!creating && busy && !confirm && <p className="console-admin-hint" role="status">正在加载歌曲资料…</p>}
     {!creating && !candidatesLoading && candidates && !candidates.items.length && <p className="console-admin-hint" role="status">没有匹配的歌曲。</p>}
-    {creating ? <div>
+    {creating ? <div className="song-create-form">
       <div className="live-id-selector live-create-tools">
         <label className="live-management-label" htmlFor={`${formId}-group-mode`}>歌曲组</label>
         <select id={`${formId}-group-mode`} className="live-management-primary-control" disabled={fieldsDisabled}

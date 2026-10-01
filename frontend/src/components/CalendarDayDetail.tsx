@@ -13,7 +13,6 @@ type CalendarDayDetailProps = {
   selectedDate: string;
   items: CatalogCalendarLiveItem[];
   onOpenLive: (row: HomeLiveRow) => void;
-  onShowAll: () => void;
 };
 
 function formatStartTime(value: string | null, dateIso: string): string {
@@ -48,7 +47,6 @@ export function CalendarDayDetail({
   selectedDate,
   items,
   onOpenLive,
-  onShowAll,
 }: CalendarDayDetailProps) {
   const dayItems = useMemo(
     () => items.filter((item) => item.calendar_date === selectedDate),
@@ -120,10 +118,6 @@ export function CalendarDayDetail({
           })
         )}
       </div>
-
-      <button type="button" className="all-lives-button" onClick={onShowAll}>
-        查看全部 Live <span aria-hidden="true">→</span>
-      </button>
     </aside>
   );
 }

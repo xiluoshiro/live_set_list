@@ -1,44 +1,5 @@
-/* A: performance archive. Neutral ink, a strong title rule, and a quiet release column. */
-.page-song-detail, .song-releases-dialog, .song-cover-dialog {
-  --bg-body: #fff;
-  --text-main: #1d1d20;
-  --text-heading: #141416;
-  --text-secondary: #525257;
-  --text-muted: #65656b;
-  --text-link: #d90052;
-  --accent-primary: #d90052;
-  --accent-primary-hover: #aa003f;
-  --border-normal: #d4d4d8;
-  --border-subtle: #e8e8eb;
-  --surface-topbar: #fff;
-  --surface-overlay: #fff;
-  --surface-input: #fff;
-  --surface-table-hover: #fafafa;
-  --surface-chip-soft: #fff0f5;
-  background: var(--bg-body);
-  color: var(--text-main);
-}
-:root[data-theme="dark"] .page-song-detail,
-:root[data-theme="dark"] .song-releases-dialog,
-:root[data-theme="dark"] .song-cover-dialog {
-  --bg-body: #171719;
-  --text-main: #eeeef0;
-  --text-heading: #fafafa;
-  --text-secondary: #c0c0c7;
-  --text-muted: #a8a8b1;
-  --text-link: #ff79aa;
-  --accent-primary: #ff79aa;
-  --accent-primary-hover: #ffa1c2;
-  --border-normal: #48484f;
-  --border-subtle: #343439;
-  --surface-topbar: #171719;
-  --surface-overlay: #171719;
-  --surface-input: #232326;
-  --surface-table-hover: #222225;
-  --surface-chip-soft: #39232c;
-}
-.page-song-detail .site-topbar { box-shadow: none; backdrop-filter: none; }
-.song-catalog.song-catalog-song { width: min(1344px, calc(100% - 96px)); padding: 0 0 24px; line-height: 1.5; }
+/* Performance archive layout; the palette is shared by the whole site. */
+.song-catalog.song-catalog-song { width: min(var(--page-max), calc(100% - 2 * var(--page-gutter))); padding: 0 0 24px; line-height: 1.5; }
 .song-catalog-song .song-catalog-context { flex: none; min-height: 48px; padding: 0; }
 .song-detail { --song-fit: 0; min-width: 0; }
 .song-detail-heading { padding: 12px 0 18px; border-bottom: 3px solid var(--text-heading); }
@@ -47,7 +8,7 @@
 .song-detail-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 26px; margin-top: 12px; }
 .song-catalog-versions { display: flex; flex-wrap: wrap; gap: 8px 26px; min-width: 0; }
 .song-catalog-versions .section-tab-btn { min-height: 36px; padding: 5px 0 6px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: 15px; line-height: 1.5; text-align: left; white-space: normal; overflow-wrap: anywhere; }
-.song-catalog-versions [aria-pressed="true"] { color: var(--text-heading); border-bottom-color: var(--accent-primary); font-weight: 650; }
+.song-catalog-versions [aria-pressed="true"] { color: var(--accent-primary); font-weight: 650; }
 .song-catalog-versions .section-tab-btn:hover { color: var(--text-link); }
 .song-text-button { border: 0; background: transparent; padding: 4px 0; color: var(--text-muted); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
 .song-text-button:hover { color: var(--text-link); }
@@ -110,7 +71,6 @@
 .song-cover-dialog .album-cover-image { max-height: 60dvh; max-width: 100%; object-fit: contain; }
 
 @media (max-width: 1120px) {
-  .song-catalog.song-catalog-song { width: calc(100% - 64px); }
   .song-detail .song-performance-table th:first-child { width: 108px; }
   .song-detail .song-performance-table td:nth-child(2) { padding-right: 14px; font-size: 15px; }
   .song-detail .song-performance-table td:first-child { font-size: 13px; padding-right: 14px; }
@@ -125,7 +85,6 @@
   .song-detail .song-release-section > .song-section-heading { flex-wrap: wrap; gap: 2px 8px; }
 }
 @media (max-width: 700px) {
-  .song-catalog.song-catalog-song { width: calc(100% - 40px); }
   .song-detail .song-owner { font-size: 15px; }
   .song-detail .song-performance-table thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .song-detail .song-performance-table, .song-detail .song-performance-table tbody { display: block; }
@@ -150,6 +109,7 @@
   .song-release { grid-template-columns: 76px minmax(0, 1fr); gap: 16px; }
   .song-release-art { width: 76px; height: 76px; }
   .song-release-first { display: grid; grid-template-columns: 112px minmax(0, 1fr); padding-bottom: 22px; }
+  .song-release-first.song-release-no-art { display: block; }
   .song-release-first .song-release-art { width: 112px; height: 112px; }
   .song-release-first strong { font-size: 17px; }
   .song-all-releases { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 21px 15px; }

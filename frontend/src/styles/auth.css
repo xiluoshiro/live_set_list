@@ -21,9 +21,9 @@
 
 .auth-role-chip {
   padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-chip-soft);
-  color: var(--text-tab);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text-secondary);
   border: 1px solid var(--border-normal);
   font-size: 12px;
 }
@@ -48,8 +48,14 @@
 
 .secondary-btn {
   border: 1px solid var(--border-normal);
-  background: var(--surface-chip-soft);
-  color: var(--text-tab);
+  background: var(--surface-input);
+  color: var(--text-secondary);
+}
+
+.secondary-btn:hover:not(:disabled) {
+  border-color: var(--text-muted);
+  background: var(--surface-hover);
+  color: var(--text-heading);
 }
 
 .user-menu-wrap {
@@ -58,8 +64,8 @@
 
 .user-menu-trigger {
   border: 1px solid var(--border-normal);
-  background: var(--surface-chip-soft);
-  color: var(--text-tab);
+  background: var(--surface-input);
+  color: var(--text-secondary);
   width: 40px;
   height: 40px;
   border-radius: var(--radius-pill);
@@ -87,10 +93,10 @@
   right: 0;
   width: 220px;
   border: 1px solid var(--border-normal);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-control);
   background: var(--surface-1);
-  box-shadow: var(--shadow-panel);
-  padding: 10px;
+  box-shadow: var(--shadow-popover);
+  padding: 16px;
   z-index: var(--z-dropdown);
 }
 
@@ -98,6 +104,7 @@
   font-size: 14px;
   line-height: 1.4;
   color: var(--text-main);
+  overflow-wrap: anywhere;
 }
 
 .user-name-row {
@@ -128,15 +135,17 @@
 
 .user-menu-logout-btn {
   display: inline-block;
-  color: rgba(196, 73, 73, 0.68);
-  text-decoration: none;
+  color: var(--accent-danger);
+  text-decoration: underline;
+  text-underline-offset: 4px;
   font-size: 14px;
   line-height: 1.4;
   cursor: pointer;
 }
 
 .user-menu-logout-btn:hover {
-  color: rgba(166, 51, 51, 0.82);
+  color: var(--accent-danger);
+  text-decoration-thickness: 2px;
 }
 
 .tab-tip {
@@ -153,30 +162,31 @@
 }
 
 .modal.login-modal .modal-head {
-  justify-content: center;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-head);
-  padding-right: 34px;
+  justify-content: flex-start;
+  margin: 0 20px;
+  padding: 18px 34px 14px 0;
+  border-bottom: 1px solid var(--border-normal);
+  background: transparent;
 }
 
 .modal.login-modal .modal-head h2 {
   margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-  text-align: center;
+  color: var(--text-heading);
+  font-size: 22px;
+  font-weight: 650;
+  text-align: left;
 }
 
 .modal.login-modal .modal-actions {
-  top: 6px;
-  right: 6px;
+  top: 18px;
+  right: 0;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px 10px;
+  gap: 16px;
+  padding: 20px;
 }
 
 .login-field {
@@ -206,6 +216,7 @@
 }
 
 .login-field input {
+  min-width: 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
   padding: 8px 10px;
@@ -258,9 +269,9 @@
 }
 
 .login-field input:focus-visible {
-  outline: none;
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
 .login-error {
@@ -273,7 +284,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: 0;
+  padding-top: 4px;
 }
 
 .login-actions .primary-btn,
@@ -281,4 +292,11 @@
   border-radius: var(--radius-control);
   padding: 5px 10px;
   font-size: 13px;
+  min-height: 34px;
+}
+
+@media (hover: none) {
+  .password-visibility-btn.hidden-until-hover {
+    opacity: 1;
+  }
 }

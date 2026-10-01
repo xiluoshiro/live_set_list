@@ -1,8 +1,7 @@
 .table-wrap {
   margin: 0 24px 0;
   overflow-x: auto;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-card);
+  border-top: 1px solid var(--border-normal);
   background: var(--surface-1);
 }
 
@@ -132,10 +131,14 @@ tbody tr[data-status-tone="cancelled"] {
 .name-btn {
   border: none;
   background: none;
-  color: var(--text-link);
+  color: var(--text-heading);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  text-underline-offset: 4px;
   padding: 0;
   cursor: pointer;
   font: inherit;
+  font-weight: 550;
   text-align: left;
   max-width: 100%;
   overflow: hidden;
@@ -144,7 +147,8 @@ tbody tr[data-status-tone="cancelled"] {
 }
 
 .name-btn:hover {
-  text-decoration: underline;
+  color: var(--text-link);
+  text-decoration-color: currentColor;
 }
 
 .fav-col-cell {
@@ -230,6 +234,7 @@ tbody tr[data-status-tone="cancelled"] {
 
 .icons-cell-wrap.no-overflow .icons-cell {
   overflow-x: hidden;
+  scrollbar-gutter: auto;
 }
 
 .icons-cell::-webkit-scrollbar-button {
@@ -281,28 +286,25 @@ tbody tr[data-status-tone="cancelled"] {
 
 .view-toggle {
   display: inline-flex;
-  padding: 3px;
-  border: 1px solid var(--border-normal);
-  border-radius: var(--radius-control);
-  background: var(--surface-chip-soft);
+  gap: 20px;
 }
 
 .view-toggle button {
   min-width: 64px;
   border: 0;
-  border-radius: calc(var(--radius-control) - 2px);
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
   background: transparent;
-  color: var(--text-secondary);
-  padding: 7px 12px;
+  color: var(--text-muted);
+  padding: 8px 0;
   cursor: pointer;
   font: inherit;
   transition: background-color 0.16s, color 0.16s;
 }
 
 .view-toggle button.active {
-  background: var(--accent-primary);
-  color: var(--text-on-primary);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
+  color: var(--accent-primary);
+  font-weight: 650;
 }
 
 .view-toggle button:not(.active):hover {
@@ -311,18 +313,18 @@ tbody tr[data-status-tone="cancelled"] {
 
 .live-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+  gap: 4px 32px;
   margin: 0 24px;
 }
 
 .live-card {
-  --live-status-bg: var(--surface-1);
   --live-status-text: var(--text-secondary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-card);
-  background: var(--live-status-bg);
-  padding: 20px;
+  border: 0;
+  border-top: 1px solid var(--border-normal);
+  border-radius: 0;
+  background: transparent;
+  padding: 20px 0 24px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -330,7 +332,7 @@ tbody tr[data-status-tone="cancelled"] {
 }
 
 .live-card:hover {
-  border-color: var(--live-status-text);
+  border-top-color: var(--text-heading);
 }
 
 .live-card-main {
@@ -354,13 +356,12 @@ tbody tr[data-status-tone="cancelled"] {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
-  padding: 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--live-status-text) 34%, transparent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--live-status-text) 10%, transparent);
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--live-status-text);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
 }
@@ -395,48 +396,28 @@ tbody tr[data-status-tone="cancelled"] {
   font-size: 14px;
 }
 
-.live-card[data-status-tone] {
-  position: relative;
-  overflow: hidden;
-}
-
-.live-card[data-status-tone]::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: var(--live-status-text);
-}
-
 .live-card[data-status-tone="past"] {
-  --live-status-bg: var(--live-status-past-bg);
   --live-status-text: var(--live-status-past-text);
 }
 
 .live-card[data-status-tone="upcoming"] {
-  --live-status-bg: var(--live-status-upcoming-bg);
   --live-status-text: var(--live-status-upcoming-text);
 }
 
 .live-card[data-status-tone="today"] {
-  --live-status-bg: var(--live-status-today-bg);
   --live-status-text: var(--live-status-today-text);
 }
 
 .live-card[data-status-tone="postponed"] {
-  --live-status-bg: var(--live-status-postponed-bg);
   --live-status-text: var(--live-status-postponed-text);
 }
 
 .live-card[data-status-tone="cancelled"] {
-  --live-status-bg: var(--live-status-cancelled-bg);
   --live-status-text: var(--live-status-cancelled-text);
 }
 
 .live-card.is-cancelled,
 tr.is-cancelled {
-  border-color: var(--accent-danger-soft-border);
-  background: var(--accent-danger-soft);
   color: var(--accent-danger);
 }
 
@@ -466,21 +447,20 @@ tr.is-cancelled {
 
 .live-card-head {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
 }
 
 .live-card-date {
   color: var(--text-secondary);
-  font-size: 16px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 .live-type-badge {
-  padding: 2px 8px;
-  border: 1px solid color-mix(in srgb, currentColor 34%, transparent);
-  border-radius: var(--radius-pill);
-  background: var(--live-type-other-bg);
-  color: var(--live-type-other-text);
+  padding: 0;
+  color: var(--text-muted);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
@@ -497,48 +477,24 @@ tr.is-cancelled {
   gap: 6px;
 }
 
-.live-type-badge[data-tone="oneman"] {
-  background: var(--live-type-oneman-bg);
-  color: var(--live-type-oneman-text);
-}
-
-.live-type-badge[data-tone="multi"] {
-  background: var(--live-type-multi-bg);
-  color: var(--live-type-multi-text);
-}
-
-.live-type-badge[data-tone="festival"] {
-  background: var(--live-type-festival-bg);
-  color: var(--live-type-festival-text);
-}
-
-.live-type-badge[data-tone="event"] {
-  background: var(--live-type-event-bg);
-  color: var(--live-type-event-text);
-}
-
-.live-type-badge[data-tone="group"] {
-  background: var(--live-type-group-bg);
-  color: var(--live-type-group-text);
-}
-
 .live-type-badge[data-tone="cancelled"] {
-  background: var(--live-status-cancelled-bg);
   color: var(--live-status-cancelled-text);
 }
 
 .live-card-title {
-  color: var(--text-link);
+  color: var(--text-heading);
   font-size: 18px;
   font-weight: 600;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  text-underline-offset: 4px;
 }
 
 .live-card-main:hover .live-card-title {
-  text-decoration: underline;
+  color: var(--text-link);
+  text-decoration-color: currentColor;
 }
 
 .live-card-footer {
@@ -563,18 +519,13 @@ tr.is-cancelled {
   text-decoration: none;
   cursor: pointer;
   flex-shrink: 0;
-  transition: border-color 0.16s, color 0.16s, transform 0.16s;
+  transition: border-color 0.16s, color 0.16s;
 }
 
 .live-card-action:hover {
   border-color: color-mix(in srgb, var(--accent-primary) 58%, var(--border-normal));
   color: var(--accent-primary);
   text-decoration: none;
-  transform: translateY(-1px);
-}
-
-.live-card-action:active {
-  transform: scale(0.96);
 }
 
 .action-icon {
@@ -651,20 +602,20 @@ tr.is-cancelled {
 
 .list-page-heading {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
   margin: 24px 24px 0;
+  padding-bottom: 24px;
+  border-bottom: var(--rule-heading);
 }
 
 .list-filter-panel {
   display: grid;
   gap: 12px;
   margin: 18px 24px 0;
-  padding: 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-card);
-  background: var(--surface-1);
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .list-filter-form {
@@ -677,27 +628,24 @@ tr.is-cancelled {
 .list-scope-toggle {
   display: inline-flex;
   justify-self: start;
-  padding: 3px;
-  border: 1px solid var(--border-normal);
-  border-radius: var(--radius-control);
-  background: var(--surface-chip-soft);
+  gap: 26px;
 }
 
 .list-scope-toggle button {
   min-width: 72px;
   border: 0;
-  border-radius: calc(var(--radius-control) - 2px);
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
   background: transparent;
-  color: var(--text-secondary);
-  padding: 7px 14px;
+  color: var(--text-muted);
+  padding: 7px 0;
   cursor: pointer;
   font: inherit;
 }
 
 .list-scope-toggle button.active {
-  background: var(--accent-primary);
-  color: var(--text-on-primary);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
+  color: var(--accent-primary);
+  font-weight: 650;
 }
 
 .list-scope-toggle button:focus-visible {
@@ -805,12 +753,15 @@ tr.is-cancelled {
 
 @media (max-width: 620px) {
   .list-page-heading {
+    flex-wrap: wrap;
+    align-items: flex-start;
     margin: 18px 12px 0;
+    padding-bottom: 18px;
   }
 
   .list-filter-panel {
     margin: 14px 12px 0;
-    padding: 12px;
+    padding: 0 0 16px;
   }
 
   .list-filter-form {
@@ -853,4 +804,35 @@ tr.is-cancelled {
     gap: 10px;
     padding-top: 4px;
   }
+}
+
+.table-wrap > :is(.table-with-fav, .table-no-fav) th {
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.table-wrap > :is(.table-with-fav, .table-no-fav) td {
+  padding-block: 17px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table-wrap .name-btn {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+:is(.live-card-main, .view-toggle button, .name-btn):focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 3px;
+}
+
+@media (max-width: 620px) {
+  .live-card-grid { gap: 0; }
+  .live-card { padding-block: 18px 22px; }
+  .live-card-action { width: 36px; height: 36px; }
 }

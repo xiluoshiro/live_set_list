@@ -2,23 +2,29 @@
   margin: 0 0 6px;
   color: var(--accent-primary);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 650;
   text-transform: uppercase;
 }
 
 .page-title h1 {
   margin: 0;
   color: var(--text-heading);
-  font-size: 24px;
+  font-size: clamp(30px, 3.6vw, 48px);
+  font-weight: 760;
+  letter-spacing: -0.035em;
+  line-height: 1.24;
+  overflow-wrap: anywhere;
 }
 
 .page-title-description {
   margin: 6px 0 0;
   color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 @media (max-width: 620px) {
   .page-title h1 {
-    font-size: 21px;
+    font-size: 30px;
   }
 }

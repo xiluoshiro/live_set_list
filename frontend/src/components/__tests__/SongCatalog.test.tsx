@@ -365,6 +365,44 @@ test("directory retains band controls while filtering", async () => {
   expect(screen.getByRole("region", { name: "歌曲列表" })).toHaveAttribute("aria-busy", "false");
 });
 
+// 测试点：窄屏目录随可用空间分页，多次缩放保留正在阅读的歌曲，重新筛选才回到首项。
+test("directory fits its viewport without losing the reading anchor", async () => {
+  const user = userEvent.setup();
+  let availableHeight = 322;
+  const widthSpy = vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+  const boundsSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return new DOMRect(0, 0, 320, this.tagName === "TR" ? 100 : this.tagName === "THEAD" ? 20 : 0);
+  });
+  const heightSpy = vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
+    return this.getAttribute("aria-label") === "歌曲目录" ? availableHeight : 0;
+  });
+  const items = Array.from({ length: 12 }, (_, index) => ({ group_id: index + 1, group_name: `阅读歌曲 ${index + 1}`,
+    version_count: 1, matched_song_ids: [index + 1], first_release_date: null, first_release_albums: [],
+    performance_count: 0, latest_performance_date: null, display_cover: null }));
+  api.getSongGroups.mockImplementation(async (_query, index, _band, _unused, options) => ({
+    items: items.slice((index - 1) * options.pageSize, index * options.pageSize), page: index,
+    page_size: options.pageSize, total: items.length, total_pages: Math.ceil(items.length / options.pageSize),
+    facets: { total: items.length, bands: [{ band_id: 1, band_name: "乐队甲", song_count: items.length }] },
+  }));
+  const view = render(<SongCatalog songId={null} onSongSelect={vi.fn()} onLiveSelect={vi.fn()} />);
+  try {
+    await waitFor(() => expect(screen.getAllByRole("link", { name: /^阅读歌曲 / })).toHaveLength(3));
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await screen.findByRole("link", { name: "阅读歌曲 4" });
+    for (const [height, count] of [[222, 2], [422, 4], [222, 2], [322, 3]]) {
+      availableHeight = height;
+      fireEvent(window, new Event("resize"));
+      await waitFor(() => expect(screen.getAllByRole("link", { name: /^阅读歌曲 / })).toHaveLength(count));
+      expect(screen.getByRole("link", { name: "阅读歌曲 4" })).toBeInTheDocument();
+    }
+    await user.click(screen.getByRole("button", { name: "乐队甲 12" }));
+    expect(await screen.findByRole("link", { name: "阅读歌曲 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
+  } finally {
+    view.unmount(); widthSpy.mockRestore(); boundsSpy.mockRestore(); heightSpy.mockRestore();
+  }
+});
+
 // 测试点：10/50 行概览只读取批量目录，渲染每行不会触发歌曲、唱片或演出详情请求。
 test.each([10, 50])("directory %i rows use one batch request", async pageSize => {
   api.getSongGroups.mockResolvedValue({ items: Array.from({ length: pageSize }, (_, index) => ({
