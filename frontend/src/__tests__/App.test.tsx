@@ -614,7 +614,6 @@ describe("App", () => {
     const scope = screen.getByRole("group", { name: "统计范围" });
     expect(within(scope).getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
     expect(within(scope).getByRole("button", { name: "仅收藏" })).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "统计筛选" })).getByRole("group", { name: "统计范围" })).toBe(scope);
 
     await user.selectOptions(screen.getByLabelText("乐队"), "2");
     expect(await screen.findByText("BLACK SHOUT")).toBeInTheDocument();
@@ -646,31 +645,6 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("47")).toBeInTheDocument());
     expect(getCatalogCalendarMock).toHaveBeenCalledWith(currentMonthKey());
     expect(getLivesMock).not.toHaveBeenCalled();
-  });
-
-  // 测试点：顶层公共页签统一展示英文眉题、中文主标题和共享标题层级。
-  test("公共页签使用统一的双语标题格式", async () => {
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-    );
-    const user = userEvent.setup();
-    renderApp();
-    const mainNavigation = screen.getByRole("navigation", { name: "主导航" });
-
-    expect(screen.getByText("Community live database")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
-
-    await user.click(within(mainNavigation).getByRole("button", { name: "演出资料" }));
-    expect(screen.getByText("Live archive")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "演出资料" })).toBeInTheDocument();
-
-    await user.click(within(mainNavigation).getByRole("button", { name: "乐队浏览" }));
-    expect(screen.getByText("Browse")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "乐队浏览" })).toBeInTheDocument();
-
-    await user.click(within(mainNavigation).getByRole("button", { name: "联系我们" }));
-    expect(screen.getByText("About")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "联系我们" })).toBeInTheDocument();
   });
 
   test("首页数据概览展示真实指标数据", async () => {
@@ -988,7 +962,7 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "控制台" })).not.toBeInTheDocument();
   });
 
-  // 测试点：admin 可进入控制台，且控制台沿用统一的英文眉题和中文主标题。
+  // 测试点：admin 登录后可通过主导航进入控制台。
   test("admin 角色登录后显示控制台入口", async () => {
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
@@ -1003,7 +977,6 @@ describe("App", () => {
 
     const consoleButton = await screen.findByRole("button", { name: "控制台" });
     await userEvent.setup().click(consoleButton);
-    expect(screen.getByText("Console")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "控制台" })).toBeInTheDocument();
   });
 

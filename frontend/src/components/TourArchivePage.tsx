@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getTours, type CatalogBandItem, type TourSummary } from "../api";
 import { logError } from "../logger";
+import { PageTitle } from "./PageTitle";
 import { TourCardGrid } from "./TourCardGrid";
 import { TourListFilters, type TourFilters } from "./TourListFilters";
 
@@ -20,6 +21,7 @@ export function TourArchivePage({
   onFiltersChange,
   onOpenTour,
 }: TourArchivePageProps) {
+  const [queryDraft, setQueryDraft] = useState(filters.q);
   const [tours, setTours] = useState<TourSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -30,6 +32,8 @@ export function TourArchivePage({
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const requestVersionRef = useRef(0);
   const loadMoreInFlightRef = useRef(false);
+
+  useEffect(() => setQueryDraft(filters.q), [filters.q]);
 
   useEffect(() => {
     let canceled = false;
@@ -113,6 +117,26 @@ export function TourArchivePage({
 
   return (
     <>
+      <header className="page-heading list-page-heading">
+        <PageTitle title="巡演资料" />
+        <form
+          className="home-search-row page-heading-search"
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onFiltersChange({ ...filters, q: queryDraft.trim() });
+          }}
+        >
+          <input
+            aria-label="关键词"
+            type="search"
+            value={queryDraft}
+            placeholder="搜索巡演或关联 Live"
+            onChange={(event) => setQueryDraft(event.target.value)}
+          />
+          <button type="submit">搜索</button>
+        </form>
+      </header>
       <TourListFilters filters={filters} years={years} bands={bands} onChange={onFiltersChange} />
       <TourCardGrid
         tours={tours}

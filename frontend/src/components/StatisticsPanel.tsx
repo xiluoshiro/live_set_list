@@ -8,6 +8,7 @@ import type {
 import { ContentState } from "./ContentState";
 import { LiveTypeBadge } from "./LiveTypeBadge";
 import { PageTitle } from "./PageTitle";
+import { ListScopeToggle } from "./ListScopeToggle";
 import { SectionTabs } from "./SectionTabs";
 import { formatLiveType, LIVE_TYPE_OPTIONS } from "./console/constants";
 
@@ -47,12 +48,13 @@ export function StatisticsPanel(props: StatisticsPanelProps) {
     : [];
   return (
     <section className="statistics-panel">
-      <PageTitle kicker="Archive insights" title="数据统计" description="从资料库收录记录观察 Live 与歌曲演出轨迹。" />
-      <section className="list-filter-panel statistics-filter-panel" aria-label="统计筛选">
-        <div className="list-scope-toggle" role="group" aria-label="统计范围">
-          <button type="button" className={props.scope === "all" ? "active" : ""} aria-pressed={props.scope === "all"} onClick={() => props.onScopeChange("all")}>全部</button>
-          <button type="button" className={props.scope === "favorites" ? "active" : ""} aria-pressed={props.scope === "favorites"} onClick={() => props.onScopeChange("favorites")}>仅收藏</button>
+      <header className="page-heading">
+        <div className="page-heading-main">
+          <PageTitle title="数据统计" />
+          <ListScopeToggle label="统计范围" value={props.scope} onChange={props.onScopeChange} />
         </div>
+      </header>
+      <section className="list-filter-panel statistics-filter-panel" aria-label="统计筛选">
         <div className="statistics-controls" aria-label="统计条件">
           <label className="list-filter-field">年份<select value={filters.year ?? ""} onChange={(event) => props.onFiltersChange({ ...filters, year: event.target.value ? Number(event.target.value) : undefined })}>
             <option value="">全部年份</option>{props.years.map((year) => <option key={year} value={year}>{year}</option>)}

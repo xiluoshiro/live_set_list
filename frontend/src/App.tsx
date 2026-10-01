@@ -45,6 +45,7 @@ import { PageTitle } from "./components/PageTitle";
 import { formatPerformanceDate, LiveCardGrid } from "./components/LiveCardGrid";
 import { StageLedgerPage } from "./components/StageLedgerPage";
 import { LiveListFiltersToolbar } from "./components/LiveListFilters";
+import { ListScopeToggle } from "./components/ListScopeToggle";
 import { LiveTypeBadge } from "./components/LiveTypeBadge";
 import { LoginDialog } from "./components/LoginDialog";
 import { StatisticsPanel } from "./components/StatisticsPanel";
@@ -1693,35 +1694,28 @@ function App() {
         ) : showAboutPanel ? (
           <AboutPanel />
         ) : showTourListPanel ? (
-          <>
-            <header className="list-page-heading">
-              <PageTitle kicker="Tour archive" title="巡演资料" description="浏览已整理的巡演及本站收录场次。" />
-            </header>
-            <TourArchivePage
-              filters={tourFilters}
-              years={catalogStats?.years ?? []}
-              bands={listFilterBands}
-              onFiltersChange={handleTourFiltersChange}
-              onOpenTour={openTourDetail}
-            />
-          </>
+          <TourArchivePage
+            filters={tourFilters}
+            years={catalogStats?.years ?? []}
+            bands={listFilterBands}
+            onFiltersChange={handleTourFiltersChange}
+            onOpenTour={openTourDetail}
+          />
         ) : showListPanel ? (
           <>
-            <header className="list-page-heading">
-              <PageTitle
-                kicker="Live archive"
-                title="演出资料"
-                description="浏览已收录的 Live，也可以只查看收藏内容。"
-              />
+            <header className="page-heading list-page-heading">
+              <div className="page-heading-main">
+                <PageTitle title="演出资料" />
+                <ListScopeToggle label="内容范围" value={tab === "favorites" ? "favorites" : "all"}
+                  onChange={handleTabChange} />
+              </div>
               <ViewModeToggle value={viewMode} onChange={handleViewModeChange} />
             </header>
             <LiveListFiltersToolbar
               filters={listFilters}
-              favoriteOnly={tab === "favorites"}
               years={catalogStats?.years ?? []}
               bands={listFilterBands}
               onChange={handleListFiltersChange}
-              onFavoriteOnlyChange={(favoriteOnly) => handleTabChange(favoriteOnly ? "favorites" : "all")}
             />
             <footer className="pager">
               <div className="toolbar">

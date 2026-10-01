@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useId } from "react";
 
 import type { CatalogBandItem, TourListFilters as ApiTourListFilters } from "../api";
 
@@ -24,10 +24,7 @@ type TourListFiltersProps = {
 };
 
 export function TourListFilters({ filters, years, bands, onChange }: TourListFiltersProps) {
-  const [queryDraft, setQueryDraft] = useState(filters.q);
   const idPrefix = useId();
-
-  useEffect(() => setQueryDraft(filters.q), [filters.q]);
 
   const replaceFilters = (patch: Partial<TourFilters>) => onChange({ ...filters, ...patch });
   const hasActiveFilters = filters.q !== "" || filters.year !== null
@@ -35,26 +32,7 @@ export function TourListFilters({ filters, years, bands, onChange }: TourListFil
 
   return (
     <section className="list-filter-panel tour-filter-panel" aria-label="巡演列表筛选">
-      <form
-        className="list-filter-form tour-filter-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          replaceFilters({ q: queryDraft.trim() });
-        }}
-      >
-        <label className="list-filter-field list-filter-query" htmlFor={`${idPrefix}-query`}>
-          <span>关键词</span>
-          <span className="list-filter-query-row">
-            <input
-              id={`${idPrefix}-query`}
-              type="search"
-              value={queryDraft}
-              placeholder="搜索巡演或关联 Live"
-              onChange={(event) => setQueryDraft(event.target.value)}
-            />
-            <button type="submit">搜索</button>
-          </span>
-        </label>
+      <div className="list-filter-form tour-filter-form">
         <div className="list-filter-secondary tour-filter-secondary">
           <label className="list-filter-field" htmlFor={`${idPrefix}-year`}>
             <span>年份</span>
@@ -90,7 +68,7 @@ export function TourListFilters({ filters, years, bands, onChange }: TourListFil
             <option value="date_asc">日期：旧 → 新</option>
           </select>
         </label>
-      </form>
+      </div>
       {hasActiveFilters && (
         <div className="list-active-filters" aria-label="当前筛选">
           <span>当前筛选</span>

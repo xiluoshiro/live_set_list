@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getSongGroups, type SongDirectoryPage, type SongGroupSummary, type SongSort } from "../api";
 import { songCatalogHref, type SongBrowseState } from "../songCatalogNavigation";
 import { getBandIconSrc } from "./BandIconsCell";
+import { PageTitle } from "./PageTitle";
 import { CatalogArt, CatalogLink, CatalogPagination, catalogDate, useCatalogScroll, useFittedCatalogPage } from "./SongCatalogShared";
 
 export function SongCatalogOverview({ browse, onBrowseChange, onSelectGroup, onAlbumSelect, revision, scrollY }: {
@@ -51,9 +52,9 @@ export function SongCatalogOverview({ browse, onBrowseChange, onSelectGroup, onA
   const bands = facets?.bands ?? [];
   const selectedBand = bands.find(b => b.band_id === browse.bandId);
   return <main className="song-catalog song-directory" aria-label="歌曲资料" ref={layoutRef}>
-    <header className="song-directory-heading">
-      <div><h1>歌曲资料</h1><p>{facets ? `${facets.total} 首歌曲 · ${bands.length} 支乐队` : "加载中…"}</p></div>
-      <form className="home-search-row" role="search" onSubmit={event => {
+    <header className="page-heading song-directory-heading">
+      <PageTitle title="歌曲资料" />
+      <form className="home-search-row page-heading-search" role="search" onSubmit={event => {
         event.preventDefault(); changeBrowse({ ...browse, query: query.trim(), page: 1 });
       }}><input aria-label="搜索歌曲、乐队" placeholder="搜索歌名、乐队" value={query} onChange={event => setQuery(event.target.value)} />
         <button type="submit">搜索</button></form>

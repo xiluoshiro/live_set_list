@@ -1,5 +1,4 @@
-.statistics-panel { width: min(var(--page-max), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding: 32px 0 40px; display: flex; flex-direction: column; gap: 28px; font-size: 15px; line-height: 1.6; }
-.statistics-panel > .page-title { padding-bottom: 24px; border-bottom: var(--rule-heading); }
+.statistics-panel { width: min(var(--page-max), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding: 24px 0 40px; display: flex; flex-direction: column; gap: 24px; font-size: 15px; line-height: 1.6; }
 .statistics-panel .statistics-filter-panel { margin: 0; padding: 0 0 20px; border: 0; border-bottom: 1px solid var(--border-normal); border-radius: 0; background: transparent; box-shadow: none; }
 .statistics-controls { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)) auto; align-items: end; gap: 12px; }
 .statistics-controls :is(select, .secondary-btn) { height: 38px; min-height: 38px; padding-block: 0; font: inherit; line-height: 20px; }

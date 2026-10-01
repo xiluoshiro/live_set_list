@@ -12,20 +12,16 @@ import { LIVE_TYPE_OPTIONS, formatLiveType } from "./console/constants";
 
 type LiveListFiltersProps = {
   filters: LiveListFilters;
-  favoriteOnly: boolean;
   years: number[];
   bands: CatalogBandItem[];
   onChange: (filters: LiveListFilters) => void;
-  onFavoriteOnlyChange: (favoriteOnly: boolean) => void;
 };
 
 export function LiveListFiltersToolbar({
   filters,
-  favoriteOnly,
   years,
   bands,
   onChange,
-  onFavoriteOnlyChange,
 }: LiveListFiltersProps) {
   const [queryDraft, setQueryDraft] = useState(filters.q);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
@@ -45,24 +41,6 @@ export function LiveListFiltersToolbar({
 
   return (
     <section className="list-filter-panel" aria-label="Live 列表筛选">
-      <div className="list-scope-toggle" role="group" aria-label="内容范围">
-        <button
-          type="button"
-          className={!favoriteOnly ? "active" : ""}
-          aria-pressed={!favoriteOnly}
-          onClick={() => onFavoriteOnlyChange(false)}
-        >
-          全部
-        </button>
-        <button
-          type="button"
-          className={favoriteOnly ? "active" : ""}
-          aria-pressed={favoriteOnly}
-          onClick={() => onFavoriteOnlyChange(true)}
-        >
-          仅收藏
-        </button>
-      </div>
       <form
         className="list-filter-form"
         onSubmit={(event) => {

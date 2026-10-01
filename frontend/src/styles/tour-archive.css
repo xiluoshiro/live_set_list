@@ -1,5 +1,5 @@
 .list-filter-form.tour-filter-form {
-  grid-template-columns: minmax(260px, 1.5fr) minmax(300px, 1fr) minmax(150px, .55fr);
+  grid-template-columns: minmax(300px, 2fr) minmax(150px, 1fr);
 }
 
 .list-filter-secondary.tour-filter-secondary {

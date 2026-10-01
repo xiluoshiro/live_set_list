@@ -154,8 +154,8 @@ export function SearchResultsPanel({
 
   return (
     <div className="catalog-panel">
-      <div className="catalog-panel-head">
-        <PageTitle kicker="Search" title="搜索结果" description="按 Live、乐队、歌曲和场馆分组展示。" />
+      <div className="page-heading">
+        <PageTitle title="搜索结果" />
       </div>
       <SearchForm query={query} onSearch={onSearch} />
       {error ? (
@@ -259,8 +259,8 @@ export function BandBrowsePanel({
 
   return (
     <div className="catalog-panel">
-      <div className="catalog-panel-head">
-        <PageTitle kicker="Browse" title="乐队浏览" description="选择乐队后查看已收录的相关 Live。" />
+      <div className="page-heading">
+        <PageTitle title="乐队浏览" />
       </div>
 
       {error && <ContentState kind="error" title="浏览加载失败" description={error} layout="rows" />}
@@ -336,8 +336,8 @@ export function BandBrowsePanel({
 export function AboutPanel() {
   return (
     <div className="catalog-panel about-panel">
-      <div className="catalog-panel-head">
-        <PageTitle kicker="About" title="联系我们" description="本站是站方整理维护的演唱会歌单数据库。" />
+      <div className="page-heading">
+        <PageTitle title="联系我们" />
       </div>
 
       <div className="about-grid">

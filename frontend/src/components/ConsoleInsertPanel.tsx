@@ -3128,7 +3128,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         </div>
       )}
       <section className="console-admin">
-      <PageTitle kicker="Console" title="控制台" />
+      <PageTitle title="控制台" />
       {message && <p className="console-admin-hint" role="status" aria-live="polite">{message}</p>}
 
       <nav className="console-mode-nav" aria-label="控制台录入类型">

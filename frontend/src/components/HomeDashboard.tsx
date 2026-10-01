@@ -40,7 +40,6 @@ export function HomeDashboard({
       <section className="home-intro" aria-labelledby="home-title">
         <div className="home-intro-copy">
           <PageTitle
-            kicker="Community live database"
             title="BanG Dream! Live 资料库"
             id="home-title"
           />

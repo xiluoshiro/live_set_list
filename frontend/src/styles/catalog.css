@@ -1,21 +1,12 @@
 .catalog-panel {
   width: min(var(--page-max), calc(100% - 2 * var(--page-gutter)));
   margin: 0 auto;
-  padding: 32px 0 40px;
+  padding: 24px 0 40px;
   display: flex;
   flex-direction: column;
   gap: 24px;
   font-size: 15px;
   line-height: 1.6;
-}
-
-.catalog-panel-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 24px;
-  border-bottom: var(--rule-heading);
 }
 
 .catalog-section h3,
@@ -27,7 +18,6 @@
   font-weight: 700;
 }
 
-.catalog-panel-head .page-title-description,
 .catalog-section p,
 .catalog-empty,
 .catalog-state {
@@ -368,10 +358,6 @@
 @media (max-width: 620px) {
   .catalog-panel {
     padding: 24px 0 32px;
-  }
-
-  .catalog-panel-head {
-    flex-direction: column;
   }
 
   .catalog-live-item {

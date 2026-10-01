@@ -601,13 +601,7 @@ tr.is-cancelled {
 }
 
 .list-page-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
   margin: 24px 24px 0;
-  padding-bottom: 24px;
-  border-bottom: var(--rule-heading);
 }
 
 .list-filter-panel {
@@ -752,13 +746,6 @@ tr.is-cancelled {
 }
 
 @media (max-width: 620px) {
-  .list-page-heading {
-    flex-wrap: wrap;
-    align-items: flex-start;
-    margin: 18px 12px 0;
-    padding-bottom: 18px;
-  }
-
   .list-filter-panel {
     margin: 14px 12px 0;
     padding: 0 0 16px;

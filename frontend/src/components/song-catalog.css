@@ -1,7 +1,7 @@
 /* Catalog pages use the shared archive palette, with layouts suited to each record. */
 .song-catalog { --song-section-line: var(--text-heading); --song-number-font: var(--font-sans); margin: 0 auto; padding: 24px 0; font-size: 14px; }
 .song-catalog h1, .song-catalog h2, .song-catalog h3, .song-catalog p { margin: 0; }
-.song-catalog h1 { color: var(--text-heading); font-size: clamp(26px, 2.2vw, 34px); line-height: 1.25; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.song-catalog :where(h1) { color: var(--text-heading); font-size: clamp(26px, 2.2vw, 34px); line-height: 1.25; letter-spacing: -.025em; overflow-wrap: anywhere; }
 .song-catalog h2 { color: var(--text-heading); font-size: 19px; line-height: 1.4; }
 .song-catalog h2 small { margin-left: 10px; color: var(--text-muted); font-size: 12px; font-weight: 400; }
 .song-catalog a { color: var(--text-heading); }
@@ -29,12 +29,9 @@
 .song-catalog-pagination nav > button { margin-inline: 3px; border-color: var(--border-normal); background: var(--surface-input); font-size: 16px; }
 .song-page-gap { padding: 0 4px; }
 
-.song-directory { width: min(var(--page-max), calc(100% - 2 * var(--page-gutter))); padding: 32px 0 24px; line-height: 1.5; }
+.song-directory { width: min(var(--page-max), calc(100% - 2 * var(--page-gutter))); padding: 24px 0; line-height: 1.5; }
 .page-song-directory .song-directory { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: auto; }
-.song-directory h1 { font-size: clamp(30px, 3.6vw, 48px); font-weight: 760; letter-spacing: -.035em; line-height: 1.24; }
-.song-directory-heading { display: flex; flex: none; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 20px; padding-bottom: 22px; border-bottom: var(--rule-heading); }
-.song-directory-heading p { margin-top: 7px; color: var(--text-muted); font-size: 12px; }
-.song-directory-heading form { width: min(440px, 45%); }
+.song-directory-heading { flex: none; margin-bottom: 20px; }
 .song-directory-layout { display: grid; flex: 1; min-height: 0; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; }
 .song-band-directory { display: flex; flex-direction: column; min-height: 0; padding-right: 12px; }
 .song-band-directory h2 { font-size: 12px; font-weight: 500; color: var(--text-muted); padding: 8px 0 15px; }
@@ -151,8 +148,6 @@
 }
 @media (max-width: 620px) {
   .song-directory, .song-catalog-single { padding-top: 24px; }
-  .song-directory-heading { align-items: stretch; flex-direction: column; gap: 18px; }
-  .song-directory-heading form { width: 100%; }
   .song-directory-table th:nth-child(2), .song-directory-table td:nth-child(2) { display: none; }
   .song-directory-table th:first-child { width: 80%; }
   .song-directory-table th:nth-child(4) { width: 20%; }
@@ -186,11 +181,7 @@
 }
 @media (max-width: 760px) {
   .song-directory { padding-top: 24px; }
-  .song-directory h1 { font-size: 30px; }
-  .song-directory-heading { align-items: stretch; flex-direction: column; gap: 17px; margin-bottom: 16px; }
-  .song-directory-heading p { font-size: 11px; }
-  .song-directory-heading form { width: 100%; flex-direction: row; }
-  .song-directory-heading button { flex: none; }
+  .song-directory-heading { margin-bottom: 16px; }
   .song-directory-results > .song-section-heading { align-items: flex-start; }
   .song-directory-scope h2 { font-size: 18px; }
   .song-directory .song-sort-label select { min-width: 0; max-width: 148px; }
