@@ -53,6 +53,10 @@ export type PerformanceGroupRef = {
 };
 
 export type LiveItem = {
+  venue?: string | null;
+  start_time?: string | null;
+  start_timezone_label?: string | null;
+  has_setlist?: boolean;
   live_id: number;
   live_date: string;
   live_title: string;

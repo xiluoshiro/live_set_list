@@ -10,6 +10,7 @@ from app.db import get_db_connection
 from app.favorites import get_favorite_live_id_set
 from app.logging_config import get_logger
 from app.live_status import build_public_live_status, visitor_date_sql, VISITOR_TODAY_SQL
+from app.live_timezone import serialize_time, timezone_abbreviation
 from app.live_list_filters import LiveListFilters, LiveType, build_live_where, build_lookup_pattern
 from app.schemas import (
     CatalogPerformancesResponse,
@@ -218,10 +219,17 @@ def _build_live_filter_conditions(
     live_type: LiveType | None,
     band_id: int | None,
     venue_id: int | None = None,
+    status: Literal["upcoming", "today", "past", "postponed", "cancelled"] | None = None,
 ) -> tuple[str, tuple[object, ...]]:
     where_sql, params = build_live_where(
         LiveListFilters(q=q, year=year, live_type=live_type, band_id=band_id, venue_id=venue_id)
     )
+    if status in ("cancelled", "postponed"):
+        where_sql += " AND l.event_status = %s"
+        params.append(status)
+    elif status is not None:
+        operator = {"upcoming": ">", "today": "=", "past": "<"}[status]
+        where_sql += f" AND l.event_status <> 'cancelled' AND {visitor_date_sql('l')} {operator} {VISITOR_TODAY_SQL}"
     return where_sql, tuple(params)
 
 
@@ -235,12 +243,13 @@ def _build_catalog_performances_queries(
     scope: Literal["all", "favorites"],
     user_id: int | None,
     venue_id: int | None = None,
+    status: Literal["upcoming", "today", "past", "postponed", "cancelled"] | None = None,
 ) -> tuple[str, tuple[object, ...], str, tuple[object, ...]]:
     live_where, live_params = _build_live_filter_conditions(
-        q=q, year=year, live_type=live_type, band_id=band_id, venue_id=venue_id,
+        q=q, year=year, live_type=live_type, band_id=band_id, venue_id=venue_id, status=status,
     )
     secondary_where, secondary_params = _build_live_filter_conditions(
-        q=None, year=year, live_type=live_type, band_id=band_id, venue_id=venue_id,
+        q=None, year=year, live_type=live_type, band_id=band_id, venue_id=venue_id, status=status,
     )
 
     sort_group_date = "end_date" if sort == "date_desc" else "start_date"
@@ -258,6 +267,7 @@ def _build_catalog_performances_queries(
         sort_dir=sort_dir,
         favorite_user_id=user_id if scope == "favorites" else None,
         favorites_scope=scope == "favorites",
+        allow_title_group_expansion=status is None,
     )
 
 
@@ -285,6 +295,7 @@ def _build_scope_queries(
     sort_dir: str,
     favorite_user_id: int | None,
     favorites_scope: bool,
+    allow_title_group_expansion: bool = True,
 ) -> tuple[str, tuple[object, ...], str, tuple[object, ...]]:
     if favorites_scope and favorite_user_id is None:
         raise ValueError("favorites scope requires a user id")
@@ -399,7 +410,7 @@ def _build_scope_queries(
               AND stats.matched_live_count > 0
               AND (
                   stats.matched_live_count = stats.live_count
-                  OR stats.group_title_matches
+                  {"OR stats.group_title_matches" if allow_title_group_expansion else ""}
               )
         ),
         partial_group_lives AS (
@@ -632,8 +643,18 @@ def _build_scope_queries(
             group_result_id, group_result_title, group_start_date, group_end_date,
             group_day_count, group_live_count, group_cancelled_live_count,
             group_display_type, group_bands, group_venues,
-            live_event_status, live_start_time, live_was_rescheduled, live_opening_time
+            live_event_status, live_start_time, live_was_rescheduled, live_opening_time,
+            metadata.live_venue, metadata.live_timezone, metadata.live_has_setlist
         FROM merged
+        LEFT JOIN LATERAL (
+            SELECT venue_version.venue_name AS live_venue,
+                   venue.timezone_id AS live_timezone,
+                   EXISTS (SELECT 1 FROM live_setlist setlist WHERE setlist.live_id = metadata_live.id) AS live_has_setlist
+            FROM live_attrs metadata_live
+            LEFT JOIN venue_name_versions venue_version ON venue_version.id = metadata_live.venue_name_version_id
+            LEFT JOIN venue_list venue ON venue.id = metadata_live.venue_id
+            WHERE metadata_live.id = merged.id
+        ) metadata ON TRUE
         ORDER BY sort_rank ASC, sort_date {sort_dir}, sort_time {sort_dir} NULLS LAST, sort_id {sort_dir}
         LIMIT %s OFFSET %s
     """
@@ -659,6 +680,10 @@ def _parse_performances_row(
                 "bands": list(row[6] or []),
                 "url": row[4],
                 "is_favorite": live_id in favorite_live_ids,
+                "venue": row[25] if len(row) > 25 else None,
+                "start_time": serialize_time(row[22]) if has_status_columns else None,
+                "start_timezone_label": timezone_abbreviation(row[2], row[22], row[26]) if len(row) > 26 else None,
+                "has_setlist": bool(row[27]) if len(row) > 27 else False,
                 "tour": build_tour_ref_from_row(row, tour_id_index=7, tour_title_index=8),
                 "performance_group": build_performance_group_ref_from_row(
                     row, group_id_index=9, group_title_index=10
@@ -720,6 +745,7 @@ def get_catalog_performances(
     live_type: Literal["oneman", "taiban", "multi_act", "festival", "event", "other"] | None = Query(default=None),
     band_id: int | None = Query(default=None, ge=1),
     venue_id: int | None = Query(default=None, ge=1),
+    status: Literal["upcoming", "today", "past", "postponed", "cancelled"] | None = Query(default=None),
     sort: Literal["date_desc", "date_asc"] = Query(default="date_desc"),
     current_user: AuthUser | None = Depends(get_current_user_optional),
 ):
@@ -742,6 +768,7 @@ def get_catalog_performances(
         scope=scope,
         user_id=user_id,
         venue_id=venue_id,
+        status=status,
     )
 
     try:

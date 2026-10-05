@@ -9,6 +9,8 @@
 }
 
 .tour-list-error { color: var(--accent-danger); }
+.tour-catalog .tour-filter-panel { margin-inline: 0; }
+.tour-card-stops { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 .tour-detail-page { width: min(var(--page-max), calc(100% - var(--page-gutter) * 2)); margin: 28px auto 0; padding: 0 0 64px; }
 .tour-detail-page > .section-tabs { margin-top: 14px; }

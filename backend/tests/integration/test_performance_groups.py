@@ -714,6 +714,24 @@ def test_catalog_performances_groups_by_status_then_time(
     # date_asc：未开始组内按日期正序（9505 最近→9501 最远），组内时间排序逻辑保持不变。
     assert _ordered_ids("date_asc") == [9505, 9501, 9503, 9502, 9504]
 
+    # 测试点：状态筛选使用同一访客日历规则，计数与返回的实际场次一致。
+    for status, expected in (("upcoming", [9501, 9505]), ("today", [9503]),
+                             ("past", [9502]), ("cancelled", [9504])):
+        response = integration_test_client.get(
+            "/api/catalog/performances", params={"q": "StatusProbe", "status": status},
+            headers={"X-Visitor-Timezone": "Asia/Tokyo"},
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["pagination"]["total"] == len(expected)
+        assert [item["live"]["live_id"] for item in payload["items"]] == expected
+        for item in payload["items"]:
+            assert item["live"]["venue"] == "Shibuya WWW X"
+            assert item["live"]["start_time"] == "18:00:00+09:00"
+            assert item["live"]["start_timezone_label"] == "JST"
+            assert item["live"]["has_setlist"] is False
+
+
     with integration_admin_connection.cursor() as cur:
         cur.execute("DELETE FROM live_attrs WHERE id = ANY(%s)", (live_ids,))
 
@@ -949,3 +967,45 @@ def test_catalog_performances_favorites_with_filters(
 
     with integration_admin_connection.cursor() as cur:
         cur.execute("DELETE FROM user_live_favorites WHERE user_id = %s", (editor_id,))
+
+
+# 测试点：组名关键词与状态同时筛选时，只展开匹配的子场，不带回其他状态的场次。
+def test_catalog_status_expands_mixed_group(integration_test_client, integration_admin_connection):
+    with integration_admin_connection.cursor() as cursor:
+        ids = []
+        for status in ("scheduled", "cancelled"):
+            cursor.execute("INSERT INTO live_attrs (live_date, live_title, live_type, event_status, url) "
+                           "VALUES (CURRENT_DATE + 30, 'Mixed Status Child', 'oneman', %s, "
+                           "'https://example.test/mixed-status') RETURNING id", (status,))
+            ids.append(cursor.fetchone()[0])
+        cursor.execute("INSERT INTO performance_group_attrs (group_title) VALUES ('Mixed Status Group') RETURNING id")
+        group_id = cursor.fetchone()[0]
+        cursor.executemany("INSERT INTO performance_group_lives (group_id, live_id) VALUES (%s, %s)",
+                           [(group_id, live_id) for live_id in ids])
+    for status, expected_id in (("upcoming", ids[0]), ("cancelled", ids[1])):
+        response = integration_test_client.get("/api/catalog/performances", params={"q": "Mixed Status Group", "status": status})
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["pagination"]["total"] == 1
+        assert payload["items"][0]["kind"] == "live"
+        assert payload["items"][0]["live"]["live_id"] == expected_id
+        assert payload["items"][0]["live"]["performance_group"]["group_id"] == group_id
+
+
+# 测试点：列表中的歌单标记来自实际收录情况，场馆和时刻允许未公布。
+def test_catalog_card_setlist_metadata(integration_test_client, integration_admin_connection):
+    response = integration_test_client.get("/api/catalog/performances")
+    assert response.status_code == 200, response.text
+    lives = {item["live"]["live_id"]: item["live"] for item in response.json()["items"] if item["kind"] == "live"}
+    assert lives[1]["has_setlist"] is True
+    assert lives[41]["has_setlist"] is False
+    with integration_admin_connection.cursor() as cursor:
+        cursor.execute("INSERT INTO live_attrs (live_date, live_title, live_type, url) "
+                       "VALUES (CURRENT_DATE + 30, 'Unknown Catalog Schedule', 'oneman', "
+                       "'https://example.test/unknown-schedule')")
+    response = integration_test_client.get("/api/catalog/performances", params={"q": "Unknown Catalog Schedule"})
+    assert response.status_code == 200, response.text
+    unknown = response.json()["items"][0]["live"]
+    assert unknown["has_setlist"] is False
+    assert unknown["venue"] is None
+    assert unknown["start_time"] is None

@@ -4,6 +4,7 @@ import {
   ApiError,
   getPerformances,
   getVenueDetail,
+  type CatalogBandItem,
   type PerformanceItem,
   type PublicVenueDetailResponse,
 } from "../api";
@@ -16,6 +17,7 @@ import { VenueMapMenu } from "./VenueMapMenu";
 type VenueDetailPageProps = {
   venueId: number;
   fallbackName: string;
+  bands?: CatalogBandItem[];
   onBack: () => void;
   onOpenLive: (live: { live_id: number; live_date: string; live_title: string; url: string | null }) => void;
   onOpenGroup: (groupId: number, groupTitle: string) => void;
@@ -61,6 +63,8 @@ function toPerformanceRow(item: PerformanceItem): LiveRow {
       groupLiveCount: group.live_count,
       groupCancelledLiveCount: group.cancelled_live_count ?? 0,
       groupIcons: group.bands.map((band) => band.band_id),
+      groupVenues: group.venues,
+      bandNames: Object.fromEntries(group.bands.map(band => [band.band_id, band.band_name])),
       eventStatus: null,
       datePhase: null,
       wasRescheduled: false,
@@ -75,6 +79,10 @@ function toPerformanceRow(item: PerformanceItem): LiveRow {
     liveType: live.live_type,
     icons: live.bands,
     url: live.url,
+    venue: live.venue,
+    startTime: live.start_time,
+    startTimezoneLabel: live.start_timezone_label,
+    hasSetlist: live.has_setlist,
     groupId: live.performance_group?.group_id ?? null,
     groupTitle: live.performance_group?.group_title ?? null,
     groupStartDate: null,
@@ -92,6 +100,7 @@ function toPerformanceRow(item: PerformanceItem): LiveRow {
 export function VenueDetailPage({
   venueId,
   fallbackName,
+  bands = [],
   onBack,
   onOpenLive,
   onOpenGroup,
@@ -242,6 +251,7 @@ export function VenueDetailPage({
             <span>共 {detail.pagination.total} 场</span>
           </div>
           <LiveCardGrid
+            bands={bands}
             rows={rows}
             showStar={false}
             isFavorite={() => false}

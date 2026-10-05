@@ -187,3 +187,28 @@ test("cancelled performance group card stays aggregated and remains clickable", 
   fireEvent.click(screen.getByRole("button", { name: "查看活动组《两日活动》详情，状态：已取消" }));
   expect(onOpenGroup).toHaveBeenCalledWith(3, "两日活动");
 });
+
+
+// 测试点：两支队伍显示全称，三支以上展示全部可识别图标，同时收藏操作不会进入详情。
+test.each([2, 3])("renders identifiable performers for %i bands", (count) => {
+  const onOpenLive = vi.fn();
+  const onToggleStar = vi.fn();
+  const names = ["First Team", "Second Team", "Third Team"];
+  render(<LiveCardGrid rows={[{ ...makeLiveRow("scheduled", "upcoming"), icons: [1, 2, 3].slice(0, count), venue: "Example Hall", startTime: "18:00:00+09:00", startTimezoneLabel: "JST" }]}
+    bands={names.map((name, index) => ({ band_id: index + 1, band_name: name, band_abbr: name, live_count: 1 }))}
+    showStar isFavorite={() => false} isSyncing={() => false} onToggleStar={onToggleStar} onOpenLive={onOpenLive}
+    loading={false} loadError={null} sentinelRef={createRef<HTMLDivElement>()} loadingMore={false} hasMore={false} total={1} />);
+  for (const name of names.slice(0, count)) {
+    if (count > 2) {
+      expect(screen.getByRole("img", { name })).toBeInTheDocument();
+      expect(screen.queryByText(name)).not.toBeInTheDocument();
+    } else expect(screen.getByText(name)).toBeInTheDocument();
+  }
+  expect(screen.getByText("Example Hall")).toBeInTheDocument();
+  expect(screen.getByText("18:00 (JST)")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "加入收藏" }));
+  expect(onToggleStar).toHaveBeenCalledWith(8);
+  expect(onOpenLive).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: /查看《状态测试 Live》/ }));
+  expect(onOpenLive).toHaveBeenCalledWith(expect.objectContaining({ liveId: 8 }));
+});

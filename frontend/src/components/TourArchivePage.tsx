@@ -116,7 +116,7 @@ export function TourArchivePage({
   }, [loadMore]);
 
   return (
-    <>
+    <section className="live-catalog tour-catalog">
       <header className="page-heading list-page-heading">
         <PageTitle title="巡演资料" />
         <form
@@ -148,6 +148,6 @@ export function TourArchivePage({
         sentinelRef={sentinelRef}
         onOpenTour={onOpenTour}
       />
-    </>
+    </section>
   );
 }

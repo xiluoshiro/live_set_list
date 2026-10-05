@@ -75,6 +75,10 @@ class CatalogPerformanceLiveItem(BaseModel):
     bands: list[int] = Field(..., description="Deduplicated band IDs sorted ascending")
     url: str | None = Field(default=None, description="Live URL from live_attrs.url")
     is_favorite: bool = Field(..., description="Whether the current user has favorited this live")
+    venue: str | None = Field(default=None, description="Venue name used by this Live")
+    start_time: str | None = Field(default=None, description="Announced venue wall time with UTC offset")
+    start_timezone_label: str | None = Field(default=None, description="Venue zone abbreviation at the announced instant")
+    has_setlist: bool = Field(default=False, description="Whether at least one setlist row exists")
     tour: TourRef | None = Field(default=None, description="Tour reference when this live belongs to a tour")
     performance_group: PerformanceGroupRef | None = Field(
         default=None, description="Performance group reference when this live belongs to an activity group"

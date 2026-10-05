@@ -30,8 +30,6 @@ import {
   type EventStatus,
 } from "./api";
 import { useAuth } from "./auth/AuthProvider";
-import { ExternalLinkIcon } from "./components/ActionIcons";
-import { BandIconsCell, type BandIconInput } from "./components/BandIconsCell";
 import {
   AboutPanel,
   BandBrowsePanel,
@@ -39,23 +37,19 @@ import {
   SearchResultsPanel,
 } from "./components/CatalogPanels";
 import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
-import { ContentState } from "./components/ContentState";
 import { HomeDashboard, type HomeLiveRow } from "./components/HomeDashboard";
 import { PageTitle } from "./components/PageTitle";
-import { formatPerformanceDate, LiveCardGrid } from "./components/LiveCardGrid";
+import { LiveCardGrid, type LiveRow } from "./components/LiveCardGrid";
 import { StageLedgerPage } from "./components/StageLedgerPage";
-import { LiveListFiltersToolbar } from "./components/LiveListFilters";
+import { LiveListFiltersToolbar, LiveListSearch } from "./components/LiveListFilters";
 import { ListScopeToggle } from "./components/ListScopeToggle";
-import { LiveTypeBadge } from "./components/LiveTypeBadge";
 import { LoginDialog } from "./components/LoginDialog";
 import { StatisticsPanel } from "./components/StatisticsPanel";
 import { TourArchivePage } from "./components/TourArchivePage";
 import { TourDetailPage, type TourDetailFallback } from "./components/TourDetailPage";
 import { PerformanceGroupDetailPage } from "./components/PerformanceGroupDetailPage";
 import { DEFAULT_TOUR_FILTERS, type TourFilters } from "./components/TourListFilters";
-import { ViewModeToggle } from "./components/ViewModeToggle";
 import { VenueDetailPage } from "./components/VenueDetailPage";
-import { formatLiveType } from "./components/console/constants";
 import { useFavorites } from "./favorites/FavoriteProvider";
 import {
   DEFAULT_LIVE_LIST_FILTERS,
@@ -65,9 +59,6 @@ import {
 } from "./liveListFilters";
 import { logError } from "./logger";
 import {
-  formatLiveStatusText,
-  getLiveStatusPresentation,
-  getPerformanceGroupStatusPresentation,
 } from "./liveStatus";
 import {
   CONSOLE_LIVE_CHANGE_STORAGE_KEY,
@@ -81,27 +72,9 @@ import {
 import { useTheme, type ThemeMode } from "./theme/ThemeProvider";
 import "./styles/index.css";
 
-type DisplayRow = {
-  kind: "live" | "performance_group";
-  liveId: number;
-  liveDate: string;
-  liveTitle: string;
-  liveType: string;
-  icons: BandIconInput[];
-  url: string | null;
-  groupId: number | null;
-  groupTitle: string | null;
-  groupStartDate: string | null;
-  groupEndDate: string | null;
-  groupDayCount: number | null;
-  groupLiveCount: number | null;
-  groupCancelledLiveCount: number | null;
+type DisplayRow = LiveRow & {
   groupDisplayType: "single_day_multi_show" | "multi_day" | null;
-  groupIcons: BandIconInput[];
   groupVenues: string[];
-  eventStatus: EventStatus | null;
-  datePhase: DatePhase | null;
-  wasRescheduled: boolean;
 };
 
 type LiveDetailFallback = {
@@ -190,6 +163,7 @@ function toPerformanceFilters(filters: LiveListFilters): Record<string, string |
     live_type: filters.liveType ?? undefined,
     band_id: filters.bandId ?? undefined,
     sort: filters.sort,
+    status: filters.status ?? undefined,
   };
 }
 
@@ -270,19 +244,15 @@ function App() {
   const [albumId, setAlbumId] = useState<number | null>(initialAlbumMatch ? Number(initialAlbumMatch[1]) : null);
   const [songScrollY, setSongScrollY] = useState(0);
   const initialVenueId = getVenueIdFromPath(window.location.pathname);
-  const [pageSize, setPageSize] = useState<15 | 20>(20);
-  const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
-    const stored = localStorage.getItem("live-view-mode");
-    return stored === "table" ? "table" : "cards";
-  });
+  const pageSize = 20;
   const [cardPage, setCardPage] = useState(1);
   const [cardLoadingMore, setCardLoadingMore] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const [page, setPage] = useState(1);
   const [listFilters, setListFilters] = useState<LiveListFilters>({ ...DEFAULT_LIVE_LIST_FILTERS });
+  const [searchResetKey, setSearchResetKey] = useState(0);
   const [listFilterBands, setListFilterBands] = useState<CatalogBandItem[]>([]);
-  const [jumpPageInput, setJumpPageInput] = useState("1");
   const [tab, setTab] = useState<TabKey>(initialLiveId !== null ? "detail" : initialVenueId !== null ? "venue_detail" : initialSongMatch || initialAlbumMatch ? "songs" : "home");
   const [detailLiveId, setDetailLiveId] = useState<number | null>(initialLiveId);
   const [detailFallback, setDetailFallback] = useState<LiveDetailFallback | null>(
@@ -568,6 +538,10 @@ function App() {
           liveType: live.live_type,
           icons: live.bands ?? [],
           url: live.url,
+          venue: live.venue,
+          startTime: live.start_time,
+          startTimezoneLabel: live.start_timezone_label,
+          hasSetlist: live.has_setlist,
           groupId: live.performance_group?.group_id ?? null,
           groupTitle: live.performance_group?.group_title ?? null,
           groupStartDate: null,
@@ -602,6 +576,7 @@ function App() {
         groupDisplayType: pg.display_type,
         groupIcons: pg.bands.map((b) => b.band_id),
         groupVenues: pg.venues,
+        bandNames: Object.fromEntries(pg.bands.map(band => [band.band_id, band.band_name])),
         eventStatus: null,
         datePhase: null,
         wasRescheduled: false,
@@ -775,7 +750,7 @@ function App() {
   }, [tab]);
 
   useEffect(() => {
-    if (!listEnabled && tab !== "statistics") return;
+    if (!listEnabled && tab !== "statistics" && tab !== "venue_detail" && tab !== "tours") return;
     let canceled = false;
 
     const fetchListFilterBands = async () => {
@@ -823,7 +798,7 @@ function App() {
     const requestedSnapshotKey = buildListSnapshotKey(tab, page, pageSize, currentListFiltersKey);
     const cachedSnapshot = listSnapshotsRef.current[requestedSnapshotKey];
     const cardSessionKey = getCardSessionKey(tab as ListTabKey);
-    const cachedCardSession = viewMode === "cards" ? cardSessionsRef.current[cardSessionKey] : undefined;
+    const cachedCardSession = cardSessionsRef.current[cardSessionKey];
     const preserveVisibleItems = preserveListDuringLiveRefreshRef.current && items.length > 0;
     preserveListDuringLiveRefreshRef.current = false;
 
@@ -844,7 +819,7 @@ function App() {
         setServerTotalPages(cachedSnapshot.totalPages);
         setLoadError(null);
         setLoading(false);
-        if (viewMode === "cards") {
+        {
           cardSessionsRef.current[cardSessionKey] = {
             ...cachedSnapshot,
             cardPage: page,
@@ -875,7 +850,7 @@ function App() {
           total: data.pagination.total,
           totalPages: data.pagination.total_pages,
         };
-        if (viewMode === "cards") {
+        {
           cardSessionsRef.current[cardSessionKey] = {
             items: mappedItems,
             total: data.pagination.total,
@@ -932,7 +907,6 @@ function App() {
     page,
     pageSize,
     tab,
-    viewMode,
     tab === "favorites" ? favorites.projectionVersion : 0,
   ]);
 
@@ -981,22 +955,8 @@ function App() {
   const showBrowsePanel = tab === "browse";
   const showStatisticsPanel = tab === "statistics";
   const showAboutPanel = tab === "about";
-  const rows = showListPanel ? items : [];
 
   const total = serverTotal;
-  const totalPages = serverTotalPages;
-  const safePage = Math.min(page, totalPages);
-  const pagedRows = rows;
-  const pageLiveIds = tab === "all" ? pagedRows.filter((row) => row.kind === "live").map((row) => row.liveId) : [];
-  const canBatchFavorite = canUseFavoriteFeatures && tab === "all" && pageLiveIds.length > 0;
-  const pageAllFavorited =
-    canBatchFavorite && pageLiveIds.every((liveId) => favorites.favoriteLiveIdSet.has(liveId));
-  const batchFavoriteDesired = !pageAllFavorited;
-
-  useEffect(() => {
-    setJumpPageInput(String(safePage));
-  }, [safePage]);
-
   useEffect(() => {
     if (!userMenuOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
@@ -1014,11 +974,6 @@ function App() {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [userMenuOpen]);
-
-  const handlePageSizeChange = (value: 15 | 20) => {
-    setPageSize(value);
-    setPage(1);
-  };
 
   const handleListFiltersChange = (nextFilters: LiveListFilters) => {
     setListFilters(nextFilters);
@@ -1161,51 +1116,11 @@ function App() {
     navigateToTab(nextTab);
   };
 
-  const commitJumpPage = () => {
-    const parsed = Number.parseInt(jumpPageInput, 10);
-    const fallbackPage = Number.isFinite(parsed) ? parsed : safePage;
-    const nextPage = Math.min(totalPages, Math.max(1, fallbackPage));
-    setPage(nextPage);
-    setJumpPageInput(String(nextPage));
-  };
-
-  const handleViewModeChange = async (mode: "table" | "cards") => {
-    setViewMode(mode);
-    localStorage.setItem("live-view-mode", mode);
-    if (mode === "table") {
-      setCardPage(1);
-      setPage(1);
-      setItems([]);
-      setLoading(true);
-      setLoadError(null);
-      try {
-        const scope = tab === "favorites" ? "favorites" as const : "all" as const;
-        const performFilters = toPerformanceFilters(listFilters);
-        const data = listFiltersActive
-          ? await getPerformances(1, pageSize, scope, performFilters)
-          : await getPerformances(1, pageSize, scope);
-        setItems(performancesToDisplayRows(data.items));
-        setServerTotal(data.pagination.total);
-        setServerTotalPages(data.pagination.total_pages);
-        setPage(data.pagination.page);
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
-          auth.setAnonymous();
-          setTab("home");
-          return;
-        }
-        setLoadError(error instanceof Error ? error.message : "未知错误");
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
   useEffect(() => {
-    activeCardSessionKeyRef.current = viewMode === "cards" && (tab === "all" || tab === "favorites")
+    activeCardSessionKeyRef.current = (tab === "all" || tab === "favorites")
       ? getCardSessionKey(tab)
       : null;
-  }, [currentListFiltersKey, pageSize, tab, viewMode]);
+  }, [currentListFiltersKey, pageSize, tab]);
 
   useEffect(() => {
     if (pendingScrollRestoreRef.current === null) return;
@@ -1252,8 +1167,8 @@ function App() {
         : await getPerformances(nextPage, pageSize, scope);
       const mappedItems = performancesToDisplayRows(data.items);
       const currentSession = cardSessionsRef.current[sessionKey];
-      if (currentSession && currentSession.cardPage >= data.pagination.page) return;
-      const baseItems = currentSession?.items ?? items;
+      if (currentSession && currentSession.cardPage >= data.pagination.page && data.pagination.page === nextPage) return;
+      const baseItems = data.pagination.page < nextPage ? [] : currentSession?.items ?? items;
       const existingIds = new Set(baseItems.map(displayRowKey));
       const mergedItems = [...baseItems, ...mappedItems.filter((item) => !existingIds.has(displayRowKey(item)))];
       const nextSession: CardListSession = {
@@ -1288,7 +1203,6 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (viewMode !== "cards") return;
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
@@ -1301,9 +1215,9 @@ function App() {
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [viewMode, loadMoreCards]);
+  }, [loadMoreCards]);
 
-  const showFavoriteColumn = tab === "all" && auth.isAuthenticated;
+  const showFavoriteActions = (tab === "all" || tab === "favorites") && auth.isAuthenticated;
 
   const toggleFavorite = async (id: number) => {
     if (!auth.isAuthenticated) {
@@ -1322,32 +1236,6 @@ function App() {
       }
       logError("toggle_favorite_failed", {
         liveId: id,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  };
-
-  // 仅对“当前页 liveId 集合”做批量意图切换，具体同步与失败收敛交给 FavoriteProvider。
-  const toggleBatchFavorite = async () => {
-    if (!canBatchFavorite) {
-      return;
-    }
-    if (!auth.isAuthenticated) {
-      setLoginError(null);
-      setLoginDialogOpen(true);
-      return;
-    }
-    try {
-      await favorites.setFavoritesBatch(pageLiveIds, batchFavoriteDesired);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        auth.setAnonymous();
-        setTab("home");
-        setLoginDialogOpen(true);
-      }
-      logError("toggle_batch_favorite_failed", {
-        desired: batchFavoriteDesired,
-        count: pageLiveIds.length,
         message: error instanceof Error ? error.message : String(error),
       });
     }
@@ -1629,6 +1517,7 @@ function App() {
             key={`venue-${detailVenueId}`}
             venueId={detailVenueId}
             fallbackName={venueFallbackName}
+            bands={listFilterBands}
             onBack={handleBackFromVenue}
             onOpenLive={openVenueLiveDetail}
             onOpenGroup={(groupId, groupTitle) => openPerformanceGroupDetail({
@@ -1702,263 +1591,39 @@ function App() {
             onOpenTour={openTourDetail}
           />
         ) : showListPanel ? (
-          <>
+          <section className="live-catalog">
             <header className="page-heading list-page-heading">
               <div className="page-heading-main">
                 <PageTitle title="演出资料" />
                 <ListScopeToggle label="内容范围" value={tab === "favorites" ? "favorites" : "all"}
                   onChange={handleTabChange} />
               </div>
-              <ViewModeToggle value={viewMode} onChange={handleViewModeChange} />
+              <LiveListSearch filters={listFilters} onChange={handleListFiltersChange} resetKey={searchResetKey} />
             </header>
             <LiveListFiltersToolbar
               filters={listFilters}
               years={catalogStats?.years ?? []}
               bands={listFilterBands}
               onChange={handleListFiltersChange}
+              onClear={() => { setSearchResetKey(key => key + 1); handleListFiltersChange({ ...DEFAULT_LIVE_LIST_FILTERS }); }}
+              summary={<span aria-live="polite">总计 {total} 条</span>}
             />
-            <footer className="pager">
-              <div className="toolbar">
-                {viewMode === "table" && (
-                  <label>
-                    每页行数
-                    <select
-                      value={pageSize}
-                      onChange={(e) => handlePageSizeChange(Number(e.target.value) as 15 | 20)}
-                    >
-                      <option value={15}>15</option>
-                      <option value={20}>20</option>
-                    </select>
-                  </label>
-                )}
-                <span>总计 {total} 条</span>
-              </div>
-              {viewMode === "table" && (
-                <div className="pager-controls">
-                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>
-                    上一页
-                  </button>
-                  <span className="pager-status">
-                    第 {safePage} / {totalPages} 页
-                  </span>
-                  <label className="pager-jump">
-                    跳转至第
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={jumpPageInput}
-                      onChange={(e) => setJumpPageInput(e.target.value)}
-                      onBlur={commitJumpPage}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          commitJumpPage();
-                        }
-                      }}
-                    />
-                    页
-                  </label>
-                  <button
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={safePage >= totalPages}
-                  >
-                    下一页
-                  </button>
-                </div>
-              )}
-            </footer>
-            {viewMode === "cards" && (
-              <LiveCardGrid
-                rows={items}
-                showStar={showFavoriteColumn}
-                isFavorite={isFavorite}
-                isSyncing={(id) => favorites.isFavoriteSyncing(id)}
-                onToggleStar={(id) => void toggleFavorite(id)}
-                onOpenLive={(row) => openLiveDetail(row as DisplayRow)}
-                onOpenGroup={(groupId, groupTitle) => openPerformanceGroupDetail({ group_id: groupId, group_title: groupTitle })}
-                loading={loading}
-                loadError={loadError}
-                sentinelRef={sentinelRef}
-                loadingMore={cardLoadingMore}
-                hasMore={cardPage < serverTotalPages}
-                total={serverTotal}
-              />
-            )}
-            {viewMode === "table" && (
-              <div className="table-wrap">
-              <table className={showFavoriteColumn ? "table-with-fav" : "table-no-fav"}>
-                <thead>
-                  <tr>
-                    {showFavoriteColumn && (
-                      <th>
-                        <span className="fav-header-with-batch">
-                          <span>收藏</span>
-                          {canBatchFavorite && (
-                            <button
-                              type="button"
-                              className={`batch-favorite-btn ${pageAllFavorited ? "is-fav-state" : "is-empty-state"}`}
-                              onClick={() => void toggleBatchFavorite()}
-                              title={batchFavoriteDesired ? "收藏本页" : "取消收藏本页"}
-                              aria-label={batchFavoriteDesired ? "收藏本页" : "取消收藏本页"}
-                            >
-                              ★
-                            </button>
-                          )}
-                        </span>
-                      </th>
-                    )}
-                    <th>日期</th>
-                    <th>Live 名称</th>
-                    <th>类型</th>
-                    <th>乐队</th>
-                    <th>URL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedRows.map((row) => (
-                    row.kind === "performance_group" ? (
-                      <tr
-                        key={`group-${row.groupId}`}
-                        data-status-tone={getPerformanceGroupStatusPresentation(
-                          row.groupStartDate,
-                          row.groupEndDate,
-                          row.groupCancelledLiveCount ?? 0,
-                          row.groupLiveCount ?? 0,
-                        ).tone}
-                      >
-                        {showFavoriteColumn && <td className="fav-col-cell"></td>}
-                        <td>{formatPerformanceDate(row.groupStartDate, row.groupEndDate, row.liveDate)}</td>
-                        <td>
-                          <button
-                            className="name-btn"
-                            onClick={() => row.groupId !== null && openPerformanceGroupDetail({ group_id: row.groupId, group_title: row.groupTitle ?? "" })}
-                            title={row.liveTitle}
-                          >
-                            {row.liveTitle}
-                          </button>
-                        </td>
-                        <td>
-                          <LiveTypeBadge
-                            value="performance_group"
-                            label={row.groupDisplayType === "single_day_multi_show" ? "单日多场" : "多日活动"}
-                          />
-                          {" · "}
-                          {getPerformanceGroupStatusPresentation(
-                            row.groupStartDate,
-                            row.groupEndDate,
-                            row.groupCancelledLiveCount ?? 0,
-                            row.groupLiveCount ?? 0,
-                          ).primary}
-                        </td>
-                        <td className="band-cell" title={`${row.groupIcons.length} 支乐队`}>
-                          <BandIconsCell icons={row.groupIcons} rowId={row.groupId ?? 0} />
-                        </td>
-                        <td>
-                          <span>
-                            {row.groupLiveCount !== null
-                              ? `${row.groupDayCount} 日 · ${row.groupLiveCount} 场${row.groupCancelledLiveCount ? ` · 取消 ${row.groupCancelledLiveCount} 场` : ""}`
-                              : "-"}
-                          </span>
-                        </td>
-                      </tr>
-                    ) : (
-                    <tr
-                      key={row.liveId}
-                      data-status-tone={getLiveStatusPresentation(
-                        row.eventStatus ?? "scheduled",
-                        row.datePhase ?? "past",
-                        row.wasRescheduled,
-                      ).tone}
-                    >
-                      {showFavoriteColumn && (
-                        <td className="fav-col-cell">
-                          {row.eventStatus !== "cancelled" && (
-                            <button
-                              className={`star-btn ${isFavorite(row.liveId) ? "is-fav" : ""} ${favorites.isFavoriteSyncing(row.liveId) ? "is-syncing" : ""}`}
-                              onClick={() => void toggleFavorite(row.liveId)}
-                              title={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
-                              aria-label={isFavorite(row.liveId) ? "取消收藏" : "加入收藏"}
-                              aria-busy={favorites.isFavoriteSyncing(row.liveId)}
-                            >
-                              ★
-                            </button>
-                          )}
-                        </td>
-                      )}
-                      <td>{row.liveDate}</td>
-                      <td>
-                        <button
-                          className="name-btn"
-                          onClick={() => openLiveDetail(row)}
-                          title={row.liveTitle}
-                        >
-                          {row.liveTitle}
-                        </button>
-                      </td>
-                      <td>
-                        <LiveTypeBadge value={row.liveType} label={formatLiveType(row.liveType)} />
-                        {` · ${formatLiveStatusText(
-                          row.eventStatus ?? "scheduled",
-                          row.datePhase ?? "past",
-                          row.wasRescheduled,
-                        )}`}
-                      </td>
-                      <td className="band-cell" title={`${row.icons.length} 支乐队`}>
-                        <BandIconsCell icons={row.icons} rowId={row.liveId} />
-                      </td>
-                      <td>
-                        {row.url ? (
-                          <a
-                            href={row.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="url-icon-link"
-                            aria-label={`打开《${row.liveTitle}》的资料来源`}
-                          >
-                            <ExternalLinkIcon />
-                          </a>
-                        ) : (
-                          <span>-</span>
-                        )}
-                      </td>
-                    </tr>
-                    )
-                  ))}
-                  {loadError && (
-                    <tr>
-                      <td colSpan={showFavoriteColumn ? 6 : 5} className="empty-cell">
-                        <ContentState
-                          kind="error"
-                          title="数据加载失败"
-                          description={loadError}
-                          layout="rows"
-                          compact
-                        />
-                      </td>
-                    </tr>
-                  )}
-                  {!loadError && pagedRows.length === 0 && (
-                    <tr>
-                      <td colSpan={showFavoriteColumn ? 6 : 5} className="empty-cell">
-                        {loading ? (
-                          <ContentState kind="loading" title="加载中..." layout="rows" compact />
-                        ) : (
-                          <ContentState
-                            kind="empty"
-                            title="当前没有可展示的数据"
-                            description="可以调整筛选条件后再试。"
-                            layout="rows"
-                            compact
-                          />
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-              </div>
-            )}
+            <LiveCardGrid
+              rows={items}
+              bands={listFilterBands}
+              showStar={showFavoriteActions}
+              isFavorite={isFavorite}
+              isSyncing={(id) => favorites.isFavoriteSyncing(id)}
+              onToggleStar={(id) => void toggleFavorite(id)}
+              onOpenLive={(row) => openLiveDetail(row as DisplayRow)}
+              onOpenGroup={(groupId, groupTitle) => openPerformanceGroupDetail({ group_id: groupId, group_title: groupTitle })}
+              loading={loading}
+              loadError={loadError}
+              sentinelRef={sentinelRef}
+              loadingMore={cardLoadingMore}
+              hasMore={cardPage < serverTotalPages}
+              total={serverTotal}
+            />
             {showBackToTop && (
               <button
                 type="button"
@@ -1972,7 +1637,7 @@ function App() {
                 </svg>
               </button>
             )}
-          </>
+          </section>
         ) : showConsolePanel ? (
           <ConsoleInsertPanel initialMode="live_create" onLiveDataChanged={handleConsoleLiveDataChanged} />
         ) : (

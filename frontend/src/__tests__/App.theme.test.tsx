@@ -187,7 +187,6 @@ describe("App dark mode", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
     localStorage.clear();
-    localStorage.setItem("live-view-mode", "table");
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.style.colorScheme = "";
 
@@ -212,7 +211,7 @@ describe("App dark mode", () => {
     const user = userEvent.setup();
     renderWithTheme();
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
     expect(
       screen.getByRole("button", { name: "当前跟随系统（浅色），单击锁定夜间模式" }),
@@ -290,7 +289,7 @@ describe("App dark mode", () => {
 
     await waitFor(() => expect(document.documentElement.getAttribute("data-theme")).toBe("dark"));
     await user.click(screen.getByRole("button", { name: "演出资料" }));
-    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+    await user.click(screen.getByRole("button", { name: /查看《示例 Live 名称 1》详情/ }));
 
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();

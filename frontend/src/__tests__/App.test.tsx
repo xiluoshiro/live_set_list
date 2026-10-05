@@ -450,29 +450,24 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function getTotalCount(): number {
-  const text = screen.getByText(/总计 \d+ 条/).textContent ?? "";
-  const match = text.match(/总计 (\d+) 条/);
-  if (!match) {
-    throw new Error("未找到总计条数文本");
-  }
-  return Number(match[1]);
+
+
+function installCardObserver() {
+  let callback: IntersectionObserverCallback | undefined;
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(next: IntersectionObserverCallback) { callback = next; }
+    observe() {} disconnect() {} unobserve() {}
+  });
+  return async () => { await act(async () => {
+    callback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+  }); };
 }
 
-function getPageInfo(): { page: number; totalPages: number } {
-  const text = screen.getByText(/第 \d+ \/ \d+ 页/).textContent ?? "";
-  const match = text.match(/第 (\d+) \/ (\d+) 页/);
-  if (!match) {
-    throw new Error("未找到分页文本");
-  }
-  return { page: Number(match[1]), totalPages: Number(match[2]) };
-}
-
-function getTableRowByLiveTitle(title: string): HTMLElement {
-  const nameButton = screen.getByRole("button", { name: title });
-  const row = nameButton.closest("tr");
+function getCardByLiveTitle(title: string): HTMLElement {
+  const nameButton = screen.getByText(title);
+  const row = nameButton.closest("article");
   if (!row) {
-    throw new Error(`未找到标题 ${title} 对应的表格行`);
+    throw new Error(`未找到标题 ${title} 对应的演出卡片`);
   }
   return row as HTMLElement;
 }
@@ -497,7 +492,6 @@ async function openAllContent(user: ReturnType<typeof userEvent.setup>) {
 describe("App", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
-    localStorage.setItem("live-view-mode", "table");
     localStorage.removeItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY);
     Reflect.deleteProperty(window, "requestIdleCallback");
     Reflect.deleteProperty(window, "cancelIdleCallback");
@@ -677,7 +671,7 @@ describe("App", () => {
     expect(screen.queryByText("最近收录")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "个人与贡献" })).not.toBeInTheDocument();
 
-    await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
+    await user.click(await screen.findByText("示例 Live 名称 1"));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(1));
     expect(screen.getByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
 
@@ -696,7 +690,7 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
+    await user.click(await screen.findByText("示例 Live 名称 1"));
     expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "detail", detailLiveId: 1 });
 
     fireEvent.popState(window, { state: { app: "live-set-list", tab: "home" } });
@@ -713,8 +707,8 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
+    await user.click(screen.getByText("示例 Live 名称 1"));
 
     await user.click(await screen.findByRole("button", { name: "返回演出资料" }));
 
@@ -724,7 +718,6 @@ describe("App", () => {
 
   test("卡片详情关闭会保留已加载页并继续触发无限加载", async () => {
     // 测试点：详情期间完成的卡片分页请求不能让关闭后的列表卡在第一页。
-    localStorage.setItem("live-view-mode", "cards");
     const secondPage = deferred<PerformancesResponse>();
     getLivesMock.mockImplementation((requestedPage) => {
       if (requestedPage === 3) {
@@ -830,7 +823,7 @@ describe("App", () => {
       renderApp();
       await openAllContent(user);
 
-      await user.click(await screen.findByRole("button", { name: "示例 Live 名称 1" }));
+      await user.click(await screen.findByText("示例 Live 名称 1"));
 
       expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
       expect(window.history.state).toMatchObject({ app: "live-set-list", tab: "detail", detailLiveId: 1 });
@@ -980,78 +973,8 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "控制台" })).toBeInTheDocument();
   });
 
-  test("全量页存在未收藏条目时，显示收藏本页按钮并触发 batch 收藏", async () => {
-    // 测试点：混合收藏状态下，批量按钮应进入“收藏本页”动作，并只发一次 batch 请求。
-    getAuthMeMock.mockResolvedValue({
-      authenticated: true,
-      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
-      csrf_token: "csrf-token",
-      favorite_live_ids: [1, 2],
-    });
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-    );
-    favoriteLivesBatchMock.mockResolvedValueOnce({
-      action: "favorite",
-      requested_count: 20,
-      applied_live_ids: Array.from({ length: 18 }, (_, idx) => idx + 3),
-      noop_live_ids: [1, 2],
-      not_found_live_ids: [],
-    });
-    const user = userEvent.setup();
-    renderApp({ withAuthProvider: true });
-    await openAllContent(user);
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "收藏本页" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "收藏本页" }));
-
-    expect(favoriteLivesBatchMock).toHaveBeenCalledWith(
-      "favorite",
-      Array.from({ length: 20 }, (_, idx) => idx + 1),
-      "csrf-token",
-    );
-    expect(favoriteLivesBatchMock).toHaveBeenCalledTimes(1);
-    expect(favoriteLiveMock).toHaveBeenCalledTimes(0);
-    expect(unfavoriteLiveMock).toHaveBeenCalledTimes(0);
-  });
-
-  test("全量页已全收藏时，显示取消收藏本页按钮并触发 batch 取消收藏", async () => {
-    // 测试点：当当前页全部已收藏时，批量按钮切到“取消收藏本页”动作。
-    getAuthMeMock.mockResolvedValue({
-      authenticated: true,
-      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
-      csrf_token: "csrf-token",
-      favorite_live_ids: Array.from({ length: 20 }, (_, idx) => idx + 1),
-    });
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-    );
-    favoriteLivesBatchMock.mockResolvedValueOnce({
-      action: "unfavorite",
-      requested_count: 20,
-      applied_live_ids: Array.from({ length: 20 }, (_, idx) => idx + 1),
-      noop_live_ids: [],
-      not_found_live_ids: [],
-    });
-    const user = userEvent.setup();
-    renderApp({ withAuthProvider: true });
-    await openAllContent(user);
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "取消收藏本页" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "取消收藏本页" }));
-
-    expect(favoriteLivesBatchMock).toHaveBeenCalledWith(
-      "unfavorite",
-      Array.from({ length: 20 }, (_, idx) => idx + 1),
-      "csrf-token",
-    );
-    expect(favoriteLivesBatchMock).toHaveBeenCalledTimes(1);
-    expect(favoriteLiveMock).toHaveBeenCalledTimes(0);
-    expect(unfavoriteLiveMock).toHaveBeenCalledTimes(0);
-  });
-
   // 测试点：收藏不再占用独立导航页签，而是在演出资料内作为范围切换。
-  test("已登录时演出资料页显示范围切换、收藏列和星标按钮", async () => {
+  test("已登录时演出资料页显示范围切换和星标按钮", async () => {
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
       user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
@@ -1071,8 +994,6 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "仅收藏" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("columnheader", { name: /收藏/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "收藏本页" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
   });
 
@@ -1100,7 +1021,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "仅收藏" }));
     await waitFor(() => expect(getPerformancesMock).toHaveBeenCalledWith(1, 20, "favorites"));
     expect(screen.getByRole("button", { name: "仅收藏" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument();
+    expect(screen.getByText("示例 Live 名称 101")).toBeInTheDocument();
   });
 
   // 测试点：未登录模式下不应该渲染收藏星标按钮。
@@ -1113,7 +1034,7 @@ describe("App", () => {
     );
     renderApp();
     await userEvent.setup().click(await screen.findByRole("button", { name: "演出资料" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "取消收藏" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入收藏" })).not.toBeInTheDocument();
   });
@@ -1142,13 +1063,13 @@ describe("App", () => {
     renderApp();
 
     await openAllContent(user);
-    await user.click(await screen.findByRole("button", { name: "示例多日 Live" }));
+    await user.click(await screen.findByText("示例多日 Live"));
 
     await waitFor(() => expect(getPerformanceGroupDetailMock).toHaveBeenCalledWith(88));
     expect(screen.getByRole("navigation", { name: "活动组场次" })).toBeInTheDocument();
   });
 
-  // 测试点：单日多场活动组表格只显示一个原格式日期，卡片只显示一个紧凑日期。
+  // 测试点：单日多场活动组只显示一个紧凑日期，避免重复起止日期。
   test("单日多场活动组不重复显示起止日期", async () => {
     getPerformancesMock.mockResolvedValue({
       items: [{
@@ -1172,17 +1093,12 @@ describe("App", () => {
     renderApp();
 
     await openAllContent(user);
-    const tableRow = getTableRowByLiveTitle("示例单日多场");
-    expect(within(tableRow).getByText("2026-08-01")).toBeInTheDocument();
-    expect(within(tableRow).queryByText("2026-08-01 ~ 2026-08-01")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "卡片" }));
-    const card = screen.getByText("示例单日多场").closest("article") as HTMLElement;
+    const card = getCardByLiveTitle("示例单日多场");
     expect(within(card).getByText("2026.08.01")).toBeInTheDocument();
     expect(within(card).queryByText("2026-08-01 ~ 2026-08-01")).not.toBeInTheDocument();
   });
 
-  // 测试点：活动组部分命中时，表格和卡片模式都复用普通 Live 展示并可逐场打开详情。
+  // 测试点：活动组部分命中时展示匹配场次，并可逐场打开详情。
   test("演出资料部分命中的活动组逐场展示", async () => {
     const fullGroupResponse: PerformancesResponse = {
       items: [{
@@ -1228,17 +1144,16 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
     await openAllContent(user);
-    expect(await screen.findByRole("button", { name: "部分命中测试组" })).toBeInTheDocument();
+    expect(await screen.findByText("部分命中测试组")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("关键词"), "ChildProbe");
     await user.click(screen.getByRole("button", { name: "搜索" }));
 
-    expect(await screen.findByRole("button", { name: "ChildProbe DAY 1" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "ChildProbe DAY 2" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "部分命中测试组" })).not.toBeInTheDocument();
+    expect(await screen.findByText("ChildProbe DAY 1")).toBeInTheDocument();
+    expect(screen.getByText("ChildProbe DAY 2")).toBeInTheDocument();
+    expect(screen.queryByText("部分命中测试组")).not.toBeInTheDocument();
     expect(screen.getByText("总计 2 条")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "卡片" }));
     expect(screen.getAllByRole("article")).toHaveLength(2);
     expect(
       screen.queryByRole("button", { name: /查看活动组《部分命中测试组》详情/ }),
@@ -1248,11 +1163,12 @@ describe("App", () => {
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(9301));
   });
 
-  // 测试点：巡演资料展示筛选和总计，单页结果不显示翻页控件。
+  // 测试点：巡演卡片展示真实乐队、站点、收录数和来源，并支持独立关键词筛选。
   test("巡演资料页签展示聚合资料并支持独立筛选", async () => {
     const user = userEvent.setup();
     const toursResponse = makeToursResponse();
     toursResponse.items[0].cancelled_live_count = 1;
+    toursResponse.items[0].stop_labels = ["東京", "大阪"];
     getToursMock.mockResolvedValue(toursResponse);
     renderApp();
     await user.click(await screen.findByRole("button", { name: "巡演资料" }));
@@ -1275,7 +1191,10 @@ describe("App", () => {
     expect(within(tourCard).getByText("收录2")).toBeInTheDocument();
     expect(within(tourCard).getByText("取消1")).toBeInTheDocument();
     expect(within(tourCard).getByText("2026.05.30–06.02")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Band 2" })).toBeInTheDocument();
+    expect(within(tourCard).getByText("Ave Mujica")).toBeInTheDocument();
+    expect(within(tourCard).getByText("東京 / 大阪")).toBeInTheDocument();
+    expect(within(tourCard).getByRole("link", { name: "打开《Ave Mujica LIVE TOUR 2026 Exitus》的资料来源" }))
+      .toHaveAttribute("href", "https://example.com/live/41");
 
     await user.type(screen.getByLabelText("关键词"), "Exitus");
     await user.click(screen.getByRole("button", { name: "搜索" }));
@@ -1509,17 +1428,17 @@ describe("App", () => {
     renderApp({ withAuthProvider: true });
     await openAllContent(user);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "仅收藏" }));
 
-    expect(screen.queryByRole("button", { name: "示例 Live 名称 1" })).not.toBeInTheDocument();
+    expect(screen.queryByText("示例 Live 名称 1")).not.toBeInTheDocument();
     expect(screen.getByText("加载中...")).toBeInTheDocument();
 
     deferredFavorites.resolve(
       makePerformancesResponse({ page: 1, pageSize: 20, total: 2, totalPages: 1, itemCount: 2, startId: 101 }),
     );
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 101")).toBeInTheDocument());
   });
 
   // 测试点：同一登录态下已访问过的全量/收藏页再次切回时，应直接命中本地快照。
@@ -1544,12 +1463,12 @@ describe("App", () => {
     renderApp({ withAuthProvider: true });
     await openAllContent(user);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "仅收藏" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 101")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "演出资料" }));
 
-    expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument();
+    expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument();
     expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
     expect(getPerformancesMock).toHaveBeenCalledTimes(2);
   });
@@ -1591,84 +1510,29 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "仅收藏" }));
 
-    expect(screen.getByRole("button", { name: "示例 Live 名称 101" })).toBeInTheDocument();
+    expect(screen.getByText("示例 Live 名称 101")).toBeInTheDocument();
     expect(getAuthMeMock).toHaveBeenCalledTimes(1);
   });
 
   // 测试点：翻页请求与显示一致，返回已加载页复用快照，第二页改为 15 行后重新请求第一页。
-  test("分页请求、返回快照和每页条数切换保持一致", async () => {
-    getLivesMock
-      .mockResolvedValueOnce(
-        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
-      );
-    getPerformancesMock
-      .mockResolvedValueOnce(
-        makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-      )
-      .mockResolvedValueOnce(
-        makePerformancesResponse({ page: 2, pageSize: 20, total: 47, totalPages: 3, itemCount: 20, startId: 21 }),
-      )
-      .mockResolvedValueOnce(
-        makePerformancesResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
-      );
-    const user = userEvent.setup();
-    renderApp();
-    await openAllContent(user);
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-
-    const total = getTotalCount();
-    expect(getPerformancesMock).toHaveBeenCalledWith(1, 20, "all");
-    const firstPageInfo = getPageInfo();
-    expect(firstPageInfo.page).toBe(1);
-    expect(firstPageInfo.totalPages).toBe(Math.ceil(total / 20));
-
-    await user.click(screen.getByRole("button", { name: "下一页" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 21" })).toBeInTheDocument());
-    expect(getPerformancesMock).toHaveBeenLastCalledWith(2, 20, "all");
-    const secondPageInfo = getPageInfo();
-    expect(secondPageInfo.page).toBe(Math.min(2, secondPageInfo.totalPages));
-
-    await user.click(screen.getByRole("button", { name: "上一页" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    expect(getPageInfo().page).toBe(1);
+  // 测试点：追加下一批卡片后，详情往返保留两批资料与服务端总计，不重复获取已经加载的页。
+  test("卡片追加与详情返回快照保持一致", async () => {
+    const intersect = installCardObserver();
+    getPerformancesMock.mockResolvedValueOnce(makePerformancesResponse({ page: 1, pageSize: 20, total: 40, totalPages: 2, itemCount: 20 }))
+      .mockResolvedValueOnce(makePerformancesResponse({ page: 2, pageSize: 20, total: 40, totalPages: 2, itemCount: 20, startId: 21 }));
+    const user = userEvent.setup(); renderApp(); await openAllContent(user);
+    await screen.findByText("示例 Live 名称 1"); await intersect();
+    await screen.findByText("示例 Live 名称 21");
+    const sourceState = window.history.state;
+    await user.click(screen.getByText("示例 Live 名称 21"));
+    await screen.findByRole("heading", { name: "示例 Live 名称 21" });
+    await act(async () => { fireEvent.popState(window, { state: sourceState }); });
+    expect(await screen.findByText("示例 Live 名称 1")).toBeInTheDocument();
+    expect(screen.getByText("示例 Live 名称 21")).toBeInTheDocument();
+    expect(screen.getByText("总计 40 条")).toBeInTheDocument();
     expect(getPerformancesMock).toHaveBeenCalledTimes(2);
-
-    await user.click(screen.getByRole("button", { name: "下一页" }));
-    await waitFor(() => expect(getPageInfo().page).toBe(2));
-    await user.selectOptions(screen.getByLabelText("每页行数"), "15");
-    await waitFor(() => expect(getPerformancesMock).toHaveBeenLastCalledWith(1, 15, "all"));
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    const pageInfoAfterResize = getPageInfo();
-    expect(pageInfoAfterResize.page).toBe(1);
-    expect(pageInfoAfterResize.totalPages).toBe(Math.ceil(total / 15));
   });
 
-  test("跳转页输入框支持回车跳转到目标页", async () => {
-    // 测试点：在“跳转至第（）页”输入页码后按回车，应请求对应页并更新分页显示。
-    getLivesMock
-      .mockResolvedValueOnce(
-        makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
-      );
-    getPerformancesMock
-      .mockResolvedValueOnce(
-        makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-      )
-      .mockResolvedValueOnce(
-        makePerformancesResponse({ page: 3, pageSize: 20, total: 47, totalPages: 3, itemCount: 7, startId: 41 }),
-      );
-    const user = userEvent.setup();
-    renderApp();
-    await openAllContent(user);
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-
-    const jumpInput = screen.getByRole("textbox");
-    await user.clear(jumpInput);
-    await user.type(jumpInput, "3{Enter}");
-
-    await waitFor(() => expect(getPerformancesMock).toHaveBeenCalledWith(3, 20, "all"));
-    await waitFor(() => expect(screen.getByText("第 3 / 3 页")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "示例 Live 名称 41" })).toBeInTheDocument();
-  });
 
   test("点击 live 名称打开详情页并可返回列表", async () => {
     // 测试点：详情查看路径（打开/浏览器后退返回）可用。
@@ -1678,7 +1542,7 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
     await openAllContent(user);
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
 
     const firstLiveButton = screen.getAllByRole("button", { name: /示例 Live 名称/ })[0];
     const firstLiveName = firstLiveButton.textContent ?? "";
@@ -1686,7 +1550,7 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: firstLiveName })).toBeInTheDocument();
 
     fireEvent.popState(window, { state: { app: "live-set-list", tab: "all" } });
-    await waitFor(() => expect(screen.queryByRole("heading", { name: firstLiveName })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("heading", { name: firstLiveName, level: 1 })).not.toBeInTheDocument());
   });
 
   test("直接访问永久 Live URL 会恢复详情并保留当前路径", async () => {
@@ -1739,9 +1603,9 @@ describe("App", () => {
     );
     const user = userEvent.setup();
     const { container } = renderApp();
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+    await user.click(screen.getByText("示例 Live 名称 1"));
 
     expect(screen.queryByRole("button", { name: "关闭演出资料" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "演出流程" })).toBeInTheDocument();
@@ -1764,13 +1628,13 @@ describe("App", () => {
     );
     const user = userEvent.setup();
     render(<App />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+    await user.click(screen.getByText("示例 Live 名称 1"));
     expect(screen.getByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
 
     fireEvent.popState(window, { state: { app: "live-set-list", tab: "all" } });
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
   });
 
   test("详情弹窗在 url 为空时标题不渲染超链接", async () => {
@@ -1781,9 +1645,9 @@ describe("App", () => {
     getLiveDetailMock.mockResolvedValueOnce(makeDetailResponse({ liveId: 1, url: null }));
     const user = userEvent.setup();
     renderApp();
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+    await user.click(screen.getByText("示例 Live 名称 1"));
     expect(screen.getByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /示例 Live 名称 1/i })).not.toBeInTheDocument();
   });
@@ -1805,8 +1669,8 @@ describe("App", () => {
     });
   });
 
-  test("乐队列渲染图标单元格", async () => {
-    // 测试点：乐队列应渲染图标容器与 SVG 图标。
+  test("演出卡片显示出演队伍名称", async () => {
+    // 测试点：两支出演队伍展示目录中的真实名称，便于识别演出阵容。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1817,12 +1681,9 @@ describe("App", () => {
     renderApp();
     await openAllContent(user);
     await waitFor(() => {
-      const firstBandCell = screen.getAllByTitle(/支乐队/)[0];
-      const bandIcons = within(firstBandCell).getAllByRole("img", { name: /Band \d+/ });
-      expect(bandIcons.length).toBeGreaterThan(0);
-      bandIcons.forEach((icon) => {
-        expect(icon.getAttribute("src")).toMatch(/^\/icons\/Band_\d+\.svg$/);
-      });
+      const card = getCardByLiveTitle("示例 Live 名称 1");
+      expect(within(card).getByText("Poppin'Party")).toBeInTheDocument();
+      expect(within(card).getByText("Roselia")).toBeInTheDocument();
     });
   });
 
@@ -1852,8 +1713,9 @@ describe("App", () => {
     renderApp();
     await openAllContent(user);
     await waitFor(() => {
-      const bandCell = screen.getByTitle("0 支乐队");
-      expect(within(bandCell).queryByRole("img")).not.toBeInTheDocument();
+      const card = getCardByLiveTitle("No Setlist Live");
+      expect(within(card).queryByRole("img")).not.toBeInTheDocument();
+      expect(within(card).queryByText("Poppin'Party")).not.toBeInTheDocument();
     });
   });
 
@@ -1887,7 +1749,7 @@ describe("App", () => {
     await openAllContent(user);
 
     await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2, 3]));
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
     expect(screen.queryByText(/数据加载失败/)).not.toBeInTheDocument();
   });
 
@@ -1920,7 +1782,8 @@ describe("App", () => {
   });
 
   test("翻页后会对新页数据触发批量详情预读", async () => {
-    // 测试点：翻页成功后，batch 预读应切换到新页的 live_id 列表。
+    const intersect = installCardObserver();
+    // 测试点：追加卡片成功后，批量详情预读包含新加载的 Live。
     getLivesMock
       .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }),
@@ -1937,8 +1800,8 @@ describe("App", () => {
     await openAllContent(user);
 
     await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([1, 2]));
-    await user.click(screen.getByRole("button", { name: "下一页" }));
-    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([21, 22]));
+    await intersect();
+    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith(expect.arrayContaining([21, 22])));
   });
 
   test("浏览器空闲时会预读下一页列表与详情", async () => {
@@ -1972,7 +1835,7 @@ describe("App", () => {
     await openAllContent(user);
 
     await waitFor(() => expect(getPerformancesMock).toHaveBeenCalledWith(2, 20, "all"));
-    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith([21, 22]));
+    await waitFor(() => expect(getLiveDetailsBatchMock).toHaveBeenCalledWith(expect.arrayContaining([21, 22])));
   });
 
   test("分页总计与总页数以后端返回为准", async () => {
@@ -1989,12 +1852,12 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(screen.getByText("总计 120 条")).toBeInTheDocument();
-      expect(screen.getByText("第 1 / 6 页")).toBeInTheDocument();
     });
   });
 
   test("后端校正页码后，前端页码显示会同步到纠正结果且不重复请求", async () => {
-    // 测试点：后端返回 canonical page 时，前端应同步显示该页并复用这次响应，不再冗余补请求。
+    const intersect = installCardObserver();
+    // 测试点：追加请求遇到服务端收缩页数时，使用校正后的数据和总计结束加载，不重复请求。
     getLivesMock
       .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 15, total: 40, totalPages: 3, itemCount: 15 }),
@@ -2010,10 +1873,10 @@ describe("App", () => {
     renderApp();
     await openAllContent(user);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
+    await intersect();
     await waitFor(() => {
-      expect(screen.getByText("第 1 / 1 页")).toBeInTheDocument();
+      expect(screen.getByText("已加载全部 20 条")).toBeInTheDocument();
       expect(screen.getByText("总计 20 条")).toBeInTheDocument();
     });
     expect(getPerformancesMock).toHaveBeenCalledTimes(2);
@@ -2033,7 +1896,6 @@ describe("App", () => {
     await openAllContent(user);
 
     await waitFor(() => {
-      expect(screen.getAllByText("-").length).toBeGreaterThan(0);
       expect(screen.queryByRole("link", { name: /打开《.*》的资料来源/ })).not.toBeInTheDocument();
     });
   });
@@ -2053,12 +1915,12 @@ describe("App", () => {
     d.resolve(makePerformancesResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }));
     await waitFor(() => {
       expect(screen.queryByText("加载中...")).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument();
+      expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument();
     });
   });
 
-  // 测试点：列表失败时保留错误提示与分页，并记录包含分页参数和错误原因的日志。
-  test("请求失败时显示错误提示、保留分页并记录上下文日志", async () => {
+  // 测试点：列表失败时显示错误提示，并记录包含分页参数和错误原因的日志。
+  test("请求失败时显示错误提示、记录上下文日志", async () => {
     getLivesMock
       .mockResolvedValueOnce(makeResponse({ page: 1, pageSize: 15, total: 47, totalPages: 4, itemCount: 15 }));
     getPerformancesMock
@@ -2071,7 +1933,6 @@ describe("App", () => {
       const alert = screen.getByRole("alert");
       expect(alert).toHaveTextContent("数据加载失败");
       expect(alert).toHaveTextContent("Request failed: 500");
-      expect(screen.getByText(/第 \d+ \/ \d+ 页/)).toBeInTheDocument();
       expect(logErrorMock).toHaveBeenCalledWith(
         "load_lives_failed",
         expect.objectContaining({ page: 1, pageSize: 20, message: "Request failed: 500" }),
@@ -2088,8 +1949,8 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "示例 Live 名称 1" }));
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
+    await user.click(screen.getByText("示例 Live 名称 1"));
 
     await waitFor(() => {
       expect(logErrorMock).toHaveBeenCalledWith(
@@ -2102,8 +1963,11 @@ describe("App", () => {
     });
   });
 
-  // 测试点：登录后切换分页，收藏操作仍会按同一 live_id 发到服务端。
+  // 测试点：追加一批卡片后，两批的收藏操作仍分别绑定真实 Live ID。
   test("跨页后收藏状态仍按 live_id 生效", async () => {
+    const intersect = installCardObserver();
+    getPerformancesMock.mockResolvedValueOnce(makePerformancesResponse({ page: 1, pageSize: 20, total: 40, totalPages: 2, itemCount: 20 }))
+      .mockResolvedValueOnce(makePerformancesResponse({ page: 2, pageSize: 20, total: 40, totalPages: 2, itemCount: 20, startId: 21 }));
     getLivesMock
       .mockResolvedValueOnce(
         makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20, startId: 1 }),
@@ -2133,13 +1997,16 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
     });
-    await user.click(screen.getAllByRole("button", { name: "取消收藏" })[0]);
+    await intersect();
+    await screen.findByText("示例 Live 名称 21");
+    await user.click(within(getCardByLiveTitle("示例 Live 名称 1")).getByRole("button", { name: "取消收藏" }));
     await waitFor(() => expect(unfavoriteLiveMock).toHaveBeenCalledWith(1, "csrf-token"));
+    await user.click(within(getCardByLiveTitle("示例 Live 名称 21")).getByRole("button", { name: "加入收藏" }));
+    await waitFor(() => expect(favoriteLiveMock).toHaveBeenCalledWith(21, "csrf-token"));
   });
 
   // 测试点：卡片收藏按钮提交当前 Live，独立外链指向该 Live 的资料来源。
   test("卡片模式下渲染可访问的独立操作入口", async () => {
-    localStorage.setItem("live-view-mode", "cards");
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
       user: { id: 1, username: "viewer", display_name: "Viewer", role: "viewer" },
@@ -2165,32 +2032,7 @@ describe("App", () => {
     await waitFor(() => expect(favoriteLiveMock).toHaveBeenCalledWith(1, "csrf-token"));
   });
 
-  // 测试点：分段控件明确展示两种视图，当前项状态和本地偏好随切换同步。
-  test("视图切换按钮可在卡片与表格模式间切换", async () => {
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
-    );
-    const user = userEvent.setup();
-    renderApp();
-    await openAllContent(user);
-
-    expect(screen.getByRole("table")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "视图模式" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "表格" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "卡片" })).toHaveAttribute("aria-pressed", "false");
-
-    await user.click(screen.getByRole("button", { name: "卡片" }));
-    expect(screen.getAllByRole("article").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "卡片" })).toHaveAttribute("aria-pressed", "true");
-    expect(localStorage.getItem("live-view-mode")).toBe("cards");
-
-    await user.click(screen.getByRole("button", { name: "表格" }));
-    await waitFor(() => expect(screen.getByRole("table")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "表格" })).toHaveAttribute("aria-pressed", "true");
-    expect(localStorage.getItem("live-view-mode")).toBe("table");
-  });
-
-  // 测试点：关键词、年份、类型、乐队和排序会共同刷新服务端列表，年份与乐队只显示名称。
+  // 测试点：组合筛选向服务端提交状态，折叠保留条件，清除全部同时复位搜索框和筛选。
   test("演出资料筛选栏提交共享筛选参数且选项不显示数量", async () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 6, totalPages: 1, itemCount: 6 }),
@@ -2202,6 +2044,7 @@ describe("App", () => {
     await user.clear(screen.getByLabelText("关键词"));
     await user.type(screen.getByLabelText("关键词"), "Roselia");
     await user.click(screen.getByRole("button", { name: "搜索" }));
+    await user.click(screen.getByRole("button", { name: "展开筛选" }));
     await user.selectOptions(screen.getByLabelText("年份"), "2026");
     await user.selectOptions(screen.getByLabelText("Live 类型"), "oneman");
     await user.selectOptions(screen.getByLabelText("乐队 / 艺人"), "2");
@@ -2214,16 +2057,36 @@ describe("App", () => {
         live_type: "oneman",
         band_id: 2,
         sort: "date_asc",
+        status: undefined,
       });
     });
     expect(screen.getByRole("option", { name: "2026" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Roselia" })).toBeInTheDocument();
     expect(screen.queryByText(/（\d+）/)).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("状态"), "upcoming");
+    await waitFor(() => expect(getPerformancesMock).toHaveBeenLastCalledWith(1, 20, "all", expect.objectContaining({ status: "upcoming" })));
+    await user.click(screen.getByRole("button", { name: "收起筛选 (5)" }));
+    expect(screen.getByRole("button", { name: "展开筛选 (5)" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "待举行 ×" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "展开筛选 (5)" }));
+    expect(screen.getByLabelText("状态")).toHaveValue("upcoming");
+    await user.click(screen.getByRole("button", { name: "收起筛选 (5)" }));
+    await user.click(screen.getByRole("button", { name: "清除全部" }));
+    expect(screen.getByLabelText("关键词")).toHaveValue("");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "清除全部" })).not.toBeInTheDocument());
+    expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "展开筛选" }));
+    expect(screen.getByLabelText("状态")).toHaveValue("");
+    expect(screen.getByLabelText("年份")).toHaveValue("");
+    expect(screen.getByLabelText("排序")).toHaveValue("date_desc");
+    await user.selectOptions(screen.getByLabelText("年份"), "2026");
+    await user.type(screen.getByLabelText("关键词"), "尚未提交");
+    await user.click(screen.getByRole("button", { name: "清除全部" }));
+    expect(screen.getByLabelText("关键词")).toHaveValue("");
   });
 
   // 测试点：没有控制台变更时，重新聚焦后的首次卡片点击必须直接进入详情而不刷新列表。
   test("重新聚焦后的首次卡片点击不会被列表刷新吞掉", async () => {
-    localStorage.setItem("live-view-mode", "cards");
     const user = userEvent.setup();
     renderApp();
     await openAllContent(user);
@@ -2244,7 +2107,6 @@ describe("App", () => {
 
   // 测试点：没有控制台变更时，重新聚焦后按 Escape 不得清空或重新请求当前卡片列表。
   test("重新聚焦后按Escape不会刷新卡片列表", async () => {
-    localStorage.setItem("live-view-mode", "cards");
     const user = userEvent.setup();
     renderApp();
     await openAllContent(user);
@@ -2269,7 +2131,7 @@ describe("App", () => {
       .mockReturnValueOnce(refresh.promise);
     const user = userEvent.setup();
     renderApp();
-    const row = await screen.findByRole("button", { name: "示例 Live 名称 1" });
+    const row = await screen.findByText("示例 Live 名称 1");
     const rawChange = JSON.stringify({
       action: "updated",
       liveId: 1,
@@ -2300,7 +2162,7 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
     await openAllContent(user);
-    await screen.findByRole("button", { name: "示例 Live 名称 1" });
+    await screen.findByText("示例 Live 名称 1");
     const rawChange = JSON.stringify({
       action: "updated",
       liveId: 1,
@@ -2334,7 +2196,6 @@ describe("App", () => {
 
   // 测试点：真实跨标签刷新在途时保留旧卡片，避免用户正在进行的首次点击被卸载。
   test("跨标签刷新在途时旧卡片仍可点击进入详情", async () => {
-    localStorage.setItem("live-view-mode", "cards");
     const refresh = deferred<PerformancesResponse>();
     getPerformancesMock
       .mockResolvedValueOnce(
@@ -2377,7 +2238,7 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
     await openAllContent(user);
-    await screen.findByRole("button", { name: "示例 Live 名称 1" });
+    await screen.findByText("示例 Live 名称 1");
     localStorage.setItem(CONSOLE_LIVE_CHANGE_STORAGE_KEY, JSON.stringify({
       action: "setlist_appended",
       liveId: 1,

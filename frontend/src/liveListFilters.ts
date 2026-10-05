@@ -5,6 +5,7 @@ export type LiveListFilters = {
   year: number | null;
   liveType: string | null;
   bandId: number | null;
+  status?: "upcoming" | "today" | "past" | "postponed" | "cancelled" | null;
   sort: LiveListSort;
 };
 
@@ -13,6 +14,7 @@ export const DEFAULT_LIVE_LIST_FILTERS: LiveListFilters = {
   year: null,
   liveType: null,
   bandId: null,
+  status: null,
   sort: "date_desc",
 };
 
@@ -22,6 +24,7 @@ export function normalizedLiveListFilters(filters?: LiveListFilters): LiveListFi
     year: filters?.year ?? null,
     liveType: filters?.liveType ?? null,
     bandId: filters?.bandId ?? null,
+    status: filters?.status ?? null,
     sort: filters?.sort ?? "date_desc",
   };
 }
@@ -34,6 +37,7 @@ export function liveListFiltersKey(filters?: LiveListFilters): string {
     normalized.liveType ?? "",
     normalized.bandId ?? "",
     normalized.sort,
+    normalized.status ?? "",
   ].join(":");
 }
 
@@ -44,6 +48,7 @@ export function hasActiveLiveListFilters(filters?: LiveListFilters): boolean {
     || normalized.year !== null
     || normalized.liveType !== null
     || normalized.bandId !== null
+    || normalized.status != null
     || normalized.sort !== "date_desc"
   );
 }

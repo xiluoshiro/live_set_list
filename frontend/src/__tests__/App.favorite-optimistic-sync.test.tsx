@@ -205,11 +205,11 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function getTableRowByLiveTitle(title: string): HTMLElement {
-  const nameButton = screen.getByRole("button", { name: title });
-  const row = nameButton.closest("tr");
+function getCardByLiveTitle(title: string): HTMLElement {
+  const nameButton = screen.getByText(title);
+  const row = nameButton.closest("article");
   if (!row) {
-    throw new Error(`未找到标题 ${title} 对应的表格行`);
+    throw new Error(`未找到标题 ${title} 对应的演出卡片`);
   }
   return row as HTMLElement;
 }
@@ -230,7 +230,6 @@ async function openAllContent(user: ReturnType<typeof userEvent.setup>) {
 
 describe("App optimistic favorite sync", () => {
   beforeEach(() => {
-    localStorage.setItem("live-view-mode", "table");
     Reflect.deleteProperty(window, "requestIdleCallback");
     Reflect.deleteProperty(window, "cancelIdleCallback");
 
@@ -338,16 +337,16 @@ describe("App optimistic favorite sync", () => {
     renderApp();
     await openAllContent(user);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 3" })).toBeInTheDocument());
-    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
-    expect(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "取消收藏" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 3")).toBeInTheDocument());
+    await user.click(within(getCardByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
+    expect(within(getCardByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "取消收藏" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "仅收藏" }));
     await waitFor(() => expect(getPerformancesSyncMock).toHaveBeenCalledWith(1, 20, "favorites"));
     await waitFor(() => expect(getAuthMeMock).toHaveBeenCalledTimes(2));
 
     await user.click(screen.getByRole("button", { name: "演出资料" }));
-    expect(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" })).toBeInTheDocument();
+    expect(within(getCardByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" })).toBeInTheDocument();
   });
 
   test("同条目快速连点会在首轮完成后补发第二轮同步请求", async () => {
@@ -361,8 +360,8 @@ describe("App optimistic favorite sync", () => {
     renderApp();
     await openAllContent(user);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    const row = getTableRowByLiveTitle("示例 Live 名称 1");
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
+    const row = getCardByLiveTitle("示例 Live 名称 1");
     await user.click(within(row).getByRole("button", { name: "取消收藏" }));
     await waitFor(() => expect(unfavoriteLiveMock).toHaveBeenCalledTimes(1));
     await user.click(within(row).getByRole("button", { name: "加入收藏" }));
@@ -372,7 +371,7 @@ describe("App optimistic favorite sync", () => {
 
     firstUnfavorite.resolve();
     await waitFor(() => expect(favoriteLiveMock).toHaveBeenCalledWith(1, "csrf-token"));
-    await waitFor(() => expect(within(getTableRowByLiveTitle("示例 Live 名称 1")).getByRole("button", { name: "取消收藏" })).toBeInTheDocument());
+    await waitFor(() => expect(within(getCardByLiveTitle("示例 Live 名称 1")).getByRole("button", { name: "取消收藏" })).toBeInTheDocument());
   });
 
   // 测试点：连续三次失败显示固定同步告警，后续一次成功立即清除告警。
@@ -387,15 +386,15 @@ describe("App optimistic favorite sync", () => {
     renderApp();
     await openAllContent(user);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "示例 Live 名称 1" })).toBeInTheDocument());
-    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
-    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 1")).getByRole("button", { name: "取消收藏" }));
-    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 2")).getByRole("button", { name: "取消收藏" }));
+    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
+    await user.click(within(getCardByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
+    await user.click(within(getCardByLiveTitle("示例 Live 名称 1")).getByRole("button", { name: "取消收藏" }));
+    await user.click(within(getCardByLiveTitle("示例 Live 名称 2")).getByRole("button", { name: "取消收藏" }));
     await waitFor(() =>
       expect(screen.getByText("收藏同步失败，请稍后重试或刷新页面确认")).toBeInTheDocument(),
     );
 
-    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "取消收藏" }));
+    await user.click(within(getCardByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "取消收藏" }));
     await waitFor(() =>
       expect(screen.queryByText("收藏同步失败，请稍后重试或刷新页面确认")).not.toBeInTheDocument(),
     );
@@ -419,7 +418,7 @@ describe("App optimistic favorite sync", () => {
     renderApp();
 
     await openAllContent(user);
-    await user.click(within(getTableRowByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
+    await user.click(within(getCardByLiveTitle("示例 Live 名称 3")).getByRole("button", { name: "加入收藏" }));
     await user.click(screen.getByRole("button", { name: "仅收藏" }));
 
     await waitFor(() => expect(screen.queryByRole("button", { name: "仅收藏" })).not.toBeInTheDocument());

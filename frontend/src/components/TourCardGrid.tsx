@@ -4,7 +4,7 @@ import type { TourSummary } from "../api";
 import { formatCompactDateRange } from "../dateFormat";
 import { getPerformanceGroupStatusPresentation } from "../liveStatus";
 import { ExternalLinkIcon } from "./ActionIcons";
-import { BandIconsCell } from "./BandIconsCell";
+import { LiveCardBands } from "./LiveCardBands";
 import { CollectedLiveBadges } from "./CollectedLiveBadges";
 import { ContentState } from "./ContentState";
 
@@ -35,9 +35,7 @@ export function TourCardGrid({
 }: TourCardGridProps) {
   return (
     <>
-      <footer className="pager">
-        <div className="toolbar"><span>总计 {total} 个巡演</span></div>
-      </footer>
+      <div className="live-catalog-summary"><span aria-live="polite">总计 {total} 个巡演</span></div>
       {error && tours.length === 0 ? (
         <ContentState kind="error" title="巡演资料加载失败" description={error} layout="cards" />
       ) : tours.length === 0 ? (
@@ -61,40 +59,43 @@ export function TourCardGrid({
               tour.collected_live_count,
             );
             return (
-              <article className="live-card" data-status-tone={status.tone} key={tour.tour_id}>
-                <button
+              <article className="live-card" data-status-tone={status.tone} key={tour.tour_id}
+                onClick={event => { if (!(event.target as HTMLElement).closest("button, a")) onOpenTour(tour); }}>
+                <div className="live-card-head">
+                  <span className="live-card-date">{formatDateRange(tour)}</span>
+                  <span className="live-card-badges"><span className="live-status-pill">{status.primary}</span></span>
+                </div>
+                <h2 className="live-card-title"><button
                   type="button"
                   className="live-card-main"
                   aria-label={`查看巡演《${tour.tour_title}》详情，状态：${status.primary}`}
                   onClick={() => onOpenTour(tour)}
                 >
-                  <span className="live-card-head">
-                    <span className="live-card-date">{formatDateRange(tour)}</span>
-                    <span className="live-card-badges">
-                      <span className="live-status-pill">{status.primary}</span>
-                    </span>
-                  </span>
-                  <span className="live-card-title">{tour.tour_title}</span>
-                </button>
+                  {tour.tour_title}
+                </button></h2>
+                <LiveCardBands icons={tour.bands.map(band => band.band_id)} bands={tour.bands} />
+                <div className="live-card-location tour-card-stops" title={tour.stop_labels.join(" / ")}>
+                  {tour.stop_labels.join(" / ")}
+                </div>
                 <div className="live-card-footer">
-                  <BandIconsCell icons={tour.bands.map((band) => band.band_id)} rowId={tour.tour_id} />
-                  <span className="live-card-actions">
+                  <span className="live-card-info">
                     <CollectedLiveBadges
                       collectedCount={tour.collected_live_count}
                       cancelledCount={tour.cancelled_live_count}
                     />
-                    {tour.url ? (
-                      <a
-                        href={tour.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="live-card-url live-card-action"
-                        aria-label={`打开《${tour.tour_title}》的资料来源`}
-                      >
-                        <ExternalLinkIcon />
-                      </a>
-                    ) : null}
                   </span>
+                  {tour.url ? (
+                    <a
+                      href={tour.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="live-card-url live-card-action"
+                      title="资料来源"
+                      aria-label={`打开《${tour.tour_title}》的资料来源`}
+                    >
+                      <ExternalLinkIcon />
+                    </a>
+                  ) : null}
                 </div>
               </article>
             );
