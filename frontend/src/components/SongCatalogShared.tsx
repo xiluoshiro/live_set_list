@@ -52,6 +52,11 @@ export function useFittedCatalogPage(rowsRef: RefObject<HTMLElement>, viewportRe
       // Loading temporarily removes the rows and pagination; wait for the
       // completed page rather than fitting against that transient extra space.
       if (!body?.children.length || !viewport) return;
+      // Natural page scrolling has no fixed viewport to fit the page size to.
+      if (getComputedStyle(viewport).overflowY !== "auto") {
+        measured.current = { width: 0, rowHeight: 0 };
+        return;
+      }
       // A provisional oversized page may add a scrollbar; its width must not
       // reset the tallest-row history and cause alternating page capacities.
       const width = viewport.getBoundingClientRect().width;

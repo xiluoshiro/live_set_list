@@ -708,9 +708,7 @@
     grid-template-rows: repeat(4, max-content);
     grid-auto-rows: max-content;
     align-content: start;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    scrollbar-width: thin;
+    overflow: visible;
   }
 
   [data-home-calendar] .calendar-pane {

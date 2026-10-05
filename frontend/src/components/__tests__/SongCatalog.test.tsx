@@ -365,11 +365,18 @@ test("directory retains band controls while filtering", async () => {
   expect(screen.getByRole("region", { name: "歌曲列表" })).toHaveAttribute("aria-busy", "false");
 });
 
-// 测试点：窄屏目录随可用空间分页，多次缩放保留正在阅读的歌曲，重新筛选才回到首项。
-test("directory fits its viewport without losing the reading anchor", async () => {
+// 测试点：桌面缩放保留阅读位置，手机整页滚动时分页稳定且仍能翻页与筛选。
+test("directory pagination preserves the reading anchor across fitted and natural layouts", async () => {
   const user = userEvent.setup();
   let availableHeight = 322;
+  let naturalLayout = true;
   const widthSpy = vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+  const originalStyle = window.getComputedStyle.bind(window);
+  const styleSpy = vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
+    const style = originalStyle(element, pseudo);
+    if (element.getAttribute("aria-label") === "歌曲目录") style.overflowY = naturalLayout ? "visible" : "auto";
+    return style;
+  });
   const boundsSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     return new DOMRect(0, 0, 320, this.tagName === "TR" ? 100 : this.tagName === "THEAD" ? 20 : 0);
   });
@@ -386,6 +393,11 @@ test("directory fits its viewport without losing the reading anchor", async () =
   }));
   const view = render(<SongCatalog songId={null} onSongSelect={vi.fn()} onLiveSelect={vi.fn()} />);
   try {
+    await screen.findByRole("link", { name: "阅读歌曲 12" });
+    expect(api.getSongGroups).toHaveBeenCalledTimes(1);
+    naturalLayout = false;
+    widthSpy.mockReturnValue(1280);
+    fireEvent(window, new Event("resize"));
     await waitFor(() => expect(screen.getAllByRole("link", { name: /^阅读歌曲 / })).toHaveLength(3));
     await user.click(screen.getByRole("button", { name: "下一页" }));
     await screen.findByRole("link", { name: "阅读歌曲 4" });
@@ -395,11 +407,24 @@ test("directory fits its viewport without losing the reading anchor", async () =
       await waitFor(() => expect(screen.getAllByRole("link", { name: /^阅读歌曲 / })).toHaveLength(count));
       expect(screen.getByRole("link", { name: "阅读歌曲 4" })).toBeInTheDocument();
     }
+    naturalLayout = true;
+    widthSpy.mockReturnValue(390);
+    availableHeight = 122;
+    const requestsBeforeResize = api.getSongGroups.mock.calls.length;
+    await act(async () => {
+      fireEvent(window, new Event("resize"));
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    });
+    expect(screen.getAllByRole("link", { name: /^阅读歌曲 / })).toHaveLength(3);
+    expect(screen.getByRole("link", { name: "阅读歌曲 4" })).toBeInTheDocument();
+    expect(api.getSongGroups).toHaveBeenCalledTimes(requestsBeforeResize);
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    expect(await screen.findByRole("link", { name: "阅读歌曲 7" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "乐队甲 12" }));
     expect(await screen.findByRole("link", { name: "阅读歌曲 1" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
   } finally {
-    view.unmount(); widthSpy.mockRestore(); boundsSpy.mockRestore(); heightSpy.mockRestore();
+    view.unmount(); widthSpy.mockRestore(); styleSpy.mockRestore(); boundsSpy.mockRestore(); heightSpy.mockRestore();
   }
 });
 

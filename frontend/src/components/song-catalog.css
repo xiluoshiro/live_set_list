@@ -30,7 +30,7 @@
 .song-page-gap { padding: 0 4px; }
 
 .song-directory { width: min(var(--page-max), calc(100% - 2 * var(--page-gutter))); padding: 24px 0; line-height: 1.5; }
-.page-song-directory .song-directory { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+.page-song-directory .song-directory { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .song-directory-heading { flex: none; margin-bottom: 20px; }
 .song-directory-layout { display: grid; flex: 1; min-height: 0; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; }
 .song-band-directory { display: flex; flex-direction: column; min-height: 0; padding-right: 12px; }
@@ -56,7 +56,7 @@
 .song-band-options button[aria-pressed="true"] { border-color: var(--accent-primary); color: var(--text-link); background: var(--surface-chip-soft); font-weight: 600; }
 .song-directory-results { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .song-directory-results > .song-section-heading { flex: none; min-height: 32px; margin-bottom: 7px; }
-.song-directory-viewport { flex: 1; min-height: 80px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.song-directory-viewport { flex: 1; min-height: 80px; }
 .song-directory-viewport:focus-visible { outline-offset: -2px; box-shadow: none; }
 .song-directory-pagination { flex: none; min-height: 48px; }
 .song-directory-scope { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
@@ -135,6 +135,10 @@
 .song-album-tracks small { color: var(--text-muted); font-size: 11px; font-weight: 400; }
 .song-track-owner { display: block; margin-top: 2px; }
 
+@media (min-width: 761px) and (min-height: 520px) {
+  .page-song-directory .song-directory { overflow: auto; }
+  .song-directory-viewport { overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+}
 @media (max-width: 999px) {
   .song-directory-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 16px; }
   .song-band-directory { border: 0; padding: 0; min-width: 0; }
