@@ -165,7 +165,6 @@ export function LiveCardGrid({
                 <span className="live-card-info">
                   {grouped ? <><strong>{row.groupDayCount}日</strong><span> · </span><CollectedLiveBadges collectedCount={row.groupLiveCount ?? 0} cancelledCount={row.groupCancelledLiveCount} /></>
                     : row.eventStatus === "cancelled" ? null
-                    : row.datePhase === "past" ? row.hasSetlist === undefined ? null : row.hasSetlist ? <strong>有歌单</strong> : "尚无歌单"
                     : row.startTime ? <>开演 <strong>{formatTimedLabel(row.startTime, row.startTimezoneLabel)}</strong></> : "开演时间未公布"}
                 </span>
                 {!grouped && row.url && <a href={row.url} target="_blank" rel="noreferrer" className="live-card-url live-card-action"
