@@ -7,6 +7,7 @@ import {
   type PerformanceGroupDetailResponse,
   type TourRef,
 } from "../api";
+import { formatCompactDateRange } from "../dateFormat";
 import { logError } from "../logger";
 import { getPerformanceGroupStatusPresentation } from "../liveStatus";
 import { ContentState } from "./ContentState";
@@ -31,16 +32,6 @@ function getDisplayTypeLabel(
   displayType: PerformanceGroupDetailResponse["display_type"],
 ): string {
   return displayType === "single_day_multi_show" ? "单日多场" : "多日活动";
-}
-
-function getCountText(detail: PerformanceGroupDetailResponse): string {
-  const cancelledText = (detail.cancelled_live_count ?? 0) > 0
-    ? ` · 取消 ${detail.cancelled_live_count ?? 0} 场`
-    : "";
-  if (detail.day_count === 1) {
-    return `已收录 ${detail.live_count} 场${cancelledText}`;
-  }
-  return `已收录 ${detail.day_count} 日 · ${detail.live_count} 场${cancelledText}`;
 }
 
 function normalizeError(caught: unknown): string {
@@ -143,40 +134,42 @@ export function PerformanceGroupDetailPage({
       )
     : null;
   return (
-    <div className="tour-detail-page" data-stage-ledger>
+    <div className="tour-detail-page performance-detail-page" data-stage-ledger>
       {detail && groupStatus && (
         <header className="stage-masthead">
           <div className="stage-masthead-main">
+            <MastheadTitle as="h1" title={detail.group_title} naturalWrap />
             <div className="stage-title-meta">
               <span className="stage-status-line" data-status-tone={groupStatus.tone}>
                 <span>{groupStatus.primary}</span>
               </span>
               <span className="stage-type-label">{getDisplayTypeLabel(detail.display_type)}</span>
+              {detail.bands.length > 0 && (
+                <div className="stage-masthead-bands">
+                  <span className="stage-field-label">参与乐队</span>
+                  <ul className="stage-band-list">
+                    {detail.bands.map((band) => (
+                      <li key={band.band_id}>
+                        {onOpenBand ? (
+                          <button type="button" className="stage-inline-link" onClick={() => onOpenBand(band.band_id)}>
+                            {band.band_name}
+                          </button>
+                        ) : (
+                          <span>{band.band_name}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <span>{formatCompactDateRange(detail.start_date, detail.end_date, detail.start_date, "-")}</span>
+              {(detail.cancelled_live_count ?? 0) > 0 && <span>取消 {detail.cancelled_live_count} 场</span>}
+              {liveDetail?.tour && onOpenTour && (
+                <div className="stage-related-links">
+                  <button type="button" className="stage-inline-link" title={liveDetail.tour.tour_title} onClick={() => onOpenTour(liveDetail.tour!)}>所属巡演</button>
+                </div>
+              )}
             </div>
-            <MastheadTitle as="h1" title={detail.group_title} />
-            {detail.bands.length > 0 && (
-              <div className="stage-masthead-bands">
-                <span className="stage-field-label">参与乐队</span>
-                <ul className="stage-band-list">
-                  {detail.bands.map((band) => (
-                    <li key={band.band_id}>
-                      {onOpenBand ? (
-                        <button type="button" className="stage-inline-link" onClick={() => onOpenBand(band.band_id)}>
-                          {band.band_name}
-                        </button>
-                      ) : (
-                        <span>{band.band_name}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-          <div className="stage-masthead-side">
-            <dl className="stage-schedule-list">
-              <div><dt>场次</dt><dd>{getCountText(detail)}</dd></div>
-            </dl>
           </div>
         </header>
       )}
@@ -195,6 +188,7 @@ export function PerformanceGroupDetailPage({
                 liveId: live.live_id,
                 title: displayTitle,
                 fullTitle: live.live_title,
+                date: live.live_date,
                 cancelled: live.event_status === "cancelled",
                 canOpen: live.event_status !== "cancelled" || live.has_setlist,
                 selected: live.live_id === selectedLiveId,
@@ -214,7 +208,8 @@ export function PerformanceGroupDetailPage({
                   url: selectedLive.url,
                 }}
                 displayTitle={getGroupedLiveShortTitle(selectedLive.live_title, detail.group_title)}
-                onOpenTour={onOpenTour}
+                showTourReference={false}
+                contextBandIds={detail.bands.map((band) => band.band_id)}
                 embedded
                 onOpenBand={onOpenBand}
                 onOpenVenue={onOpenVenue}

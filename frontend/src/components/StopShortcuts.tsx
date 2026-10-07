@@ -2,6 +2,7 @@ export type StopShortcutItem = {
   liveId: number;
   title: string;
   fullTitle?: string;
+  date?: string;
   cancelled: boolean;
   canOpen: boolean;
   selected: boolean;
@@ -29,11 +30,13 @@ export function StopShortcuts({ label, items }: StopShortcutsProps) {
               aria-pressed={item.selected}
               onClick={item.onSelect}
             >
-              {item.title}
+              <span>{item.title}</span>
+              {item.date && <span className="tour-stop-date"> · {Number(item.date.slice(5, 7))}/{Number(item.date.slice(8, 10))}</span>}
             </button>
           ) : (
             <span className="tour-stop-shortcut cancelled-static-title" title={item.fullTitle}>
-              {item.title}
+              <span>{item.title}</span>
+              {item.date && <span className="tour-stop-date"> · {Number(item.date.slice(5, 7))}/{Number(item.date.slice(8, 10))}</span>}
             </span>
           )}
         </span>

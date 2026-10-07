@@ -142,11 +142,11 @@ describe("PerformanceGroupDetailPage", () => {
     expect(screen.getAllByText("已结束").length).toBeGreaterThanOrEqual(1);
   });
 
-  // 测试点：单日与多日活动各自同时显示正确的类型标签和已收录日数/场次数。
+  // 测试点：单日与多日活动显示对应类型及紧凑日期范围。
   test.each([
     {
       typeLabel: "单日多场",
-      countLabel: "已收录 5 场",
+      dateLabel: "2025.04.26",
       detail: {
         display_type: "single_day_multi_show",
         day_count: 1,
@@ -157,10 +157,10 @@ describe("PerformanceGroupDetailPage", () => {
     },
     {
       typeLabel: "多日活动",
-      countLabel: "已收录 2 日 · 3 场",
+      dateLabel: "2025.04.26-27",
       detail: { display_type: "multi_day", day_count: 2, live_count: 3 },
     },
-  ])("displays $typeLabel with $countLabel", async ({ typeLabel, countLabel, detail }) => {
+  ])("displays $typeLabel with $dateLabel", async ({ typeLabel, dateLabel, detail }) => {
     getPerformanceGroupDetailMock.mockResolvedValue(
       makeDetailResponse(detail),
     );
@@ -169,11 +169,11 @@ describe("PerformanceGroupDetailPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText(typeLabel)).toBeInTheDocument();
-      expect(screen.getByText(countLabel)).toBeInTheDocument();
+      expect(screen.getByText(dateLabel)).toBeInTheDocument();
     });
   });
 
-  // 测试点：场次导航移除活动组标题前缀，且不显示日期分组、分隔符或开演时间。
+  // 测试点：场次导航显示短标题及月日，便于区分场次。
   test("renders a flat short-title navigation like tour stops", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
@@ -182,11 +182,8 @@ describe("PerformanceGroupDetailPage", () => {
     await waitFor(() => {
       const nav = screen.getByRole("navigation", { name: "活动组场次" });
       expect(within(nav).getAllByRole("button")).toHaveLength(3);
-      expect(nav.querySelector("time")).toBeNull();
-      expect(nav).not.toHaveTextContent("2025-04-26");
-      expect(nav).not.toHaveTextContent("18:00");
       const button = within(nav).getByRole("button", { name: /DAY 1: Poppin'Party/ });
-      expect(button).toBeInTheDocument();
+      expect(button).toHaveTextContent("4/26");
       expect(button).not.toHaveTextContent("BanG Dream! 12th LIVE");
     });
   });
@@ -233,7 +230,7 @@ describe("PerformanceGroupDetailPage", () => {
     });
   });
 
-  // 测试点：隐藏日期和时间后仍严格保留后端给出的日期、开演时间规范顺序。
+  // 测试点：带月日的场次仍严格保留后端给出的规范顺序。
   test("preserves canonical live order without time suffixes", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
@@ -263,7 +260,7 @@ describe("PerformanceGroupDetailPage", () => {
 
     render(<PerformanceGroupDetailPage groupId={1}  onOpenTour={onOpenTour} />);
 
-    const tourLink = await screen.findByRole("button", { name: "MyGO!!!!! ZEPP TOUR 2025" });
+    const tourLink = await screen.findByRole("button", { name: "所属巡演" });
     await user.click(tourLink);
     expect(onOpenTour).toHaveBeenCalledWith({ tour_id: 9, tour_title: "MyGO!!!!! ZEPP TOUR 2025" });
   });
@@ -306,7 +303,7 @@ describe("PerformanceGroupDetailPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("参与乐队")).toBeInTheDocument();
-      expect(screen.getByText("Poppin'Party")).toBeInTheDocument();
+      expect(screen.getAllByText("Poppin'Party").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Roselia")).toBeInTheDocument();
     });
   });

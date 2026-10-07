@@ -8,6 +8,7 @@ import {
   type TourDetailResponse,
   type TourStatisticsResponse,
 } from "../api";
+import { formatCompactDateRange } from "../dateFormat";
 import { logError } from "../logger";
 import { ContentState } from "./ContentState";
 import { MastheadTitle } from "./MastheadTitle";
@@ -30,10 +31,6 @@ type TourDetailPageProps = {
   onOpenBand?: (bandId: number) => void;
   onOpenVenue?: (venueId: number, venueName: string) => void;
 };
-
-function formatDateRange(detail: TourDetailResponse): string {
-  return detail.start_date === detail.end_date ? detail.start_date : `${detail.start_date} — ${detail.end_date}`;
-}
 
 function normalizeError(caught: unknown): string {
   const message = caught instanceof Error ? caught.message : "未知错误";
@@ -127,48 +124,35 @@ export function TourDetailPage({
   const selectedStop = detail?.stops.find((stop) => stop.live_id === selectedLiveId) ?? null;
 
   return (
-    <div className="tour-detail-page" data-stage-ledger>
+    <div className="tour-detail-page performance-detail-page" data-stage-ledger>
       <header className="stage-masthead">
         <div className="stage-masthead-main">
+          <MastheadTitle as="h1" title={detail?.tour_title ?? fallback.tourTitle} naturalWrap />
           <div className="stage-title-meta">
             <span className="stage-type-label">巡演</span>
-          </div>
-          <MastheadTitle as="h1" title={detail?.tour_title ?? fallback.tourTitle} />
-          {detail && detail.bands.length > 0 && (
-            <div className="stage-masthead-bands">
-              <span className="stage-field-label">参与乐队</span>
-              <ul className="stage-band-list">
-                {detail.bands.map((band) => (
-                  <li key={band.band_id}>
-                    {onOpenBand ? (
-                      <button type="button" className="stage-inline-link" onClick={() => onOpenBand(band.band_id)}>
-                        {band.band_name}
-                      </button>
-                    ) : (
-                      <span>{band.band_name}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-        {detail && (
-          <div className="stage-masthead-side">
-            <dl className="stage-schedule-list">
-              <div><dt>已收录日期</dt><dd>{formatDateRange(detail)}</dd></div>
-              <div>
-                <dt>场次</dt>
-                <dd>
-                  {detail.collected_live_count} 场
-                  {(detail.cancelled_live_count ?? 0) > 0 && (
-                    <span className="live-cancelled-count"> · 取消 {detail.cancelled_live_count ?? 0} 场</span>
-                  )}
-                </dd>
+
+            {detail && detail.bands.length > 0 && (
+              <div className="stage-masthead-bands">
+                <span className="stage-field-label">参与乐队</span>
+                <ul className="stage-band-list">
+                  {detail.bands.map((band) => (
+                    <li key={band.band_id}>
+                      {onOpenBand ? (
+                        <button type="button" className="stage-inline-link" onClick={() => onOpenBand(band.band_id)}>
+                          {band.band_name}
+                        </button>
+                      ) : (
+                        <span>{band.band_name}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </dl>
+            )}
+            {detail && <span>{formatCompactDateRange(detail.start_date, detail.end_date, detail.start_date, "-")}</span>}
+            {(detail?.cancelled_live_count ?? 0) > 0 && <span className="live-cancelled-count"> · 取消 {detail?.cancelled_live_count} 场</span>}
           </div>
-        )}
+        </div>
       </header>
       {loading && <ContentState kind="loading" title="加载巡演详情..." layout="detail" />}
       {error && <ContentState kind="error" title="巡演详情加载失败" description={error} layout="detail" />}
@@ -193,6 +177,7 @@ export function TourDetailPage({
                     liveId: stop.live_id,
                     title: displayTitle,
                     fullTitle: stop.live_title,
+                    date: stop.live_date,
                     cancelled: stop.event_status === "cancelled",
                     canOpen: stop.event_status !== "cancelled" || stop.has_setlist,
                     selected: stop.live_id === selectedLiveId,
@@ -210,8 +195,9 @@ export function TourDetailPage({
                     displayTitle={getTourStopShortTitle(selectedStop.live_title, detail.tour_title)}
                     showTourReference={false}
                     embedded
-                onOpenBand={onOpenBand}
-                onOpenVenue={onOpenVenue}
+                    contextBandIds={detail.bands.map((band) => band.band_id)}
+                    onOpenBand={onOpenBand}
+                    onOpenVenue={onOpenVenue}
                     canFavorite={canFavorite}
                     isFavorite={selectedLiveId !== null && isFavorite(selectedLiveId)}
                     isFavoriteSyncing={selectedLiveId !== null && isSyncing(selectedLiveId)}

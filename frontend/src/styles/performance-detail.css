@@ -1,0 +1,166 @@
+/* Compact performance layout shared by standalone, grouped and tour stops. */
+.performance-detail-page {
+  --stage-track-number-width: 40px;
+  --stage-track-column-gap: 12px;
+}
+
+.performance-detail-page .stage-masthead {
+  gap: 0;
+  padding: 0 0 16px;
+}
+
+.performance-detail-page .stage-masthead h1 {
+  font-size: 30px;
+  line-height: 1.3;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+}
+
+.performance-detail-page .stage-title-meta {
+  align-items: baseline;
+  gap: 6px 18px;
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+.performance-detail-page .stage-masthead-bands {
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.performance-detail-page .stage-inline-link,
+.performance-detail-page .stage-inline-link:hover {
+  text-decoration: none;
+}
+
+.performance-detail-page .stage-related-links {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.performance-detail-page .stage-related-links .stage-inline-link {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.performance-detail-page .stage-related-links .stage-inline-link:hover {
+  color: var(--accent-primary);
+}
+
+.performance-detail-page .tour-stop-shortcuts {
+  gap: 0 22px;
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+  border-bottom-color: var(--border-normal);
+}
+
+.performance-detail-page .tour-stop-shortcut {
+  min-height: 44px;
+  padding: 9px 0;
+  border-bottom: 2px solid transparent;
+  white-space: normal;
+  text-align: left;
+}
+
+.performance-detail-page .tour-stop-shortcut[aria-pressed="true"] {
+  border-bottom-color: var(--accent-primary);
+  font-weight: 650;
+}
+
+.performance-detail-page .tour-stop-date {
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.performance-detail-page .tour-inline-live-detail { margin: 0; }
+.performance-detail-page .is-embedded > article > .stage-masthead { padding: 0; }
+
+.performance-detail-page .stage-masthead-side {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 44px;
+  padding: 4px 0;
+}
+
+.performance-detail-page:not(.is-embedded) > article > .stage-masthead > .stage-masthead-side {
+  margin-top: 12px;
+}
+
+.performance-detail-page .stage-schedule-list {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 26px;
+}
+
+.performance-detail-page .stage-schedule-list > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+}
+
+.performance-detail-page .stage-schedule-date { order: 1; }
+.performance-detail-page .stage-schedule-venue { order: 2; }
+.performance-detail-page .stage-schedule-opening { order: 3; }
+.performance-detail-page .stage-schedule-start { order: 4; }
+.performance-detail-page .stage-schedule-list dt { flex: none; margin: 0; font-size: 13px; white-space: nowrap; }
+.performance-detail-page .stage-schedule-list dd { font-variant-numeric: tabular-nums; }
+.performance-detail-page .stage-actions { flex-shrink: 0; }
+.performance-detail-page .stage-action-button { padding: 7px 13px; }
+.performance-detail-page .stage-embedded-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 8px 0; font-size: 14px; }
+.performance-detail-page .stage-status-note { margin: 12px 0; }
+
+.performance-detail-page .stage-content-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  padding-top: 18px;
+}
+
+.performance-detail-page .stage-content-grid.has-inspector {
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+}
+
+.performance-detail-page .stage-flow-section,
+.performance-detail-page .stage-attendance-section,
+.performance-detail-page .stage-history-section { padding-top: 0; }
+.performance-detail-page .stage-section-heading { align-items: baseline; gap: 16px; margin: 0 0 10px; }
+.performance-detail-page .stage-section-heading h2 { font-size: 20px; }
+.performance-detail-page .stage-track-count { color: var(--text-muted); font-size: 13px; font-weight: 400; letter-spacing: normal; }
+.performance-detail-page .stage-segment { margin-top: 0; }
+.performance-detail-page .stage-segment + .stage-segment { margin-top: 20px; }
+.performance-detail-page .stage-act-block { margin-top: 6px; }
+.performance-detail-page .stage-track-item.is-selected { background: var(--surface-hover); }
+.performance-detail-page .stage-track-trigger { min-height: 44px; padding: 8px 0; }
+.performance-detail-page .stage-track-trigger:hover strong { color: var(--accent-primary); }
+.performance-detail-page .stage-track-number { font-size: 14px; }
+.performance-detail-page .stage-inspector-column { top: calc(var(--stage-topbar-offset) + 20px); margin-top: 40px; }
+.performance-detail-page .stage-inspector-body { padding: 16px 0; }
+.performance-detail-page .stage-inspector-group h4 { font-size: 12px; }
+.performance-detail-page .stage-member-title strong { font-size: 14px; }
+.performance-detail-page .stage-attendance-label { font-size: 12px; }
+.performance-detail-page .stage-member-record p { margin: 7px 0 0 17px; font-size: 12px; }
+
+@media (max-width: 1099px) {
+  .performance-detail-page .stage-masthead-side { flex-wrap: wrap; padding: 10px 0; gap: 10px; }
+  .performance-detail-page .stage-schedule-list { flex-basis: 100%; }
+  .performance-detail-page .stage-content-grid.has-inspector { grid-template-columns: minmax(0, 1fr); }
+  .performance-detail-page .stage-inline-inspector { display: block; padding: 0 12px; background: var(--surface-1); }
+}
+
+@media (max-width: 760px) {
+  .performance-detail-page .stage-masthead h1 { font-size: 26px; }
+  .performance-detail-page .stage-title-meta { gap: 6px 14px; }
+  .performance-detail-page .stage-schedule-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; }
+  .performance-detail-page .stage-schedule-list > div { grid-column: auto; grid-row: auto; }
+  .performance-detail-page .stage-track-trigger { grid-template-columns: var(--stage-track-number-width) minmax(0, 1fr); }
+  .performance-detail-page .stage-track-meta { grid-column: 2; justify-content: flex-start; text-align: left; }
+}

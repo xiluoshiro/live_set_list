@@ -8,15 +8,17 @@ type MastheadTitleProps = {
   as: "h1" | "h2";
   id?: string;
   title: string;
+  naturalWrap?: boolean;
 };
 
-export function MastheadTitle({ as, id, title }: MastheadTitleProps) {
+export function MastheadTitle({ as, id, title, naturalWrap = false }: MastheadTitleProps) {
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   const measureRef = useRef<HTMLSpanElement | null>(null);
   const [lines, setLines] = useState<string[] | null>(null);
 
   useEffect(() => {
     setLines(null);
+    if (naturalWrap) return;
     const headingEl = titleRef.current;
     const measureEl = measureRef.current;
     if (!headingEl || !measureEl) return;
@@ -39,13 +41,13 @@ export function MastheadTitle({ as, id, title }: MastheadTitleProps) {
     const result = buildTitleLines(tokens, isLineTooLong);
     measureEl.textContent = "";
     setLines(result);
-  }, [title]);
+  }, [title, naturalWrap]);
 
   const Heading = as;
   return (
     <Heading ref={titleRef} id={id}>
       <span ref={measureRef} className="stage-title-measure" aria-hidden="true" />
-      {lines ? (
+      {!naturalWrap && lines ? (
         lines.map((line) => (
           <span key={line} className="stage-title-line">
             {line}

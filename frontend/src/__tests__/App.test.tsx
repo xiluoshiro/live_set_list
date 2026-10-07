@@ -1286,7 +1286,7 @@ describe("App", () => {
     }
   });
 
-  // 测试点：巡演场次导航显示标题缩写，不把演出状态或场馆塞进选项。
+  // 测试点：巡演场次导航以短标题和月日区分场次，点击后加载对应歌单。
   test("巡演详情在页内切换缩写后的 Live 场次", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -1296,24 +1296,22 @@ describe("App", () => {
     await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
     const stopNavigation = screen.getByRole("navigation", { name: "巡演场次" });
     expect(within(stopNavigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "東京公演",
-      "FINAL",
+      "東京公演 · 5/30",
+      "FINAL · 6/2",
     ]);
-    expect(stopNavigation).toHaveTextContent("東京公演FINAL");
     expect(stopNavigation).not.toHaveTextContent("已结束");
     expect(within(stopNavigation).queryByText("/")).not.toBeInTheDocument();
     expect(within(stopNavigation).queryByText("2026-05-30")).not.toBeInTheDocument();
     expect(within(stopNavigation).queryByText("Zepp Tokyo")).not.toBeInTheDocument();
-    expect(screen.getByText("已收录日期")).toBeInTheDocument();
-    expect(screen.getByText("2026-05-30 — 2026-06-02")).toBeInTheDocument();
+    expect(screen.getByText("2026.05.30-06.02")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看 Live" })).not.toBeInTheDocument();
     expect(screen.queryByText("已有 Setlist")).not.toBeInTheDocument();
     expect(screen.queryByText("暂无 Setlist")).not.toBeInTheDocument();
     expect(screen.queryByText("stop_label")).not.toBeInTheDocument();
 
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(41));
-    expect(screen.getByRole("heading", { name: "演出流程" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "FINAL" }));
+    expect(screen.getByRole("heading", { name: /^演出流程/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /FINAL/ }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
     expect(getTourDetailMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
@@ -1339,7 +1337,7 @@ describe("App", () => {
     expect(within(changePanel).getByLabelText("移除 旧曲")).toBeInTheDocument();
     expect(within(changePanel).getByLabelText("新增 新曲")).toBeInTheDocument();
     expect(screen.queryByRole("table", { name: "场次变化" })).not.toBeInTheDocument();
-    await user.click(within(changePanel).getByRole("button", { name: "FINAL" }));
+    await user.click(within(changePanel).getByRole("button", { name: /FINAL/ }));
     expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
   });
@@ -1608,7 +1606,7 @@ describe("App", () => {
     await user.click(screen.getByText("示例 Live 名称 1"));
 
     expect(screen.queryByRole("button", { name: "关闭演出资料" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "演出流程" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^演出流程/ })).toBeInTheDocument();
     expect(screen.getByText("日期")).toBeInTheDocument();
     expect(screen.getByText("开场")).toBeInTheDocument();
     expect(screen.getByText("开演")).toBeInTheDocument();

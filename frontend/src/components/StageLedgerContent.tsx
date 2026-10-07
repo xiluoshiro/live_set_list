@@ -1,5 +1,5 @@
 import { formatTimedLabel } from "../liveTimeFormat";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 
 import type {
   LiveDetailBandMember,
@@ -42,6 +42,7 @@ export type StageLedgerContentProps = {
   onRequestLogin?: () => void;
   showTourReference?: boolean;
   embedded?: boolean;
+  contextBandIds?: number[];
 };
 
 type StageRow = LiveDetailRow & {
@@ -286,7 +287,7 @@ function BandNameList({
   );
 }
 
-function StageTrackInspector({ row, onClose }: { row: StageRow; onClose?: () => void }) {
+function StageTrackInspector({ row }: { row: StageRow }) {
   return (
     <div className="stage-inspector-body">
       <div className="stage-inspector-heading">
@@ -295,11 +296,6 @@ function StageTrackInspector({ row, onClose }: { row: StageRow; onClose?: () => 
           <h3>{row.song_name}</h3>
           <a href={`/songs/${row.song_id}`}>歌曲资料</a>
         </div>
-        {onClose && (
-          <button type="button" className="stage-iconless-button" onClick={onClose} aria-label="关闭歌曲详情">
-            关闭
-          </button>
-        )}
       </div>
       <div className="stage-inspector-stack">
         <div className="stage-inspector-group">
@@ -373,6 +369,7 @@ function StageFlow({
   onOpenTrack,
   onCloseTrack,
   triggerRefs,
+  isWideScreen,
 }: {
   rows: StageRow[];
   selectedTrackId: string | null;
@@ -381,6 +378,7 @@ function StageFlow({
   onOpenTrack: (value: string) => void;
   onCloseTrack: () => void;
   triggerRefs: MutableRefObject<Record<string, HTMLButtonElement | null>>;
+  isWideScreen: boolean;
 }) {
   const segments = buildSegments(rows);
   const bandAnchors = new Set<string>();
@@ -412,13 +410,17 @@ function StageFlow({
               <ol className="stage-track-list" start={block.rows[0]?.sub_order ?? 1}>
                 {block.rows.map((row) => {
                   const isSelected = row.stable_id === selectedTrackId;
-                  const isMobileExpanded = row.stable_id === mobileExpandedTrackId;
+                  const isMobileExpanded = !isWideScreen && row.stable_id === mobileExpandedTrackId;
                   const inlineInspectorId = `stage-inline-${row.stable_id}`;
                   return (
                     <li key={row.stable_id} className={`stage-track-item${isSelected ? " is-selected" : ""}`}>
                       <Collapsible.Root
                         open={isMobileExpanded}
                         onOpenChange={(open) => {
+                          if (isWideScreen) {
+                            onOpenTrack(row.stable_id);
+                            return;
+                          }
                           setMobileExpandedTrackId(open ? row.stable_id : null);
                           if (open) {
                             onOpenTrack(row.stable_id);
@@ -434,8 +436,8 @@ function StageFlow({
                             }}
                             type="button"
                             className="stage-track-trigger"
-                            aria-expanded={isMobileExpanded}
-                            aria-controls={inlineInspectorId}
+                            aria-expanded={isWideScreen ? isSelected : isMobileExpanded}
+                            aria-controls={isWideScreen ? "stage-song-inspector" : inlineInspectorId}
                           >
                             <span className="stage-track-number">{String(row.sub_order).padStart(2, "0")}</span>
                             <span className="stage-track-copy">
@@ -446,9 +448,11 @@ function StageFlow({
                             )}
                           </button>
                         </Collapsible.Trigger>
-                        <Collapsible.Content id={inlineInspectorId} className="stage-inline-inspector">
-                          <StageTrackInspector row={row} onClose={onCloseTrack} />
-                        </Collapsible.Content>
+                        {!isWideScreen && (
+                          <Collapsible.Content id={inlineInspectorId} className="stage-inline-inspector">
+                            <StageTrackInspector row={row} />
+                          </Collapsible.Content>
+                        )}
                       </Collapsible.Root>
                     </li>
                   );
@@ -541,36 +545,30 @@ function MastheadRelated({
   const groupRef = detail.performance_group && onOpenPerformanceGroup ? detail.performance_group : null;
   if (!tourRef && !groupRef) return null;
   return (
-    <>
+    <div className="stage-related-links">
       {tourRef && (
-        <div className="stage-masthead-bands">
-          <span className="stage-field-label">巡演</span>
-          <button type="button" className="stage-inline-link" onClick={() => onOpenTour?.(tourRef)}>
-            {tourRef.tour_title}
+          <button type="button" className="stage-inline-link" title={tourRef.tour_title} onClick={() => onOpenTour?.(tourRef)}>
+            所属巡演
           </button>
-        </div>
       )}
       {groupRef && (
-        <div className="stage-masthead-bands">
-          <span className="stage-field-label">活动组</span>
-          <button type="button" className="stage-inline-link" onClick={() => onOpenPerformanceGroup?.(groupRef, detail.live_id)}>
-            {groupRef.group_title}
+          <button type="button" className="stage-inline-link" title={groupRef.group_title} onClick={() => onOpenPerformanceGroup?.(groupRef, detail.live_id)}>
+            所属活动组
           </button>
-        </div>
       )}
-    </>
+    </div>
   );
 }
 
-function StageSkeleton({ fallback }: { fallback: LiveDetailFallback }) {
+function StageSkeleton({ fallback, embedded }: { fallback: LiveDetailFallback; embedded: boolean }) {
   return (
-    <div className="stage-ledger-page stage-ledger-loading" data-stage-ledger>
+    <div className={`stage-ledger-page stage-ledger-loading performance-detail-page${embedded ? " is-embedded" : ""}`} data-stage-ledger aria-label="加载演出详情">
       <div className="stage-breadcrumb-skeleton" />
       <article className="stage-ledger-article">
         <header className="stage-masthead">
           <div className="stage-masthead-main">
             <span className="stage-skeleton-line stage-skeleton-short" />
-            <h1 className="stage-skeleton-title">{fallback.liveTitle || "演出资料"}</h1>
+            {!embedded && <h1 className="stage-skeleton-title">{fallback.liveTitle || "演出资料"}</h1>}
             <span className="stage-skeleton-line stage-skeleton-medium" />
           </div>
           <div className="stage-skeleton-schedule">
@@ -626,10 +624,27 @@ export function StageLedgerContent({
   onRequestLogin,
   showTourReference = true,
   embedded = false,
+  contextBandIds,
 }: StageLedgerContentProps) {
   const rows = useMemo(() => normalizeRows(detailData?.detail_rows), [detailData?.detail_rows]);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [mobileExpandedTrackId, setMobileExpandedTrackId] = useState<string | null>(null);
+  const [isWideScreen, setIsWideScreen] = useState(() => window.matchMedia?.("(min-width: 1100px)").matches ?? false);
+  useEffect(() => {
+    const media = window.matchMedia?.("(min-width: 1100px)");
+    if (!media) return;
+    const update = () => {
+      setIsWideScreen(media.matches);
+      setMobileExpandedTrackId(null);
+      setSelectedTrackId(null);
+    };
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    setSelectedTrackId(null);
+    setMobileExpandedTrackId(null);
+  }, [detailData?.live_id]);
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const selectedTrackIdRef = useRef<string | null>(null);
   selectedTrackIdRef.current = selectedTrackId;
@@ -638,10 +653,8 @@ export function StageLedgerContent({
   const datePhase = detailData?.date_phase ?? "past";
   const isCancelled = detailData?.event_status === "cancelled";
   const visibleRows = isCancelled ? [] : rows;
-  const selectedRow = visibleRows.find((row) => row.stable_id === selectedTrackId) ?? null;
-  const shouldShowJump = visibleRows.length > 20
-    || (new Set(visibleRows.flatMap((row) => row.band_members.map((member) => getBandKey(member)))).size > 3)
-    || (new Set(visibleRows.map((row) => row.segment_type)).size > 2);
+  const selectedRow = visibleRows.find((row) => row.stable_id === selectedTrackId)
+    ?? (isWideScreen ? visibleRows[0] ?? null : null);
 
   const clearTrackState = useCallback((focusId = selectedTrackIdRef.current ?? mobileExpandedTrackId) => {
     setSelectedTrackId(null);
@@ -685,22 +698,14 @@ export function StageLedgerContent({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && (selectedTrackId !== null || mobileExpandedTrackId !== null)) {
+      if (!isWideScreen && event.key === "Escape" && (selectedTrackId !== null || mobileExpandedTrackId !== null)) {
         event.preventDefault();
         closeTrack();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeTrack, mobileExpandedTrackId, selectedTrackId]);
-
-  const focusAnchor = useCallback((event: MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    const target = document.getElementById(targetId);
-    if (!target) return;
-    event.preventDefault();
-    target.focus({ preventScroll: true });
-    target.scrollIntoView?.({ behavior: "auto", block: "start" });
-  }, []);
+  }, [closeTrack, mobileExpandedTrackId, selectedTrackId, isWideScreen]);
 
   if (detailNotFound) {
     return (
@@ -715,7 +720,7 @@ export function StageLedgerContent({
     );
   }
 
-  if (detailLoading && !detailData) return <StageSkeleton fallback={fallback} />;
+  if (detailLoading && !detailData) return <StageSkeleton fallback={fallback} embedded={embedded} />;
 
   if (!detailData) {
     return (
@@ -747,40 +752,36 @@ export function StageLedgerContent({
   const showFavoriteAction = detailData.event_status !== "cancelled"
     && Boolean((canFavorite && onToggleFavorite) || (!canFavorite && onRequestLogin));
   const showStageActions = Boolean(detailUrl || showFavoriteAction);
-  const showMobileActionBar = showFavoriteAction;
-  const jumpSegments = buildSegments(visibleRows);
-  const jumpBands = uniqueBandMembers(visibleRows.flatMap((row) => row.band_members));
+  const showEmbeddedBands = embedded && contextBandIds
+    && (contextBandIds.length !== detailData.bands.length || detailData.bands.some((id) => !contextBandIds.includes(id)));
   const titleId = `stage-ledger-title-${detailData.live_id}`;
   const structuredData = buildStructuredData(detailData);
 
   return (
-    <div className="stage-ledger-page" data-stage-ledger>
-      <article className="stage-ledger-article" aria-labelledby={titleId}>
+    <div className={`stage-ledger-page performance-detail-page${embedded ? " is-embedded" : ""}`} data-stage-ledger>
+      <article className="stage-ledger-article" aria-labelledby={embedded ? undefined : titleId} aria-label={embedded ? detailTitle : undefined}>
         <header className="stage-masthead">
-          <div className="stage-masthead-main">
-            <div className="stage-title-meta">
-              <StatusLine detail={detailData} />
-              <span className="stage-type-label">{formatLiveType(detailData.live_type)}</span>
+          {!embedded && (
+            <div className="stage-masthead-main">
+              <MastheadTitle as="h1" id={titleId} title={detailTitle} naturalWrap />
+              <div className="stage-title-meta">
+                <StatusLine detail={detailData} />
+                <div className="stage-masthead-bands">
+                  <span className="stage-field-label">出演</span>
+                  <BandNameList detail={detailData} onOpenBand={onOpenBand} />
+                </div>
+                <MastheadRelated
+                  detail={detailData}
+                  onOpenTour={onOpenTour}
+                  onOpenPerformanceGroup={onOpenPerformanceGroup}
+                  showTourReference={showTourReference}
+                />
+              </div>
             </div>
-            <MastheadTitle as={embedded ? "h2" : "h1"} id={titleId} title={detailTitle} />
-            <div className="stage-masthead-bands">
-              <span className="stage-field-label">出演</span>
-              <BandNameList detail={detailData} onOpenBand={onOpenBand} />
-            </div>
-            <MastheadRelated
-              detail={detailData}
-              onOpenTour={onOpenTour}
-              onOpenPerformanceGroup={onOpenPerformanceGroup}
-              showTourReference={showTourReference}
-            />
-            {detailData.status_note && detailData.event_status !== "cancelled" && (
-              <p className="stage-status-note" role="note">
-                {detailData.event_status === "postponed" ? "延期说明" : "备注"}：{detailData.status_note}
-              </p>
-            )}
-          </div>
+          )}
           <div className="stage-masthead-side">
             <dl className="stage-schedule-list">
+              <div><dt>类型</dt><dd>{formatLiveType(detailData.live_type)}</dd></div>
               <div className="stage-schedule-date"><dt>日期</dt><dd>{detailData.live_date}</dd></div>
               <div className="stage-schedule-opening"><dt>开场</dt><dd>{formatTimedLabel(detailData.opening_time, detailData.opening_timezone_label)}</dd></div>
               <div className="stage-schedule-start"><dt>开演</dt><dd>{formatTimedLabel(detailData.start_time, detailData.start_timezone_label)}</dd></div>
@@ -843,6 +844,17 @@ export function StageLedgerContent({
               </div>
             )}
           </div>
+          {embedded && (detailData.event_status === "cancelled" || detailData.event_status === "postponed" || detailData.was_rescheduled || showEmbeddedBands) && (
+            <div className="stage-embedded-meta">
+              {(detailData.event_status === "cancelled" || detailData.event_status === "postponed" || detailData.was_rescheduled) && <StatusLine detail={detailData} />}
+              {showEmbeddedBands && <div className="stage-masthead-bands"><span className="stage-field-label">出演</span><BandNameList detail={detailData} onOpenBand={onOpenBand} /></div>}
+            </div>
+          )}
+          {detailData.status_note && detailData.event_status !== "cancelled" && (
+            <p className="stage-status-note" role="note">
+              {detailData.event_status === "postponed" ? "延期说明" : "备注"}：{detailData.status_note}
+            </p>
+          )}
         </header>
 
         {detailError && detailData && (
@@ -881,34 +893,18 @@ export function StageLedgerContent({
                 <section className="stage-flow-section" id="stage-flow" tabIndex={-1} aria-labelledby="stage-flow-title">
                   <div className="stage-section-heading">
                     <div>
-                      <h2 id="stage-flow-title">演出流程</h2>
+                      <h2 id="stage-flow-title">演出流程 <span className="stage-track-count">· {visibleRows.length} 首</span></h2>
                     </div>
-                    <span>{visibleRows.length} TRACKS</span>
                   </div>
-                  {shouldShowJump && (
-                    <nav className="stage-jump-nav" aria-label="演出流程跳转">
-                      <div className="stage-jump-row stage-jump-segment-row">
-                        {jumpSegments.map((segment) => (
-                          <a key={segment.key} href={`#stage-segment-${segment.key}`} onClick={(event) => focusAnchor(event, `stage-segment-${segment.key}`)}>{segmentLabel(segment.code)}</a>
-                        ))}
-                      </div>
-                      {jumpBands.length > 0 && (
-                        <div className="stage-jump-row stage-jump-band-row">
-                          {jumpBands.map((band) => (
-                            <a key={getBandKey(band)} href={`#stage-band-${encodeURIComponent(getBandKey(band))}`} onClick={(event) => focusAnchor(event, `stage-band-${encodeURIComponent(getBandKey(band))}`)}>{band.band_name}</a>
-                          ))}
-                        </div>
-                      )}
-                    </nav>
-                  )}
                   <StageFlow
                     rows={visibleRows}
-                    selectedTrackId={selectedTrackId}
+                    selectedTrackId={selectedRow?.stable_id ?? null}
                     mobileExpandedTrackId={mobileExpandedTrackId}
                     setMobileExpandedTrackId={setMobileExpandedTrackId}
                     onOpenTrack={openTrack}
                     onCloseTrack={closeTrack}
                     triggerRefs={triggerRefs}
+                    isWideScreen={isWideScreen}
                   />
                 </section>
               ) : detailData.live_type !== "event" && (
@@ -925,28 +921,16 @@ export function StageLedgerContent({
               )}
               <ScheduleHistory detail={detailData} />
             </div>
-            {selectedRow && (
-              <aside className="stage-inspector-column" aria-label="歌曲详情">
+            {isWideScreen && selectedRow && (
+              <aside id="stage-song-inspector" className="stage-inspector-column" aria-label="歌曲详情">
                 <div className="stage-inspector-panel">
-                  <StageTrackInspector row={selectedRow} onClose={closeTrack} />
+                  <StageTrackInspector row={selectedRow} />
                 </div>
               </aside>
             )}
           </div>
         )}
 
-        {showMobileActionBar && (
-          <div className="stage-mobile-action-bar" aria-label="移动端操作">
-            {showFavoriteAction && canFavorite && onToggleFavorite && (
-              <button type="button" className="stage-mobile-action" aria-pressed={isFavorite} onClick={onToggleFavorite}>
-                {isFavorite ? "已收藏" : "收藏"}
-              </button>
-            )}
-            {showFavoriteAction && !canFavorite && onRequestLogin && (
-              <button type="button" className="stage-mobile-action" onClick={onRequestLogin}>登录后收藏</button>
-            )}
-          </div>
-        )}
         <script type="application/ld+json" data-stage-ledger-jsonld dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       </article>
     </div>

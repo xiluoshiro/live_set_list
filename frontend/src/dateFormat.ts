@@ -6,6 +6,7 @@ export function formatCompactDateRange(
   startDate: string | null,
   endDate: string | null,
   fallbackDate: string,
+  separator = "–",
 ): string {
   const resolvedStartDate = startDate ?? fallbackDate;
   const compactStart = formatCompactDate(resolvedStartDate);
@@ -13,10 +14,10 @@ export function formatCompactDateRange(
   const [startYear, startMonth] = resolvedStartDate.split("-");
   const [endYear, endMonth, endDay] = endDate.split("-");
   if (startYear === endYear && startMonth === endMonth) {
-    return `${compactStart}–${endDay}`;
+    return `${compactStart}${separator}${endDay}`;
   }
   if (startYear === endYear) {
-    return `${compactStart}–${endMonth}.${endDay}`;
+    return `${compactStart}${separator}${endMonth}.${endDay}`;
   }
-  return `${compactStart}–${formatCompactDate(endDate)}`;
+  return `${compactStart}${separator}${formatCompactDate(endDate)}`;
 }

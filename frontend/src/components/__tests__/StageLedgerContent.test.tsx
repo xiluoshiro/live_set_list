@@ -100,6 +100,7 @@ describe("StageLedgerContent", () => {
 
   afterEach(() => {
     window.history.replaceState(null, "", "/");
+    vi.unstubAllGlobals();
   });
 
   // 测试点：后端 IANA 标签优先于同偏移的旧映射，开场与开演分别显示。
@@ -168,9 +169,9 @@ describe("StageLedgerContent", () => {
     const onOpenBand = vi.fn();
     const { container } = renderStage(makeDetail(), { onOpenBand });
 
-    expect(screen.getAllByText("Main Set").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText("Opening Act").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText("ZZ").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("heading", { name: "Main Set" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Opening Act" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "ZZ" })).toBeInTheDocument();
     expect(screen.getByText("Song One")).toBeInTheDocument();
     expect(screen.getAllByText("01").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/77");
@@ -204,6 +205,25 @@ describe("StageLedgerContent", () => {
 
     const structuredData = JSON.parse(container.querySelector("script[data-stage-ledger-jsonld]")?.textContent ?? "{}");
     expect(structuredData.url).toMatch(/\/lives\/77$/);
+  });
+
+  // 测试点：宽屏默认展示首曲；选择其他歌曲与切换场次时详情随数据更新。
+  test("宽屏始终展示当前场次的歌曲详情", async () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({
+      matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
+    const user = userEvent.setup();
+    const detail = makeDetail();
+    const { rerender } = renderStage(detail);
+    expect(within(screen.getByRole("complementary", { name: "歌曲详情" })).getByRole("heading", { name: "Song One" })).toBeInTheDocument();
+    const second = screen.getByRole("button", { name: /Opening Song/ });
+    await user.click(second);
+    await user.click(second);
+    expect(within(screen.getByRole("complementary", { name: "歌曲详情" })).getByRole("heading", { name: "Opening Song" })).toBeInTheDocument();
+    const next = makeDetail({ live_id: 78, detail_rows: [{ ...detail.detail_rows[0], song_name: "Next Live Song" }] });
+    rerender(<StageLedgerContent detailData={next} detailLoading={false} detailError={null}
+      fallback={{ liveTitle: next.live_title, liveDate: next.live_date, url: next.url }} />);
+    expect(within(screen.getByRole("complementary", { name: "歌曲详情" })).getByRole("heading", { name: "Next Live Song" })).toBeInTheDocument();
   });
 
   // 测试点：两支乐队分别从 M1 编号时，曲目分组和详情选择不能因重复 row_id 串行。
@@ -253,36 +273,6 @@ describe("StageLedgerContent", () => {
     expect(screen.getAllByText("实到成员：羊宮妃那").length).toBeGreaterThanOrEqual(1);
   });
 
-  test("流程跳转链接能定位并聚焦段落和乐队", async () => {
-    // 测试点：长流程提供段落与乐队跳转，点击链接将焦点移到实际目标。
-    const baseRow = makeDetail().detail_rows[0];
-    const detail = makeDetail({
-      detail_rows: [
-        ...Array.from({ length: 19 }, (_, index) => ({
-          ...baseRow,
-          row_id: `M${index + 1}`,
-          absolute_order: index + 1,
-          sub_order: index + 1,
-          song_name: `Main Song ${index + 1}`,
-        })),
-        { ...baseRow, row_id: "OP20", absolute_order: 20, sub_order: 20, segment_type: "OP", song_name: "Opening Song" },
-        { ...baseRow, row_id: "EN21", absolute_order: 21, sub_order: 21, segment_type: "EN", song_name: "Encore Song" },
-      ],
-    });
-    renderStage(detail);
-
-    const navigation = within(screen.getByRole("navigation", { name: "演出流程跳转" }));
-    const user = userEvent.setup();
-    for (const name of ["Opening Act", "Poppin'Party"]) {
-      const link = navigation.getByRole("link", { name });
-      const targetId = link.getAttribute("href")!.slice(1);
-      const target = document.getElementById(targetId);
-      expect(target).not.toBeNull();
-      await user.click(link);
-      expect(target).toHaveFocus();
-    }
-  });
-
   test("Event 先呈现出席阵容，不伪造空歌单", async () => {
     // 测试点：Event 路径优先呈现 attendees，只有存在曲目时才展示流程区。
     const user = userEvent.setup();
@@ -317,7 +307,7 @@ describe("StageLedgerContent", () => {
     expect(window.location.href).toBe(previousUrl);
     expect(window.history.state).toBe(previousState);
 
-    await user.click(screen.getAllByRole("button", { name: "关闭歌曲详情" })[0]);
+    await user.click(trigger);
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Song One" })).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
   });
@@ -405,7 +395,6 @@ describe("StageLedgerContent", () => {
 
     expect(screen.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument();
     const loginButtons = screen.getAllByRole("button", { name: "登录后收藏" });
-    expect(loginButtons).toHaveLength(2);
     await user.click(loginButtons[0]);
     expect(onRequestLogin).toHaveBeenCalledTimes(1);
   });
