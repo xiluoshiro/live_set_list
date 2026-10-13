@@ -22,7 +22,7 @@ def test_album_links_roundtrip_and_partial_updates(integration_test_client):
     assert album["cover_urls"] == covers
     assert client.get(f"/api/albums/{aid}").json() == album
     assert client.get(f"/api/console/albums/{aid}").json() == album
-    summary = {key: value for key, value in album.items() if key != "tracks"}
+    summary = {key: value for key, value in album.items() if key not in {"tracks", "ownership"}}
     assert summary in client.get("/api/console/albums").json()["items"]
     song = client.get("/api/songs/1").json()
     assert summary in song["albums"]
@@ -98,3 +98,43 @@ def test_album_link_defaults_and_viewer_permissions(integration_test_client):
                           })
     assert response.status_code == 403
     assert client.get(f"/api/albums/{album['album_id']}").json() == album
+
+
+# 测试点：专辑归属按乐队、成员及混合模式独立保存；资料和曲目更新保留归属，清空与失败均有明确结果。
+@pytest.mark.parametrize("mode", ["bands", "members", "mixed"])
+def test_album_ownership_roundtrip_and_preservation(integration_test_client, mode):
+    client = integration_test_client
+    headers = auth(client)
+    member = client.post("/api/console/members", headers=headers, json={"display_name": "专辑成员"}).json()
+    owner = {"mode": mode, "band_ids": [2, 1] if mode != "members" else [],
+             "member_groups": [{"band_id": 3, "member_ids": [member["member_id"]]}] if mode != "bands" else []}
+    song_before = client.get("/api/songs/1").json()
+    response = client.post("/api/console/albums", headers=headers, json={
+        "album_name": "独立归属盘", "ownership": owner, "tracks": [{"song_id": 1}],
+    })
+    assert response.status_code == 201, response.text
+    album = response.json()
+    endpoint = f"/api/console/albums/{album['album_id']}"
+    assert {key: album["ownership"][key] for key in owner} == owner
+    assert [band["band_name"] for band in album["ownership"]["bands"]] == (["Roselia", "Poppin'Party"] if mode != "members" else [])
+    if mode != "bands":
+        assert album["ownership"]["groups"][0]["members"][0]["display_name"] == "专辑成员"
+    assert client.get(f"/api/albums/{album['album_id']}").json() == album
+    changed = client.put(endpoint, headers=headers, json={"album_name": "改名盘", "expected_revision": album["revision"]})
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["ownership"] == album["ownership"]
+    tracks = client.put(endpoint + "/tracks", headers=headers, json={"expected_revision": changed.json()["revision"], "tracks": []})
+    assert tracks.status_code == 200, tracks.text
+    assert tracks.json()["ownership"] == album["ownership"]
+    # 引用不存在的成员必须回滚专辑字段、归属和 revision。
+    invalid = client.put(endpoint, headers=headers, json={"album_name": "不应保存", "expected_revision": tracks.json()["revision"],
+        "ownership": {"mode": "members", "member_groups": [{"band_id": 1, "member_ids": [999999]}]}})
+    assert invalid.status_code == 422, invalid.text
+    assert client.get(endpoint).json() == tracks.json()
+    cleared = client.put(endpoint, headers=headers, json={"album_name": "改名盘", "expected_revision": tracks.json()["revision"],
+        "ownership": {"mode": "pending"}})
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["ownership"] == {"mode": "pending", "band_ids": [], "member_groups": [], "bands": [], "groups": []}
+    assert client.put(endpoint, headers=headers, json={"album_name": "旧修改", "expected_revision": tracks.json()["revision"], "ownership": owner}).status_code == 409
+    assert client.get(endpoint).json() == cleared.json()
+    assert client.get("/api/songs/1").json()["ownership"] == song_before["ownership"]

@@ -11,7 +11,7 @@ import type { BandOption } from "./types";
 import { UpdateDiffTable } from "./UpdateDiffTable";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleChoiceSelect, ConsoleCandidatePager } from "./ConsoleChoiceSelect";
-import { ConsoleMultiSelect } from "./ConsoleMultiSelect";
+import { ownershipFields } from "./OwnershipFields";
 import { CoverEditor, coverSummary } from "./CoverEditor";
 import { coverPayload, coverUrlsError, filledCovers } from "../../albumLinks";
 
@@ -181,35 +181,16 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     { field: "当前版本归组", before: original?.group_name ?? "", after: `${moveTarget.group_name}（移至末尾）` },
     { field: "归组更正原因", before: "", after: moveTarget.reason },
   );
-  const bandOptions = bands.filter(band => band.band_id > 0).map(band => ({ id: band.band_id, label: band.band_name }));
-  const memberOptions = members.map(member => ({ id: member.member_id, label: member.display_name }));
   const visibleHistory = history.filter(entry => entry.action === (creating ? "create" : "update"));
   const fieldsDisabled = busy || confirm;
-  const hasBands = ownership.mode === "bands" || ownership.mode === "mixed";
-  const hasMembers = ownership.mode === "members" || ownership.mode === "mixed";
+  const { bandOptions, hasBands, hasMembers, ownershipModeField, bandPicker, memberBandPicker, memberPickers } =
+    ownershipFields(ownership, bands, members, fieldsDisabled, setOwnership);
   const songNameField = <input aria-label="歌曲名称" disabled={fieldsDisabled} value={draft.song_name}
     placeholder="请输入歌曲名称"
     onChange={event => setDraft({ ...draft, song_name: event.target.value })} />;
   const versionField = <input aria-label="版本标识" disabled={fieldsDisabled || (creating && newGroup) || (!creating && original?.version_label === "")}
     placeholder={(creating && newGroup) || (!creating && original?.version_label === "") ? "默认版本" : "请输入版本标识"}
     value={creating && newGroup ? "" : draft.version_label} onChange={event => setDraft({ ...draft, version_label: event.target.value })} />;
-  const ownershipModeField = <select aria-label="归属模式" disabled={fieldsDisabled} value={ownership.mode} onChange={event => {
-    const mode = event.target.value as SongOwnership["mode"];
-    setOwnership({ mode, band_ids: mode === "bands" || mode === "mixed" ? ownership.band_ids : [], member_groups: mode === "members" || mode === "mixed" ? ownership.member_groups : [] });
-  }}>
-    <option value="pending">待回填</option><option value="bands">乐队</option><option value="members">成员</option><option value="mixed">乐队与成员</option>
-  </select>;
-  const bandPicker = <ConsoleMultiSelect label="归属乐队" options={bandOptions} hideLabel
-    value={ownership.band_ids} disabled={fieldsDisabled} onChange={band_ids => setOwnership({ ...ownership, band_ids })} />;
-  const memberBandPicker = <ConsoleMultiSelect label="成员所属乐队" options={bandOptions} hideLabel
-    value={ownership.member_groups.map(group => group.band_id)} disabled={fieldsDisabled}
-    onChange={ids => setOwnership({ ...ownership,
-      member_groups: ids.map(id => ownership.member_groups.find(group => group.band_id === id) ?? { band_id: id, member_ids: [] }),
-    })} />;
-  const memberPickers = ownership.member_groups.map(group => <ConsoleMultiSelect key={group.band_id}
-    label={`${bands.find(band => band.band_id === group.band_id)?.band_name ?? `#${group.band_id}`} 固定成员`}
-    options={memberOptions} value={group.member_ids} disabled={fieldsDisabled}
-    onChange={member_ids => setOwnership({ ...ownership, member_groups: ownership.member_groups.map(item => item.band_id === group.band_id ? { ...item, member_ids } : item) })} />);
   const formActions = <div className={`console-submit-row ${creating ? "live-admin-insert-row" : "song-submit-row"} venue-create-actions`}>
     {creating && <label className="live-clear-after-create-option"><input type="checkbox" disabled={busy}
       checked={clearAfterCreate} onChange={event => setClearAfterCreate(event.target.checked)} />新增后清空数据</label>}

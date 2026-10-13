@@ -64,6 +64,14 @@ def _write_console_audit_log(
     )
 
 
+def _save_console_song_band(cur: Any, song_id: int, band_id: int) -> None:
+    """Persist the explicit band selected by the single/batch Setlist song form."""
+    cur.execute("DELETE FROM song_bands WHERE song_id = %s", (song_id,))
+    cur.execute("UPDATE song_list SET owner_mode = %s WHERE id = %s", ("bands" if band_id > 0 else None, song_id))
+    if band_id > 0:
+        cur.execute("INSERT INTO song_bands(song_id, band_id, display_order) VALUES (%s, %s, 1)", (song_id, band_id))
+
+
 def _raise_business_error(status_code: int, message: str) -> None:
     """Raise a consistent HTTPException for console-side business validation failures."""
     raise HTTPException(status_code=status_code, detail=message)
@@ -396,6 +404,7 @@ def create_song(
                 if created_row is None:
                     raise HTTPException(status_code=409, detail=f"Song name already exists: {payload.song_name}")
                 song_id = int(created_row[0])
+                _save_console_song_band(cur, song_id, payload.band_id)
 
                 _write_console_audit_log(
                     cur,
@@ -460,13 +469,14 @@ def update_song(
                     """
                     UPDATE song_list
                     SET song_name = %s, band_id = %s, is_cover = %s, revision = revision + 1
-                    WHERE id = %s AND owner_mode IS NULL
+                    WHERE id = %s AND (owner_mode IS NULL OR (owner_mode = 'bands' AND band_id IS NOT NULL))
                     RETURNING id
                     """,
                     (payload.song_name, payload.band_id, payload.cover, song_id),
                 )
                 if cur.fetchone() is None:
                     raise HTTPException(status_code=404, detail=f"Song id {song_id} not found")
+                _save_console_song_band(cur, song_id, payload.band_id)
                 _write_console_audit_log(
                     cur,
                     user_id=context.user.id,
@@ -557,6 +567,7 @@ def create_songs_batch(
                             cur.execute("RELEASE SAVEPOINT batch_song_sp")
                             continue
                         song_id = int(created_row[0])
+                        _save_console_song_band(cur, song_id, song.band_id)
 
                         _write_console_audit_log(
                             cur,

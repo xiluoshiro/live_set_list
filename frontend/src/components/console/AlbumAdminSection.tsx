@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { getCatalogConsole, songCatalogWrite, type CatalogPage, type AlbumDetail, type AlbumDraft, type AlbumSummary, type AlbumTrackWrite, type ConsoleSongItem } from "../../api";
+import { getCatalogConsole, songCatalogWrite, type CatalogMember, type CatalogPage, type AlbumDetail, type AlbumDraft, type AlbumSummary, type AlbumTrackWrite, type ConsoleSongItem } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { UpdateDiffTable } from "./UpdateDiffTable";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
@@ -8,14 +8,18 @@ import { ConsoleCandidatePager } from "./ConsoleChoiceSelect";
 import { CoverEditor, coverSummary } from "./CoverEditor";
 import { albumLinksError, coverPayload, filledCovers } from "../../albumLinks";
 import { getTodayDateInputValue } from "./helpers";
+import type { BandOption } from "./types";
+import { emptyOwnership, ownershipFields, ownershipSummary, ownershipValid } from "./OwnershipFields";
+import { ownershipLabel } from "../SongCatalog";
 
-const emptyAlbum = (): AlbumDraft => ({ album_name: "", release_label: "", release_date: getTodayDateInputValue(), album_url: null, cover_urls: [{ url: "", name: "" }], tracks: [] });
+const emptyAlbum = (): AlbumDraft => ({ album_name: "", release_label: "", release_date: getTodayDateInputValue(), album_url: null, cover_urls: [{ url: "", name: "" }], ownership: emptyOwnership(), tracks: [] });
 const albumPayload = (draft: AlbumDraft): AlbumDraft => ({ ...draft, cover_urls: coverPayload(draft.cover_urls) });
 const songLabel = (song: Pick<ConsoleSongItem, "song_id" | "song_name" | "version_label" | "band_name">) =>
   `#${song.song_id} ${song.song_name} / ${song.version_label || "默认版本"} / ${song.band_name ?? "待回填"}`;
 const fields = (album: AlbumDetail): AlbumDraft => ({
   album_name: album.album_name, release_label: album.release_label, release_date: album.release_date,
   album_url: album.album_url, cover_urls: album.cover_urls.length ? [...album.cover_urls] : [{ url: "", name: "" }],
+  ownership: album.ownership ? { mode: album.ownership.mode, band_ids: album.ownership.band_ids, member_groups: album.ownership.member_groups } : emptyOwnership(),
   tracks: album.tracks.map(t => ({ album_track_id: t.album_track_id, song_id: t.song_id, track_order: t.track_order,
     edition_label: t.edition_label, section_name: t.section_name ?? "" })),
 });
@@ -31,14 +35,18 @@ const numberTracks = (tracks: AlbumTrackWrite[]) => {
     return { ...track, section_name: section, track_order: order };
   });
 };
-export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManage }: {
+export function AlbumAdminSection({ variant, active, bands = [], registerLeaveGuard, onManage }: {
   variant: "create" | "edit";
   active: boolean;
+  bands?: BandOption[];
   registerLeaveGuard: (guard: ((proceed: () => void) => void) | null) => void;
   onManage: () => void;
 }) {
   const creating = variant === "create";
   const { csrfToken } = useAuth();
+  const [members, setMembers] = useState<CatalogMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersError, setMembersError] = useState("");
   const formId = useId();
   const [albumResults, setAlbumResults] = useState<CatalogPage<AlbumSummary> | null>(null);
   const [albumsLoading, setAlbumsLoading] = useState(false);
@@ -68,6 +76,9 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const loadGeneration = useRef(0);
   const locked = busy || confirm;
+  const { hasBands, hasMembers, ownershipModeField, bandPicker, memberBandPicker, memberPickers } =
+    ownershipFields(draft.ownership, bands, members, locked || membersLoading || !!membersError,
+      ownership => setDraft({ ...draft, ownership }));
   const [discard, setDiscard] = useState<(() => void) | null>(null);
   const payload = albumPayload(draft);
   const dirty = JSON.stringify(payload) !== JSON.stringify(albumPayload(!creating && original ? fields(original) : emptyAlbum()));
@@ -79,6 +90,16 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     setSongSearch(value => ({ query: songQuery.trim(), refresh: value.refresh + 1 }));
   };
   useEffect(() => { setConfirm(false); setDiscard(null); setMessage(""); setError(""); }, [active, creating]);
+  useEffect(() => {
+    if (!active) return;
+    let current = true;
+    setMembersLoading(true); setMembersError("");
+    void getCatalogConsole<{ items: CatalogMember[] }>("/members")
+      .then(result => { if (current) setMembers(result.items); })
+      .catch(e => { if (current) setMembersError(String(e)); })
+      .finally(() => { if (current) setMembersLoading(false); });
+    return () => { current = false; };
+  }, [active]);
   useEffect(() => {
     if (!active || creating) return;
     registerLeaveGuard(guard);
@@ -164,6 +185,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     { field: "专辑", before: original?.album_name ?? "", after: draft.album_name },
     { field: "发行标识", before: original?.release_label ?? "", after: draft.release_label },
     { field: "日期", before: original?.release_date ?? "未知", after: draft.release_date ?? "未知" },
+    { field: "归属", before: original?.ownership ? ownershipLabel(original) : "待回填", after: ownershipSummary(draft.ownership, bands, members) },
     { field: "专辑页面", before: original?.album_url ?? "", after: draft.album_url ?? "" },
     { field: "封面", before: coverSummary(original?.cover_urls ?? []), after: coverSummary(payload.cover_urls) },
     ...Array.from({ length: Math.max(originalTracks.length, draft.tracks.length) }, (_, index) => ({
@@ -215,6 +237,14 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
         </tr></tbody>
       </table>
     </div>
+    <section className="song-ownership-editor" aria-label="专辑归属">
+      <div className="console-table-wrap"><table className="console-admin-table song-ownership-table" aria-label="专辑归属资料">
+        <thead><tr><th scope="col">归属模式</th>{hasBands && <th scope="col">归属乐队</th>}{hasMembers && <th scope="col">成员所属乐队</th>}</tr></thead>
+        <tbody><tr><td>{ownershipModeField}</td>{hasBands && <td>{bandPicker}</td>}{hasMembers && <td>{memberBandPicker}</td>}</tr></tbody>
+      </table></div>
+      {hasMembers && <div className="tour-admin-toolbar song-create-member-fields">{memberPickers}</div>}
+      {membersError && <p role="alert">成员查询失败：{membersError}</p>}
+    </section>
     <CoverEditor title="专辑封面" covers={draft.cover_urls} locked={locked}
       onChange={cover_urls => setDraft({ ...draft, cover_urls })} />
     <section aria-label="收录曲目">
@@ -253,7 +283,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
         {creating && <label className="live-clear-after-create-option"><input type="checkbox" disabled={locked}
           checked={clearAfterCreate} onChange={e => setClearAfterCreate(e.target.checked)} />新增后清空数据</label>}
         <button type="button" className="console-ghost-btn" disabled={locked} onClick={() => { setDraft(creating ? emptyAlbum() : fields(original!)); setSelectedSong(""); setError(""); setMessage(""); }}>{creating ? "清空数据" : "恢复原值"}</button>
-        <button type="button" className="console-submit-btn" disabled={locked || !dirty || !draft.album_name.trim() || draft.release_date === ""} onClick={review}>{creating ? "提交插入" : "保存修改"}</button>
+        <button type="button" className="console-submit-btn" disabled={locked || !dirty || !draft.album_name.trim() || draft.release_date === "" || !ownershipValid(draft.ownership)} onClick={review}>{creating ? "提交插入" : "保存修改"}</button>
       </div>
     {!creating && dirty && <p className="console-admin-hint" role="status">专辑 #{original!.album_id} 有未保存修改</p>}
     </>}

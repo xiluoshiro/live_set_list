@@ -500,7 +500,7 @@ def test_console_lookup_endpoints_do_not_mutate_database(
     assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM venue_list") == venue_count_before
 
 
-# 测试点：`editor+` 调用新增歌曲接口时，应写入 song_list 并追加 song_create 审计。
+# 测试点：单曲入口保存所选乐队的正式归属及审计，详情可读，后续修改和清空乐队同步更新归属。
 def test_console_create_song_persists_row_and_audit_log(
     integration_test_client,
     integration_admin_connection,
@@ -543,6 +543,17 @@ def test_console_create_song_persists_row_and_audit_log(
         "203",
         {"band_id": 2, "cover": False},
     )
+    song = integration_test_client.get("/api/songs/203").json()
+    assert song["ownership"]["mode"] == "bands"
+    assert song["ownership"]["bands"] == [{"band_id": 2, "band_name": "Roselia"}]
+    changed = integration_test_client.put("/api/console/songs/203", headers={"X-CSRF-Token": csrf_token},
+        json={"song_name": "Console Created Song", "band_id": 1, "cover": False})
+    assert changed.status_code == 200, changed.text
+    assert integration_test_client.get("/api/songs/203").json()["ownership"]["band_ids"] == [1]
+    cleared = integration_test_client.put("/api/console/songs/203", headers={"X-CSRF-Token": csrf_token},
+        json={"song_name": "Console Created Song", "band_id": 0, "cover": True})
+    assert cleared.status_code == 200, cleared.text
+    assert integration_test_client.get("/api/songs/203").json()["ownership"]["mode"] == "pending"
 
 
 # 测试点：歌曲可归属 Other bands，且不同乐队可复用同一歌曲名。
@@ -1883,7 +1894,7 @@ def test_console_append_live_setlist_rejects_when_live_has_existing_rows(
     assert response.json()["detail"] == "Live id 1 already has setlist data"
 
 
-# 测试点：批量新增歌曲接口应一次写入多条歌曲，部分冲突时跳过冲突项继续写入其余项。
+# 测试点：批量入口保存每首歌的所选乐队归属，部分冲突跳过且重复提交不改变已保存归属。
 def test_console_create_songs_batch_persists_and_skips_conflicts(
     integration_test_client,
     integration_admin_connection,
@@ -1916,6 +1927,10 @@ def test_console_create_songs_batch_persists_and_skips_conflicts(
     assert data["created"][0]["band_id"] == 2
     assert data["created"][1]["song_name"] == "Batch Song B"
     assert data["created"][1]["cover"] is True
+    for item in data["created"]:
+        song = integration_test_client.get(f"/api/songs/{item['song_id']}").json()
+        assert song["ownership"]["mode"] == "bands"
+        assert song["ownership"]["band_ids"] == [item["band_id"]]
 
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
