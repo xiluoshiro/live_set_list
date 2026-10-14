@@ -2763,7 +2763,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
             <thead>
               <tr>
                 <th>abs</th>
-                <th>歌曲组 ID</th>
+                <th>song_group_id</th>
                 <th>song_name</th>
                 <th>seg</th>
                 <th>sub</th>
