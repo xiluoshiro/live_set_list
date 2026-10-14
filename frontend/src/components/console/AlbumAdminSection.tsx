@@ -5,6 +5,7 @@ import { UpdateDiffTable } from "./UpdateDiffTable";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { albumTitle } from "../../albumTitle";
 import { ConsoleCandidatePager } from "./ConsoleChoiceSelect";
+import { ConsoleEditSelect, resolveConsoleEditSelection } from "./ConsoleEditSelect";
 import { CoverEditor, coverSummary } from "./CoverEditor";
 import { albumLinksError, coverPayload, filledCovers } from "../../albumLinks";
 import { getTodayDateInputValue } from "./helpers";
@@ -52,7 +53,8 @@ export function AlbumAdminSection({ variant, active, bands = [], registerLeaveGu
   const [albumsLoading, setAlbumsLoading] = useState(false);
   const [albumsError, setAlbumsError] = useState("");
   const [albumQuery, setAlbumQuery] = useState("");
-  const [albumSearch, setAlbumSearch] = useState({ query: "", page: 1, refresh: 0 });
+  const [albumSearch, setAlbumSearch] = useState({ query: "", page: 1, refresh: 0, selectFirst: true });
+  const selectedSearch = useRef<typeof albumSearch | null>(null);
   const albums = albumResults?.items ?? [];
   const [original, setOriginal] = useState<AlbumDetail | null>(null);
   const [createDraft, setCreateDraft] = useState(emptyAlbum);
@@ -75,7 +77,7 @@ export function AlbumAdminSection({ variant, active, bands = [], registerLeaveGu
   const [loadingAlbum, setLoadingAlbum] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const loadGeneration = useRef(0);
-  const locked = busy || confirm;
+  const locked = busy || confirm || (!creating && albumsLoading);
   const { hasBands, hasMembers, ownershipModeField, bandPicker, memberBandPicker, memberPickers } =
     ownershipFields(draft.ownership, bands, members, locked || membersLoading || !!membersError,
       ownership => setDraft({ ...draft, ownership }));
@@ -84,7 +86,7 @@ export function AlbumAdminSection({ variant, active, bands = [], registerLeaveGu
   const dirty = JSON.stringify(payload) !== JSON.stringify(albumPayload(!creating && original ? fields(original) : emptyAlbum()));
   const guard = (next: () => void) => { if (!creating && original && dirty) setDiscard(() => next); else next(); };
   const closeConfirmation = () => { if (!busy) { setConfirm(false); setDiscard(null); } };
-  const queryAlbums = () => setAlbumSearch(value => ({ query: albumQuery.trim(), page: 1, refresh: value.refresh + 1 }));
+  const queryAlbums = () => { if (!locked) setAlbumSearch(value => ({ query: albumQuery.trim(), page: 1, refresh: value.refresh + 1, selectFirst: true })); };
   const querySongs = () => {
     setSelectedSong("");
     setSongSearch(value => ({ query: songQuery.trim(), refresh: value.refresh + 1 }));
@@ -108,9 +110,21 @@ export function AlbumAdminSection({ variant, active, bands = [], registerLeaveGu
   useEffect(() => {
     if (!active || creating) return;
     let current = true;
+    const selectionGeneration = loadGeneration.current;
     setAlbumsLoading(true); setAlbumsError(""); setAlbumResults(null);
     void getCatalogConsole<CatalogPage<AlbumSummary>>(`/albums?q=${encodeURIComponent(albumSearch.query)}&page=${albumSearch.page}&limit=20`)
-      .then(result => { if (current) setAlbumResults(result); })
+      .then(result => {
+        if (!current) return;
+        setAlbumResults(result);
+        if (selectedSearch.current !== albumSearch) {
+          const manuallyOpened = selectedSearch.current === null && selectionGeneration > 0;
+          selectedSearch.current = albumSearch;
+          const nextId = resolveConsoleEditSelection(result.items, album => album.album_id, original?.album_id ?? null,
+            albumSearch.selectFirst ? "query" : "preserve");
+          if (albumSearch.selectFirst && !manuallyOpened && result.items.length && nextId !== null &&
+            nextId !== original?.album_id && selectionGeneration === loadGeneration.current) guard(() => void load(nextId));
+        }
+      })
       .catch(e => { if (current) setAlbumsError(String(e)); })
       .finally(() => { if (current) setAlbumsLoading(false); });
     return () => { current = false; };
@@ -158,7 +172,7 @@ export function AlbumAdminSection({ variant, active, bands = [], registerLeaveGu
         setOriginal(album); setEditDraft(fields(album));
       }
       setConfirm(false);
-      setAlbumSearch(value => ({ ...value, refresh: value.refresh + 1 }));
+      setAlbumSearch(value => ({ ...value, refresh: value.refresh + 1, selectFirst: creating ? value.selectFirst : false }));
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   };
   const move = (index: number, direction: number) => {
@@ -205,15 +219,14 @@ export function AlbumAdminSection({ variant, active, bands = [], registerLeaveGu
         placeholder="输入专辑 ID、名称或发行标识" value={albumQuery} disabled={locked}
         onChange={e => setAlbumQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") queryAlbums(); }} />
       <button type="button" className="console-ghost-btn" disabled={locked || albumsLoading} onClick={queryAlbums}>查询</button>
-      <select id={`${formId}-album`} aria-label="已有专辑" value={original?.album_id ?? ""} disabled={locked || albumsLoading || !albums.length}
-        onChange={e => { const id = Number(e.target.value); if (id) guard(() => void load(id)); }}>
-        <option value="">选择要编辑的专辑</option>
-        {original && !albums.some(a => a.album_id === original.album_id) && <option value={original.album_id}>#{original.album_id} {albumTitle(original)}</option>}
-        {albums.map(a => <option key={a.album_id} value={a.album_id}>#{a.album_id} {albumTitle(a)}</option>)}
-      </select>
+      <ConsoleEditSelect id={`${formId}-album`} label="已有专辑" placeholder="选择要编辑的专辑"
+        value={original?.album_id ?? null} disabled={locked || !albums.length}
+        selectedOption={original ? { id: original.album_id, label: `#${original.album_id} ${albumTitle(original)}` } : undefined}
+        options={albums.map(album => ({ id: album.album_id, label: `#${album.album_id} ${albumTitle(album)}` }))}
+        onSelect={id => guard(() => void load(id))} />
       <ConsoleCandidatePager page={albumResults?.page ?? albumSearch.page} totalPages={albumResults?.total_pages ?? 1}
         total={albumResults?.total ?? 0} loading={albumsLoading} disabled={locked || !albumResults}
-        onPage={page => setAlbumSearch(value => ({ ...value, page }))} />
+        onPage={page => setAlbumSearch(value => ({ ...value, page, selectFirst: false }))} />
     </div>
     {albumsError && <p role="alert">专辑查询失败：{albumsError}</p>}
     {!albumsLoading && albumResults && !albums.length && <p className="console-admin-hint" role="status">没有匹配的专辑。</p>}

@@ -8,6 +8,7 @@ import {
 } from "../../api";
 import { VenueCreateSection } from "./VenueCreateSection";
 import { VenueLocationPanel } from "./VenueLocationPanel";
+import { ConsoleEditSelect, resolveConsoleEditSelection } from "./ConsoleEditSelect";
 
 type VenueAdminSectionProps = {
   variant: "create" | "edit";
@@ -68,11 +69,9 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
       setVenueTotal(response.total ?? items.length);
       setVenueTotalPages(response.total_pages ?? 1);
 
-      const nextVenueId = preferredVenueId && items.some((item) => item.venue_id === preferredVenueId)
-        ? preferredVenueId
-        : selectedVenueId && items.some((item) => item.venue_id === selectedVenueId)
-          ? selectedVenueId
-          : items[0]?.venue_id ?? null;
+      const preferredId = preferredVenueId && items.some(item => item.venue_id === preferredVenueId)
+        ? preferredVenueId : selectedVenueId;
+      const nextVenueId = resolveConsoleEditSelection(items, venue => venue.venue_id, preferredId, "prefer-match");
       setSelectedVenueId(nextVenueId);
       if (nextVenueId === null) {
         setDetail(null);
@@ -120,18 +119,13 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
           onKeyDown={(event) => { if (event.key === "Enter") void loadVenuePage(venueQuery.trim(), 1); }}
         />
         <button type="button" className="console-ghost-btn" disabled={loading} onClick={() => void loadVenuePage(venueQuery.trim(), 1)}>查询</button>
-        <select
+        <ConsoleEditSelect
           id="venue-admin-select"
-          aria-label="已有 Venue"
-          value={selectedVenueId ?? ""}
+          label="已有 Venue" placeholder="暂无 Venue"
+          value={selectedVenueId}
           disabled={loading || venues.length === 0}
-          onChange={(event) => void loadDetail(Number(event.target.value))}
-        >
-          {venues.length === 0 && <option value="">暂无 Venue</option>}
-          {venues.map((venue) => (
-            <option key={venue.venue_id} value={venue.venue_id}>#{venue.venue_id} {venue.venue_name}</option>
-          ))}
-        </select>
+          options={venues.map(venue => ({ id: venue.venue_id, label: `#${venue.venue_id} ${venue.venue_name}` }))}
+          onSelect={id => void loadDetail(id)} />
         <div className="tour-candidate-pager">
           <button type="button" className="console-ghost-btn" disabled={loading || venuePage <= 1} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage - 1)}>上一页</button>
           <span>第 {venuePage} / {Math.max(1, venueTotalPages)} 页，共 {venueTotal} 个场馆</span>

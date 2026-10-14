@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleDateInput, isIsoCalendarDate } from "./ConsoleDateInput";
+import { ConsoleEditSelect, resolveConsoleEditSelection } from "./ConsoleEditSelect";
 import type { BandOption } from "./types";
 
 
@@ -99,10 +100,8 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
       setHistory(null);
       return;
     }
-    const nextId = selectedBandId && realBands.some((band) => band.band_id === selectedBandId)
-      ? selectedBandId
-      : realBands[0].band_id;
-    if (history?.band_id !== nextId) void loadHistory(nextId);
+    const nextId = resolveConsoleEditSelection(realBands, band => band.band_id, selectedBandId, "prefer-match");
+    if (nextId !== null && history?.band_id !== nextId) void loadHistory(nextId);
   }, [history?.band_id, realBands, selectedBandId]);
 
   const submitCreate = async () => {
@@ -210,17 +209,14 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
     <section className="tour-admin-section" aria-label="乐队管理">
       <div className="tour-admin-toolbar">
         <label htmlFor="band-admin-select">已有 Band</label>
-        <select
+        <ConsoleEditSelect
           id="band-admin-select"
           className="console-entity-select"
-          value={selectedBandId ?? ""}
+          label="已有 Band" placeholder=""
+          value={selectedBandId}
           disabled={loading}
-          onChange={(event) => void loadHistory(Number(event.target.value))}
-        >
-          {realBands.map((band) => (
-            <option key={band.band_id} value={band.band_id}>#{band.band_id} {band.band_name}</option>
-          ))}
-        </select>
+          options={realBands.map(band => ({ id: band.band_id, label: `#${band.band_id} ${band.band_name}` }))}
+          onSelect={id => void loadHistory(id)} />
         <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setCreating((value) => !value)}>
           {creating ? "收起新增" : "新增 Band"}
         </button>

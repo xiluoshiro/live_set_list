@@ -2,6 +2,7 @@ import { useState, type MutableRefObject, type ReactNode, type RefObject } from 
 
 import type { ConsoleBandHistory, ConsoleLiveBandLineupContext } from "../../api";
 import { SEGMENT_OPTIONS } from "./constants";
+import { ConsoleEditSelect } from "./ConsoleEditSelect";
 import { getBandMembersTemplate, summarizeBandMember, summarizeOtherMember } from "./helpers";
 import type { ParsedSetlistWarning } from "./setlistParser/types";
 import type { BandOption, DerivedSegment, LiveInsertBundle, LiveInsertRow, Position, SetlistDraftRow } from "./types";
@@ -225,18 +226,10 @@ export function LiveInsertTab({
             placeholder="输入 Live ID 或标题"
           />
           <button type="button" className="console-ghost-btn" onClick={onQueryLives}>查询</button>
-          <select
-            aria-label="选择要编辑的 Setlist"
-            value={selectedLiveId || ""}
-            onChange={(event) => onSelectedLiveIdChange(Number(event.target.value))}
-          >
-            <option value="">选择要编辑的 Setlist</option>
-            {lives.map((live) => (
-              <option key={live.live_id} value={live.live_id}>
-                #{live.live_id} {live.live_date} {live.live_title}
-              </option>
-            ))}
-          </select>
+          <ConsoleEditSelect label="选择要编辑的 Setlist" placeholder="选择要编辑的 Setlist"
+            value={selectedLiveId || null} disabled={isLiveLoading}
+            options={lives.map(live => ({ id: live.live_id, label: `#${live.live_id} ${live.live_date} ${live.live_title}` }))}
+            onSelect={onSelectedLiveIdChange} />
         </div>
       )}
       {variant === "create" && <div className="tour-admin-toolbar live-admin-toolbar">

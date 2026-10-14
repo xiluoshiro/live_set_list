@@ -11,6 +11,7 @@ import { DATE_PHASE_LABELS } from "../../liveStatus";
 import { ChoiceMenu } from "./ChoiceMenu";
 import { Collapsible } from "../ui/Collapsible";
 import { formatLiveType } from "./constants";
+import { ConsoleEditSelect } from "./ConsoleEditSelect";
 import type { BandOption, Position, VenueOption } from "./types";
 
 type LiveAdminSectionProps = {
@@ -329,27 +330,16 @@ export function LiveAdminSection({
             <option value="postponed" disabled={dateLocked}>延期</option>
             <option value="cancelled" disabled={dateLocked}>已取消</option>
           </select>
-          <select
-            aria-label="选择要编辑的 Live"
-            value={editingLiveId ?? ""}
+          <ConsoleEditSelect
+            label="选择要编辑的 Live" placeholder="选择要编辑的 Live"
+            value={editingLiveId}
             disabled={liveCandidateLoading || liveCandidates.length === 0}
-            onChange={(event) => {
-              const liveId = Number(event.target.value);
-              if (liveId > 0) onSelectLiveForEdit(liveId);
-            }}
-          >
-            <option value="">选择要编辑的 Live</option>
-            {selectedCandidateMissing && (
-              <option value={editingLiveId ?? ""}>
-                #{editingLiveId} {liveDate} {formatLiveType(liveType)} {liveTitle}
-              </option>
-            )}
-            {liveCandidates.map((live) => (
-              <option key={live.live_id} value={live.live_id}>
-                #{live.live_id} {live.live_date} {formatLiveType(live.live_type)} {live.live_title}
-              </option>
-            ))}
-          </select>
+            selectedOption={selectedCandidateMissing && editingLiveId !== null ? {
+              id: editingLiveId, label: `#${editingLiveId} ${liveDate} ${formatLiveType(liveType)} ${liveTitle}`,
+            } : undefined}
+            options={liveCandidates.map(live => ({ id: live.live_id,
+              label: `#${live.live_id} ${live.live_date} ${formatLiveType(live.live_type)} ${live.live_title}` }))}
+            onSelect={onSelectLiveForEdit} />
           <button type="button" className="console-ghost-btn" onClick={() => onLiveCandidatePageChange(Math.max(1, liveCandidatePage - 1))} disabled={liveCandidateLoading || liveCandidatePage <= 1}>上一页</button>
           <span>第 {liveCandidatePage} / {normalizedLiveCandidateTotalPages} 页，共 {liveCandidateTotal} 条</span>
           <button type="button" className="console-ghost-btn" onClick={() => onLiveCandidatePageChange(Math.min(normalizedLiveCandidateTotalPages, liveCandidatePage + 1))} disabled={liveCandidateLoading || liveCandidatePage >= normalizedLiveCandidateTotalPages}>下一页</button>

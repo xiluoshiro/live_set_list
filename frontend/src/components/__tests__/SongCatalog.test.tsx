@@ -571,14 +571,13 @@ test("create adds a version to the selected song group", async () => {
   expect(screen.getByLabelText("歌曲名称")).toHaveValue("");
 });
 
-// 测试点：管理先选版本，恢复保留对象，放弃确认取消后保留草稿；409 保留输入。
+// 测试点：管理自动加载命中版本，恢复保留对象，放弃确认取消后保留草稿；409 保留输入。
 test("manage loads details and protects unsaved changes", async () => {
   const user = userEvent.setup();
   let guard: ((proceed: () => void) => void) | null = null;
   const leave = vi.fn();
   render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={value => { guard = value; }} onManage={() => {}} />);
   expect(screen.queryByLabelText("歌曲名称")).not.toBeInTheDocument();
-  await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
   await screen.findByLabelText("歌曲名称");
   expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("歌曲名称"), { target: { value: "修改曲名" } });
@@ -596,6 +595,57 @@ test("manage loads details and protects unsaved changes", async () => {
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(screen.getByLabelText("歌曲名称")).toHaveValue("再次修改"));
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/songs/1/edit", "PUT", expect.objectContaining({ song_name: "再次修改", version_label: "普通版", cover_urls: [], expected_revision: 1 }), "csrf");
+});
+
+// 测试点：查询切换保护未保存草稿，取消保留输入，确认后加载期间禁止编辑旧歌曲。
+test("automatic query selection protects the unsaved song draft", async () => {
+  const user = userEvent.setup();
+  const second = { ...version(2), song_name: "查询命中曲" };
+  let resolveQuery!: (result: ReturnType<typeof page<SongVersion>>) => void;
+  const queryResult = new Promise<ReturnType<typeof page<SongVersion>>>(resolve => { resolveQuery = resolve; });
+  api.getCatalogConsole.mockImplementation(async (path: string) => path === "/members" ? { items: [] }
+    : path === "/songs/1" ? version() : path === "/songs/2" ? second
+      : path.includes("q=next") ? queryResult : page([version()]));
+  render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  const name = await screen.findByLabelText("歌曲名称");
+  fireEvent.change(name, { target: { value: "未保存曲名" } });
+  await user.type(screen.getByLabelText("搜索歌曲"), "next");
+  await user.click(screen.getByRole("button", { name: "查询" }));
+  let dialog = within(screen.getByRole("dialog", { name: "确认放弃歌曲修改" }));
+  await user.click(dialog.getByRole("button", { name: "取消" }));
+  expect(name).toHaveValue("未保存曲名");
+  expect(screen.getByLabelText("选择要编辑的歌曲")).toHaveValue("1");
+  expect(api.getCatalogConsole).not.toHaveBeenCalledWith("/songs?q=next&page=1&limit=20");
+  await user.click(screen.getByRole("button", { name: "查询" }));
+  dialog = within(screen.getByRole("dialog", { name: "确认放弃歌曲修改" }));
+  await user.click(dialog.getByRole("button", { name: "确认放弃" }));
+  expect(name).toBeDisabled();
+  await act(async () => resolveQuery(page([second])));
+  await waitFor(() => expect(name).toHaveValue("查询命中曲"));
+  expect(name).toBeEnabled();
+  expect(screen.getByLabelText("选择要编辑的歌曲")).toHaveValue("2");
+});
+
+// 测试点：无结果时不加载详情，单项命中自动打开，后续空查询保留已有编辑对象。
+test("empty song queries do not select a nonexistent match", async () => {
+  const user = userEvent.setup();
+  api.getCatalogConsole.mockImplementation(async (path: string) => path === "/members" ? { items: [] }
+    : path === "/songs/1" ? version() : page(path.includes("q=hit") ? [version()] : []));
+  render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  await screen.findByText("没有匹配的歌曲。");
+  expect(screen.getByLabelText("选择要编辑的歌曲")).toHaveValue("");
+  expect(screen.queryByLabelText("歌曲名称")).not.toBeInTheDocument();
+  expect(api.getCatalogConsole).not.toHaveBeenCalledWith("/songs/1");
+  const query = screen.getByLabelText("搜索歌曲");
+  await user.type(query, "hit{Enter}");
+  const name = await screen.findByLabelText("歌曲名称");
+  expect(name).toHaveValue("合唱曲");
+  expect(screen.getByLabelText("选择要编辑的歌曲")).toHaveValue("1");
+  await user.clear(query);
+  await user.type(query, "missing{Enter}");
+  await screen.findByText("没有匹配的歌曲。");
+  expect(name).toHaveValue("合唱曲");
+  expect(screen.getByLabelText("选择要编辑的歌曲")).toHaveValue("1");
 });
 
 // 测试点：独立唱片页本地切图遵守边界，坏图仍可切换及访问来源，离开再进入恢复默认图。

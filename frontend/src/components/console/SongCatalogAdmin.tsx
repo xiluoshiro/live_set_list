@@ -11,6 +11,7 @@ import type { BandOption } from "./types";
 import { UpdateDiffTable } from "./UpdateDiffTable";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleChoiceSelect, ConsoleCandidatePager } from "./ConsoleChoiceSelect";
+import { ConsoleEditSelect, resolveConsoleEditSelection } from "./ConsoleEditSelect";
 import { ownershipFields } from "./OwnershipFields";
 import { CoverEditor, coverSummary } from "./CoverEditor";
 import { coverPayload, coverUrlsError, filledCovers } from "../../albumLinks";
@@ -51,9 +52,10 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [bandFilter, setBandFilter] = useState("");
-  const [search, setSearch] = useState({ query: "", bandFilter: "", page: 1 });
+  const [search, setSearch] = useState({ query: "", bandFilter: "", page: 1, selectFirst: true });
+  const selectedSearch = useRef<typeof search | null>(null);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
-  const querySongs = () => setSearch({ query: query.trim(), bandFilter, page: 1 });
+  const querySongs = () => guard(() => setSearch({ query: query.trim(), bandFilter, page: 1, selectFirst: true }));
   const [candidates, setCandidates] = useState<CatalogPage<ConsoleSongItem> | null>(null);
   const candidateLabel = (s: ConsoleSongItem) => `#${s.song_id} ${s.song_name} / ${s.version_label || "默认版本"} / ${s.band_name ?? "待回填"}`;
   const selectedSongLabel = original ? `#${original.song_id} ${original.song_name} / ${original.version_label || "默认版本"} / ${ownershipLabel(original)}` : "";
@@ -93,11 +95,22 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   useEffect(() => {
     if (!active || creating) return;
     let current = true;
+    const selectionGeneration = loadGeneration.current;
     setCandidatesLoading(true);
     setCandidates(null);
     const params = new URLSearchParams({ q: search.query, page: String(search.page), limit: "20" });
     if (search.bandFilter) params.set("band_id", search.bandFilter);
-    void getCatalogConsole<CatalogPage<ConsoleSongItem>>(`/songs?${params}`).then(result => { if (current) setCandidates(result); })
+    void getCatalogConsole<CatalogPage<ConsoleSongItem>>(`/songs?${params}`).then(result => {
+      if (!current) return;
+      setCandidates(result);
+      if (selectedSearch.current !== search) {
+        const manuallyOpened = selectedSearch.current === null && selectionGeneration > 0;
+        selectedSearch.current = search;
+        const nextId = resolveConsoleEditSelection(result.items, song => song.song_id, original?.song_id ?? null,
+          search.selectFirst ? "query" : "preserve");
+        if (search.selectFirst && !manuallyOpened && result.items.length && nextId !== null && selectionGeneration === loadGeneration.current) void loadSong(nextId);
+      }
+    })
       .catch(e => { if (current) setError(String(e)); })
       .finally(() => { if (current) setCandidatesLoading(false); });
     return () => { current = false; };
@@ -183,7 +196,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     { field: "归组更正原因", before: "", after: moveTarget.reason },
   );
   const visibleHistory = history.filter(entry => entry.action === (creating ? "create" : "update"));
-  const fieldsDisabled = busy || confirm;
+  const fieldsDisabled = busy || confirm || candidatesLoading;
   const { bandOptions, hasBands, hasMembers, ownershipModeField, bandPicker, memberBandPicker, memberPickers } =
     ownershipFields(ownership, bands, members, fieldsDisabled, setOwnership);
   const songNameField = <input aria-label="歌曲名称" disabled={fieldsDisabled} value={draft.song_name}
@@ -219,17 +232,15 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         {bandOptions.map(band => <option key={band.id} value={band.id}>{band.label}</option>)}
       </select>
       <button type="button" className="console-ghost-btn" disabled={fieldsDisabled || candidatesLoading} onClick={querySongs}>查询</button>
-      <select aria-label="选择要编辑的歌曲" value={original?.song_id ?? ""} disabled={fieldsDisabled || candidatesLoading}
-        onChange={event => { if (event.target.value) guard(() => void loadSong(Number(event.target.value))); }}>
-        <option value="">选择要编辑的歌曲</option>
-        {original && !candidates?.items.some(song => song.song_id === original.song_id) &&
-          <option value={original.song_id}>{selectedSongLabel}</option>}
-        {candidates?.items.map(song => <option key={song.song_id} value={song.song_id}>{original?.song_id === song.song_id ? selectedSongLabel : candidateLabel(song)}</option>)}
-      </select>
+      <ConsoleEditSelect label="选择要编辑的歌曲" placeholder="选择要编辑的歌曲"
+        value={original?.song_id ?? null} disabled={fieldsDisabled}
+        selectedOption={original ? { id: original.song_id, label: selectedSongLabel } : undefined}
+        options={(candidates?.items ?? []).map(song => ({ id: song.song_id, label: candidateLabel(song) }))}
+        onSelect={id => guard(() => void loadSong(id))} />
       <div className="tour-candidate-pager">
-        <button type="button" className="console-ghost-btn" disabled={fieldsDisabled || candidatesLoading || !candidates || candidates.page <= 1} onClick={() => setSearch(value => ({ ...value, page: value.page - 1 }))}>上一页</button>
+        <button type="button" className="console-ghost-btn" disabled={fieldsDisabled || candidatesLoading || !candidates || candidates.page <= 1} onClick={() => setSearch(value => ({ ...value, page: value.page - 1, selectFirst: false }))}>上一页</button>
         <span>{candidatesLoading ? "加载中…" : `第 ${candidates?.page ?? search.page} / ${candidates?.total_pages ?? 1} 页，共 ${candidates?.total ?? 0} 首歌曲`}</span>
-        <button type="button" className="console-ghost-btn" disabled={fieldsDisabled || candidatesLoading || !candidates || candidates.page >= candidates.total_pages} onClick={() => setSearch(value => ({ ...value, page: value.page + 1 }))}>下一页</button>
+        <button type="button" className="console-ghost-btn" disabled={fieldsDisabled || candidatesLoading || !candidates || candidates.page >= candidates.total_pages} onClick={() => setSearch(value => ({ ...value, page: value.page + 1, selectFirst: false }))}>下一页</button>
       </div>
     </div>}
     {!creating && !original && !busy && <p className="console-admin-hint">请先选择要编辑的歌曲。</p>}

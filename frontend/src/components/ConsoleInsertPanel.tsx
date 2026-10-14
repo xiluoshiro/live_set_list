@@ -57,6 +57,7 @@ import { CompactConfirmationTable } from "./console/CompactConfirmationTable";
 import { PerformanceGroupAdminSection } from "./console/PerformanceGroupAdminSection";
 import { TourAdminSection } from "./console/TourAdminSection";
 import { GeographyQualitySection } from "./console/GeographyQualitySection";
+import { resolveConsoleEditSelection } from "./console/ConsoleEditSelect";
 import { VenueAdminSection } from "./console/VenueAdminSection";
 import { LocalityAdminSection } from "./console/LocalityAdminSection";
 import {
@@ -1214,9 +1215,9 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setLiveCandidatePagination(response);
       if (selectFirstLiveCandidateAfterQueryRef.current) {
         selectFirstLiveCandidateAfterQueryRef.current = false;
-        const firstCandidate = response.items[0];
-        if (firstCandidate && firstCandidate.live_id !== editingLiveId) {
-          requestLiveForEdit(firstCandidate.live_id);
+        const nextId = resolveConsoleEditSelection(response.items, live => live.live_id, editingLiveId);
+        if (response.items.length && nextId !== null && nextId !== editingLiveId) {
+          requestLiveForEdit(nextId);
         }
       }
     } catch (error) {
@@ -1343,8 +1344,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         url: null,
       }));
       setSetlistEditLives(candidates);
-      const first = candidates[0];
-      if (first) await loadSetlistForEdit(first.live_id);
+      const nextId = resolveConsoleEditSelection(candidates, live => live.live_id, null);
+      if (nextId !== null) await loadSetlistForEdit(nextId);
       else {
         setSelectedLiveId(0);
         setMessage("没有符合条件的 Setlist。");

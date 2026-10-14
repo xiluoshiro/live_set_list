@@ -343,12 +343,13 @@ test("cover rows start ready to edit and can be removed and re-added", async () 
   expect(within(table).getByLabelText("第 1 张封面 URL")).toHaveValue("");
 });
 
-// 测试点：专辑翻页和查询不丢弃当前编辑草稿，搜索通过按钮或回车从第一页重新查询。
-test("album search and paging preserve the selected draft", async () => {
+// 测试点：专辑查询自动编辑首项且保护草稿，翻页与空结果保留编辑对象，放弃后才切换命中项。
+test("album queries select the first match while paging and empty results preserve the draft", async () => {
   const user = userEvent.setup();
   const first = { album_id: 1, album_name: "首页专辑", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 1, tracks: [] };
   const second = { ...first, album_id: 21, album_name: "后页专辑" };
   api.getCatalogConsole.mockImplementation(async (path: string) => {
+    if (path === "/albums/1") return first;
     if (path === "/albums/21") return second;
     if (path.startsWith("/songs")) return pageOf([]);
     const params = new URL(path, "http://test").searchParams;
@@ -358,8 +359,8 @@ test("album search and paging preserve the selected draft", async () => {
   });
   render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   const search = within(screen.getByRole("search", { name: "查询专辑" }));
-  expect(screen.getByText("请先选择要编辑的专辑。")).toBeInTheDocument();
-  await search.findByText("第 1 / 2 页，共 21 条");
+  await waitFor(() => expect(screen.getByLabelText("专辑名称")).toHaveValue("首页专辑"));
+  expect(search.getByLabelText("已有专辑")).toHaveValue("1");
   await user.click(search.getByRole("button", { name: "下一页" }));
   await search.findByText("第 2 / 2 页，共 21 条");
   await user.selectOptions(search.getByLabelText("已有专辑"), "21");
@@ -380,6 +381,22 @@ test("album search and paging preserve the selected draft", async () => {
   expect(search.getByRole("option", { name: "#21 后页专辑" })).toBeInTheDocument();
   expect(search.getByLabelText("已有专辑")).toHaveValue("21");
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
+  let dialog = within(await screen.findByRole("dialog", { name: "未保存的修改" }));
+  await user.click(dialog.getByRole("button", { name: "继续编辑" }));
+  expect(screen.getByLabelText("专辑名称")).toHaveValue("待保存资料");
+  expect(search.getByLabelText("已有专辑")).toHaveValue("21");
+  await user.click(search.getByRole("button", { name: "查询" }));
+  dialog = within(await screen.findByRole("dialog", { name: "未保存的修改" }));
+  await user.click(dialog.getByRole("button", { name: "放弃修改" }));
+  await waitFor(() => expect(screen.getByLabelText("专辑名称")).toHaveValue("首页专辑"));
+  expect(search.getByLabelText("已有专辑")).toHaveValue("1");
+  await user.click(search.getByRole("button", { name: "下一页" }));
+  await search.findByRole("option", { name: "#21 后页专辑" });
+  await user.selectOptions(search.getByLabelText("已有专辑"), "21");
+  await waitFor(() => expect(screen.getByLabelText("专辑名称")).toHaveValue("后页专辑"));
+  await user.type(search.getByLabelText("搜索专辑"), "{Enter}");
+  await waitFor(() => expect(screen.getByLabelText("专辑名称")).toHaveValue("首页专辑"));
+  expect(search.getByLabelText("已有专辑")).toHaveValue("1");
 });
 
 // 测试点：首次加载禁用候选，查询失败可重试，空结果和失败状态互不混淆。
