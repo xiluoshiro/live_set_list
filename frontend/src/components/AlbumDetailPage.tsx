@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getAlbumDetail, type AlbumDetail } from "../api";
 import { songCatalogHref, type SongBrowseState } from "../songCatalogNavigation";
 import { AlbumCoverGallery } from "./AlbumCover";
-import { ownershipLabel } from "./SongCatalog";
 import { CatalogArt, CatalogLink, catalogDate, useCatalogScroll } from "./SongCatalogShared";
 
 export function AlbumDetailPage({ albumId, selectedSongId, browse, revision, onSongSelect, scrollY, trackScrollTop, onTrackScroll }: {
@@ -30,7 +29,7 @@ export function AlbumDetailPage({ albumId, selectedSongId, browse, revision, onS
   const sections = [...new Set(album.tracks.map(track => track.section_name ?? ""))];
   const showTrackOwners = new Set(album.tracks.map(track => track.band_name).filter(Boolean)).size > 1;
   return <article className="song-album-page" aria-label="唱片详情">
-    <header className="song-album-heading">{album.ownership && album.ownership.mode !== "pending" && <p className="song-owner">{ownershipLabel(album)}</p>}<h1>{album.album_name}</h1>{album.release_label && <p>{album.release_label}</p>}</header>
+    <header className="song-album-heading"><h1>{album.album_name}</h1>{album.release_label && <p>{album.release_label}</p>}</header>
     <aside className="song-album-aside" aria-label="发行资料">
       <div className="song-album-art">{album.cover_urls.length ? <AlbumCoverGallery covers={album.cover_urls} title={album.album_name} /> : <CatalogArt title={album.album_name} />}</div>
       <div className="song-album-release"><dl className="song-album-facts"><div><dt>发行时间</dt><dd><time dateTime={album.release_date ?? undefined}>{catalogDate(album.release_date)}</time></dd></div>

@@ -346,11 +346,9 @@ def save_album(payload: AlbumWrite, request: Request, context: AuthSessionContex
             cur.execute("DELETE FROM album_sections WHERE album_id = %s AND NOT(section_name = ANY(%s))",
                         (album_id, section_names))
         assert album_id is not None
-        if "ownership" in payload.model_fields_set:
-            save_ownership(cur, album_id, payload.ownership, resource="album")
         album = read_album(cur, album_id)
         audit(cur, context, "album_save", "album", album_id,
-              {**payload.model_dump(mode="json"), "album_url": album_url, "cover_urls": cover_urls, "ownership": album["ownership"]})
+              {**payload.model_dump(mode="json"), "album_url": album_url, "cover_urls": cover_urls})
         return album
 
 

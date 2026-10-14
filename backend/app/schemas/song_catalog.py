@@ -164,7 +164,6 @@ class AlbumWrite(CoverFields):
     release_label: str = Field(default="", max_length=255)
     release_date: date | None = None
     album_url: ExternalHttpsUrl | None = None
-    ownership: Ownership = Field(default_factory=lambda: Ownership(mode="pending"))
     tracks: list[AlbumTrackWrite] | None = Field(default=None, max_length=500)
 
     @field_validator("release_date", mode="before")
@@ -339,7 +338,6 @@ class AlbumTrack(AlbumTrackWrite):
 
 
 class AlbumDetail(AlbumSummary):
-    ownership: OwnershipDetail
     tracks: list[AlbumTrack]
 
 

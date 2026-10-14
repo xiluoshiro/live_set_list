@@ -26,7 +26,7 @@ beforeEach(() => {
     latest_performance_date: null, display_cover: null }], page: 2, page_size: 10, total: 12, total_pages: 2,
     facets: { total: 12, bands: [{ band_id: 3, band_name: "乐队", song_count: 12 }] } });
   vi.mocked(getSongPerformances).mockResolvedValue({ items: [], page: 1, page_size: 8, total: 0, total_pages: 1, available_years: [] });
-  vi.mocked(getAlbumDetail).mockResolvedValue({ ...album, ownership: version.ownership, tracks: [{ album_track_id: 1, song_id: 72, group_id: 7,
+  vi.mocked(getAlbumDetail).mockResolvedValue({ ...album, tracks: [{ album_track_id: 1, song_id: 72, group_id: 7,
     song_name: "合唱曲", version_label: "合唱版", edition_label: "Instrumental", section_name: "Disc 2", track_order: 1, band_name: "待回填" }] });
 });
 

@@ -1,6 +1,6 @@
 """Shared song catalog reads and transactional ownership persistence."""
 from contextlib import contextmanager
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import HTTPException
 from psycopg2 import Error, OperationalError
@@ -110,19 +110,17 @@ def require_setlist_date(cur: Any, live_id: int) -> None:
         raise HTTPException(409, "未来的演出不能保存歌单")
 
 
-def read_ownership(cur: Any, song_id: int, mode: str | None, *, resource: Literal["song", "album"] = "song") -> dict[str, Any]:
-    if resource not in {"song", "album"}:
-        raise ValueError("Unsupported ownership resource")
+def read_ownership(cur: Any, song_id: int, mode: str | None) -> dict[str, Any]:
     if mode is None:
         return {"mode": "pending", "band_ids": [], "member_groups": [], "bands": [], "groups": []}
-    cur.execute(f"""SELECT sb.band_id, b.band_name FROM {resource}_bands sb
-        JOIN band_attrs b ON b.id = sb.band_id WHERE sb.{resource}_id = %s
+    cur.execute("""SELECT sb.band_id, b.band_name FROM song_bands sb
+        JOIN band_attrs b ON b.id = sb.band_id WHERE sb.song_id = %s
         ORDER BY sb.display_order, sb.band_id""", (song_id,))
     bands = rows(cur)
-    cur.execute(f"""SELECT g.band_id, b.band_name, m.member_id, p.display_name
-        FROM {resource}_member_groups g JOIN band_attrs b ON b.id = g.band_id
-        JOIN {resource}_members m ON m.{resource}_id = g.{resource}_id AND m.band_id = g.band_id
-        JOIN members p ON p.id = m.member_id WHERE g.{resource}_id = %s
+    cur.execute("""SELECT g.band_id, b.band_name, m.member_id, p.display_name
+        FROM song_member_groups g JOIN band_attrs b ON b.id = g.band_id
+        JOIN song_members m ON m.song_id = g.song_id AND m.band_id = g.band_id
+        JOIN members p ON p.id = m.member_id WHERE g.song_id = %s
         ORDER BY g.display_order, g.band_id, m.display_order, m.member_id""", (song_id,))
     groups: dict[int, dict[str, Any]] = {}
     for member in rows(cur):
@@ -173,9 +171,8 @@ def read_song_group(cur: Any, group_id: int) -> dict[str, Any]:
 
 def read_album(cur: Any, album_id: int) -> dict[str, Any]:
     cur.execute("""SELECT id AS album_id, album_name, release_label, release_date, album_url, cover_urls,
-        revision, owner_mode FROM albums WHERE id = %s""", (album_id,))
+        revision FROM albums WHERE id = %s""", (album_id,))
     album = one(cur)
-    album["ownership"] = read_ownership(cur, album_id, album.pop("owner_mode"), resource="album")
     cur.execute(f"""SELECT t.id AS album_track_id, t.song_id, t.track_order, t.edition_label, section.section_name,
         s.song_name, s.version_label, s.group_id,
         {SONG_OWNERSHIP_LABEL_SQL} AS band_name
@@ -198,26 +195,23 @@ def lock_revision(cur: Any, table: str, record_id: int, expected: int) -> None:
         raise HTTPException(409, "资料已被修改，请重新加载后编辑")
 
 
-def save_ownership(cur: Any, song_id: int, ownership: Ownership, *, resource: Literal["song", "album"] = "song") -> None:
-    if resource not in {"song", "album"}:
-        raise ValueError("Unsupported ownership resource")
-    table = "song_list" if resource == "song" else "albums"
-    cur.execute(f"SELECT id FROM {table} WHERE id = %s FOR UPDATE", (song_id,))
+def save_ownership(cur: Any, song_id: int, ownership: Ownership) -> None:
+    cur.execute("SELECT id FROM song_list WHERE id = %s FOR UPDATE", (song_id,))
     if cur.fetchone() is None:
         raise HTTPException(404, "Catalog record not found")
-    cur.execute(f"DELETE FROM {resource}_members WHERE {resource}_id = %s", (song_id,))
-    cur.execute(f"DELETE FROM {resource}_member_groups WHERE {resource}_id = %s", (song_id,))
-    cur.execute(f"DELETE FROM {resource}_bands WHERE {resource}_id = %s", (song_id,))
-    cur.execute(f"UPDATE {table} SET owner_mode = %s WHERE id = %s",
+    cur.execute("DELETE FROM song_members WHERE song_id = %s", (song_id,))
+    cur.execute("DELETE FROM song_member_groups WHERE song_id = %s", (song_id,))
+    cur.execute("DELETE FROM song_bands WHERE song_id = %s", (song_id,))
+    cur.execute("UPDATE song_list SET owner_mode = %s WHERE id = %s",
                 (None if ownership.mode == "pending" else ownership.mode, song_id))
     for order, band_id in enumerate(ownership.band_ids, 1):
-        cur.execute(f"INSERT INTO {resource}_bands({resource}_id, band_id, display_order) VALUES (%s, %s, %s)",
+        cur.execute("INSERT INTO song_bands(song_id, band_id, display_order) VALUES (%s, %s, %s)",
                     (song_id, band_id, order))
     for order, group in enumerate(ownership.member_groups, 1):
-        cur.execute(f"INSERT INTO {resource}_member_groups({resource}_id, band_id, display_order) VALUES (%s, %s, %s)",
+        cur.execute("INSERT INTO song_member_groups(song_id, band_id, display_order) VALUES (%s, %s, %s)",
                     (song_id, group.band_id, order))
         for member_order, member_id in enumerate(group.member_ids, 1):
-            cur.execute(f"INSERT INTO {resource}_members({resource}_id, band_id, member_id, display_order) VALUES (%s, %s, %s, %s)",
+            cur.execute("INSERT INTO song_members(song_id, band_id, member_id, display_order) VALUES (%s, %s, %s, %s)",
                         (song_id, group.band_id, member_id, member_order))
 
 

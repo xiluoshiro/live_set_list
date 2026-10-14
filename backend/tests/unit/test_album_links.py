@@ -4,19 +4,6 @@ from pydantic import ValidationError
 from app.schemas.song_catalog import AlbumUpdate, AlbumWrite, GroupCreate, VersionCreate, VersionUpdate
 
 
-# 测试点：专辑归属复用同一校验协议，拒绝空乐队、空成员及跨组重复成员；省略与显式待回填可区分。
-@pytest.mark.parametrize("ownership", [
-    {"mode": "bands"}, {"mode": "members"}, {"mode": "mixed", "band_ids": [1]},
-    {"mode": "members", "member_groups": [{"band_id": 1, "member_ids": []}]},
-    {"mode": "members", "member_groups": [{"band_id": 1, "member_ids": [7]}, {"band_id": 2, "member_ids": [7]}]},
-])
-def test_album_ownership_validation(ownership):
-    with pytest.raises(ValidationError):
-        AlbumWrite(album_name="盘", ownership=ownership)
-    assert "ownership" not in AlbumUpdate(album_name="盘", expected_revision=1).model_fields_set
-    assert "ownership" in AlbumUpdate.model_validate({"album_name": "盘", "expected_revision": 1, "ownership": {"mode": "pending"}}).model_fields_set
-
-
 # 测试点：名称与 URL 一起保留顺序并修剪空格，旧字符串转成未命名封面，省略与清空可区分。
 def test_album_links_preserve_urls_and_defaults():
     first = "https://images.example.test/cover?id=2&size=large#front"

@@ -91,7 +91,7 @@
 | 领域 | 仓库链路 | 意义 |
 | --- | --- | --- |
 | 乐队及历史 | `band_history_write.py`、`console_bands.py`、band_history schema、`BandAdminSection` | 名称版本、阵容版本的乐队身份 |
-| 正式歌曲／专辑归属 | `song_catalog.py`、`song_catalog_directory.py`、`songs.py`、song_catalog schema、`OwnershipFields`、`SongCatalogOverview` | song_bands、成员分组、album_bands 的外键；必须保留 |
+| 正式歌曲归属 | `song_catalog.py`、`song_catalog_directory.py`、`songs.py`、song_catalog schema、`OwnershipFields`、`SongCatalogOverview` | song_bands、成员分组的外键；必须保留 |
 | 实际出演 | `console_write.py` 的歌单、`lives.py` 演出关系、console schema、`LiveInsertTab`、parser、`StageLedgerContent` | 实际演出乐队、阵容和成员上下文；不能删除或替换为歌曲归属 |
 | 演出／收藏筛选 | `live_list_filters.py`、`me.py`、`LiveListFilters`、`App.tsx` | 由实际出演或无歌单时的默认乐队筛选 |
 | 巡演／活动组 | `tours.py`、`performance_groups.py`、对应 console routers 和 schemas、Tour／PerformanceGroup 页面 | 聚合对象的乐队、实际出演和筛选 |

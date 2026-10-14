@@ -1,4 +1,3 @@
-import { act } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -18,74 +17,6 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.useRealTimers());
-
-const bands = [{ band_id: 1, band_name: "乐队 A" }, { band_id: 2, band_name: "乐队 B" }];
-const members = [{ member_id: 7, display_name: "成员甲", revision: 1 }];
-
-// 测试点：专辑新增支持乐队、成员和混合归属，未完成选择不能提交，确认后完整保存并随清空重置。
-test.each(["bands", "members", "mixed"])("creates an album with %s ownership", async mode => {
-  const user = userEvent.setup();
-  api.getCatalogConsole.mockImplementation(async (path: string) => ({ items: path === "/members" ? members : [] }));
-  api.songCatalogWrite.mockImplementation(async (_path, _method, payload) => ({ ...payload, album_id: 1, revision: 1 }));
-  render(<AlbumAdminSection variant="create" active bands={bands} registerLeaveGuard={() => {}} onManage={() => {}} />);
-  await user.type(screen.getByLabelText("专辑名称"), "归属盘");
-  await waitFor(() => expect(screen.getByLabelText("归属模式")).toBeEnabled());
-  await user.selectOptions(screen.getByLabelText("归属模式"), mode);
-  expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
-  if (mode !== "members") {
-    await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
-    await user.click(screen.getByRole("checkbox", { name: "乐队 A" }));
-    await user.keyboard("{Escape}");
-  }
-  if (mode !== "bands") {
-    await user.click(screen.getByRole("button", { name: "选择成员所属乐队" }));
-    await user.click(screen.getByRole("checkbox", { name: "乐队 B" }));
-    await user.keyboard("{Escape}");
-    expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "选择乐队 B 固定成员" }));
-    await user.click(screen.getByRole("checkbox", { name: "成员甲" }));
-    await user.keyboard("{Escape}");
-  }
-  await user.click(screen.getByRole("button", { name: "提交插入" }));
-  const dialog = screen.getByRole("dialog");
-  expect(within(dialog).getByRole("table")).toHaveTextContent(mode === "bands" ? "乐队 A" : "乐队 B：成员甲");
-  expect(screen.getByLabelText("归属模式")).toBeDisabled();
-  await user.click(within(dialog).getByRole("button", { name: "确认" }));
-  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums", "POST", expect.objectContaining({ ownership: {
-    mode, band_ids: mode === "members" ? [] : [1], member_groups: mode === "bands" ? [] : [{ band_id: 2, member_ids: [7] }],
-  } }), "csrf");
-  expect(screen.getByLabelText("归属模式")).toHaveValue("pending");
-});
-
-// 测试点：已有专辑归属回显，恢复和取消离开保留正确草稿，更新使用原 revision 与修改后的归属。
-test("album ownership edits can be restored and saved", async () => {
-  const user = userEvent.setup();
-  const owner = { mode: "bands", band_ids: [1], member_groups: [], bands: [bands[0]], groups: [] };
-  const album = { album_id: 1, album_name: "归属盘", release_label: "", release_date: null, album_url: null, cover_urls: [], ownership: owner, revision: 3, tracks: [] };
-  let leave: ((proceed: () => void) => void) | null = null;
-  api.getCatalogConsole.mockImplementation(async (path: string) => path === "/albums/1" ? album : { items: path === "/members" ? members : path.startsWith("/albums") ? [album] : [] });
-  api.songCatalogWrite.mockImplementation(async (_path, _method, payload) => ({ ...album, ...payload, ownership: { ...payload.ownership, bands: [], groups: [] }, revision: 4 }));
-  render(<AlbumAdminSection variant="edit" active bands={bands} registerLeaveGuard={guard => { leave = guard; }} onManage={() => {}} />);
-  await user.selectOptions(screen.getByLabelText("已有专辑"), await screen.findByRole("option", { name: "#1 归属盘" }));
-  expect(await screen.findByRole("button", { name: "选择归属乐队" })).toHaveTextContent("乐队 A");
-  await user.selectOptions(screen.getByLabelText("归属模式"), "pending");
-  await user.click(screen.getByRole("button", { name: "恢复原值" }));
-  expect(screen.getByLabelText("归属模式")).toHaveValue("bands");
-  expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
-  await user.selectOptions(screen.getByLabelText("归属模式"), "pending");
-  const proceed = vi.fn();
-  act(() => leave?.(proceed));
-  await user.click(screen.getByRole("button", { name: "继续编辑" }));
-  expect(proceed).not.toHaveBeenCalled();
-  expect(screen.getByLabelText("归属模式")).toHaveValue("pending");
-  await user.click(screen.getByRole("button", { name: "保存修改" }));
-  expect(within(screen.getByRole("dialog")).getByRole("table")).toHaveTextContent("乐队 A");
-  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认" }));
-  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums/1", "PUT", expect.objectContaining({ expected_revision: 3, ownership: { mode: "pending", band_ids: [], member_groups: [] } }), "csrf");
-  expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
-});
 
 // 测试点：管理候选和资料表显示专辑 ID，选择后保留原始名称、发行说明及未知日期。
 test("album selection displays the release title without changing stored fields", async () => {
@@ -147,7 +78,6 @@ test("Instrumental 复用已有歌曲，专辑日期可未知，失败保留待�
   expect(api.songCatalogWrite).toHaveBeenCalledTimes(1);
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums", "POST", {
     album_name: "测试专辑", release_label: "", release_date: null, album_url: null, cover_urls: [],
-    ownership: { mode: "pending", band_ids: [], member_groups: [] },
     tracks: [{ song_id: 1, track_order: 1, edition_label: "Instrumental", section_name: "" }, { song_id: 1, track_order: 2, edition_label: "", section_name: "" }],
   }, "csrf");
   expect(screen.getByRole("checkbox", { name: "第 1 曲器乐" })).toBeChecked();
@@ -265,7 +195,6 @@ test("creation retains its mode and release date when keeping the draft", async 
   expect(api.songCatalogWrite).toHaveBeenCalledTimes(2);
   expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/albums", "POST", {
     album_name: "发行盘", release_label: "", release_date: "2026-09-27", album_url: null, cover_urls: [], tracks: [],
-    ownership: { mode: "pending", band_ids: [], member_groups: [] },
   }, "csrf");
   expect(screen.getByLabelText("专辑名称")).toHaveValue("发行盘");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeEnabled();

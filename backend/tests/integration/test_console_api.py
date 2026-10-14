@@ -1804,7 +1804,7 @@ def test_console_append_live_setlist_rejects_when_live_has_existing_rows(
     assert response.json()["detail"] == "Live id 1 already has setlist data"
 
 
-# 测试点：批量新增保留完整归属、逐项报告错误，重复及单曲入口复用相同身份且不重复审计。
+# 测试点：批量新增保留完整归属、逐项报告错误，重复入口复用身份，专辑收录采用具体版本归属。
 def test_batch_catalog_ownership_roundtrip_and_retry(integration_test_client, integration_admin_connection):
     client = integration_test_client
     csrf = _login_and_get_csrf_for(client, username=TEST_DEFAULT_ADMIN_USERNAME, password=TEST_DEFAULT_ADMIN_PASSWORD)
@@ -1842,10 +1842,9 @@ def test_batch_catalog_ownership_roundtrip_and_retry(integration_test_client, in
     assert _count_rows(integration_admin_connection, "SELECT count(*) FROM audit_logs WHERE action='song_create'") == audit_before
     assert client.post("/api/console/song-groups", headers=headers, json=songs[1]).status_code == 409
     album = client.post("/api/console/albums", headers=headers, json={
-        "album_name": "批量曲收录盘", "ownership": owners[3], "tracks": [{"song_id": item["song_id"]} for item in items],
+        "album_name": "批量曲收录盘", "tracks": [{"song_id": item["song_id"]} for item in items],
     })
     assert album.status_code == 201, album.text
-    assert album.json()["ownership"]["mode"] == "mixed"
     lookup = client.get("/api/console/songs?q=批量同名曲&groups_only=true").json()["items"]
     labels = {item["song_id"]: item["band_name"] for item in lookup}
     assert [track["band_name"] for track in album.json()["tracks"]] == [labels[item["song_id"]] for item in items]
