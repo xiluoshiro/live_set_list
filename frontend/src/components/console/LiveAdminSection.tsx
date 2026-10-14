@@ -652,7 +652,7 @@ export function LiveAdminSection({
 
       {defaultBandOpen && defaultBandMenuPos && (
         <div
-          className="bands-floating-menu"
+          className="bands-floating-menu default-band-menu"
           ref={defaultBandMenuRef}
           role="group"
           aria-label="default_band_ids"

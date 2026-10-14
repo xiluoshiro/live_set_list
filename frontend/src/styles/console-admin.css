@@ -1702,6 +1702,14 @@
   padding: 10px 0;
 }
 
+.bands-floating-menu.default-band-menu {
+  gap: 2px;
+}
+
+.default-band-menu > .band-member-block {
+  padding: 4px 0;
+}
+
 .band-member-main {
   display: flex;
   align-items: center;
