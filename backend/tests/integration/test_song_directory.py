@@ -184,7 +184,7 @@ def test_directory_refreshes_after_catalog_and_setlist_writes(integration_test_c
     assert client.get(f"/api/songs/{sid}").json()["albums"] == []
     assert [b["band_id"] for b in summary()["facets"]["bands"]] == [1]
     owner = client.put(f"/api/console/songs/{sid}/ownership", headers=headers, json={
-        "expected_revision": song["revision"], "reason": "验收归属修订", "ownership": {"mode": "bands", "band_ids": [2]},
+        "expected_revision": song["revision"], "ownership": {"mode": "bands", "band_ids": [2]},
     })
     assert owner.status_code == 200, owner.text
     assert [b["band_id"] for b in summary()["facets"]["bands"]] == [2]

@@ -2383,7 +2383,6 @@ export type SongEditUpdate = SongVersionDraft & {
   expected_revision: number;
   group: { group_id: number; expected_revision: number; group_name: string; song_ids: number[] };
   ownership: SongOwnership;
-  ownership_reason: string;
   move_to_group: { group_id: number; expected_revision: number; reason: string } | null;
 };
 export type SongEditMutation = { ok: boolean; item: SongVersion; group: SongGroup };

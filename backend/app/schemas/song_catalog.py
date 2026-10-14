@@ -111,7 +111,6 @@ class VersionUpdate(VersionFields):
 
 class OwnershipUpdate(CatalogModel):
     expected_revision: int = Field(ge=1)
-    reason: str = Field(min_length=1, max_length=1000)
     ownership: Ownership
 
 
@@ -139,7 +138,6 @@ class SongEditTarget(GroupMove):
 class SongEditUpdate(VersionUpdate):
     group: SongEditGroup
     ownership: Ownership
-    ownership_reason: str = Field(default="", max_length=1000)
     move_to_group: SongEditTarget | None = None
 
     @model_validator(mode="after")

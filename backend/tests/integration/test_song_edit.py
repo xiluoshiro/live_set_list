@@ -44,7 +44,7 @@ def audit_count(conn, song_id):
         return cur.fetchone()[0]
 
 
-# 测试点：整页保存原子更新资料及命名封面，公开读取一致且重试不能重复审计。
+# 测试点：整页保存原子更新资料、归属及命名封面，公开读取一致且重试不能重复审计。
 def test_whole_page_save_updates_public_references_once(integration_test_client, integration_admin_connection):
     client = integration_test_client
     headers = auth(client)
@@ -56,7 +56,7 @@ def test_whole_page_save_updates_public_references_once(integration_test_client,
     }).json()
     payload = edit_payload(client, sid)
     payload.update(song_name='全局新名称', cover_urls=[{'url': 'https://example.test/cover.png', 'name': '通常盤'}],
-                   ownership={'mode': 'bands', 'band_ids': [2]}, ownership_reason='官方资料更正')
+                   ownership={'mode': 'bands', 'band_ids': [2]})
     payload['group']['group_name'] = '全局新组名'
     payload['group']['song_ids'].reverse()
     result = client.put(f'/api/console/songs/{sid}/edit', headers=headers, json=payload)
@@ -71,12 +71,18 @@ def test_whole_page_save_updates_public_references_once(integration_test_client,
     assert client.get(f"/api/albums/{album['album_id']}").json()['tracks'][0]['song_name'] == '全局新名称'
     assert client.get(f"/api/songs/{sibling['song_id']}").json()['song_name'] == '版本歌曲'
     assert audit_count(integration_admin_connection, sid) == 1
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("SELECT payload_json FROM audit_logs WHERE action = 'song_edit' AND resource_id = %s", (str(sid),))
+        audit_payload = cur.fetchone()[0]
+        assert audit_payload['before']['song']['ownership']['band_ids'] == [1]
+        assert audit_payload['after']['ownership']['band_ids'] == [2]
     # A retry of an already committed operation cannot duplicate it.
     assert client.put(f'/api/console/songs/{sid}/edit', headers=headers, json=payload).status_code == 409
     assert audit_count(integration_admin_connection, sid) == 1
 
 
-@pytest.mark.parametrize('failure', ['ownership_fk', 'duplicate_label', 'group_revision', 'song_revision', 'members_missing', 'reason'])
+# 测试点：归属引用、版本标识、revision 或组成员校验失败时整页数据与审计一起回滚。
+@pytest.mark.parametrize('failure', ['ownership_fk', 'duplicate_label', 'group_revision', 'song_revision', 'members_missing'])
 def test_failed_combined_save_leaves_no_partial_changes(integration_test_client, integration_admin_connection, failure):
     client = integration_test_client
     headers = auth(client)
@@ -85,7 +91,7 @@ def test_failed_combined_save_leaves_no_partial_changes(integration_test_client,
     sid = song['song_id']
     before = client.get(f"/api/song-groups/{song['group_id']}").json()
     payload = edit_payload(client, sid)
-    payload.update(song_name='不应保存', ownership={'mode': 'bands', 'band_ids': [2]}, ownership_reason='核实')
+    payload.update(song_name='不应保存', ownership={'mode': 'bands', 'band_ids': [2]})
     payload['group']['group_name'] = '不应保存的组名'
     payload['group']['song_ids'].reverse()
     status = 422
@@ -102,8 +108,6 @@ def test_failed_combined_save_leaves_no_partial_changes(integration_test_client,
         status = 409
     elif failure == 'members_missing':
         payload['group']['song_ids'] = [sid]
-    else:
-        payload['ownership_reason'] = ' '
     result = client.put(f'/api/console/songs/{sid}/edit', headers=headers, json=payload)
     assert result.status_code == status, result.text
     assert client.get(f"/api/song-groups/{song['group_id']}").json() == before
@@ -164,7 +168,7 @@ def test_metadata_edit_preserves_gapped_version_order(integration_test_client, f
     sid = before['versions'][version_index]['song_id']
     payload = edit_payload(client, sid)
     if field == 'ownership':
-        payload.update(ownership={'mode': 'bands', 'band_ids': [2]}, ownership_reason='归属核实')
+        payload.update(ownership={'mode': 'bands', 'band_ids': [2]})
     elif field == 'cover_urls':
         payload[field] = [{'url': 'https://example.test/updated.png', 'name': '更新封面'}]
     elif field == 'group_name':

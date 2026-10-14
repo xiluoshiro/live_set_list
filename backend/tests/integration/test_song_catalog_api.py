@@ -121,7 +121,7 @@ def test_member_ownership_and_atomic_failure(integration_test_client):
     assert client.post("/api/console/song-groups", headers=headers, json=payload).status_code == 422
     assert client.get("/api/song-groups").json()["pagination"]["total"] == before
     assert client.put(f"/api/console/songs/{song['song_id']}/ownership", headers=headers, json={
-        "expected_revision": 1, "reason": "更正记录", "ownership": {"mode": "bands", "band_ids": [2]},
+        "expected_revision": 1, "ownership": {"mode": "bands", "band_ids": [2]},
     }).status_code == 200
 
 
@@ -152,7 +152,7 @@ def test_performance_count_and_actual_band_cover(integration_test_client, integr
         added_id = cur.fetchone()[0]
     integration_admin_connection.commit()
     changed = client.put("/api/console/songs/1/ownership", headers=headers, json={
-        "expected_revision": 1, "reason": "核对基准", "ownership": {"mode": "bands", "band_ids": [1, 2]},
+        "expected_revision": 1, "ownership": {"mode": "bands", "band_ids": [1, 2]},
     })
     assert changed.status_code == 200, changed.text
     performances = client.get("/api/songs/1/performances").json()
@@ -235,7 +235,7 @@ def test_ownership_constraints_at_commit(integration_test_client, integration_ad
     client = integration_test_client
     headers = auth(client)
     result = client.put("/api/console/songs/1/ownership", headers=headers, json={
-        "expected_revision": 1, "reason": "回填", "ownership": {"mode": "bands", "band_ids": [1]},
+        "expected_revision": 1, "ownership": {"mode": "bands", "band_ids": [1]},
     })
     assert result.status_code == 200
     conn = integration_admin_connection
@@ -255,7 +255,7 @@ def test_mixed_version_uses_group_history_and_default(integration_test_client, i
     headers = auth(client)
     member = client.post("/api/console/members", headers=headers, json={"display_name": "合作成员"}).json()
     response = client.put("/api/console/songs/1/ownership", headers=headers, json={
-        "expected_revision": 1, "reason": "确认默认归属", "ownership": {"mode": "bands", "band_ids": [1]},
+        "expected_revision": 1, "ownership": {"mode": "bands", "band_ids": [1]},
     })
     assert response.status_code == 200, response.text
     response = client.post("/api/console/songs", headers=headers, json={

@@ -10,7 +10,7 @@ def test_album_links_roundtrip_and_partial_updates(integration_test_client):
     client = integration_test_client
     headers = auth(client)
     response = client.put("/api/console/songs/1/ownership", headers=headers, json={
-        "expected_revision": 1, "reason": "核实版本归属",
+        "expected_revision": 1,
         "ownership": {"mode": "bands", "band_ids": [1, 2]},
     })
     assert response.status_code == 200, response.text

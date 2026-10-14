@@ -157,7 +157,7 @@ V40 已实现歌曲组歌单引用、混合归属和专辑子项。`live_setlist
 4. 回填期函数允许 NULL＋全部空；收紧迁移替换检查函数并增加 owner_mode NOT NULL。不能仅靠前端开关或环境变量永久绕开数据库约束。
 5. 运行时角色没有禁用触发器、修改 schema 或 TRUNCATE 主数据的权限。备份恢复后执行完整性审计，不能因恢复时触发器未运行而跳过验证。
 
-保存任何父实体及子关系只增加一次 revision；独立修改子表也必须经过统一服务入口并锁父对象。普通资料更新不允许更换固定归属；修正归属通过带原因的显式纠错请求处理。
+保存任何父实体及子关系只增加一次 revision；独立修改子表也必须经过统一服务入口并锁父对象。版本归属可随整页资料直接编辑并统一保存，独立归属更新接口同样保留 revision 校验和前后快照审计。
 
 ### 4.6 索引
 
@@ -343,7 +343,7 @@ Pydantic 与 TypeScript 必须同步声明三种结构；客户端不读取虚�
 | `PUT /api/console/song-groups/{id}` | 组标题、版本顺序与 revision 校验 |
 | `POST /api/console/songs` | 为已有组新增版本，明确归属或迁移期待回填 |
 | `PUT /api/console/songs/{id}` | 普通资料修改；不接受普通编辑偷偷更换固定归属 |
-| `PUT /api/console/songs/{id}/ownership` | 显式纠错 / 回填，expected_revision、reason、完整目标归属 |
+| `PUT /api/console/songs/{id}/ownership` | 归属更新 / 回填，expected_revision、完整目标归属 |
 | `POST/PUT /api/console/albums[/{id}]` | 最小专辑资料；完整日期或 null |
 | `PUT /api/console/albums/{id}/tracks` | 完整曲目关系及顺序替换；保留已有 album_track_id |
 | `GET/POST/PUT /api/console/members[/{id}]` | 稳定成员候选与资料；UI 挂在乐队管理下 |
@@ -472,7 +472,6 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 ```json
 {
   "expected_revision": 2,
-  "reason": "按已核对资料补齐固定成员归属",
   "ownership": {
     "mode": "members",
     "member_groups": [
@@ -590,7 +589,7 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 2. 选择具体 song_id 后请求 Console 编辑详情，取得完整资料、固定关系和 revision，再建立 originalSongPayload 与编辑草稿。新增 `GET /api/console/songs/{song_id}` 编辑读取契约，不能把分页候选当成完整资料保存。
 3. 已选对象移出候选当前页时，继续显示其完整标签，与普通候选相同；新候选返回不得清空选中 ID 或覆盖未保存草稿。加载失败不把一个未完整加载的版本标为可编辑。
 4. 普通字段修改使用差异确认及 `PUT /api/console/songs/{song_id}`；group_name / 组内顺序使用对应组接口和组 revision，不能把它们误存入单个版本。
-5. 固定归属默认只读，回填 / 纠错通过第 8 节显式入口提供原因和影响；页面拆分不意味着成员模式可以随意维护阵容变化。
+5. 版本归属直接使用下拉框和多选框编辑，随整页保存；页面拆分不意味着成员模式可以随意维护阵容变化。
 6. “恢复原值”恢复当前版本最近一次成功读取或保存后的快照，保留选择。没有差异不发送 PUT；保存中禁止重复提交。
 7. 成功后原地更新快照、revision、候选及修改记录；版本改名后页外选中标签同步变化。409 冲突保留本地草稿，重新读取后比较，不自动覆盖服务端。
 
@@ -649,7 +648,7 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 
 公共查询使用 live_project_ro。管理写入使用现有 get_write_db_connection，仍由 editor+、session、CSRF 控制；普通收藏写账号不获得资料维护权。新表、序列、函数按现有 owner 契约归 live_project_owner，Flyway 建立授权，不修改 flyway_schema_history 所有权。
 
-审计保存实体 ID、修改前后差异、归属模式及关系、纠错原因和操作者。批量关系更新失败整事务回滚，不记录已成功审计但数据未提交的状态。
+审计保存实体 ID、修改前后差异、归属模式及关系和操作者；版本移组仍保存归组更正原因。批量关系更新失败整事务回滚，不记录已成功审计但数据未提交的状态。
 
 ### 11.3 专辑页面与外链封面
 

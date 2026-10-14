@@ -169,7 +169,7 @@ def correct_ownership(payload: OwnershipUpdate, request: Request, song_id: int =
         save_ownership(cur, song_id, payload.ownership)
         cur.execute("UPDATE song_list SET revision = revision + 1 WHERE id = %s", (song_id,))
         audit(cur, context, "song_ownership_update", "song", song_id,
-              {"before": before, "after": payload.ownership.model_dump(), "reason": payload.reason})
+              {"before": before, "after": payload.ownership.model_dump()})
         return {"ok": True, "item": read_song(cur, song_id)}
 
 
@@ -199,8 +199,6 @@ def edit_song_catalog(payload: SongEditUpdate, request: Request, song_id: int = 
             raise HTTPException(409, "默认版本须保留空版本标识并留在所属歌曲组中")
         old_ownership = {key: before["ownership"][key] for key in ("mode", "band_ids", "member_groups")}
         ownership_changed = old_ownership != payload.ownership.model_dump()
-        if ownership_changed and not payload.ownership_reason:
-            raise HTTPException(422, "请填写归属更正原因")
         cover_urls = payload.model_dump(mode="json")["cover_urls"] if "cover_urls" in payload.model_fields_set else before["cover_urls"]
         old_order = sorted(existing, key=lambda item: (existing[item], item))
         order_changed = source.song_ids != old_order or target is not None

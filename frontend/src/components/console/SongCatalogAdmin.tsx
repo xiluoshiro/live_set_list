@@ -62,8 +62,6 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const [members, setMembers] = useState<CatalogMember[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [clearAfterCreate, setClearAfterCreate] = useState(true);
-  const [correcting, setCorrecting] = useState(false);
-  const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -78,7 +76,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const ownershipChanged = !!original && JSON.stringify(owner) !== JSON.stringify(ownerFields(original));
   const groupChanged = !!originalGroup && !!editGroup && JSON.stringify(groupFields(editGroup)) !== JSON.stringify(groupFields(originalGroup));
   const changed = !!original && (JSON.stringify(songPayload(editDraft)) !== JSON.stringify(songFields(original)) || ownershipChanged || groupChanged || !!moveTarget.group_id);
-  const dirty = changed || !!reason.trim() || !!moveTarget.reason.trim();
+  const dirty = changed || !!moveTarget.reason.trim();
   const guard = (proceed: () => void) => { if (busy || confirm) return; if (!creating && dirty) setDiscard(() => proceed); else proceed(); };
   useEffect(() => { setConfirm(false); setDiscard(null); }, [active, variant]);
   useEffect(() => {
@@ -133,7 +131,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const restore = (song: SongVersion, group: SongGroup | null = originalGroup) => {
     setOriginal(song); setEditDraft(songFields(song));
     setOwner(ownerFields(song)); setOriginalGroup(group); setEditGroup(group);
-    setCorrecting(false); setReason(""); setMoveTarget(emptySongMove()); setEditorGeneration(value => value + 1);
+    setMoveTarget(emptySongMove()); setEditorGeneration(value => value + 1);
   };
   const loadSong = async (id: number) => {
     const generation = ++loadGeneration.current;
@@ -154,7 +152,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       const editPayload: SongEditUpdate | null = !creating && original && originalGroup && editGroup ? {
         ...songPayload(draft), expected_revision: original.revision,
         group: { ...groupFields(editGroup), group_id: originalGroup.group_id, expected_revision: originalGroup.revision },
-        ownership, ownership_reason: ownershipChanged ? reason.trim() : "",
+        ownership,
         move_to_group: moveTarget.group_id && moveTarget.expected_revision ? {
           group_id: moveTarget.group_id, expected_revision: moveTarget.expected_revision, reason: moveTarget.reason.trim(),
         } : null,
@@ -185,7 +183,6 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     ].filter(change => creating || change.before !== change.after);
   if (!creating && ownershipChanged) changes.push(
     { field: "归属（当前版本）", before: original ? ownershipLabel(original) : "", after: ownerSummary },
-    { field: "归属更正原因", before: "", after: reason },
   );
   if (!creating && groupChanged) changes.push(...[
     { field: "歌曲组名称（整组）", before: originalGroup?.group_name ?? "", after: editGroup?.group_name.trim() ?? "" },
@@ -210,7 +207,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       checked={clearAfterCreate} onChange={event => setClearAfterCreate(event.target.checked)} />新增后清空数据</label>}
     <button type="button" className="console-ghost-btn" disabled={fieldsDisabled} onClick={() => { creating ? clear() : restore(original!); setError(""); setMessage(""); }}>{creating ? "清空数据" : "恢复原值"}</button>
     <button type="button" className="console-submit-btn" disabled={fieldsDisabled || !draft.song_name.trim() || !ownerValid ||
-      (!creating && (!changed || !editGroup?.group_name.trim() || (ownershipChanged && !reason.trim()) ||
+      (!creating && (!changed || !editGroup?.group_name.trim() ||
         (!!moveTarget.group_id && (!moveTarget.expected_revision || !moveTarget.reason.trim())))) || (creating && !newGroup && (!groupId || !groupRevision))}
       onClick={() => {
         const problem = coverUrlsError(filledCovers(draft.cover_urls));
@@ -305,20 +302,10 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       <section className="song-ownership-editor" aria-label="版本归属">
         <div className="live-admin-status-head"><h3>版本归属</h3><span>影响当前版本及其所有引用处</span></div>
         <div className="console-table-wrap"><table className="console-admin-table song-ownership-table" aria-label="版本归属资料">
-          <thead><tr><th scope="col">归属模式</th><th scope="col">归属</th><th scope="col">操作</th></tr></thead>
-          <tbody><tr><td>{{ pending: "待回填", bands: "乐队", members: "成员", mixed: "乐队与成员" }[ownership.mode]}</td><td>{ownerSummary}</td>
-            <td><button type="button" className="console-ghost-btn" disabled={fieldsDisabled} aria-expanded={correcting} aria-controls={`${formId}-ownership`}
-              onClick={() => setCorrecting(value => !value)}>{correcting ? "收起" : "更正归属"}</button></td></tr></tbody>
+          <thead><tr><th scope="col">归属模式</th>{hasBands && <th scope="col">归属乐队</th>}{hasMembers && <th scope="col">成员所属乐队</th>}</tr></thead>
+          <tbody><tr><td>{ownershipModeField}</td>{hasBands && <td>{bandPicker}</td>}{hasMembers && <td>{memberBandPicker}</td>}</tr></tbody>
         </table></div>
-        <div id={`${formId}-ownership`} hidden={!correcting}>
-          <div className="console-table-wrap"><table className="console-admin-table song-ownership-table" aria-label="更正版本归属">
-            <thead><tr><th scope="col">归属模式</th>{hasBands && <th scope="col">归属乐队</th>}{hasMembers && <th scope="col">成员所属乐队</th>}</tr></thead>
-            <tbody><tr><td>{ownershipModeField}</td>{hasBands && <td>{bandPicker}</td>}{hasMembers && <td>{memberBandPicker}</td>}</tr></tbody>
-          </table></div>
-          {hasMembers && <div className="tour-admin-toolbar song-create-member-fields">{memberPickers}</div>}
-          <label className="song-correction-reason">归属更正原因<input disabled={fieldsDisabled} aria-required={ownershipChanged} placeholder="请输入归属更正原因"
-            value={reason} maxLength={1000} onChange={event => setReason(event.target.value)} /></label>
-        </div>
+        {hasMembers && <div className="tour-admin-toolbar song-create-member-fields">{memberPickers}</div>}
       </section>
       {editGroup && <SongGroupEditor key={editorGeneration} song={original} group={editGroup} currentDraft={draft} currentOwner={ownerSummary}
         target={moveTarget} locked={fieldsDisabled} onChange={setEditGroup} onTargetChange={setMoveTarget} />}
@@ -354,7 +341,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       <div className="console-confirm-actions">
         <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => { setConfirm(false); setDiscard(null); }}>取消</button>
         <button type="button" className="console-submit-btn" disabled={busy} onClick={() => {
-          if (discard) { const proceed = discard; setDiscard(null); setCorrecting(false); if (original) restore(original); proceed(); } else void submit();
+          if (discard) { const proceed = discard; setDiscard(null); if (original) restore(original); proceed(); } else void submit();
         }}>{busy ? "提交中…" : discard ? "确认放弃" : "确认提交"}</button>
       </div>
     </div></div>}
