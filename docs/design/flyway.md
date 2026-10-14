@@ -8,7 +8,6 @@
 - 已准备本地 PostgreSQL 18.3 容器作为迁移目标库
 - `B1__baseline_schema.sql` 是当前 baseline
 - `live_statistic` 与 `live_statistic_test` 都应通过同一套 Flyway migration 管理
-- 当前仓库内版本化迁移已到 `V24__restore_band_history_replace_delete_grants.sql`
 
 ## 1. 日常推荐流程
 
@@ -280,19 +279,12 @@ flyway -configFiles=backend/db/flyway/flyway.toml testConnection
 flyway -configFiles=backend/db/flyway/flyway.toml migrate
 ```
 
-### 6.4 当前仓库迁移状态
+### 6.4 迁移管理规则
 
-仓库当前状态：
-
-- baseline 文件为 `B1__baseline_schema.sql`
-- 当前最新 migration 文件为 `V24__restore_band_history_replace_delete_grants.sql`
-- 目标库执行 `flyway migrate` 后，应应用 `B1` 以及 `V2` 到 `V24`
-- `public.flyway_schema_history` 由 Flyway 自动维护，不应在业务 migration 中改 owner 或额外授权
-
-因此：
-
-- 结构变更应继续通过 Flyway 纳管
-- 后续新增数据库结构变化时，应在当前最大版本号之后继续追加新的 `V<n>__...sql`
+- baseline 文件为 `B1__baseline_schema.sql`，后续结构由 `sql/` 中的版本化迁移定义。
+- 实际版本及待执行项通过目标库的 `flyway info` 确认。
+- 新结构追加到现有最大版本号之后，不修改已执行迁移。
+- `public.flyway_schema_history` 由 Flyway 维护，不在业务 migration 中改 owner 或额外授权。
 
 ## 7. Flyway 使用的 PostgreSQL 用户权限
 

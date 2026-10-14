@@ -1,6 +1,5 @@
 # Venue 坐标回填台账
 
-- 开始日期：2026-09-10
 - 范围：本地 `live_statistic` 的 153 个实体 Venue。
 - 目的：提供可用于地图上大致定位 Venue 的坐标回填资料；地图平台详情关联独立维护，不修改 Live 的时区快照。
 - 坐标基准：WGS84。
@@ -9,7 +8,7 @@
 - 地址语义：“官方地址／实体核验”列只保存可直接展示和搜索的地址正文，以及必要的楼宇、楼层或馆区信息；来源可信度、历史状态和核验过程只写入“坐标来源”与“定位说明”，不得混入回填地址。
 - 地址语言：日本使用日语，中国大陆使用简体中文，台湾／香港使用繁体中文，其余国家一律使用英文；不因当地官方语言另行切换。
 - 回填边界：表中“可回填”表示 venue_list.latitude / longitude 的 Venue 级定位可采用；地址、locality_id 和 IANA 时区按配套 SQL 一并维护，地图平台地点关联仍需另行维护。本台账本身不是远程执行授权。
-- 回填 SQL：[2026-09-11__backfill_verified_venue_locations.sql](../../backfill/2026-09-11__backfill_verified_venue_locations.sql)。SQL 不修改既有 Live 时区快照。
+- 回填 SQL：[2026-09-11__backfill_verified_venue_locations.sql](../../backfill/2026-09-11__backfill_verified_venue_locations.sql)。SQL 只修改 Venue 地理资料，不改 Live 排期。
 
 | Venue ID | 场馆 | 官方地址／实体核验 | Venue 级 WGS84 坐标 | 坐标来源 | 结论 | 定位说明 |
 | ---: | --- | --- | --- | --- | --- | --- |
@@ -64,7 +63,7 @@
 | 4 | 河口湖ステラシアター | 山梨県南都留郡富士河口湖町船津5577 | 35.480260, 138.759710 | [Mapcarta 场馆点](https://mapcarta.com/33942394) | 可回填 | 官方地址与地点名称一致。 |
 | 37 | COOL JAPAN PARK OSAKA WWホール | 大阪府大阪市中央区大阪城3-6 | 34.684700, 135.533700 | [场馆官方资料](https://cjpo.jp/theater/)；[WW Hall 地图候选](https://tixvoy.com/en/venues/cool-japan-park-osaka-ww-hall) | 可回填 | 已定位至 WW Hall；与综合设施中心点相近，入口按活动复核。 |
 | 44 | Zepp New Taipei | 新北市新莊區新北大道四段3號8樓 | 25.059680, 121.449570 | [新北市开放资料](https://media.taiwan.net.tw/zh-tw/portal/travel/details/attraction_382000000a_403749) | 可回填 | 官方开放资料直接提供场馆坐标。 |
-| 58 | 駒場公園 | 長野県佐久市猿久保字丸山55 | 36.254864, 138.485756 | [佐久市官方场馆页](https://www.city.saku.nagano.jp/shisetsu/koen/saku/komaba.html)；[佐久市公园开放数据](https://linkdata.org/work/rdf1s847i/saku_parklist.html) | 可回填 | 数据库中的 Live 均为ナガノアニエラフェスタ，实际场馆是佐久市駒場公園；已修正原先误选的东京同名公园。采用公园开放数据点作 Venue 级定位。 |
+| 58 | 駒場公園 | 長野県佐久市猿久保字丸山55 | 36.254864, 138.485756 | [佐久市官方场馆页](https://www.city.saku.nagano.jp/shisetsu/koen/saku/komaba.html)；[佐久市公园开放数据](https://linkdata.org/work/rdf1s847i/saku_parklist.html) | 可回填 | 数据库中的 Live 均为ナガノアニエラフェスタ，实际场馆是佐久市駒場公園；采用佐久市公园开放数据点作 Venue 级定位，不能与东京同名公园混淆。 |
 | 73 | Zepp Shinjuku (TOKYO) | 東京都新宿区歌舞伎町1-29-1、東急歌舞伎町タワーB1-B4F | 35.695580, 139.700770 | [OpenStreetMap/Mapcarta](https://mapcarta.com/N11045809946) | 可回填 | OSM 返回场馆点。 |
 | 95 | パシフィコ横浜 展示ホール | 神奈川県横浜市西区みなとみらい1-1-1 | 35.459900, 139.635380 | [OpenStreetMap/Mapcarta](https://mapcarta.com/W45537786) | 可回填 | 展示厅群；具体公演可能在 Hall A/B/C。 |
 | 125 | Anaheim Convention Center | 800 W Katella Ave, Anaheim, CA 92802 | 33.800570, -117.920720 | [OpenStreetMap/Mapcarta](https://mapcarta.com/22993306) | 可回填 | 复合会展中心，候选为设施点。 |
@@ -178,7 +177,7 @@
 | 127 | イオンシネマ板橋 | 東京都板橋区徳丸2-6-1、イオン板橋ショッピングセンター5F | 35.770033, 139.660993 | [场馆资料](https://cinema.pmil.me/en/aeon-itabashi?context=search)；[Apple Maps](https://maps.apple.com/place?_provider=9902&place-id=IAD684E438ED2AF0F) | 可回填 | 该资料列出 AEON CINEMA Itabashi 的坐标，地址与 Apple Maps 场馆详情一致。 |
 | 128 | スペースFS汐留 | 東京都港区東新橋1-1-16、汐留FSビル | 35.665668, 139.760057 | [汐留FS大楼坐标页](https://toku-p.earth-car.com/parking-search/35.6656682-139.7600568-16/%E6%B1%90%E7%95%99%EF%BC%A6%EF%BC%B3%E3%83%93%E3%83%AB)；[场馆/建筑地址](https://harao.tokyo/sites/hro/buildingpage/120266/1) | 可回填 | 来源 URL 明示汐留FS大楼的 WGS84 坐标；为建筑点。 |
 | 129 | パシフィコ横浜 国立大ホール | 神奈川県横浜市西区みなとみらい1-1-1 | 35.457833, 139.636667 | [场馆官方页](https://plan.pacifico.co.jp/national-convention-hall)；[带 GPS 的建筑照片](https://commons.wikimedia.org/wiki/File%3APacifico_Yokohama_National_Convention_Hall.JPG) | 可回填 | 坐标为国立大ホール建筑；入口以当次活动指引为准。 |
-| 132 | ゲーマーズ新宿店 | 東京都渋谷区代々木2-10-1、新宿サンセイビル4F | 35.688077, 139.698400 | [2019 年店铺地址资料](https://magi.camp/blogs/2029909363)；[OpenStreetMap 新宿サンセイビル](https://www.openstreetmap.org/way/138522511) | 可回填 | 采用 2019-07-31 Live 发生时的新宿サンセイビル建筑点，已修正原先笼统且错误的“新宿3丁目”地址。 |
+| 132 | ゲーマーズ新宿店 | 東京都渋谷区代々木2-10-1、新宿サンセイビル4F | 35.688077, 139.698400 | [2019 年店铺地址资料](https://magi.camp/blogs/2029909363)；[OpenStreetMap 新宿サンセイビル](https://www.openstreetmap.org/way/138522511) | 可回填 | 采用 2019-07-31 Live 发生时的新宿サンセイビル建筑点，地址以对应历史店址为准，不使用笼统的“新宿3丁目”。 |
 | 134 | 清水マリンパーク | 静岡県静岡市清水区日の出町 | 35.010030, 138.494747 | [静冈市官方观光页](https://www.visit-shizuoka.com/spot/detail_12.html)；[MapFan 世界测地系](https://mapfan.com/spots/SC54Q%2CJ%2CU5) | 可回填 | 官方地址本身未标番地；坐标采用地图可直接搜索的户外公园点，具体舞台和入口不在 Venue 坐标层表达。 |
 | 136 | 静岡エコパアリーナ | 静岡県袋井市愛野2300-1、エコパ | 34.745520, 137.968410 | [官方场馆页](https://www.ecopa.jp/facility/arena/)；[OSM 地图点](https://mapcarta.com/W510576754) | 可回填 | OSM 建筑要素明确为 ECOPA ARENA，与体育场分离。 |
 | 145 | Grand Peace Palace | 26 Kyungheedae-ro, Dongdaemun-gu, Seoul 02447, South Korea | 37.598611, 127.052732 | [活动官方页](https://bang-dream.com/events/kimchikura-fes-26/)；[OpenStreetMap 点](https://www.openstreetmap.org/way/261207462) | 可回填 | 庆熙大学和平殿堂建筑要素，与官方活动页的 Seoul / Kyung Hee University 一致。 |

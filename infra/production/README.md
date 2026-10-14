@@ -1,8 +1,6 @@
 # LiveSetList Production Runbook
 
-This directory contains the production templates and server-side deployment entry for the live Google Cloud Compute Engine VM. Tag-based GitHub Actions deployment is verified; the operational procedure is in [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md).
-
-Repository migrations and the production database currently end at V13. Release `v2026-07-18-001` completed the V12/V13 migration and application switch after correcting historical business-table owner drift. Future releases must still verify Actions, the root-only attestation, the ownership contract, and production `flyway info`.
+This directory contains the production templates and server-side deployment entry for the live Google Cloud Compute Engine VM. The operational procedure is in [docs/production-deployment-runbook.md](../../docs/production-deployment-runbook.md).
 
 Target baseline:
 
@@ -96,7 +94,7 @@ The repository now contains a protected two-stage migration workflow. `release_m
 
 The release archive also contains `backend/db/postgres/checks/ownership_contract.sql`. CI runs it after a fresh Flyway migration; the VM release manager runs it before backup, after migration, and before application switching. Business objects must belong to `live_project_owner`, while `flyway_schema_history` remains owned by `live_project_flyway`.
 
-The production VM entrypoints, state directories, sudoers rules, and GitHub configuration were installed for the initial two-stage rollout on 2026-07-17. The commands below are bootstrap/upgrade commands, not per-release steps; repeat them only when an administrator intentionally updates the root-owned entrypoints:
+The commands below install or upgrade the root-owned entrypoints, state directories, sudoers rules, and GitHub configuration. Run them when these components change:
 
 Upload both entrypoints as the deploy-only user. Keep the repeatable staging files in that user's home instead of fixed `/tmp/*.next` paths, which can become non-overwritable when an earlier copy is owned by another user:
 

@@ -1,6 +1,6 @@
 # LiveSetList 文档索引
 
-本文档是 `docs/` 的入口。当前代码、FastAPI schema、Flyway SQL 和部署现场记录始终优先于历史设计文档。
+本文档是 `docs/` 的入口。当前代码、FastAPI schema 和 Flyway SQL 是接口与结构的依据。
 
 ## 当前契约与状态
 
@@ -10,7 +10,7 @@
 - [公共 Live 与收藏 Live 统计需求](product/public-statistics.md)：当前 S1 口径、全部 / 收藏通用统计、按乐队划分的年度歌曲排行、久未演唱和后续歌曲生命周期方向。
 - [歌曲资料与专辑关联需求](product/song-details-and-albums.md)：歌曲组与版本、固定翻唱基准、逐条歌单计数、专辑及子项；页面链接和多封面已实现。
 - [巡演聚合产品需求](product/tour-aggregation.md)：巡演与单场 Live 的产品边界、用户页面、资料口径、阶段范围和验收标准。
-- [Flyway 落地说明](design/flyway.md)：仓库 migration、角色和日常迁移流程；当前仓库已到 V23。
+- [Flyway 落地说明](design/flyway.md)：仓库 migration、角色和日常迁移流程。
 - [生产部署设计](design/production-deployment.md)：目标架构、安全边界和未完成的运维项。
 - [生产部署操作指南](production-deployment-runbook.md)：环境配置、发布流程、检查要求和排障。
 
@@ -18,7 +18,7 @@
 
 - [歌曲概览、歌曲详情与唱片详情交付标准](design/song-catalog-three-page-delivery.md)：三页改版交付基线、摘要与统计口径、API 增量、数据准备及具体验收场景。
 - [歌曲资料、歌曲组与专辑实现设计](design/song-catalog-and-albums.md)：版本与归属数据模型、逐条演奏统计、公共及 Console API、专辑子项与迁移；主体已有实现，增量封面方案见专项文档。
-- [专辑页面链接与多封面实现方案](design/album-links-and-covers.md)：两个 URL 字段、默认封面与切换、后台手工维护、迁移兼容和本地验证记录。
+- [专辑页面链接与多封面实现方案](design/album-links-and-covers.md)：两个 URL 字段、默认封面与切换、后台手工维护、存储约束和兼容边界。
 - [全站 Stage Ledger 视觉重构方案](design/site-wide-stage-ledger-ui-refactor.md)：以演出流程和新首页首屏为双参考，定义全站视觉系统、组件库边界、页面迁移批次与视觉回归门禁。
 - [首页 Live 日历改造设计](design/home-live-calendar.md)：以按月日期导航替换语义不准确的“最近收录”，并从首屏移除“个人与贡献”。
 - [巡演聚合实现设计](design/tour-aggregation.md)
@@ -46,16 +46,16 @@
 ## 复盘与归档
 
 - `fails/`：已发生问题、原因、规避方式和仍需补齐的看护能力。
-- [归档索引](archive/README.md)：已完成需求、设计和视觉走查的统一入口。
-- [已完成需求](archive/completed-product/)：已验收并退出活动路线图的需求历史。
-- [已完成设计与走查](archive/completed-design/)：已落地方案、阶段设计和视觉问题分析；只用于理解背景，不作为当前 API、UI 或部署状态的唯一依据。
+- [归档索引](archive/README.md)：已完成需求、设计与视觉规则的统一入口。
+- [已完成需求](archive/completed-product/)：已完成能力的业务规则。
+- [已完成设计与走查](archive/completed-design/)：已落地方案、技术约束和视觉规则；只用于理解背景，不作为当前 API、UI 或部署状态的唯一依据。
 
 ## 维护规则
 
 1. API 字段变化先更新后端 schema / route，再导出或检查 OpenAPI，最后更新 `api.md` 的补充规则。
-2. 数据库结构变化只新增 Flyway migration，并同步 `design/flyway.md`、相关 README 和部署说明。
+2. 数据库结构变化只新增 Flyway migration；相关文档维护最终结构与操作规则，不追加逐版本变更记录。
 3. 用户可见导航、页签或标题变化，要同步根 README、产品需求、UI 设计和 E2E 用例名称。
 4. 生产状态必须区分“仓库已具备”“tag 已创建”“Actions 已通过”“VM 已验收”，不能互相替代。
 5. 仅修改 Markdown 时运行 `git diff --check` 并检查本地链接；业务代码变化按仓库规则运行 `python scripts/run_checks.py functional`。
 
-6. 设计与实现文档保留功能规则、技术方案、操作规范和故障原因；不写对话归因、执行流水账、测试结果、耗时、退出码或逐次验收记录。
+6. 文档只维护最终设计、接口、使用与故障处理规则；不写工作日志、对话过程、实施批次、逐版本变更清单、测试成绩、备份文件名或临时产物路径。执行证据留在测试／运行产物中。

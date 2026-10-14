@@ -4,9 +4,9 @@
 
 三页增量契约与验收要求见[三页交付标准](song-catalog-three-page-delivery.md)。公共页面采用概览 A、详情 D、唱片 A；本文件第 9 节记录当前接入结构。主体数据模型与维护权限沿用原规则。
 
-状态：主体框架及本批资料回填已完成，未审核资料的约束收紧仍待后续处理。业务规则以[歌曲资料、详情与专辑关联需求](../product/song-details-and-albums.md)为准；实际落地范围见第 16 节。
+业务规则以[歌曲资料、详情与专辑关联需求](../product/song-details-and-albums.md)为准。未审核的版本归属允许 pending。
 
-专辑页面链接与多封面已实现，字段为 `album_url` / `cover_urls`。迁移、交互及本地验证见[专项实现说明](album-links-and-covers.md)；旧 `cover_path` 仅暂留数据库供应用切换使用。
+专辑页面链接与多封面已实现，字段为 `album_url` / `cover_urls`。存储、校验和交互见[专项实现说明](album-links-and-covers.md)。
 
 已确认的产品边界：
 
@@ -21,23 +21,7 @@
 - 延期调整必须指定新日期；已有歌单后不得修改演出日期，未来或取消 Live 不允许有歌单。
 - 成员首次按需求文档的固定 67 人顺序编号；专辑手动维护页面链接和封面数组，数组第一项为默认封面。
 
-本文确定技术结构；三页页面标准以专项交付文档为准。本批数据范围见第 15 节，审核规则以回填输入为准。
-
-## 2. 改造前基线与适配入口
-
-| 入口 | 改造前行为 | 适配范围 |
-| --- | --- | --- |
-| [B1](../../backend/db/flyway/sql/B1__baseline_schema.sql)、[V10](../../backend/db/flyway/sql/V10__allow_same_song_name_for_different_bands.sql) | `song_list(id, song_name, band_id, is_cover)`；名称与单个 band_id 唯一；setlist 引用 song_id | 保留主键，增加组及版本字段，替换单乐队归属和唯一规则 |
-| [console schema](../../backend/app/schemas/console.py) | Song 请求和响应要求单个 band_id，成员仍以名字传输 | 模式化归属、可回填状态、成员 ID 与版本消歧 |
-| [console_read.py](../../backend/app/routers/console_read.py) | `/songs` 按歌名前缀和单乐队筛选，内连接 band_attrs | 继续返回具体版本候选；空归属及成员模式不能被 JOIN 丢掉 |
-| [console_write.py](../../backend/app/routers/console_write.py) | 单首及批量写 song_list；Live 改期区分 correction / reschedule；歌单可新增、追加及替换 | 关系保存、日期锁定、并发校验及审计 |
-| [lives.py](../../backend/app/routers/lives.py) | `_build_detail_tags` 优先人工 is_cover，否则检查单个 band 是否出演 | 独立的现场判定结果与原因；不能继续把多乐队压成一个 band_id |
-| [band_history_write.py](../../backend/app/band_history_write.py) | 阵容和实际出演按姓名校验并持久化 | ID 作为人物身份，姓名保留展示用途，阵容版本和出演角色继续保留 |
-| [live_status.py](../../backend/app/live_status.py)、[live_timezone.py](../../backend/app/live_timezone.py) | 公开日期阶段使用访问者时区；物理场馆使用 IANA 时区，ONLINE 的已公布时间携带偏移 | 固定演出时区下的歌单有效性校验，与公开展示状态分开 |
-| [App.tsx](../../frontend/src/App.tsx) | 手写路径解析、TabKey 和 AppHistoryState，未使用 React Router | 扩展现有导航历史，不额外引入路由库 |
-| [api.ts](../../frontend/src/api.ts)、[queryCache.ts](../../frontend/src/cache/queryCache.ts) | 统一请求、LRU 缓存和请求合并 | 增加歌曲组、版本和专辑类型及缓存失效 |
-
-歌曲页按歌曲组计次。Catalog、Tour、Live 通过组内默认版本取得详情链接和基准；公共统计继续保留实际演出乐队维度及 live_count，同组版本不重复作为独立歌曲。
+本文确定技术结构；三页页面标准以专项交付文档为准。手工数据维护边界见第 15 节，审核规则以回填输入为准。
 
 ## 3. 概念模型与 ID 规则
 
@@ -262,7 +246,7 @@ P 的来源是 `live_setlist_band_performance_members` 中该 setlist 的 band_i
 
 新增内部 `live_setlist_policy` 服务及对应 SQL 判定入口。公开页面仍可按访问者时区呈现日期阶段；服务端写入和歌曲计数不得依赖请求中的访问者时区。
 
-建议优先级：物理 / 未公开场馆的 venue.timezone_id → ONLINE 已公布 timetz 中的固定偏移。无可靠时区时返回 `schedule_basis_unknown`，不得默认使用服务器本地时间。无场馆或 ONLINE 未公布时刻的历史数据需先审计；这部分最终回退规则属于第 15 节的实施前边界。
+建议优先级：物理 / 未公开场馆的 venue.timezone_id → ONLINE 已公布 timetz 中的固定偏移。无可靠时区时返回 `schedule_basis_unknown`，不得默认使用服务器本地时间。无可靠事件时钟的历史数据保持未知，不能用服务器日期推导有效演出。
 
 只存在可靠日期和时区即可判断“当日”；不要求开演时间、完演时间或跨日后才录歌单。SQL 与 Python 使用一致的 as_of 时刻和日期算法；单元测试可传入时刻，不引入生产端任意绕过日期的参数。
 
@@ -571,11 +555,11 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 
 ### 10.1 新增与管理两个页面
 
-当前 [ConsoleInsertPanel.tsx](../../frontend/src/components/ConsoleInsertPanel.tsx) 的演出导航已有 `live_create / live_edit`，共同使用 [LiveAdminSection](../../frontend/src/components/console/LiveAdminSection.tsx) 的 `variant="create" / "edit"`；歌曲目前只有 `song` 入口，新增、选中修改和搜索同处 [SongAdminSection](../../frontend/src/components/console/SongAdminSection.tsx)。目标是拆分页面入口和状态，复用公共字段组件，不复制两套表单逻辑。
+[ConsoleInsertPanel.tsx](../../frontend/src/components/ConsoleInsertPanel.tsx) 的歌曲维护使用 `song_create / song_edit` 两个入口，共同使用 [SongCatalogAdmin](../../frontend/src/components/console/SongCatalogAdmin.tsx)。新增与管理各自维护草稿，复用字段、确认弹窗和保存逻辑。
 
-建议将 [ConsoleMode](../../frontend/src/components/console/types.ts) 扩展为 `song_create / song_edit`，在“歌曲”分组配置 create / manage 两个入口，显示“新增歌曲／歌曲管理”。旧 `song` 内部入口及调用点统一迁移到 song_edit；不额外新增公共站点导航项，也不要求独立浏览器窗口或新路由库。
+[ConsoleMode](../../frontend/src/components/console/types.ts) 定义“新增歌曲／歌曲管理”两个模式；歌单内嵌维护复用同一版本编辑器。
 
-组件可继续使用 `SongAdminSection variant="create" | "edit"`，抽出共享 SongFields / SongOwnershipFields；外层负责两页不同的工具栏、动作区和操作记录。复用演出页的管理工具栏、表单字段、确认弹窗和操作记录样式，不复制演出专用的日期、场馆或待补排期内容。
+外层负责两页不同的工具栏、动作区和操作记录。复用演出页的管理工具栏、表单字段、确认弹窗和操作记录样式，不复制演出专用的日期、场馆或待补排期内容。
 
 | 行为 | 新增歌曲 | 歌曲管理 |
 | --- | --- | --- |
@@ -618,7 +602,7 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 
 建议用互斥页面状态表达 create / edit，并分别保存新增草稿、编辑原值与编辑草稿；同一个字段组件通过 props 接收状态，不从 editingSongId 是否为空猜测提交动作。确认对象显式包含 action、目标 ID、expected_revision 和 payload 快照；切换页面、取消确认或目标变化时清理旧确认。
 
-新增页切换时的清空 / 保留行为及未保存提醒范围沿用演出新增现行规则；不把管理页保护扩大为本次未要求的新全站离开拦截。管理页的 isDirty 应比较规范化业务值：显示顺序变化计入编辑差异，但不改变翻唱基准的集合语义。
+新增页切换时的清空 / 保留行为及未保存提醒范围沿用演出新增现行规则；管理页草稿保护不扩展为全站离开拦截。管理页的 isDirty 应比较规范化业务值：显示顺序变化计入编辑差异，但不改变翻唱基准的集合语义。
 
 新增记录、修改记录可共享底层列表结构，但记录中必须保留 action，页面按 action 过滤；不能像当前 insertedSongs 那样仅凭 song_id 覆盖一条记录后混淆新增与修改。导航、操作记录编辑入口、外部定位和确认回调均走统一模式切换函数，不绕过未保存保护。
 
@@ -675,80 +659,16 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 
 迁移先增加新字段以兼容应用切换，旧 `cover_path` 在后续独立迁移中清理；已交付回填 SQL 的适用阶段需明确。数据约束、全部 API 入口、后台操作、前台切换和验证要求见[专项实现方案](album-links-and-covers.md)。
 
-## 12. 迁移与回填顺序
+## 12. 数据维护约束
 
-实际 Flyway 版本号在实现时按仓库最新版本分配。已执行迁移不修改；不把本设计里的 P1 / P2 名称当成固定 V 编号。
+- 已执行的结构迁移保持不变，结构调整使用新的 Flyway 文件。
+- 人工确认的歌曲分组、归属与成员映射放在独立回填中，不由应用启动、Flyway 或自动发布猜测。
+- 每个版本必须关联合法歌曲组，组内版本标识与顺序不得冲突；默认版本保持稳定。
+- pending 只用于未核实归属；已填写模式须与整队、成员关系一致，成员分组必须引用稳定人物 ID。
+- 维护歌曲身份与收录关系时保持原有 song_id、演奏记录及收录 ID；Instrumental 不新增歌曲版本。
+- 按业务键与预期值检查目标，已有相同值无需重复写入，冲突则整笔回滚；不以另一环境的整表指纹约束执行。
 
-| 阶段 | 结构 / 代码 | 数据及验收门槛 |
-| --- | --- | --- |
-| P0 契约准备 | 盘点单 band_id 读取、兼容响应和测试数据；定义新 schema / 类型 | 旧 song_id 引用、人工翻唱值、异常歌单清单可核对 |
-| P1 扩展框架 | 新组、归属、成员、专辑表；可空 owner_mode；历史成员可空 ID；父行锁和归属模式约束 | 每个旧 song_id 机械分配独立组及 version_order=1，不自动按名称合组；旧 band_id 留作证据 |
-| P2 应用兼容 | 公共读、Console、Catalog / Tour / Live 全部识别 bands / members / mixed / pending；开放待回填框架 | 旧入口无 int(None)、内连接丢行或任取一个 band；新增歌曲均有 group_id |
-| P3 人工回填 | 显式配置的迁移期录入；旧批量新增推导规则在此处理 | 67 人映射、具体歌曲归属、歌曲组、版本标识、专辑资料逐项审核；Other bands 单列 |
-| P4 约束收紧 | 新迁移设 owner_mode、历史 member_id 非空；替换姓名主键；删除过渡写入入口 | 空归属、双模式、空成员组、悬空 ID、歧义映射和非法歌单均已处理 |
-| P5 清理兼容 | 确认所有引用迁移后删除 song_list.band_id 等过渡字段；旧 is_cover 依产品结论处理 | 新接口不再依赖旧列，回归与本地浏览器验收通过 |
-
-P1 的机械一歌一组是保持现有资料可访问的结构迁移，不表示其最终歌曲组已审核。应保存迁移映射以便核对；后续合组保持 song_id，并按审核映射调整 setlist 的歌曲组外键。给老数据统一赋 bands 模式会把未确认资料伪装成已回填，因此不采用。
-
-P1 与 P2 是一次完整兼容切换中的结构和应用步骤。为旧记录补齐 group_id 后，不能继续允许尚未适配的旧歌曲创建代码直接写入新库；两步之间暂停资料写入，待统一写服务与兼容读取完成验证后恢复。本文不要求为这个短暂阶段另建自动建组触发器，也不宣称只有 P1 完成时旧应用仍可无条件写入。
-
-固定 67 人及业务关联的人工回填放在根 [backfill](../../backfill/AGENTS.md)，不写入应用启动、自动发布或 Flyway 的业务推断流程；集成 seed 使用隔离的最小例子，不复制生产资料。只有不涉及人工判断的结构映射随 schema 迁移执行。
-
-收紧前检查：
-
-- 每个版本有合法歌曲组；组内版本顺序和标识无冲突，公开组无空组。
-- owner_mode 非空；模式与实际关系一致，mixed 两类均非空；成员分组与稳定人物 ID 完整。
-- 初始成员 ID 与名单一致，跨乐队同人无重复编号，后续序列大于最大 ID。
-- 原有 live_setlist 的记录数、song_id 引用和逐条位置未因迁移而变化；预期人工修正单独计账。
-- Instrumental 未新增 song_id；专辑曲序唯一，日期为 null 或完整年月日。
-- 非法状态歌单与时区未知记录已核验，日期锁在所有写入口有效。
-- 所有角色权限与引用表、索引、函数 owner 符合契约。
-
-回退边界：扩展期优先回退读取开关，保留新增数据；新模型已写入多乐队 / 成员关系后不能直接启动只认单 band_id 的旧应用。收紧或删除旧列后采用前向修复，必要的数据恢复需独立备份与恢复方案，不提供有损“取第一支乐队”回退。
-
-### 12.1 回填输入与审核结果
-
-回填文件按实体分开维护，保持输入可以审阅，不从单场出演推导歌曲固定基准：
-
-| 输入 | 必需内容 | 冲突处理 |
-| --- | --- | --- |
-| 成员映射 | 固定 member_id、标准名、历史姓名及必要上下文 | 同名歧义或 ID 已被另一人占用即停止 |
-| 歌曲分组 | 现有 song_id、目标组、组标题、版本标识、版本顺序 | 同名不自动合并；冲突由资料审核明确 |
-| 歌曲归属 | song_id、mode、band_ids 或按 band_id 分组的 member_ids | 版本可同时拥有整队和固定成员归属，引用不存在拒绝 |
-| 专辑与收录 | 专辑稳定标识、名称、日期、发行标识、封面引用、曲目顺序及 song_id | 同名专辑不自动合并；Instrumental 不创建歌曲 |
-| 历史异常处理 | 明确 live_id / setlist_id、错误原因、拟修正字段 | 单独批准和执行，不夹带进成员回填 |
-
-可重复执行策略：先比对目标业务键及预期旧值；已等于目标时记为无需变更，不同且不符合前置条件时停止。每批使用完整事务，提交前验证本批引用和计数，提交后只读复核。按 backfill 规则准备纯 SQL 和明确 COMMIT，不混入自动发布链路。
-
-### 12.2 阶段退出条件与失败路径
-
-| 阶段 | 允许进入下一阶段的条件 | 失败后的处理 |
-| --- | --- | --- |
-| 框架兼容 | 四种归属响应均可完整读写，旧 song_id 引用保持 | 保留扩展表；暂停开放新模型写入，修复兼容入口 |
-| 人物初始化 | 1–67 名单逐项相符、历史映射无歧义、序列正确 | 回滚本批，不覆盖已占用 ID |
-| 归属与合组 | 所有目标条目已审核，归属完整性与顺序成立 | 保持 pending / 原组，不以推断结果强行收紧 |
-| Live 整理 | 未来 / 取消歌单异常及未知日期基准已明确处理 | 保留异常清单，阻止宣称全量统计完整 |
-| 非空收紧 | 全库校验通过，应用不再提交旧模式 | 迁移事务失败即停止，不关闭约束继续运行 |
-| 删除旧字段 | 运行时、schemas、前端类型、测试与运维查询均不再依赖 | 暂留旧字段，不做有损投影或强行删列 |
-
-完成标准以代码、隔离测试库、本地数据检查及浏览器验证为依据，不把远程执行、发布或线上验收作为本文实施完成的必要步骤。本文也不授权执行任何数据回填或远程操作。
-
-## 13. 文件改造清单与实施批次
-
-| 范围 | 文件 / 模块 | 主要改动 |
-| --- | --- | --- |
-| 数据库 | backend/db/flyway/sql、新对象权限与 ownership checks | 分阶段新表、关系约束、索引、日期防护 |
-| 身份逻辑 | 新 song_identity.py / song_queries.py | 模式校验、固定乐队集合、现场判定、共享读取 |
-| 日期规则 | 新 live_setlist_policy.py，与现有 live_status / live_timezone 共享基础能力 | 演出时区下有效性、写入锁、异常原因 |
-| 公共 API | 新 routers/songs.py、schemas/songs.py、main.py | 组、版本、歌单和专辑读取 |
-| Console API | console_read / console_write、新 console_songs / console_albums / console_members 模块 | 保持原路由语义并逐步拆分复杂写入，事务与审计 |
-| 历史阵容 | band_history、band_history_write、schemas/band_history、console_bands | 成员 ID 双读及最终切换，保留阵容版本与角色 |
-| 既有引用 | lives / catalog / tours 及对应 schemas | 新归属响应、统一现场判定、去除单值假设 |
-| 公共前端 | App、api、SongArchivePage 及子组件、页面局部 CSS | 导航、历史、左右分栏、版本切换、请求竞态 |
-| Console 前端 | ConsoleInsertPanel、console/types、SongAdminSection 及共享字段、乐队管理和专辑管理 | song_create / song_edit 双入口、隔离草稿、确认、操作记录、固定归属、ID、日期锁与关系顺序 |
-| 数据与测试 | backfill、backend seed / tests、frontend mocks / tests | 明确映射、阶段约束、行为及 HTTP 契约验证 |
-
-建议按“结构与只读契约 → 兼容入口和管理 → 左右分栏页面 → 人工回填 → 约束收紧”分批实施。每批都维护旧入口可用，不把全部数据审核塞进一次 schema 迁移。第 15 节未决项只阻止受影响功能的定案，不阻止主体框架设计。
+生成器、适用结构及事务要求见[手工回填说明](../../backfill/song-catalog-2026-09-26/README.md)。
 
 ## 14. 验证设计
 
@@ -788,29 +708,18 @@ P1 与 P2 是一次完整兼容切换中的结构和应用步骤。为旧记录�
 
 按根 AGENTS.md 选择最终命令：只有 frontend 改动用 `python scripts/run_checks.py frontend`；只有 backend 改动用 `backend-unit`；前后端共同改动或混合业务 / 运行时改动用 `functional`。数据库专项检查和串行集成场景不能被仅有类型检查替代。仅编写本设计文档时检查本地链接、差异和规则一致性，不启动应用测试。
 
-## 15. 数据范围与执行边界
+## 15. 手工数据维护边界
 
-本批以 [审核输入与 SQL](../../backfill/song-catalog-2026-09-26/README.md) 为准：歌曲组、默认版本、翻唱例外、外部合作方仅出现在版本名称、固定成员上下文均已确认。表外 63 首旧歌曲保持原值，后续另行补资料；本批不写封面。
+回填使用[审核输入与 SQL](../../backfill/song-catalog-2026-09-26/README.md)，明确歌曲身份、默认版本、翻唱例外和固定成员上下文。未审核归属保留 pending，不以出演事实或旧提示推导固定归属。
 
-主库迁移与回填需按本地数据库流程另行执行。代码及隔离验证不授权主库写入或远程操作。历史归属仍未审核的条目保留 pending，不提前收紧全库非空约束或删除旧字段。
+回填由人工单独触发，不进入 Flyway、应用启动或自动发布链路。数据库操作按对应本地或远端执行器的授权、备份及事务规则处理。
 
-## 16. 当前实现与验证
+## 16. 应用约定
 
-### 16.1 应用约定
-
-- V40 将历史歌单关联到歌曲组，保留旧 song_id 作为来源证据；专辑仍关联具体版本。新组必须创建空版本名的默认项，默认项不能改成非默认版本或移到其他组。
+- 历史歌单关联到歌曲组，保留旧 song_id 作为来源证据；专辑仍关联具体版本。新组必须创建空版本名的默认项，默认项不能改成非默认版本或移到其他组。
 - 歌单录入候选通过 groups_only 返回每组一个默认项，提交 song_group_id。Live、Tour、搜索及统计按组读取；同组版本共享次数和关联歌单，现场翻唱基准由默认项决定。
 - 歌曲版本支持整队、成员及 mixed 归属。管理页沿用已有选择控件、确认弹窗与表单结构，同时保存两类关系。
 - 专辑子项统一使用“碟号／发行版”名称；每个子项独立曲序，重排保留收录 ID。Instrumental 保存在收录标识中，复用对应演唱版本。
-- 恢复工具覆盖 album_sections 的运行角色权限。旧歌曲快捷新增继续生成 pending，不把旧单乐队字段当成已审核归属。
+- 恢复工具覆盖 album_sections 的运行角色权限。单曲及批量新增使用完整归属协议，未核实的归属允许 pending。
 
 实现入口：后端 song_catalog.py、routers/songs.py、routers/console_song_catalog.py、routers/console_write.py；前端 SongCatalog.tsx、SongCatalogAdmin.tsx、AlbumAdminSection.tsx、ConsoleInsertPanel.tsx。
-
-### 16.2 验证结果
-
-- `python scripts/run_checks.py functional` 全部通过，包含 scripts、前后端类型检查、后端单元与集成、469 项前端行为测试及恢复单元检查。
-- 独立恢复沙箱与恢复单元／契约检查共 27 项通过，覆盖 V40 结构的备份、恢复和运行角色权限。
-- 本地测试库已通过 V40 的 migrate 与 validate。回填包在另一独立容器内使用同一 V40 文件验证提交、重复执行、冲突与异常回滚，4023 条历史歌单保留；容器已清理。
-- 用户更新 Codex 后明确要求使用 browser；本次已在内置 browser 中完成专辑标题的视觉复核，覆盖 1280px 宽屏、390px 窄屏及三类标题。该授权替代此前针对旧版本的临时通道限制。
-- 本地主库已备份并由 V39 迁移至 V40，单文件回填已提交；owner 契约、数据保全和 14 项只读 API 检查通过，证据见 [主库核验结果](../../backfill/song-catalog-2026-09-26/validation/local-main-result.json)。未操作远端。
-- 专辑发行说明已保存完整展示前缀；前端卡片、展开标题和管理候选共用标题格式，空说明仅显示专辑名，非空显示 `发行说明「专辑名」`。日期单独显示，沿用原有布局和样式。增量前端 typecheck 与 473 项测试通过。

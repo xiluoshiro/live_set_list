@@ -18,9 +18,9 @@ Google Cloud VM 初始化步骤、常规手工发布和 GitHub Actions 自动化
 - Balanced Persistent Disk：30 GB 最低，40 GB 推荐，50 GB 是更宽松余量
 - 初版不使用 Vercel、Cloud Run、Cloud SQL 或 Kubernetes
 
-## 1. 原始公网部署阻塞点与当前状态
+## 1. 生产部署约束
 
-本节保留首次上线前的风险审计，用于解释为什么采用当前架构。各项 P0 结果以第 3 节和[公网部署 runbook](../production-deployment-runbook.md)为准。
+配置和操作流程见[公网部署 runbook](../production-deployment-runbook.md)。
 
 ### 1.1 前端 API 地址已改为生产可配置
 
@@ -155,27 +155,24 @@ PostgreSQL: private network only
 
 ## 3. 上线 TODO
 
-### P0 必须完成
+### 基础配置契约
 
-- [x] 前端 API 基址改为同源 `/api`，并支持 `VITE_API_BASE_URL`。
-- [x] 后端 CORS 改为环境变量配置，并为生产域名提供明确 allowlist。
-- [x] 生产环境强制 `AUTH_COOKIE_SECURE=true`。
-- [x] 新增生产启动方案，不使用 `uvicorn --reload`。
-- [x] 新增反向代理配置，完成 HTTPS、静态前端托管和 `/api/*` 转发模板。
-- [x] 生产数据库 compose 模板只绑定 `127.0.0.1`，不公网暴露。
-- [x] 生产 admin bootstrap 默认关闭，显式启用时拒绝占位/弱密码。
-- [x] 为 `/api/auth/login` 增加 Nginx `limit_req` 模板。
-- [x] 生产环境默认关闭 `/docs`、`/redoc`、`/openapi.json`。
-- [x] `.gitignore` 明确忽略真实 env 文件，保留 `.example`。
-- [x] 准备生产环境变量清单，覆盖 DB、auth、cookie、日志、域名、CORS。
-- [x] 完成首次业务数据迁移、app startup 与数据库 health 验收；后续 Flyway migration 仍需单独演练。
-- [x] 建立并启用生产备份任务；恢复演练仍应按发布/恢复窗口持续复核。
-- [x] 建立部署验收清单和回滚步骤。
-- [x] GitHub Actions tag 出包、production 审批、SSH 自动部署与公网 smoke test。
-- [x] 完成 V9 -> V11 生产 migration、应用切换和数据库 health 验收。
-- [x] 核对并记录 `v2026-07-18-001` 的 V12/V13 Actions、生产 migration、应用切换与 health 结果。
+- 前端 API 基址改为同源 `/api`，并支持 `VITE_API_BASE_URL`。
+- 后端 CORS 改为环境变量配置，并为生产域名提供明确 allowlist。
+- 生产环境强制 `AUTH_COOKIE_SECURE=true`。
+- 新增生产启动方案，不使用 `uvicorn --reload`。
+- 新增反向代理配置，完成 HTTPS、静态前端托管和 `/api/*` 转发模板。
+- 生产数据库 compose 模板只绑定 `127.0.0.1`，不公网暴露。
+- 生产 admin bootstrap 默认关闭，显式启用时拒绝占位/弱密码。
+- 为 `/api/auth/login` 增加 Nginx `limit_req` 模板。
+- 生产环境默认关闭 `/docs`、`/redoc`、`/openapi.json`。
+- `.gitignore` 明确忽略真实 env 文件，保留 `.example`。
+- 准备生产环境变量清单，覆盖 DB、auth、cookie、日志、域名、CORS。
+- 生产备份采用独立任务，恢复能力在发布／恢复窗口核实。
+- 建立部署验收清单和回滚步骤。
+- GitHub Actions tag 出包、production 审批、SSH 自动部署与公网 smoke test。
 
-### P0 已新增仓库入口
+### 仓库入口
 
 - 生产模板目录：`infra/production`
 - 生产 env 样例：`infra/production/env.production.example`
@@ -189,27 +186,26 @@ PostgreSQL: private network only
 
 ### P1 强烈建议完成
 
-- [ ] 增加 Host 限制或反代 Host allowlist。
-- [ ] 增加 HTTPS 安全头：HSTS、`X-Content-Type-Options`、`Referrer-Policy`、基础 CSP。
-- [ ] 反向代理设置请求体大小限制和基础请求频率限制。
-- [ ] 后端正确记录真实客户端 IP，避免日志里只出现反代地址。
-- [ ] 统一生产日志输出策略：控制台、文件、轮转、采集目标。
-- [ ] 为后端、前端静态服务、数据库、磁盘空间、证书过期设置监控。
-- [ ] 增加 staging 环境，先在 staging 完成真实域名、HTTPS、迁移、备份演练。
-- [x] 在生产 VM 安装两阶段 migration 入口，完成 sudoers 和 GitHub repository secrets/variables/Environments 配置。
-- [ ] 在 staging 完成 app-only、migration 成功、migration 失败、attestation 篡改、重复执行、应用切换失败六类场景演练。
-- [ ] 对公共搜索、列表、详情批量接口增加流量保护策略。
-- [x] 补充生产部署 runbook、`infra/production/README.md` 和 GitHub Actions 配置说明。
-- [ ] 补充最小 E2E 冒烟：打开首页、搜索、详情、登录、收藏、控制台权限拒绝/允许。
+- 增加 Host 限制或反代 Host allowlist。
+- 增加 HTTPS 安全头：HSTS、`X-Content-Type-Options`、`Referrer-Policy`、基础 CSP。
+- 反向代理设置请求体大小限制和基础请求频率限制。
+- 后端正确记录真实客户端 IP，避免日志里只出现反代地址。
+- 统一生产日志输出策略：控制台、文件、轮转、采集目标。
+- 为后端、前端静态服务、数据库、磁盘空间、证书过期设置监控。
+- 增加 staging 环境，先在 staging 完成真实域名、HTTPS、迁移、备份演练。
+- 两阶段 migration 需要 root-owned 入口、限定 sudoers 和 GitHub secrets/variables/Environments 配置。
+- 在 staging 完成 app-only、migration 成功、migration 失败、attestation 篡改、重复执行、应用切换失败六类场景演练。
+- 对公共搜索、列表、详情批量接口增加流量保护策略。
+- 补充最小 E2E 冒烟：打开首页、搜索、详情、登录、收藏、控制台权限拒绝/允许。
 
 ### P2 可后续增强
 
-- [ ] 接入错误监控或告警平台。
-- [ ] 增加自动化证书续期检查。
-- [ ] 增加管理员密码轮换流程。
-- [ ] 增加只读维护页或停机页。
-- [ ] 建立发布版本号、变更记录和部署审计。
-- [ ] 增加截图型视觉回归，覆盖首页、顶部导航、详情页和控制台。
+- 接入错误监控或告警平台。
+- 增加自动化证书续期检查。
+- 增加管理员密码轮换流程。
+- 增加只读维护页或停机页。
+- 建立发布版本号、变更记录和部署审计。
+- 增加截图型视觉回归，覆盖首页、顶部导航、详情页和控制台。
 
 ## 4. 生产配置建议
 
@@ -335,48 +331,39 @@ VITE_API_BASE_URL=https://api.<domain>
 
 ### 6.1 自动检查
 
-- [ ] `python scripts/run_checks.py functional` 通过。
-- [ ] 前端生产构建通过。
-- [ ] 后端生产启动命令可启动并可重启。
-- [ ] Flyway validate 通过。
-- [ ] 生产库 migration 成功。
+- `python scripts/run_checks.py functional` 通过。
+- 前端生产构建通过。
+- 后端生产启动命令可启动并可重启。
+- Flyway validate 通过。
+- 生产库 migration 成功。
 
 ### 6.2 浏览器检查
 
-- [ ] `https://<domain>` 可打开首页。
-- [ ] 首页统计卡片加载成功。
-- [ ] 搜索可返回 Live、乐队、歌曲、场馆结果。
-- [ ] Live 详情页可打开。
-- [ ] 登录成功后 cookie 带 `Secure` 和 `HttpOnly`。
-- [ ] 收藏新增和取消成功。
-- [ ] viewer 用户不能访问 editor 写接口。
-- [ ] editor/admin 用户可访问控制台必要功能。
-- [ ] 退出登录后写接口返回未登录或 CSRF 错误。
+- `https://<domain>` 可打开首页。
+- 首页统计卡片加载成功。
+- 搜索可返回 Live、乐队、歌曲、场馆结果。
+- Live 详情页可打开。
+- 登录成功后 cookie 带 `Secure` 和 `HttpOnly`。
+- 收藏新增和取消成功。
+- viewer 用户不能访问 editor 写接口。
+- editor/admin 用户可访问控制台必要功能。
+- 退出登录后写接口返回未登录或 CSRF 错误。
 
 ### 6.3 安全检查
 
-- [ ] HTTP 自动跳转 HTTPS。
-- [ ] PostgreSQL 端口公网不可访问。
-- [ ] `/docs`、`/redoc`、`/openapi.json` 已禁用或受限。
-- [ ] `/api/auth/login` 有限流。
-- [ ] 生产 env 未提交到 Git。
-- [ ] 默认 admin bootstrap 已关闭或有明确风险接受记录。
-- [ ] 反向代理启用基础安全头。
+- HTTP 自动跳转 HTTPS。
+- PostgreSQL 端口公网不可访问。
+- `/docs`、`/redoc`、`/openapi.json` 已禁用或受限。
+- `/api/auth/login` 有限流。
+- 生产 env 未提交到 Git。
+- 默认 admin bootstrap 已关闭或有明确风险接受记录。
+- 反向代理启用基础安全头。
 
 ### 6.4 运维检查
 
-- [ ] 后端日志可查看、可轮转。
-- [ ] 数据库备份任务已运行。
-- [ ] 恢复演练完成并记录结果。
-- [ ] 证书续期方式明确。
-- [ ] 服务器磁盘空间、进程状态、数据库连接健康有监控。
-- [ ] 回滚包和回滚命令已准备。
-
-## 7. 建议实施顺序
-
-1. 先改配置能力：前端 API base、后端 CORS、生产 cookie、OpenAPI 暴露开关。
-2. 再补生产部署骨架：反代配置、生产启动命令、env 样例、`.gitignore`。
-3. 然后补安全边界：登录限流、数据库私网、Host/安全头、admin bootstrap 收口。
-4. 最后补运维闭环：备份恢复、监控告警、上线验收、回滚演练。
-
-这个顺序的目标是先让应用能以正确拓扑跑在公网，再逐步降低公开暴露后的安全和运维风险。
+- 后端日志可查看、可轮转。
+- 数据库备份任务已运行。
+- 恢复演练完成并记录结果。
+- 证书续期方式明确。
+- 服务器磁盘空间、进程状态、数据库连接健康有监控。
+- 回滚包和回滚命令已准备。

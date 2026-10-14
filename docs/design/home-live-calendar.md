@@ -360,9 +360,9 @@ WHERE calendar_date >= :month_start
 - 预览中的点击 toast 只是交互占位，生产实现进入真实 Live 详情或列表。
 - 生产状态色轨按状态去重，不能沿用原型的 `events.slice(0, 3)`。
 
-## 12.1 与 v2 预览及设计的实现差异记录
+## 12.1 页面与数据约定
 
-生产实现（`frontend/src/components/HomeLiveCalendar.tsx`、`CalendarGrid.tsx`、`CalendarDayDetail.tsx`、`styles/home-calendar.css`）与本文及 v2 预览的落地差异：
+首页日历使用 `HomeLiveCalendar`、`CalendarGrid`、`CalendarDayDetail` 和局部样式：
 
 1. **视觉整体采用 v2 预览的 Stage Ledger 风格**：首页 hero、数据概览、最新 Live 日期、日历区与页脚全部按 v2 重做（hairline 分隔、4px 圆角、mono 元数据），不再保留旧的圆角卡片风格。
 2. **数据概览的“已收录 Live”来自新字段**：后端 `GET /api/catalog/stats` 新增 `live_count`，替代被移除的 `getLives(1, 15)` 分页总数。
@@ -370,35 +370,9 @@ WHERE calendar_date >= :month_start
 4. **详情行 Band 图标与标题同行**：最多渲染 2 个图标 + `+N` 溢出计数（mono），悬停 `title` 展示完整列表；图标不带衬底。
 5. **详情行可访问名称**：整行按钮 `aria-label` 直接使用 Live 标题，键盘与测试均按标题定位。
 6. **“查看全部 Live”按钮**位于选中日详情底部（`onShowAll` 跳转演出资料页），不再有首页“乐队浏览”链接（顶部导航保留）。
-7. **`HomeDashboard` 删除** `isAuthenticated`、`canUseConsoleFeatures`、`favoriteCount`、`recentRows`、`onShowFavorites`、`onShowConsole`、`onLogin` 七个 props；`App.tsx` 不再请求 `getLives(1, 15)`，跨标签控制台变更通过 `liveDataRevision` 驱动日历重取当前月。
+7. **首页数据**：日历按月份请求；跨标签控制台变更通过 `liveDataRevision` 驱动重取当前月。
 8. **缓存**：`getCatalogCalendar(month)` 使用以月份为键的 10 分钟 LRU 缓存，并入 `clearLiveDataCaches` 失效链路。
 9. **键盘漫游**：方向键按天/周移动焦点、Enter 选择；今天用 `aria-current="date"`，选中用 `aria-pressed`，可访问名称包含日期、场次与各状态计数。
-
-## 13. 实施顺序
-
-### Batch 1：月历接口
-
-- 新增 catalog calendar schema、SQL 和 route。
-- 覆盖月份校验、完整月份过滤、稳定排序、Band 聚合和公开状态。
-- 更新前端 API 类型与请求函数。
-
-### Batch 2：日历组件
-
-- 实现月份状态、日期格、状态聚合、默认选择和选中日详情。
-- 接入现有状态 helper、Band 图标、内容状态和主题令牌。
-- 完成键盘漫游与可访问名称。
-
-### Batch 3：首页替换
-
-- 移除“最近收录”列表和“个人与贡献”区。
-- 删除无用的首页 props、状态与 `getLives(1, 15)` 请求链。
-- 保留搜索、概览、最新 Live 日期、关于与反馈以及全局身份入口。
-
-### Batch 4：视觉与回归验收
-
-- 完成桌面、平板、390px 和 320px 实机浏览器检查。
-- 检查浅色、深色、空月、多状态日、加载和错误状态。
-- 实现完成后将本文状态改为 `IMPLEMENTED`，并记录与静态预览的必要差异。
 
 ## 14. 测试与验收
 

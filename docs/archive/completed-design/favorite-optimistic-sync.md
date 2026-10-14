@@ -29,7 +29,7 @@
 
 ## 1. 背景
 
-当前收藏链路的后端接口与数据库执行通常只需几十毫秒，但浏览器对本地服务的连接建立偶发会出现约 `300ms+` 的额外耗时。
+收藏操作采用立即可见的乐观更新，并与服务端异步对账，避免交互状态依赖网络响应速度。
 
 现有实现中，收藏按钮点击后会：
 
@@ -245,7 +245,7 @@ type FavoriteSyncState = {
 
 1. 在首轮请求 `await` 返回后，先从同步快照（如 `stateRef.current.optimisticFavoriteIntents[liveId]`）计算 `latestDesiredIntent`
 2. 若 `latestDesiredIntent !== desired`，标记需要补发
-3. 再执行 `setState` 提交本轮成功结果（清 in-flight、更新 server 真值等）
+3. 再执行 `setState` 提交当前请求的成功结果（清 in-flight、更新 server 真值等）
 4. 最后基于步骤 1 的快照结论触发 `flushFavoriteIntent(liveId, latestDesiredIntent)`
 
 额外约束：
@@ -495,27 +495,6 @@ async function flushFavoriteIntent(liveId: number) {
 3. 不要对失败做无限自动重试
 4. 不要在 `App.tsx` 和 `AuthProvider.tsx` 各自维护一套 pending 状态
 5. 不要把 401/403 当成普通可忽略失败
-
-## 14. 实施拆分建议
-
-### 第一阶段：状态重构
-
-- [x] 将 `favoritePendingIds` 从 `App.tsx` 下沉移除
-- [x] 初版弱一致状态机已搭起
-- [x] 增加 `toggleFavorite`、`isFavoriteSyncing`
-
-### 第二阶段：界面行为调整
-
-- [x] 收藏按钮取消 `disabled`
-- [x] 增加轻量同步视觉态
-- [x] 接入固定失败提示文案
-
-### 第三阶段：收敛与对账
-
-- [x] 进入收藏页时引入服务端真值刷新
-- [x] 登录恢复时完善收藏集合收敛
-- [x] 增加相关埋点日志
-- [x] 将 favorites 弱一致状态从 auth 域拆分成独立 provider
 
 ## 15. 验收标准
 

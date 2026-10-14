@@ -14,7 +14,7 @@ V32 允许 `geo_localities.locality_name` 在 `country`／`admin_area` 层级为
 
 1. 集成测试在每条用例前恢复测试 seed；seed 清空 `geo_localities`，没有任何 `locality_name=NULL` 的样本。旧地理用例只通过「新增城市」接口创建非空城市名，虽然验证了 V32 的默认 `area_level=locality`，却没有覆盖 V32 新允许的另外两个层级。
 2. 公开场馆详情的集成用例也只关联了城市名非空的记录；前端面板和公开详情测试的 API mock 同样全是普通城市。测试通过证明的是旧数据形态可用，不能证明新形态可用。
-3. 上轮回填后执行了 SQL 后置条件、Flyway validate 和 owner 契约检查，但没有对主库回填结果再做 API 响应／页面加载验收。`functional` 测试库也不会自动复制主库回填数据，所以在回填前或后运行同一套旧测试都不会暴露此问题。这是验收设计遗漏，不是测试运行器随机漏跑。
+3. SQL、Flyway 和 owner 契约不检查 API 响应模型。测试库也不会自动复制回填数据，必须构造新合法形态并校验真实 HTTP 响应。
 
 ## 修复机制
 

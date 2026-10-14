@@ -558,14 +558,3 @@ COUNT(DISTINCT l.id) FILTER (
 ```powershell
 python scripts/run_checks.py functional
 ```
-
-## 实施顺序
-
-1. 新增 Flyway migration、seed 和数据库权限。
-2. 新增统一状态计算模块与后端 schema。
-3. 扩展公共列表、详情、批量详情、Tour 和活动组查询。
-4. 拆分控制台新增与更新请求，落实 correction/reschedule 事务。
-5. 扩展控制台表单、确认、脏状态和缓存失效。
-6. 扩展公开详情、列表、卡片和聚合入口。
-7. 按明确口径调整统计和文档。
-8. 补齐单元、集成和前端测试，运行完整 functional 检查。

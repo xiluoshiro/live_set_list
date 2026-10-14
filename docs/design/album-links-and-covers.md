@@ -1,6 +1,6 @@
 # 专辑页面链接与多封面实现方案
 
-状态：已实现（2026-09-27），本地验证记录见文末。本文细化[歌曲资料与专辑需求](../product/song-details-and-albums.md)中的专辑链接、多封面和默认封面规则。应用已改用 `album_url` / `cover_urls`，旧 `cover_path` 仅暂留数据库。
+本文细化[歌曲资料与专辑需求](../product/song-details-and-albums.md)中的专辑链接、多封面和默认封面规则。应用已改用 `album_url` / `cover_urls`，旧 `cover_path` 仅暂留数据库。
 
 ## 1. 范围与业务规则
 
@@ -33,33 +33,13 @@
 | 前台展示 | [SongCatalog.tsx](../../frontend/src/components/SongCatalog.tsx)、[song-catalog.css](../../frontend/src/components/song-catalog.css) | 卡片默认图、展开详情内多图切换、专辑页面链接 |
 | 说明文档 | [歌曲实现设计](song-catalog-and-albums.md)、[API 补充规则](../api.md) | 区分目标契约与已实现状态，清理随包封面作为目标方案的说明 |
 
-## 3. 数据库迁移与旧依赖
+## 3. 存储与兼容边界
 
-### 3.1 增加字段
+`albums.album_url` 为可空文本，`cover_urls` 为有序 JSONB 对象数组，默认 `[]`。数据库约束最多 20 项，URL 与名称均为字符串，名称最多 255 字；URL 格式、空白和重复值由请求模型校验。
 
-已新增 [V41__add_album_links_and_cover_urls.sql](../../backend/db/flyway/sql/V41__add_album_links_and_cover_urls.sql)：
+数组顺序决定默认封面，不添加图片表、默认下标或独立默认封面 ID。运行角色沿用专辑的读取与管理写入权限，普通用户写角色没有资料维护权限。
 
-1. 使用既有 `live_project_owner` 所有权约定增加 `album_url`、`cover_urls`。
-2. 旧专辑初始化为 `album_url = NULL`、`cover_urls = '{}'::text[]`；链接由后台后续补录。
-3. 约束数组为空或标准一维数组，非空数组下标从 1 开始，元素不得为 NULL；长度上限与 API 一致。
-4. 不添加图片表、索引或新运行角色。沿用专辑表现有读取与管理写入授权，普通用户写账号不获得资料维护权限。
-5. 迁移前检查旧 `cover_path` 非空值。存在有效旧值时先停止迁移，整理转为外链的映射；不得直接清空或静默丢弃。目标环境必须自行检查，不能依赖其他环境的计数。
-
-SQL 只保证存储结构；URL 格式、逐项长度、空白和重复项由请求模型验证。未来人工 SQL 回填需执行同等数据校验。
-
-V43 [封面名称迁移](../../backend/db/flyway/sql/V43__add_cover_names.sql) 将歌曲和专辑的 `text[]` 原位转换为 JSONB 对象数组，按原顺序保留 URL，名称初始化为 `""`；不修改记录 revision。数据库继续限制数组形状、非空元素及最多 20 项，并要求 URL 与名称为字符串、名称最多 255 字。旧应用不能读写此新列类型，切换时应停旧应用、执行迁移后启动配套新应用。
-
-### 3.2 应用切换与旧列清理
-
-[现有发布流程](../production-deployment-runbook.md)先迁移数据库，再切换应用版本，并且应用回滚不回滚 schema。因此本次增加字段的迁移暂留旧 `cover_path`，让切换前的代码仍能读取原表。
-
-新应用只读写两个新字段，移除旧路径请求校验、发布目录存在性检查和旧前端输入框；不建立双写、回退取图或长期兼容分支。旧列只是应用切换期间的数据库兼容措施。
-
-旧列的删除另用后续 Flyway 迁移，条件是依赖旧列的应用版本已退出回滚范围、历史回填的使用顺序已明确且旧值复核完成。不要把增加字段和删除旧列同时放入同一批待执行迁移。
-
-[已交付的 V40 回填包](../../backfill/song-catalog-2026-09-26/README.md)的 SQL 和生成模板显式引用 `cover_path`。保持该交付包及其验证哈希；后续文档须注明其适用 schema 阶段。若需要在旧列删除后的数据库重新执行回填，应另行生成匹配新结构的回填文件，不改写已执行交付件，也不为历史脚本永久保留旧列。
-
-本地实现验收使用隔离测试数据库。生产库迁移和远程部署不是本功能完成本地验证的前提。
+应用只读写 `album_url` 和 `cover_urls`，不从旧 `cover_path` 回退取图。旧回填文件须按[回填说明](../../backfill/song-catalog-2026-09-26/README.md)匹配数据库结构，不能为历史文件永久保留运行兼容逻辑。
 
 ## 4. 请求校验、事务与 API
 
@@ -91,8 +71,8 @@ V43 [封面名称迁移](../../backend/db/flyway/sql/V43__add_cover_names.sql) �
 {
   "album_url": "https://bang-dream.com/discographies/3302/",
   "cover_urls": [
-    "https://images.example.test/album-standard.jpg",
-    "https://images.example.test/album-limited.jpg"
+    { "url": "https://images.example.test/album-standard.jpg", "name": "通常盤" },
+    { "url": "https://images.example.test/album-limited.jpg", "name": "限定盤" }
   ]
 }
 ```
@@ -101,7 +81,7 @@ V43 [封面名称迁移](../../backend/db/flyway/sql/V43__add_cover_names.sql) �
 
 所有写入继续沿用 editor 权限、session、CSRF、专辑 revision 和审计事务。过期 revision 返回 409；失败时原链接、数组、曲目和 revision 保持不变，前端保留草稿。
 
-API 不暴露 PostgreSQL 的数组下标；JSON 第 0 项和数据库第 1 项都表示同一默认封面。不得通过排序、集合转换或按 URL 字典序重排数组。
+API 和数据库 JSONB 数组均以第 0 项表示默认封面。不得通过排序、集合转换或按 URL 字典序重排数组。
 
 成功保存继续调用现有 `songCatalogWrite`，复用歌曲资料缓存清理及跨标签页变更事件。图片切换不调用保存接口，也不触发资料缓存失效。
 
@@ -142,17 +122,7 @@ API 不暴露 PostgreSQL 的数组下标；JSON 第 0 项和数据库第 1 项�
 
 后台封面行与现有专辑曲目排序表在角色、操作、状态和视觉结构上高度相似，直接复用 `console-admin-table`、`console-table-wrap` 及已有按钮样式。保存确认继续复用 `UpdateDiffTable`。
 
-前台继续使用 `song-catalog` 的详情容器、分页按钮和主题变量；只补封面展示所需的局部布局。实现前在浏览器中确认现有页面，完成后检查宽屏、390px 窄屏和深浅色主题。验证结果见文末。
-
-## 7. 实施顺序
-
-1. **契约与迁移**：实现两个字段、存储约束和旧封面前置检查；在隔离库验证从 V40 增量升级及从迁移链重建。
-2. **后端读写**：完成 schema、所有专辑读取路径、保存逻辑和仅更新曲目路径；补字段保留、顺序、权限和并发测试。
-3. **后台管理**：完成手工链接编辑、预览、排序、默认设置、确认差异和草稿保护。
-4. **公共展示**：完成卡片默认图、详情切换、来源链接、加载失败和选择状态重置。
-5. **验证与文档**：执行所需自动检查和本地浏览器验证，同步 API 补充说明、迁移说明和功能状态。
-
-旧列删除属于应用切换后的单独收口步骤，不和本次增量迁移一起执行。
+前台继续使用 `song-catalog` 的详情容器、分页按钮和主题变量；只补封面展示所需的局部布局。实现前在浏览器中确认现有页面，检查宽屏、390px 窄屏和深浅色主题。
 
 ## 8. 验证范围与完成标准
 
@@ -180,34 +150,12 @@ API 不暴露 PostgreSQL 的数组下标；JSON 第 0 项和数据库第 1 项�
 
 ### 8.3 执行命令与本地浏览器
 
-本次涉及 frontend 与 backend，最终检查：
+前后端共同变更按根目录检查规则执行：
 
 ```powershell
 python scripts/run_checks.py functional
 ```
 
-数据库集成场景保持串行。视觉和实际交互在隔离测试库上验证，沿用现有测试管理员；优先使用独立 Chrome/Edge；本次工具只提供内置浏览器，因此实际使用内置浏览器验证。服务连接 `live_statistic_test`，不启用 Uvicorn reload，结束后停止。
+数据库集成场景保持串行。视觉与交互检查使用隔离测试库和既有测试管理员，覆盖宽窄屏及深浅色主题；自动化后台服务不使用 Uvicorn reload。
 
 本地浏览器至少检查空数组、单图、多图、首图失败、长 URL、长专辑标题和窄屏布局。可选真实外链冒烟仅验证当时的网络可用性，不把第三方服务可用性设为自动测试成功条件。
-
-### 8.4 本地验证记录（2026-09-27）
-
-- `python scripts/run_checks.py functional`：通过；前端 48 个测试文件、477 项测试通过。
-- `live_statistic_test`：Flyway 从 V40 增量升级到 V41，随后 validate 通过。
-- 临时空数据库：完整 B1–V41 迁移链及所有权契约通过；测试完成后删除该临时库。
-- 集成测试覆盖旧数据迁移守卫、专辑 ID/revision/曲目保持、数组约束、链接顺序、省略与清空、角色、CSRF 和修订冲突。
-- 浏览器使用既有测试管理员完成创建、设为默认、确认保存及公开详情读取；检查真实 HTTPS 图片、失效首图、上一张/下一张及末张禁用、重新展开恢复默认。1280px 宽屏与 390px 窄屏、深浅色均有检查，封面区域未造成整页横向溢出。
-- URL 预览、单图/空数组、草稿恢复与保存失败等边界由前端行为测试覆盖。外部图片仅作浏览器冒烟，不作为自动测试依赖。
-- 实现验收阶段只迁移测试库；后续经用户授权的本地主库迁移见下一节。未执行远程部署。历史 V40 回填包仍仅适用于保留 `cover_path` 的 schema 阶段，未改动其 SQL、模板和哈希。
-
-
-### 8.5 本地主库迁移与视觉复验（2026-09-27）
-
-- 目标：Docker `live-set-list-docker`，`localhost:15432/live_statistic`。执行前为 V40，唯一待执行项为 V41。
-- 先执行 `python scripts/recovery_db.py backup-app-manual`，备份文件 `live_statistic_manual_20260927_022126.dump`；`pg_restore -l` 与恢复 SQL 预览通过（42,032 行）。
-- 按 `info → migrate → validate → info` 完成 V40 → V41；所有权契约及 `/api/health/db` 通过。
-- 180 张专辑、1,255 条收录、198 个专辑子项按迁移前所有原始列逐行比对一致，包含 ID、修订号和曲目关系。新增字段初始化为 null / []。
-- 主库实际歌曲及专辑详情、后台编辑回填均正常。现有专辑尚未补录封面，主库验证没有保存测试 URL。
-- 单图、多图、坏图、默认状态恢复在独立测试库复验。1280px 宽屏与 390px 窄屏、浅色与深色页面未发现新增溢出；单图不显示翻页，多图末张禁用下一张，失败图片仍可切回。
-- 本次两个测试专辑及关联曲目已清理；临时服务已结束。没有远程数据库或部署操作。
-- 截图与完整本地记录保存在 `.tmp/album-cover-visual/`。

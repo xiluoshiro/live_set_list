@@ -2,15 +2,13 @@
 
 ## 1. 文档定位
 
-三页浏览链路采用歌曲概览 A、歌曲详情 D、唱片详情 A。数据口径与逐项交付要求见[三页交付标准](../design/song-catalog-three-page-delivery.md)；实现状态与验收证据分开记录，未验证项不视为完成。
-
-状态：歌曲组歌单、混合归属和专辑子项已完成代码适配；本地主库已应用 V40 并完成本批回填。专辑发行说明前缀已入库，标题拼接展示已实现并通过 browser 视觉验证。本文记录当前已确认规则，验证范围见实现设计第 16 节。
+三页浏览链路采用歌曲概览 A、歌曲详情 D、唱片详情 A。页面结构、数据口径与行为标准见[三页交付标准](../design/song-catalog-three-page-delivery.md)。
 
 三个公共页面使用独立 URL，延续首页的主题、导航与分隔线样式。静态样例仅作视觉参考，不作为运行数据来源。
 
-对应[实现设计](../design/song-catalog-and-albums.md)定义目标表结构、约束、接口、状态管理及迁移步骤；未确认的产品规则仍以本文列出的边界为准。
+对应[实现设计](../design/song-catalog-and-albums.md)定义表结构、约束、接口和状态管理；未确认的产品规则仍以本文列出的边界为准。
 
-专辑页面链接与多封面已实现，具体交互、V41 迁移和本地验证见[实现说明](../design/album-links-and-covers.md)。
+专辑页面链接、封面顺序与默认图规则见[实现说明](../design/album-links-and-covers.md)。
 
 相关背景：[乐队历史阵容](../design/band-name-and-lineup-history.md)、[公共统计](public-statistics.md)、[Live 详情](../design/live-detail-stage-ledger.md)、[Live 状态历史设计](../archive/completed-design/live-status.md)。历史文档不替代当前代码。
 

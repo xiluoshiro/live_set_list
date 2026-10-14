@@ -8,7 +8,7 @@
 
 ## 状态与已确认口径
 
-- 文档状态：V26 第二阶段代码已实现；列表、Catalog、统计、Tour、活动组和控制台均读取稳定 `band_id` 与版本化出演，迁移会在一致性前置校验通过后物理删除两个旧成员列。
+- 列表、Catalog、统计、Tour、活动组和控制台读取稳定 `band_id` 与版本化出演，不使用旧成员列。
 - 乐队改名前后视为同一支乐队，保持同一个 `band_id`。
 - 乐队成员改名不在本期范围内。
 - 本期需要支持成员增加、减少和更换，以及同一场 Live 中旧阵容、新阵容和交接共演按歌曲交替出现。
@@ -40,65 +40,6 @@
 - 乐队成员实体化、成员姓名版本或跨乐队人物资料页。
 
 成员名称在本期作为稳定业务值使用。拼写修正属于受审计的数据修正，不设计成员姓名版本。
-
-## 当前实现基线与问题
-
-### V25 前遗留数据结构
-
-当前核心字段为：
-
-```text
-band_attrs
-- id
-- band_name
-- band_abbr
-- band_members text[]
-
-live_setlist
-- id uuid
-- live_id
-- song_id
-- absolute_order
-- segment_type
-- sub_order
-- band_member jsonb
-- other_member jsonb
-```
-
-`band_attrs.band_members` 表示当前成员候选。`live_setlist.band_member` 使用乐队名称作为 JSON key，值是该曲实际出演成员，例如：
-
-```json
-{
-  "Roselia": ["相羽あいな", "工藤晴香", "中島由貴", "櫻川めぐ", "志崎樺音"]
-}
-```
-
-### 当前读取问题
-
-公开详情查询会用当前 `band_attrs.band_members` 的长度作为 `total_count`，再以：
-
-```text
-present_count >= total_count
-```
-
-计算 `is_full`。
-
-这会产生四类错误：
-
-1. 修改当前名单会追溯性改变旧 Live 的满员状态。
-2. 五名正式成员缺一人、再由一名嘉宾补足时，人数仍是五，但不应判定全员。
-3. 五名正式成员与一名前成员同台时只能得到 `6 >= 5`，无法表达“全员＋特别出演”。
-4. 同一场 Live 前后阵容变化时，单一当前名单无法解释每首歌。
-
-当乐队名称改变时，JSON key 仍是旧名称；当前列表、详情、筛选、统计和巡演查询大量通过 `band_attrs.band_name` 与该 key 匹配，名称变化会导致历史行无法映射。
-
-### 当前控制台问题
-
-- `GET /api/console/bands` 只返回当前 `band_members`。
-- Setlist 新增和管理共用 `band_member` JSON。
-- 后端只规范化 JSON 形状并要求至少存在一个非空乐队，不严格校验乐队和成员的历史归属。
-- Setlist 管理使用完整集合替换；更新时删除旧行并重新插入，因此新增关系数据必须随完整集合在同一事务内替换。
-- 批量解析器按当前名单校验 `member from Band`，无法选择历史阵容。
 
 ## 核心设计
 
@@ -757,24 +698,14 @@ Live 新增和更新 payload 增加：
 
 ## 迁移与数据过渡
 
-### Migration 版本
+### 结构与权限
 
-当前仓库已新增：
+业务历史版本和 Live 映射不硬编码进结构迁移。新对象通过新的 Flyway 文件维护，已执行迁移保持不变。
 
-- `V21__add_band_name_and_lineup_history.sql`：创建名称版本、阵容版本、Live 上下文和逐曲出演关系。
-- `V22__add_handover_baseline.sql`：为交接共演增加显式旧/新正式基准；既有 `handover` 行一次性兼容回填为 `base`，之后由约束保证 handover 必填、其他模式为空。
-- `V23__enforce_handover_baseline_not_null.sql`：在不修改已执行 V22 的前提下修正 PostgreSQL `CHECK` 的 `NULL` 三值逻辑，显式要求 handover 基准非空。
-
-业务历史版本和 Live 映射不硬编码进 migration。绝不修改已经执行的 B1 或 V2～V22。
-
-迁移需要：
-
-- `SET ROLE live_project_owner` 创建对象。
-- 新表、约束、索引和 identity sequence 归属 `live_project_owner`。
-- `live_project_ro` 获得公开读取所需 `SELECT`。
-- `live_project_super_ro` 获得控制台所需 `SELECT/INSERT/UPDATE`。
-- 完整集合子表仅向 `live_project_super_ro` 授予窄范围 `DELETE`。
-- 不改变 `flyway_schema_history` owner。
+- 业务表、约束、索引和 identity sequence 归属 `live_project_owner`。
+- `live_project_ro` 获得公共读取所需 `SELECT`。
+- `live_project_super_ro` 获得控制台所需写权限；完整集合子表仅开放窄范围 `DELETE`。
+- `flyway_schema_history` 保持 Flyway 角色所有权。
 
 ### 当前数据回填
 
@@ -968,20 +899,6 @@ band_id=6
 ```
 
 该映射通过一次受审计手工修改完成，不形成长期的“年份→版本”硬编码。
-
-## 实施顺序
-
-1. [已完成] 新增 V21 Flyway migration 和测试 seed，只创建新结构。
-2. [已完成代码] 实现名称版本、阵容版本、集合计算和只读预检。
-3. [已完成] 扩展控制台乐队管理，修正并确认当前 `band_attrs`。
-4. [已完成] 初始化名称与阵容版本，并自动回填现有 Setlist 关系。
-5. [已完成] 一次性将 2015 年 Poppin'Party `live_id=50` 从 V3 改绑 V1，并确认其余现存 Poppin'Party 数据为 V3。
-6. [已完成] 已建立并回填 Live 阵容上下文与逐曲关系；Setlist 新增、管理和批量解析使用版本化出演，写请求不再接受客户端版本上下文。
-7. [已完成] 单条、批量详情、列表、Catalog、统计、Tour 和活动组均已切换版本化读取。
-8. [已完成详情部分] 详情页已按 `full|full_plus|partial|unknown` 展示，并在原成员弹窗显示版本、缺席和额外出演。
-9. [已完成] 控制台历史时间线只读；追加阵容时可按日期筛选并显式绑定一场既有交接 Live。
-10. [已完成代码] V25 停止依赖和写入旧成员 JSON，并建立统一有效 Band 与当前开放版本视图。
-11. [已完成代码] V26 在零运行时列引用和数据一致性断言后物理删除两个旧成员列；测试库先迁移，本地主库等待单独授权。
 
 ## 不采用的方案
 

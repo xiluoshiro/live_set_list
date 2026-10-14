@@ -197,7 +197,7 @@ build-and-verify
 6. 应用启动或 smoke 失败时恢复上一版 `current`，但保留已经迁移的 schema。旧版应用能否继续工作由 expand/contract 兼容要求保证。
 7. migration attestation 保持为迁移完成时的不可变证明；发布成功后只把 release state 原子标记为 `deployed`，记录 active release 与切换时间。version 和归档 SHA-256 可用于关联 tag 与 GitHub run。
 
-### 4. 实施拆分与验收
+### 4. 入口职责与发布约束
 
 1. `release_manager.py prepare` 校验并解压候选包、按生产 `current` 分类，状态写入 `/var/lib/livesetlist/release-state`。
 2. `release_manager.py migrate` 执行备份和固定版本 Flyway，attestation 写入 `/var/lib/livesetlist/deploy-attestations`，文件权限为 root-only。

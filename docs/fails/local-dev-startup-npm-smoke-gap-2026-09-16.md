@@ -4,7 +4,7 @@
 
 在 Windows 上执行 `python scripts/run_dev.py`，脚本启动 Uvicorn 后，创建前端进程时抛出 `FileNotFoundError: [WinError 2]`。前端 `Popen` 位于清理逻辑之外，异常后后端继续占用 8000 端口。
 
-## 直接原因与形成过程
+## 根因
 
 - 本机 PATH 中 `where.exe npm` 只找到 `npm.exe`，`where.exe npm.cmd` 找不到文件。旧版 [`scripts/run_dev.py`](../../scripts/run_dev.py) 在 Windows 上固定传 `npm.cmd` 给 `subprocess.Popen`，而不是解析当前环境中的真实可执行文件。
 - 检查脚本通过 `shutil.which("npm")` 解析 npm，而旧启动脚本固定使用 `npm.cmd`；两个入口采用不同策略，检查入口的测试无法覆盖启动入口。

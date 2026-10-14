@@ -1,6 +1,6 @@
 # Venue 独立管理与历史名称实现设计
 
-2026-09-18 确认：只有正式更名新增名称历史版本，真实搬迁新建 Venue；所在地、地址、坐标与时区保留补录和录错纠正入口，不产生版本。地图关联不因这些纠错自动失效。详见 [版本语义纠正记录](venue-revision-correction-2026-09-18.md)。
+只有正式更名新增名称历史版本，真实搬迁新建 Venue；所在地、地址、坐标与时区保留补录和录错纠正入口，不产生版本。地图关联不因这些纠错自动失效。详见 [版本语义规则](venue-revision-correction-2026-09-18.md)。
 
 ## 文档定位
 
@@ -12,35 +12,14 @@
 
 ## 状态与已确认口径
 
-- 文档状态：2026-09-20 按当前仓库代码刷新。核心维护与公共读取已实现，历史名称选择等尚未全部完成，具体见下方进度表。
-- 当前仓库最新 migration 为 `V36__drop_legacy_venue_name.sql`；本地主库与测试库均已迁移至 V36。
 - `live_attrs.venue_id` 和 `live_schedule_history.previous_venue_id` 已允许 `NULL`，表示场馆尚未公布；不得为此创建“未定”Venue。
-- V28 在兼容字段 `venue_list.venue` 之外增加 Venue 类型和独立名称版本表（V35 删除 V28 引入的合并字段）。
+- Venue 类型与名称版本独立保存；当前名称读取开放名称版本，不读取旧名称兼容列。
 - 同一物理场馆的正式更名保持同一个 `venue_id`；搬迁到不同地址或新建替代场馆时创建新的 `venue_id`。
 - Live 展示其录入时明确绑定的名称版本，不随 Venue 当前名称变化。
 - 名称拼写或资料错误仅通过 SQL 修正；控制台真实更名必须追加名称版本，不能覆盖旧版本。
 - 不提供 Venue 合并功能，不预留合并接口、查询参数、来源跳转或合并状态字段。
 - 本期不设计父场馆、来源链接和 Venue 备注。
 - alias、多语言名称和完整 i18n 属于低优先级后续能力，本期不预建空表或占位字段。
-
-## 当前实现进度（2026-09-20）
-
-本节以仓库实现为依据；下文原始设计和迁移阶段不代表所有条目均已交付。进度只按代码、本地数据及本地验证衡量，不以远程部署或发布为完成条件。本地主库先从 V33 迁移至 V35，再经独立备份校验后迁移至 V36，Flyway validate 与 ownership contract 通过。V36 前后逐表哈希一致：155 个场馆的保留字段、159 个名称版本、594 场 Live、4 条改期历史及地图关联均未改变。测试库 V36 的正常数据保持及名称冲突／缺失版本拒绝演练通过；`python scripts/run_checks.py functional` 与 `python scripts/run_checks.py recovery-integration` 均通过（前端 462 项、恢复沙箱 4 项）。主库迁移后再次通过 `backend-integration`，并使用临时非 reload 后端完成主库 HTTP 检查：健康、登录、全部 155 个场馆的管理详情／所在地地图／公共详情，以及全部 18 场历史名称 Live 均正常；验证后退出登录并停止服务，未做浏览器视觉验收。
-
-| 能力 | 状态 | 实现依据与边界 |
-| --- | --- | --- |
-| 稳定身份、名称历史及成对引用 | 已实现 | V28/V29 建表及 `MATCH FULL`；正式更名追加版本，Live 与改期历史保存明确版本 ID |
-| 独立新增场馆 | 已实现 | `VenueCreateSection` → `POST /api/console/venues`；同一事务保存身份、初始名称、位置及 Google 关联；创建失败保留草稿 |
-| 管理页搜索、分页、历史名称展示 | 已实现 | `VenueAdminSection`；历史名称只读，分页不依赖固定 100 条全集 |
-| 类型、正式更名和位置统一编辑 | 已实现 | `VenueLocationPanel` → `edit-preview` → `PUT /venues/{id}/edit`；事务保存、状态令牌校验及审计 |
-| 地区和位置资料维护 | 已实现 | 独立 `LocalityAdminSection`；国家／行政区／城市层级；资料纠错不生成名称版本，不重写既有 Live 时间 |
-| 场馆时区与演出时间 | 已实现新口径 | V34 移除地区时区和 Live 时区快照；实体／未公开场馆保存自身 IANA，ONLINE 演出采用固定偏移，时间保存为 `timetz`，详见 [演出时区](live-timezone.md) |
-| 地图定位与人工平台关联 | 核心链路已实现 | Google 搜索、点选、拖动、逆地理、离线 IANA、地图实例复用；Apple／高德保留人工关联；共享限流尚未实现 |
-| 公共读取 | 已实现 | 公共场馆详情、名称记录、地图及关联演出；Live、巡演、活动组等读取绑定名称版本 |
-| Live 历史名称选择 | 部分实现 | 搜索历史名称可带入命中版本，保存校验版本归属；无按日期推荐及完整版本选择流程 |
-| 名称兼容列收尾 | 已完成 | 本地主库及测试库已执行 V36 删除 `venue_list.venue`；应用、种子和恢复测试改用名称版本，自动检查、恢复沙箱及主库 HTTP 验证通过 |
-
-主要代码入口：[`console_venues.py`](../../backend/app/routers/console_venues.py)、[`console_geography.py`](../../backend/app/routers/console_geography.py)、[`ConsoleInsertPanel.tsx`](../../frontend/src/components/ConsoleInsertPanel.tsx)、[`VenueLocationPicker.tsx`](../../frontend/src/components/console/VenueLocationPicker.tsx)。
 
 ## 未完成项：按重要性排序
 
@@ -52,8 +31,6 @@
 | 2 | P1 | 地图外部请求共享限流 | 在多客户端／多 worker 下约束上游请求；并发与超限行为有验证。现有缓存、8 秒超时及响应大小限制不替代限流 |
 | 3 | P2 | 新增前相似场馆提示 | 展示已有正式名称候选，编辑者可确认不同实体后继续创建；不自动合并或仅凭相似名称阻止创建 |
 | 4 | P2 | 管理页使用情况与检索辅助 | 接入关联 Live 分页列表、类型筛选、历史名称命中标识；公共详情已有演出列表，不重复计算为缺失 |
-
-待核验事项单列，不算作已证实的开发缺口：地图桌面／窄屏真实交互及名称以外的完整数据质量。主库 V36 迁移和对应 API 验证已完成；本次主库 HTTP 检查读取真实数据，创建、更名和位置写入在隔离测试库验证。
 
 明确延后：自动批量 POI 关联、Apple／高德交互地图、alias／i18n、父子场馆、营业生命周期和地理聚合统计。它们不计入上述核心功能收尾清单。
 
@@ -83,51 +60,6 @@
 - 删除有历史引用的 Venue 或名称版本。
 
 同一园区中的不同 Hall 继续作为独立 Venue 使用。由于本期不建立父子关系，统计也不向园区层级自动聚合。
-
-## 改造前基线与问题（历史背景）
-
-### 当前数据结构
-
-```text
-venue_list
-- id integer primary key
-- venue text not null
-
-live_attrs
-- venue_id integer null -> venue_list.id
-
-live_schedule_history
-- previous_venue_id integer null -> venue_list.id
-```
-
-当前所有读取路径都通过 `venue_id` 联接 `venue_list.venue`。因此直接修改 `venue_list.venue` 会同时改变：
-
-- 所有历史 Live 的场馆展示。
-- 巡演和活动组内的历史场馆展示。
-- 正式改期记录中的旧场馆展示。
-- Catalog 场馆名称及搜索结果。
-
-这使“资料修正”和“场馆真实更名”无法区分，也无法准确表达一场 Live 当时使用的名称。
-
-### 当前控制台限制
-
-- `GET /api/console/venues` 只支持 `q + limit`，`limit` 最大为 100，没有分页和总数。
-- 控制台初始化调用 `getConsoleVenues(undefined, 100)`，数据超过 100 条后不能形成完整候选集合。
-- `POST /api/console/venues` 只接受一个 `venue_name`，没有详情、修改、更名或合并接口。
-- Venue 仍附属于 Live 录入区域，没有独立维护入口。
-
-候选查询必须分页，不能以固定 100 条上限假设场馆总量。
-
-### V27 的影响
-
-V27 允许 Live 的场馆为空。新结构必须满足：
-
-```text
-venue_id IS NULL
-=> venue_name_version_id IS NULL
-```
-
-场馆公布后，Live 更新操作一次性写入 `venue_id + venue_name_version_id`。取消或改回未公布状态时，两者也必须一起清空。
 
 ## 核心模型
 
@@ -333,9 +265,9 @@ current_venue_versions
 - 前端必须让编辑者确认最终版本，后端保存明确 ID。
 - 修改 Live 日期时不自动改写已有版本；若日期与版本有效期不一致，只提示并允许编辑者调整。
 
-## 合并功能移除（2026-09-20）
+## 实体边界
 
-本地主库检查未发现合并指向，用户决定移除该功能。删除合并预览和执行路由、专用模型、列表合并参数、合并过滤及来源 ID 跳转。V35 删除合并字段并重建当前名称视图；V28/V29 作为已执行迁移保留不改。后续已按授权将本地主库迁移至 V35，合并不再列入待实现项。
+不提供 Venue 合并预览、合并写入、合并状态或来源 ID 跳转。同名不等于同一实体，搬迁创建新的 Venue；名称展示使用当前或 Live 明确绑定的名称版本。
 
 ## API 设计
 
@@ -490,83 +422,6 @@ Venue管理
 - Venue 去重继续按 `venue_id`，更名不增加 Venue 数量。
 - 现有公开 `venue_count` 在首期保持返回字段和口径兼容。
 - `venue_kind` 为后续拆分实体 Venue、Online 和未公开场馆统计提供依据，但本期不强制改变前端统计文案。
-
-## 迁移与实现流程
-
-Venue 改造由 V28 建立加法式结构，运行数据整理完成后由 V29 收口约束。
-
-### 阶段 1：加法式 schema
-
-新增第一份 migration：
-
-1. 给 `venue_list` 增加 `venue_kind`（原合并字段已由 V35 移除）。
-2. 创建 `venue_name_versions`、索引和约束。
-3. 给 `live_attrs` 和 `live_schedule_history` 增加名称版本列，暂时允许 `NULL`。
-4. 给每个现有 Venue 创建一个保持原字符串不变的开放名称版本。
-5. 将现有 Live 和改期历史绑定到对应初始版本。
-6. 建立 `current_venue_versions`。
-7. 配置 owner、角色权限和 ownership contract。
-8. 保留 `venue_list.venue` 和所有旧读取路径。
-
-迁移不解析括号、不推断旧名、不合并任何 Venue，也不写入特定生产数据判断。
-
-### 阶段 2：后端双读双写（历史过渡阶段，V36 已移除兼容写入）
-
-1. 扩展 Venue schema 和分页读取 API。
-2. 增加详情、创建、更名、位置资料修正接口。
-3. Live 新增/更新保存两个 Venue ID。
-4. 正式改期创建时保存修改前的两个 Venue ID。
-5. 新读取优先使用名称版本；版本为空时临时回退 `venue_list.venue`。
-6. Venue 当前名称发生变化时同步兼容字段。
-7. 为事务、校验、权限、审计和回退行为补齐单元及集成测试。
-
-### 阶段 3：控制台 Venue 管理
-
-1. 新增 `VenueAdminSection` 和 `venue` 控制台 mode。
-2. 接入分页列表、详情和关联 Live。
-3. 接入创建、更名和位置资料修正确认流程。
-4. 将 Live 页的 Venue 选择改成服务端搜索和名称版本选择。
-5. 创建统一进入独立新增场馆页，复用同一 API 和校验。
-
-### 阶段 4：公共读取切换
-
-按顺序迁移：
-
-1. Live 列表和详情。
-2. 改期历史。
-3. Catalog Venue 搜索和 `venue_id` 筛选。
-4. 巡演和活动组。
-5. 公共统计。
-
-所有读取完成切换前，不删除旧字段或兼容回退。
-
-### 阶段 5：人工数据整理
-
-通过控制台 API 处理，不把运行数据写死进 Flyway：
-
-- 将 `现名（旧 旧名）` 拆成有边界的正式名称版本。
-- 校正历史 Live 和改期历史的版本绑定。
-- 将 `ONLINE`、`某所` 等既有特殊记录设为正确 `venue_kind`。
-
-每次操作都写审计，且必须能够从 Venue 详情查看受影响 Live。
-
-### 阶段 6：约束收口
-
-V29 migration 在执行前断言：
-
-- 每个 Venue 恰有一个开放名称版本。
-- 每个非空 `live_attrs.venue_id` 都有同 Venue 的名称版本。
-- 每个非空 `previous_venue_id` 都有同 Venue 的名称版本。
-- 没有名称有效期重叠。
-
-断言通过后：
-
-1. 增加两个 `MATCH FULL` 复合外键。
-2. 移除旧客户端仅提交 `venue_id` 的兼容分支。
-3. 移除读取时对 `venue_list.venue` 的回退。
-4. 在再后续独立 migration 中删除 `venue_list.venue`；不得与首期结构创建放在同一 migration。
-
-第 1～3 项已完成；第 4 项由 V36 实现。历史 B1/V28 等迁移保留原样，旧回填 SQL 仅适用于其原始结构阶段，不作为当前库操作模板。
 
 ## 测试与验收
 
