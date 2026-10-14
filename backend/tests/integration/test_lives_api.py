@@ -356,6 +356,7 @@ def test_event_detail_returns_default_bands_and_computed_attendees(
 
 
 # 测试点：跨乐队歌曲附带所属乐队，is_cover 只保留旧标签，同乐队歌曲不生成新标签。
+# 测试点：单条与批量详情按正式多乐队归属判断翻唱，未确认归属保持未知。
 def test_get_live_detail_applies_cross_band_cover_rules(
     integration_test_client,
     integration_admin_connection,
@@ -366,9 +367,13 @@ def test_get_live_detail_applies_cross_band_cover_rules(
             """
             WITH seed(id, song_name, band_id, is_cover) AS (VALUES (9000, 'Cross Band Cover Song', 2, false),
                 (9001, 'Legacy Cover Song', 2, true),
-                (9002, 'Own Band Song', 1, false)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (id, song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name
+                (9002, 'Own Band Song', 1, false)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (id, song_name, is_cover, group_id) SELECT seed.id, seed.song_name, seed.is_cover, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name
             """
         )
+        cursor.execute("""WITH owners AS (UPDATE song_list SET owner_mode='bands' WHERE id IN (9000,9002) RETURNING id)
+            INSERT INTO song_bands(song_id,band_id,display_order)
+            SELECT owners.id, seed.band_id, seed.display_order FROM owners
+            JOIN (VALUES (9000,2,1),(9000,3,2),(9002,1,1)) seed(song_id,band_id,display_order) ON seed.song_id=owners.id""")
         cursor.execute(
             """
             INSERT INTO live_setlist (
@@ -415,14 +420,15 @@ def test_get_live_detail_applies_cross_band_cover_rules(
     assert response.status_code == 200
     rows_by_song = {row["song_name"]: row for row in response.json()["detail_rows"]}
     assert rows_by_song["Cross Band Cover Song"]["comments"] == ["短版", "翻唱"]
-    assert rows_by_song["Cross Band Cover Song"]["cover_band"] == {
-        "band_id": 2,
-        "band_name": "Roselia",
-    }
-    assert rows_by_song["Legacy Cover Song"]["comments"] == ["翻唱"]
-    assert rows_by_song["Legacy Cover Song"]["cover_band"] is None
+    assert rows_by_song["Cross Band Cover Song"]["ownership"]["band_ids"] == [2, 3]
+    assert rows_by_song["Legacy Cover Song"]["comments"] == []
+    assert rows_by_song["Legacy Cover Song"]["live_cover"] == "unknown"
     assert rows_by_song["Own Band Song"]["comments"] == []
-    assert rows_by_song["Own Band Song"]["cover_band"] is None
+    assert rows_by_song["Own Band Song"]["live_cover"] == "original"
+    batch = integration_test_client.post("/api/lives/details:batch", json={"live_ids": [1]})
+    assert batch.status_code == 200, batch.text
+    assert batch.json()["items"][0]["detail_rows"] == response.json()["detail_rows"]
+
 
 
 def test_get_live_detail_not_found_returns_404(integration_test_client):

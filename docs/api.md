@@ -181,8 +181,8 @@
 - `other_members` 会统一归一化为 `{key, value: string[]}`
 - `other_members` 的 `value` 允许源数据是数组、单个字符串、JSON 字符串数组、JSON 字符串字面量
 - `other_members` 最终按 `key` 升序排列
-- `comments` 由详情行规则生成：`live_setlist.is_short = true` 时包含 `"短版"`；`song_list.is_cover = true` 或歌曲目录归属 Band 不在实际演唱乐队中时包含 `"翻唱"`
-- `cover_band` 只在后端根据“歌曲目录归属 Band 不属于实际演唱乐队”推导翻唱时返回该归属 Band；歌曲自身 `is_cover=true` 的手工标签不返回 `cover_band`
+- `comments` 中的短版来自 `live_setlist.is_short`；翻唱标记仅来自 `live_cover=cover`。`live_cover` 比较歌曲组默认版本的正式归属与实际出演；归属或出演资料不足时为 `unknown`。单条和批量详情使用同一规则。
+- 详情行 `ownership` 返回完整正式归属，包括多乐队和固定成员；翻唱来源文字和图标使用该归属。旧 `song_list.is_cover` 仅保留为历史资料，不参与现场翻唱判定。
 - `is_favorite` 会按当前登录用户的 `user_live_favorites` 计算；匿名请求统一返回 `false`
 - 无 Setlist 时，单条与批量详情的 `bands/band_names` 会回退 `default_band_ids`，与列表有效 Band 规则一致
 - `event_attendees` 只在 `live_type=event` 时返回内容；每项包含 `band_id/band_name/mode/members`
@@ -300,7 +300,7 @@
   - 全部 / 收藏只改变候选 Live 集合，概览、年份分布、类型分布和歌曲聚合共用同一查询口径
   - 按 `effective_live_bands` 判断实际参与乐队；该视图仅在完全没有 Setlist 时回退 `live_attrs.default_band_ids`
   - `overview.song_count` 按 `(实际演唱乐队, song_id)` 去重；同一歌曲被多支乐队演唱时会形成多个乐队歌曲项
-  - `top_songs.band_id / band_name` 表示该次统计中的实际演唱乐队，不表示 `song_list.band_id` 中的歌曲目录归属
+  - `top_songs.band_id / band_name` 表示该次统计中的实际演唱乐队，不表示歌曲版本的正式归属
   - 未指定 `band_id` 时，先在每支乐队内部按出现 Live 数、setlist 条目数、歌名和 `song_id` 排名，只返回每队第 1 名，最终按 `band_id` 升序
   - 指定 `band_id` 时，返回该乐队 Top N，按出现 Live 数、setlist 条目数、歌名和 `song_id` 排序
   - `stale_songs` 只在指定乐队时计算；只演唱过 1 场的歌曲也会纳入，并返回全部歌曲中最久未演唱的前 `limit` 首
@@ -315,7 +315,7 @@
 - 三个接口都要求 `editor+`
 - `q` 会 trim；空字符串等同于默认候选列表
 - `limit` 范围是 `1..100`，默认 `20`
-- 歌曲接口额外支持 `page`（默认 `1`）和可选 `band_id`（归属 Band，可与 `q` 组合），并返回 `page / page_size / total / total_pages`；超出末页时收敛到最后一页
+- 歌曲接口额外支持 `page`（默认 `1`）、`groups_only`（只查询歌曲组默认版本）和可选正数 `band_id`（匹配正式乐队或成员所属乐队，可与 `q` 组合），并返回 `page / page_size / total / total_pages`；超出末页时收敛到最后一页
 - 文本查询使用 `ILIKE`，并转义 `%`、`_`、`\`
 - 歌曲查询仅从名称开头向右匹配，不匹配名称中段或末段；同时按 `config/song_lookup_punctuation_groups.json` 对常见等价标点做查询归一化，并忽略这些标点前后的空白。含内部等价标点的拉丁词与相邻日文之间的空白也会忽略，普通词间空格仍参与匹配。名称精确匹配结果排在前面，再按 `song_name, id` 排序
 - 乐队查询匹配 `band_name` 或 `band_abbr`
@@ -326,9 +326,12 @@
 当前控制台已接入真实写接口，统一使用 `get_write_db_connection()`，并写入 `audit_logs`。
 
 - 所有写接口都要求 `editor+` 和有效 CSRF header
+- `POST /api/console/song-groups`
+  - 新歌曲身份及默认版本，提交 `group_name/song_name/ownership`；完整归属支持 `pending/bands/members/mixed`
+  - 同名与同一归属集合的默认版本已存在时返回 `409`；归属展示顺序不改变身份
 - `POST /api/console/songs`
-  - 要求 `band_id` 已存在
-  - 歌曲唯一键冲突返回 `409`
+  - 在已选歌曲组中新建版本，提交 `group_id/expected_group_revision/song_name/version_label/ownership`
+  - 组内版本名冲突、过期 revision 返回 `409`
 - `POST /api/console/bands`
   - 请求使用 `id_range=regular|special` 选择编号段，不接受手工 Band ID
   - `regular` 从 `1..99` 内现有最大 ID 继续递增；`special` 从 `101+` 内现有最大 ID 继续递增；两段不复用空洞、不互相溢出，`100` 永久保留
@@ -344,12 +347,14 @@
   - `addition/removal/replacement` 可绑定一场已关联该 Band 的交接 Live；`correction` 是追加式资料修正，禁止绑定交接
   - `GET /api/console/bands/{band_id}/transition-live-candidates?live_date=...` 按日期返回已关联且未取消的候选
 - `PUT /api/console/songs/{song_id}`
-  - 与新增歌曲共用字段契约；目标歌曲或 Band 不存在返回 `404`
-  - 成功后写 `song_update` 审计
+  - 更新版本名称、版本标识和封面，提交 `expected_revision`；不存在版本返回 `404`，过期修订返回 `409`
+  - 完整编辑使用 `/songs/{song_id}/edit`，同时保存版本、归属更正原因和歌曲组；均在一个事务内写审计
 - `POST /api/console/songs:batch`
-  - 最多一次提交 100 首
-  - 单项 band 不存在或歌曲冲突会跳过该项，不回滚其他成功项
-  - `ok` 只有在全部请求项都成功创建时才为 `true`
+  - 最多一次提交 100 首，逐首采用与新歌曲组相同的完整字段协议
+  - 返回 `results[{index,item,created,error}]`；同名、同一归属的默认版本复用已有 ID，不重复写审计
+  - 单项资料错误回滚该项，其他项仍可成功；系统错误回滚整个事务；`ok` 表示全部项已创建或复用成功
+  - 并发新增和批次按规范化标题排序取得事务锁，避免重复插入及交叉批次死锁
+  - 前端按结果下标回填对应草稿的歌曲组；部分失败保留失败项归属供重试，成功写入触发资料与 Live 缓存刷新
 - `POST /api/console/venues`
   - 同一事务创建 `venue_list` 身份与首个 `venue_name_versions` 名称版本，并保存位置资料；`id` 由 sequence 生成，名称不在身份表重复保存
 - `POST /api/console/lives`

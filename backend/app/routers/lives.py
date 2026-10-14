@@ -1,4 +1,4 @@
-from app.song_catalog import LIVE_COVER_SQL
+from app.song_catalog import LIVE_COVER_SQL, SONG_OWNERSHIP_DETAIL_SQL, SONG_OWNERSHIP_LABEL_SQL
 import json
 import re
 from collections.abc import Mapping
@@ -266,8 +266,8 @@ SELECT
     stl.other_member,
     stl.is_short,
     s.is_cover,
-    s.band_id,
-    owner_band.band_name,
+    {SONG_OWNERSHIP_DETAIL_SQL} AS ownership,
+    {SONG_OWNERSHIP_LABEL_SQL} AS ownership_label,
     stl.absolute_order,
     stl.segment_type,
     stl.sub_order,
@@ -278,8 +278,6 @@ FROM live_setlist stl
 JOIN song_list s
     ON s.group_id = stl.song_group_id AND s.version_label = ''
 JOIN song_groups sg ON sg.id = stl.song_group_id
-LEFT JOIN band_attrs owner_band
-    ON owner_band.id = s.band_id
 WHERE stl.live_id = %s
 ORDER BY stl.absolute_order
 """
@@ -369,7 +367,8 @@ WITH row_base AS (
         stl.other_member,
         stl.is_short,
         s.is_cover,
-        s.band_id,
+        {SONG_OWNERSHIP_DETAIL_SQL} AS ownership,
+        {SONG_OWNERSHIP_LABEL_SQL} AS ownership_label,
         stl.absolute_order,
         stl.segment_type,
         stl.sub_order,
@@ -389,8 +388,8 @@ SELECT
     rb.other_member,
     rb.is_short,
     rb.is_cover,
-    rb.band_id,
-    owner_band.band_name,
+    rb.ownership,
+    rb.ownership_label,
     rb.absolute_order,
     rb.segment_type,
     rb.sub_order,
@@ -398,8 +397,6 @@ SELECT
     rb.setlist_id,
     rb.live_cover
 FROM row_base rb
-LEFT JOIN band_attrs owner_band
-    ON owner_band.id = rb.band_id
 ORDER BY rb.live_id, rb.absolute_order
 """
 
@@ -467,7 +464,7 @@ ParsedDetailRow = tuple[
     dict[str, Any],
     bool,
     bool,
-    int | None,
+    dict[str, Any],
     str | None,
     int,
     str,
@@ -706,28 +703,6 @@ def _other_member_sort_key(item: dict[str, Any]) -> str:
     return str(key) if key is not None else ""
 
 
-def _build_detail_tags(
-    is_short: bool,
-    is_cover: bool,
-    song_band_id: int | None,
-    song_band_name: str | None,
-    performer_band_ids: set[int],
-) -> tuple[list[str], dict[str, Any] | None]:
-    comments: list[str] = []
-    if is_short:
-        comments.append("短版")
-    if is_cover:
-        comments.append("翻唱")
-        return comments, None
-    if song_band_id is not None and song_band_id > 0 and song_band_id not in performer_band_ids:
-        comments.append("翻唱")
-        return comments, {
-            "band_id": song_band_id,
-            "band_name": song_band_name or f"Band {song_band_id}",
-        }
-    return comments, None
-
-
 def _fallback_row_position(row_id: str, fallback_order: int = 1) -> tuple[int, str, int]:
     """Keep old mocked/compatibility rows readable while structured fields roll out."""
     match = re.match(r"^([A-Za-z]+)(\d+)$", row_id)
@@ -815,8 +790,8 @@ def _build_live_detail_payload(
         other_member_obj,
         is_short,
         is_cover,
-        song_band_id,
-        song_band_name,
+        song_ownership,
+        ownership_label,
         absolute_order,
         segment_type,
         sub_order,
@@ -833,18 +808,7 @@ def _build_live_detail_payload(
         other_members = [{"key": str(key), "value": _to_string_array(value)} for key, value in other_member_obj.items()]
         other_members.sort(key=_other_member_sort_key)
 
-        performer_band_ids = {int(member["band_id"]) for member in band_members if isinstance(member["band_id"], int)}
-        comments, cover_band = _build_detail_tags(
-            is_short,
-            is_cover,
-            song_band_id,
-            song_band_name,
-            performer_band_ids,
-        )
-
-        if song_band_id is None:
-            comments = (["短版"] if is_short else []) + (["翻唱"] if live_cover == "cover" else [])
-            cover_band = None
+        comments = (["短版"] if is_short else []) + (["翻唱"] if live_cover == "cover" else [])
         detail_rows.append(
             {
                 "setlist_id": setlist_id,
@@ -857,7 +821,7 @@ def _build_live_detail_payload(
                 "band_members": band_members,
                 "other_members": other_members,
                 "comments": comments,
-                "cover_band": cover_band,
+                "ownership": song_ownership,
                 "live_cover": live_cover,
             }
         )
@@ -922,8 +886,8 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
     parsed_rows: list[ParsedDetailRow] = []
     for row_index, row in enumerate(raw_rows, start=1):
         row_id, song_name, other_member_raw, is_short, is_cover, *song_band_values = row
-        song_band_id = int(song_band_values[0]) if song_band_values and song_band_values[0] is not None else None
-        song_band_name = str(song_band_values[1]) if len(song_band_values) > 1 and song_band_values[1] is not None else None
+        song_ownership = _ensure_json_object(song_band_values[0]) if song_band_values and isinstance(song_band_values[0], dict) else {"mode": "pending", "band_ids": [], "member_groups": [], "bands": [], "groups": []}
+        ownership_label = str(song_band_values[1]) if len(song_band_values) > 1 and song_band_values[1] is not None else None
         absolute_order, segment_type, sub_order, song_id = _parse_detail_row_values(
             str(row_id),
             song_band_values,
@@ -938,8 +902,8 @@ def _build_live_detail_with_cursor(cur: Any, live_id: int) -> dict[str, Any] | N
                 other_member_obj,
                 bool(is_short),
                 bool(is_cover),
-                song_band_id,
-                song_band_name,
+                song_ownership,
+                ownership_label,
                 absolute_order,
                 segment_type,
                 sub_order,
@@ -1165,8 +1129,8 @@ def get_live_details_batch(
                 parsed_rows_by_live_id: dict[int, list[ParsedDetailRow]] = {}
                 for row_index, row in enumerate(raw_rows, start=1):
                     live_id, row_id, song_name, other_member_raw, is_short, is_cover, *song_band_values = row
-                    song_band_id = int(song_band_values[0]) if song_band_values and song_band_values[0] is not None else None
-                    song_band_name = str(song_band_values[1]) if len(song_band_values) > 1 and song_band_values[1] is not None else None
+                    song_ownership = _ensure_json_object(song_band_values[0]) if song_band_values and isinstance(song_band_values[0], dict) else {"mode": "pending", "band_ids": [], "member_groups": [], "bands": [], "groups": []}
+                    ownership_label = str(song_band_values[1]) if len(song_band_values) > 1 and song_band_values[1] is not None else None
                     absolute_order, segment_type, sub_order, song_id = _parse_detail_row_values(
                         str(row_id),
                         song_band_values,
@@ -1181,8 +1145,8 @@ def get_live_details_batch(
                             _ensure_json_object(other_member_raw),
                             bool(is_short),
                             bool(is_cover),
-                            song_band_id,
-                            song_band_name,
+                            song_ownership,
+                            ownership_label,
                             absolute_order,
                             segment_type,
                             sub_order,

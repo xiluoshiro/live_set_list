@@ -564,7 +564,7 @@ millsage · 2026-04 五人阵容
 
 - 有 Setlist 时，实际乐队来自逐曲演出关系。
 - 完全没有 Setlist 时，才回退 `live_attrs.default_band_ids`。
-- `song_list.band_id` 仍表示歌曲目录归属。
+- 歌曲目录使用正式版本归属关系；V46 已退役 `song_list.band_id`，实际出演仍使用出演关系表的 `band_id`。
 - 乐队改名前后因 `band_id` 相同而连续统计。
 
 展示名称使用 Live 上下文的 `band_name_version_id`；聚合身份始终使用 `band_id`。

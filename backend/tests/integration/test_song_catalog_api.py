@@ -12,6 +12,45 @@ def auth(client):
     return {"X-CSRF-Token": response.json()["csrf_token"]}
 
 
+# 测试点：候选、详情、搜索与专辑曲目使用同一正式归属及顺序，旧乐队提示不冒充归属或污染乐队筛选。
+@pytest.mark.parametrize("mode", ["pending", "bands", "members", "mixed"])
+def test_song_ownership_is_consistent_across_catalog_surfaces(integration_test_client, integration_admin_connection, mode):
+    client = integration_test_client
+    headers = auth(client)
+    member_ids = [client.post("/api/console/members", headers=headers, json={"display_name": name}).json()["member_id"]
+                  for name in ("成员甲", "成员乙")]
+    owner = {"mode": mode, "band_ids": [2, 1] if mode in {"bands", "mixed"} else [],
+             "member_groups": [{"band_id": 1, "member_ids": member_ids[::-1]}] if mode in {"members", "mixed"} else []}
+    created = client.post("/api/console/song-groups", headers=headers, json={
+        "song_name": "统一归属曲", "group_name": "统一归属曲", "ownership": owner,
+    })
+    assert created.status_code == 201, created.text
+    song = created.json()["item"]
+    sid = song["song_id"]
+    expected = {"pending": "待回填", "bands": "Roselia / Poppin'Party", "members": "Poppin'Party：成员乙、成员甲",
+                "mixed": "Roselia / Poppin'Party / Poppin'Party：成员乙、成员甲"}[mode]
+    for query in ("q=统一归属", "q=统一归属&groups_only=true", "limit=100"):
+        response = client.get("/api/console/songs?" + query)
+        assert response.status_code == 200, response.text
+        item = next(item for item in response.json()["items"] if item["song_id"] == sid)
+        assert item["band_name"] == expected
+    assert client.get(f"/api/songs/{sid}").json()["ownership"] == song["ownership"]
+    assert client.get(f"/api/console/songs/{sid}").json()["ownership"] == song["ownership"]
+    search = client.get("/api/catalog/search?q=统一归属曲")
+    assert search.status_code == 200, search.text
+    assert search.json()["songs"][0]["band_name"] == expected
+    album = client.post("/api/console/albums", headers=headers, json={"album_name": "统一归属盘", "tracks": [{"song_id": sid}]}).json()
+    assert album["tracks"][0]["band_name"] == expected
+    assert client.get(f"/api/albums/{album['album_id']}").json()["tracks"][0]["band_name"] == expected
+    for groups in (False, True):
+        suffix = "&groups_only=true" if groups else ""
+        assert client.get("/api/console/songs?q=统一归属&band_id=3" + suffix).json()["items"] == []
+        if mode != "pending":
+            actual_band = 1 if mode == "members" else 2
+            filtered = client.get(f"/api/console/songs?q=统一归属&band_id={actual_band}" + suffix)
+            assert [item["song_id"] for item in filtered.json()["items"]] == [sid]
+
+
 # 测试点：新组和多乐队版本一起提交；空旧归属不会隐藏版本；过期 revision 不能覆盖资料。
 def test_group_version_roundtrip_and_conflict(integration_test_client):
     client = integration_test_client
@@ -28,7 +67,6 @@ def test_group_version_roundtrip_and_conflict(integration_test_client):
     assert client.get(f"/api/song-groups/{song['group_id']}").json()["versions"][0]["song_id"] == sid
     search_item = client.get("/api/catalog/search?q=合唱曲").json()["songs"][0]
     assert search_item["ownership"]["band_ids"] == [1, 2, 3]
-    assert search_item["band_id"] is None
     assert any(item["song_id"] == sid for item in client.get("/api/console/songs?q=合唱曲").json()["items"])
     payload = {"song_name": "新曲名", "expected_revision": song["revision"]}
     assert client.put(f"/api/console/songs/{sid}", headers=headers, json=payload).status_code == 200

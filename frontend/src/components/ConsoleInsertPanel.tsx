@@ -11,8 +11,10 @@ import {
 import {
   appendConsoleLiveSetlist,
   createConsoleLive,
-  createConsoleSong,
   createConsoleSongsBatch,
+  getCatalogConsole,
+  type CatalogMember,
+  type SongOwnership,
   getConsoleBands,
   getConsoleBandHistory,
   getConsoleLive,
@@ -26,7 +28,6 @@ import {
   getLives,
   updateConsoleLive,
   updateConsoleLiveSetlist,
-  updateConsoleSong,
   type ConsoleBandItem,
   type ConsoleBandHistory,
   type ConsoleLiveBandLineupContext,
@@ -40,7 +41,6 @@ import {
   type DatePhase,
   type EventStatus,
   type ConsoleSongItem,
-  type ConsoleSongCreatePayload,
   type ConsoleVenueItem,
   type GeoLocality,
   type LiveDetailResponse,
@@ -50,8 +50,8 @@ import { MemberStatusTable } from "./DetailMemberTable";
 import { LiveAdminSection } from "./console/LiveAdminSection";
 import { PageTitle } from "./PageTitle";
 import { LiveInsertTab } from "./console/LiveInsertTab";
+import { emptyOwnership, ownershipFields, ownershipValid } from "./console/OwnershipFields";
 import { SongCatalogAdmin } from "./console/SongCatalogAdmin";
-import { SongAdminSection } from "./console/SongAdminSection";
 import { BandAdminSection } from "./console/BandAdminSection";
 import { CompactConfirmationTable } from "./console/CompactConfirmationTable";
 import { PerformanceGroupAdminSection } from "./console/PerformanceGroupAdminSection";
@@ -130,11 +130,10 @@ type SetlistConfirmRow = ConsoleLiveSetlistRowPayload & {
 };
 
 type BatchSongConfirmRow = {
+  row_key: number;
   song_name: string;
-  band_id: number;
-  band_name: string;
-  cover: boolean;
-  band_member: Record<string, string[]>;
+  performers: string;
+  ownership: SongOwnership;
 };
 
 type PendingConfirmation =
@@ -153,15 +152,6 @@ type PendingConfirmation =
       kind: "live_discard";
       title: string;
       target: { type: "edit"; liveId: number } | { type: "mode"; mode: ConsoleMode };
-    }
-  | {
-      kind: "song";
-      title: string;
-      action: "create" | "update";
-      songId: number | null;
-      payload: ConsoleSongCreatePayload;
-      bandName: string;
-      changes: UpdateChange[];
     }
   | {
       kind: "setlist";
@@ -184,8 +174,6 @@ function toSongInsertRow(item: ConsoleSongItem): SongInsertRow {
     song_id: item.song_id,
     group_id: item.group_id,
     song_name: item.song_name,
-    band_id: item.band_id,
-    cover: item.cover,
     band_name: item.band_name,
   };
 }
@@ -439,24 +427,6 @@ function formatConfirmationValue(value: unknown): string {
   return String(value);
 }
 
-function buildSongUpdateChanges(
-  original: ConsoleSongCreatePayload | null,
-  current: ConsoleSongCreatePayload,
-  bands: BandOption[],
-): UpdateChange[] {
-  if (original === null) return [];
-  const bandValue = (bandId: number) => {
-    const bandName = bands.find((band) => band.band_id === bandId)?.band_name;
-    return bandName ? `${bandId} · ${bandName}` : String(bandId);
-  };
-  const values: Array<[string, string, string]> = [
-    ["song_name", original.song_name, current.song_name],
-    ["band_id", bandValue(original.band_id), bandValue(current.band_id)],
-    ["cover", formatConfirmationValue(original.cover), formatConfirmationValue(current.cover)],
-  ];
-  return values.flatMap(([field, before, after]) => before === after ? [] : [{ field, before, after }]);
-}
-
 function formatSetlistRowSummary(
   row: ConsoleLiveSetlistRowPayload,
   songName: string | undefined,
@@ -630,21 +600,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [setlistEditQuery, setSetlistEditQuery] = useState("");
   const [setlistEditLives, setSetlistEditLives] = useState<LiveInsertRow[]>([]);
 
-  const [songName, setSongName] = useState("");
-  const [songBandId, setSongBandId] = useState<number | null>(null);
-  const [songBandOpen, setSongBandOpen] = useState(false);
-  const [songBandMenuPos, setSongBandMenuPos] = useState<Position | null>(null);
-  const [songCover, setSongCover] = useState(false);
-  const [insertedSongs, setInsertedSongs] = useState<SongInsertRow[]>([]);
-  const [songQuery, setSongQuery] = useState("");
-  const [songBandFilterId, setSongBandFilterId] = useState<number | null>(null);
-  const [songCandidates, setSongCandidates] = useState<SongInsertRow[]>([]);
-  const [songPage, setSongPage] = useState(1);
-  const [songPagination, setSongPagination] = useState({ page: 1, page_size: 20, total: 0, total_pages: 1 });
-  const [songLoading, setSongLoading] = useState(false);
-  const [editingSongId, setEditingSongId] = useState<number | null>(null);
-  const [originalSongPayload, setOriginalSongPayload] = useState<ConsoleSongCreatePayload | null>(null);
-
+  const [batchMembers, setBatchMembers] = useState<CatalogMember[]>([]);
+  const [songModalVariant, setSongModalVariant] = useState<"create" | "edit">("create");
   const [liveDate, setLiveDate] = useState(() => getTodayDateInputValue());
   const [liveTitle, setLiveTitle] = useState("");
   const [liveType, setLiveType] = useState(LIVE_TYPE_OPTIONS[0].value);
@@ -718,8 +675,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [otherMemberMenuPos, setOtherMemberMenuPos] = useState<Position | null>(null);
   const [songModalRowKey, setSongModalRowKey] = useState<number | null>(null);
 
-  const songBandTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const songBandMenuRef = useRef<HTMLDivElement | null>(null);
   const venueTriggerRef = useRef<HTMLButtonElement | null>(null);
   const venueMenuRef = useRef<HTMLDivElement | null>(null);
   const defaultBandTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -893,7 +848,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       return row.song_name.trim() === "" || row.song_group_id.trim() === "" || !hasBandMember;
     });
   // 校验规则 4：新增歌曲的“提交插入”要求 song_name 与 band_id 均非空。
-  const isSongSubmitDisabled = songName.trim() === "" || songBandId === null;
   // 校验规则 5：批量插入歌曲必须先查询过，且至少存在一行无 sid、无待选候选的歌名。
   const isBatchSongInsertDisabled = !didSongLookup || !hasBatchSongInsertCandidate;
 
@@ -935,15 +889,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
       if (songResult.status === "fulfilled") {
         const loadedSongs = songResult.value.items.map(toSongInsertRow);
-        const totalSongs = songResult.value.total ?? loadedSongs.length;
         setSongs((prev) => mergeSongs(prev, loadedSongs));
-        setSongCandidates(loadedSongs.slice(0, 20));
-        setSongPagination({
-          page: 1,
-          page_size: 20,
-          total: totalSongs,
-          total_pages: Math.max(1, Math.ceil(totalSongs / 20)),
-        });
       }
       if (bandResult.status === "fulfilled" && bandResult.value.items.length > 0) {
         setBands(sortById(bandResult.value.items.map(toBandOption), (band) => band.band_id));
@@ -1035,26 +981,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       window.removeEventListener("storage", onStorage);
     };
   }, [mode, selectedLiveId]);
-
-  useEffect(() => {
-    if (!songBandOpen) return;
-    const onDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (songBandTriggerRef.current?.contains(target)) return;
-      if (songBandMenuRef.current?.contains(target)) return;
-      setSongBandOpen(false);
-    };
-    const close = () => setSongBandOpen(false);
-    const onScroll = () => openSongBandMenu();
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, [songBandOpen]);
 
   useEffect(() => {
     if (!venueOpen) return;
@@ -1506,6 +1432,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   };
 
   const songLeaveGuard = useRef<((proceed: () => void) => void) | null>(null);
+  const modalSongLeaveGuard = useRef<((proceed: () => void) => void) | null>(null);
   const albumLeaveGuard = useRef<((proceed: () => void) => void) | null>(null);
 
   const changeConsoleMode = (nextMode: ConsoleMode, confirmed = false) => {
@@ -1563,69 +1490,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     void querySetlistEditLives();
   }, [mode]);
 
-  const resetSongForm = () => {
-    setEditingSongId(null);
-    setOriginalSongPayload(null);
-    setSongName("");
-    setSongBandId(null);
-    setSongCover(false);
-    setSongBandOpen(false);
-    setSongBandMenuPos(null);
-  };
-
-  const clearSongForm = () => {
-    resetSongForm();
-    setMessage("已清空歌曲表格。");
-  };
-
-  const selectSongForEdit = (songId: number) => {
-    const song = songCandidates.find((candidate) => candidate.song_id === songId);
-    if (!song || song.band_id === null) return;
-    setEditingSongId(song.song_id);
-    setOriginalSongPayload({
-      song_name: song.song_name,
-      band_id: song.band_id,
-      cover: song.cover,
-    });
-    setSongName(song.song_name);
-    setSongBandId(song.band_id);
-    setSongCover(song.cover);
-    setMessage(`已加载歌曲 #${song.song_id}。`);
-  };
-
-  const loadSongCandidatePage = async (query: string, page: number, bandId: number | null) => {
-    setSongLoading(true);
-    try {
-      const response = bandId === null
-        ? await getConsoleSongs(query, 20, page)
-        : await getConsoleSongs(query, 20, page, bandId);
-      const candidates = response.items.map(toSongInsertRow);
-      const responsePage = response.page ?? page;
-      const responsePageSize = response.page_size ?? 20;
-      const responseTotal = response.total ?? candidates.length;
-      const responseTotalPages = response.total_pages ?? Math.max(1, Math.ceil(responseTotal / responsePageSize));
-      setSongCandidates(candidates);
-      setSongPage(responsePage);
-      setSongPagination({
-        page: responsePage,
-        page_size: responsePageSize,
-        total: responseTotal,
-        total_pages: responseTotalPages,
-      });
-      if (candidates.length === 0) setMessage("没有符合条件的歌曲。");
-    } catch (error) {
-      setSongCandidates([]);
-      setMessage(`查询歌曲失败：${errorMessage(error)}`);
-    } finally {
-      setSongLoading(false);
-    }
-  };
-
-  const querySongCandidates = async () => {
-    setSongPage(1);
-    await loadSongCandidatePage(songQuery, 1, songBandFilterId);
-  };
-
   const loadScheduleAttention = async (attention: "" | "upcoming" | "today" | "overdue" = scheduleAttentionFilter) => {
     setScheduleAttentionLoading(true);
     try {
@@ -1651,25 +1515,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     if (mode !== "live_edit") return;
     void loadScheduleAttention("");
   }, [mode]);
-
-  useEffect(() => {
-    if (songModalRowKey === null) return;
-    void loadSongCandidatePage(songQuery, songPage, songBandFilterId);
-  }, [songModalRowKey, songPage]);
-
-  const selectSongForEditFromItem = (song: SongInsertRow) => {
-    if (song.band_id === null) return;
-    setEditingSongId(song.song_id);
-    setOriginalSongPayload({
-      song_name: song.song_name,
-      band_id: song.band_id,
-      cover: song.cover,
-    });
-    setSongName(song.song_name);
-    setSongBandId(song.band_id);
-    setSongCover(song.cover);
-    setMessage(`已加载歌曲 #${song.song_id}。`);
-  };
 
   const addSetlistRow = () => {
     setDidSongLookup(false);
@@ -1975,18 +1820,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     if (below + estimatedHeight <= window.innerHeight) return below;
     const above = rect.top - estimatedHeight - 6;
     return Math.max(above, 4);
-  };
-
-  const openSongBandMenu = () => {
-    const rect = songBandTriggerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const menuWidth = Math.max(rect.width, 280);
-    setSongBandMenuPos({
-      top: computeMenuTop(rect, Math.min(320, window.innerHeight * 0.6)),
-      left: Math.min(rect.left, window.innerWidth - menuWidth - 12),
-      width: menuWidth,
-    });
-    setSongBandOpen(true);
   };
 
   const openVenueMenu = () => {
@@ -2674,63 +2507,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     requestLiveConfirmation();
   };
 
-  const requestSongConfirmation = () => {
-    const name = songName.trim();
-    if (name === "") {
-      setMessage("保存歌曲失败：song_name 不能为空。");
-      return;
-    }
-    if (songBandId === null) {
-      setMessage("保存歌曲失败：请先选择 band_id。");
-      return;
-    }
-    if (!auth.isAuthenticated || !auth.csrfToken) {
-      setMessage("保存歌曲失败：登录态已失效，请重新登录。");
-      return;
-    }
-
-    const selectedBand = bands.find((band) => band.band_id === songBandId);
-    const payload: ConsoleSongCreatePayload = {
-      song_name: name,
-      band_id: songBandId,
-      cover: songCover,
-    };
-    setPendingConfirmation({
-      kind: "song",
-      title: editingSongId === null ? "确认新增歌曲" : "确认更新歌曲",
-      action: editingSongId === null ? "create" : "update",
-      songId: editingSongId,
-      payload,
-      bandName: selectedBand?.band_name ?? "-",
-      changes: editingSongId === null
-        ? []
-        : buildSongUpdateChanges(originalSongPayload, payload, bands),
-    });
-  };
-
-  const submitSong = async (
-    action: "create" | "update",
-    songId: number | null,
-    payload: ConsoleSongCreatePayload,
-    csrfToken: string,
-  ) => {
-    try {
-      const response = action === "create"
-        ? await createConsoleSong(payload, csrfToken)
-        : await updateConsoleSong(songId as number, payload, csrfToken);
-      const row = toSongInsertRow(response.item);
-      setSongs((prev) => sortById([row, ...prev.filter((song) => song.song_id !== row.song_id)], (song) => song.song_id));
-      setInsertedSongs((prev) => sortById([row, ...prev.filter((song) => song.song_id !== row.song_id)], (song) => song.song_id));
-      setSongCandidates((current) => [row, ...current.filter((song) => song.song_id !== row.song_id)]);
-      if (action === "create") resetSongForm();
-      else selectSongForEditFromItem(row);
-      setMessage(`已${action === "create" ? "新增" : "更新"}歌曲 #${row.song_id}`);
-    } catch (error) {
-      setMessage(`${action === "create" ? "新增" : "更新"}歌曲失败：${errorMessage(error)}`);
-    }
-  };
-
-  const requestBatchSongInsert = () => {
+  const requestBatchSongInsert = async () => {
     if (!auth.isAuthenticated || !auth.csrfToken) {
       setMessage("批量插入失败：登录态已失效，请重新登录。");
       return;
@@ -2754,29 +2531,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         return;
       }
 
-      const bandNames = Object.keys(row.band_member).filter(
-        (name) => row.band_member[name] && row.band_member[name].length > 0,
-      );
-      if (bandNames.length !== 1) {
-        errors.push(
-          `"${row.song_name}" 的乐队数量不为 1（当前 ${bandNames.length} 支：${bandNames.join("、") || "无"}）。`,
-        );
-        return;
-      }
-
-      const bandName = bandNames[0];
-      const band = bands.find((b) => b.band_name === bandName);
-      if (!band) {
-        errors.push(`"${row.song_name}" 的乐队 "${bandName}" 未匹配到有效 band_id。`);
-        return;
-      }
-
       confirmRows.push({
+        row_key: row.row_key,
         song_name: row.song_name.trim(),
-        band_id: band.band_id,
-        band_name: bandName,
-        cover: false,
-        band_member: row.band_member,
+        performers: Object.keys(row.band_member).join(" / "),
+        ownership: emptyOwnership(),
       });
     });
 
@@ -2785,6 +2544,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       return;
     }
 
+    try {
+      const response = await getCatalogConsole<{ items: CatalogMember[] }>("/members");
+      setBatchMembers(response.items);
+    } catch (error) {
+      setMessage(`加载成员失败：${errorMessage(error)}`);
+      return;
+    }
     setPendingConfirmation({
       kind: "batch_song",
       title: "确认批量新增歌曲",
@@ -2795,37 +2561,37 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
   const executeBatchSongInsert = async (rows: BatchSongConfirmRow[], csrfToken: string) => {
     try {
-      const payload = rows.map((row) => ({
-        song_name: row.song_name,
-        band_id: row.band_id,
-        cover: row.cover,
-      }));
+      const payload = rows.map(row => ({ song_name: row.song_name, group_name: row.song_name, version_label: "", cover_urls: [], ownership: row.ownership }));
       const response = await createConsoleSongsBatch(payload, csrfToken);
-      response.created.forEach((item) => {
-        const newSong = toSongInsertRow(item);
-        setSongs((prev) => sortById([newSong, ...prev.filter((s) => s.song_id !== newSong.song_id)], (s) => s.song_id));
-        setInsertedSongs((prev) => sortById([newSong, ...prev.filter((s) => s.song_id !== newSong.song_id)], (s) => s.song_id));
-      });
-      const skipped = rows.length - response.created.length;
-      const summary = `批量新增完成：请求 ${rows.length} 首，成功 ${response.created.length} 首${skipped > 0 ? `，后端跳过 ${skipped} 首` : ""}。`;
-      await querySongsForSetlist();
-      setMessage(`${summary} ${response.created.map((item) => `#${item.song_id} ${item.song_name}`).join("；") || "后端未返回新增歌曲。"}`);
+      const saved = response.results.filter(result => result.item !== null);
+      setSetlistRows(current => current.map(row => {
+        const result = saved.find(result => rows[result.index]?.row_key === row.row_key);
+        return result?.item ? { ...row, song_group_id: String(result.item.group_id), song_resolved_name: result.item.group_name, song_candidates: [] } : row;
+      }));
+      const added = saved.map(result => ({ song_id: result.item!.song_id, group_id: result.item!.group_id, song_name: result.item!.song_name }));
+      setSongs(current => sortById([...added, ...current.filter(song => !added.some(item => item.song_id === song.song_id))], song => song.song_id));
+      const failures = response.results.filter(result => result.error).map(result => `${rows[result.index]?.song_name}：${result.error}`).join("；");
+      setMessage(`批量新增完成：新增 ${saved.filter(result => result.created).length} 首，复用 ${saved.filter(result => !result.created).length} 首，失败 ${response.results.length - saved.length} 首。${failures}`);
+      if (failures) {
+        const failedIndices = new Set(response.results.filter(result => result.error).map(result => result.index));
+        setPendingConfirmation(current => current?.kind === "batch_song" ? { ...current,
+          rows: rows.filter((_, index) => failedIndices.has(index)), errors: [failures],
+        } : current);
+        return false;
+      }
+      return true;
     } catch (error) {
       const detail = backendFailureDetail(error);
       setMessage(`批量新增失败：${detail}`);
+      setPendingConfirmation(current => current?.kind === "batch_song" ? { ...current, errors: [detail] } : current);
+      return false;
     }
   };
 
-  const updateBatchSongCover = (rowIndex: number, checked: boolean) => {
-    setPendingConfirmation((current) => {
-      if (!current || current.kind !== "batch_song") {
-        return current;
-      }
-      return {
-        ...current,
-        rows: current.rows.map((row, index) => (index === rowIndex ? { ...row, cover: checked } : row)),
-      };
-    });
+  const updateBatchOwnership = (rowIndex: number, ownership: SongOwnership) => {
+    setPendingConfirmation(current => current?.kind === "batch_song" ? { ...current,
+      rows: current.rows.map((row, index) => index === rowIndex ? { ...row, ownership } : row),
+    } : current);
   };
 
   const closePendingConfirmation = () => {
@@ -2864,15 +2630,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           }
           setMode(pendingConfirmation.target.mode);
         }
-      } else if (pendingConfirmation.kind === "song") {
-        await submitSong(
-          pendingConfirmation.action,
-          pendingConfirmation.songId,
-          pendingConfirmation.payload,
-          auth.csrfToken,
-        );
       } else if (pendingConfirmation.kind === "batch_song") {
-        await executeBatchSongInsert(pendingConfirmation.rows, auth.csrfToken);
+        if (!await executeBatchSongInsert(pendingConfirmation.rows, auth.csrfToken)) return;
       } else {
         await (pendingConfirmation.action === "update" ? updateSetlist : insertSetlist)(
           pendingConfirmation.live,
@@ -2949,22 +2708,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       );
     }
 
-    if (pendingConfirmation.kind === "song") {
-      const payload = pendingConfirmation.payload;
-      return pendingConfirmation.action === "update"
-        ? <UpdateDiffTable changes={pendingConfirmation.changes} ariaLabel="歌曲修改内容" />
-        : (
-          <CompactConfirmationTable
-            rows={[
-              ["song_name", payload.song_name],
-              ["band_id", payload.band_id],
-              ["band_name", pendingConfirmation.bandName],
-              ["cover", String(payload.cover)],
-            ]}
-          />
-        );
-    }
-
     if (pendingConfirmation.kind === "batch_song") {
       return (
         <>
@@ -2979,30 +2722,21 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
             <table className="console-admin-table console-confirm-setlist-table console-confirm-batch-song-table">
               <thead>
                 <tr>
-                  <th>song_name</th>
-                  <th>bid</th>
-                  <th>band_name</th>
-                  <th>cover</th>
+                  <th>歌曲名称</th><th>演出乐队</th><th>版本归属</th>
                 </tr>
               </thead>
               <tbody>
-                {pendingConfirmation.rows.map((row, index) => (
-                  <tr key={index}>
-                    <td>{row.song_name}</td>
-                    <td>{row.band_id}</td>
-                    <td>{row.band_name}</td>
-                    <td>
-                      <input
-                        className="is-short-check"
-                        aria-label={`batch_song_cover-${index + 1}`}
-                        type="checkbox"
-                        checked={row.cover}
-                        disabled={confirmationSubmitting}
-                        onChange={(event) => updateBatchSongCover(index, event.target.checked)}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {pendingConfirmation.rows.map((row, index) => {
+                  const fields = ownershipFields(row.ownership, bands, batchMembers, confirmationSubmitting, owner => updateBatchOwnership(index, owner));
+                  return <tr key={row.row_key}>
+                    <td>{row.song_name}</td><td>{row.performers || "—"}</td>
+                    <td><div role="group" aria-label={`${row.song_name}版本归属`}>
+                      {fields.ownershipModeField}
+                      {fields.hasBands && fields.bandPicker}
+                      {fields.hasMembers && <>{fields.memberBandPicker}{fields.memberPickers}</>}
+                    </div></td>
+                  </tr>;
+                })}
               </tbody>
             </table>
           </div>
@@ -3076,48 +2810,19 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       : "-";
 
   const renderSongAdminSection = () => (
-    <SongAdminSection
-      bandOptions={bands}
-      insertedSongs={insertedSongs}
-      songCandidates={songCandidates}
-      songQuery={songQuery}
-      songBandFilterId={songBandFilterId}
-      songPage={songPagination.page}
-      songTotal={songPagination.total}
-      songTotalPages={songPagination.total_pages}
-      songLoading={songLoading}
-      editingSongId={editingSongId}
-      selectedSong={editingSongId !== null && originalSongPayload !== null ? {
-        song_id: editingSongId,
-        song_name: originalSongPayload.song_name,
-        band_id: originalSongPayload.band_id,
-        cover: originalSongPayload.cover,
-        band_name: bands.find((band) => band.band_id === originalSongPayload.band_id)?.band_name,
-      } : null}
-      songName={songName}
-      songBandId={songBandId}
-      songCover={songCover}
-      songBandOpen={songBandOpen}
-      songBandMenuPos={songBandMenuPos}
-      songBandTriggerRef={songBandTriggerRef}
-      songBandMenuRef={songBandMenuRef}
-      onSongNameChange={setSongName}
-      onSongQueryChange={setSongQuery}
-      onSongBandFilterChange={setSongBandFilterId}
-      onQuerySongs={querySongCandidates}
-      onSongPageChange={setSongPage}
-      onSelectSong={selectSongForEdit}
-      onCreateNewSong={resetSongForm}
-      onSongCoverChange={setSongCover}
-      onOpenSongBandMenu={openSongBandMenu}
-      onSelectSongBand={(bandId) => {
-        setSongBandId(bandId);
-        setSongBandOpen(false);
-      }}
-      onClearSong={clearSongForm}
-      onSubmitSong={requestSongConfirmation}
-      submitDisabled={isSongSubmitDisabled}
-    />
+    <>
+      <button type="button" className="console-ghost-btn" onClick={() => {
+        const proceed = () => setSongModalVariant(value => value === "create" ? "edit" : "create");
+        if (modalSongLeaveGuard.current) modalSongLeaveGuard.current(proceed); else proceed();
+      }}>{songModalVariant === "create" ? "管理已有歌曲" : "新增歌曲"}</button>
+      <SongCatalogAdmin key={songModalRowKey} variant={songModalVariant} active bands={bands}
+        initialSongName={setlistRows.find(row => row.row_key === songModalRowKey)?.song_name}
+        registerLeaveGuard={guard => { modalSongLeaveGuard.current = guard; }} onManage={() => setSongModalVariant("edit")}
+        onSaved={song => {
+          if (songModalRowKey !== null) updateSetlistSongId(songModalRowKey, String(song.group_id), song.group_name);
+          setSongModalRowKey(null);
+        }} />
+    </>
   );
 
   return (
@@ -3329,7 +3034,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           onCloseFullSetlistPreview={() => setSetlistParsePreviewOpen(false)}
           onUpdateSetlistSongName={updateSetlistSongName}
           onUpdateSetlistSongId={updateSetlistSongId}
-          onSetSongModalRowKey={setSongModalRowKey}
+          onSetSongModalRowKey={key => {
+            const proceed = () => { if (key !== null) setSongModalVariant("create"); setSongModalRowKey(key); };
+            if (key === null && modalSongLeaveGuard.current) modalSongLeaveGuard.current(proceed);
+            else proceed();
+          }}
           onUpdateSetlistSegment={(rowKey, value) => updateSetlistRow(rowKey, "segment_start_type", value)}
           onUpdateSetlistAbs={updateSetlistAbs}
           onUpdateSetlistSub={updateSetlistSub}
@@ -3454,7 +3163,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
                 type="button"
                 className="console-submit-btn"
                 onClick={() => void confirmPendingInsert()}
-                disabled={confirmationSubmitting || (pendingConfirmation.kind === "batch_song" && pendingConfirmation.errors.length > 0)}
+                disabled={confirmationSubmitting || (pendingConfirmation.kind === "batch_song" && (pendingConfirmation.rows.length === 0 || pendingConfirmation.rows.some(row => !ownershipValid(row.ownership))))}
               >
                 {confirmationSubmitting
                   ? "提交中..."

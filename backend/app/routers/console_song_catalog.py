@@ -12,7 +12,9 @@ from app.schemas.song_catalog import (
     AlbumDetail, AlbumPage, AlbumUpdate, AlbumWrite, AlbumTracksUpdate, GroupCreate, GroupMove, GroupUpdate,
     MemberUpdate, MemberWrite, OwnershipUpdate, SongEditMutation, SongEditUpdate, SongMutation, SongVersion, VersionCreate, VersionUpdate,
 )
-from app.song_catalog import catalog_errors, lock_revision, one, read_album, read_song, read_song_group, rows, save_ownership
+from app.song_catalog import catalog_errors, lock_revision, one, read_album, read_ownership, read_song, read_song_group, rows, save_ownership
+from app.song_lookup import normalize_song_lookup_text, song_lookup_sql
+from app.schemas.console import ConsoleSongBatchCreateRequest
 
 router = APIRouter(dependencies=[Depends(require_role("editor"))])
 
@@ -65,15 +67,73 @@ def update_version(payload: VersionUpdate, song_id: int, request: Request, conte
         return {"ok": True, "item": read_song(cur, song_id)}
 
 
+def ownership_identity(owner: dict[str, Any]) -> tuple[Any, ...]:
+    return (owner["mode"], tuple(sorted(owner["band_ids"])), tuple(sorted(
+        (group["band_id"], tuple(sorted(group["member_ids"]))) for group in owner["member_groups"])))
+
+
+def find_default_version(cur: Any, payload: GroupCreate) -> int | None:
+    # Display order is editable; it does not change the identity of an owner set.
+    expression, params = song_lookup_sql("s.song_name")
+    cur.execute(f"SELECT s.id, s.owner_mode FROM song_list s WHERE s.version_label='' AND lower(btrim({expression})) = %s ORDER BY s.id",
+                (*params, normalize_song_lookup_text(payload.song_name)))
+    existing = cur.fetchall()
+    expected = ownership_identity(payload.ownership.model_dump())
+    for song_id, mode in existing:
+        if ownership_identity(read_ownership(cur, song_id, mode)) == expected:
+            return song_id
+    return None
+
+
+def insert_group(cur: Any, payload: GroupCreate) -> int:
+    if payload.version_label:
+        raise HTTPException(422, "新歌曲组的首个版本必须为默认项")
+    cur.execute("INSERT INTO song_groups(group_name) VALUES (%s) RETURNING id", (payload.group_name,))
+    return insert_version(cur, payload, cur.fetchone()[0])
+
+
+def lock_song_title(cur: Any, title: str) -> None:
+    cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (normalize_song_lookup_text(title),))
+
+
+def create_groups_batch(payload: ConsoleSongBatchCreateRequest, request: Request, context: AuthSessionContext):
+    assert_valid_csrf(request, context)
+    results: list[dict[str, Any]] = []
+    with catalog_errors(), get_write_db_connection() as conn, conn.cursor() as cur:
+        # Stable lock ordering also serializes overlapping concurrent batches.
+        for title in sorted({normalize_song_lookup_text(song.song_name) for song in payload.songs}):
+            lock_song_title(cur, title)
+        for index, song in enumerate(payload.songs):
+            cur.execute("SAVEPOINT batch_song")
+            try:
+                with catalog_errors():
+                    if song.version_label:
+                        raise HTTPException(422, "新歌曲组的首个版本必须为默认项")
+                    existing_id = find_default_version(cur, song)
+                    song_id = existing_id if existing_id is not None else insert_group(cur, song)
+                    if existing_id is None:
+                        audit(cur, context, "song_create", "song", song_id, song.model_dump(mode="json"))
+                    item = read_song(cur, song_id)
+                results.append({"index": index, "item": item, "created": existing_id is None})
+            except HTTPException as exc:
+                if exc.status_code >= 500:
+                    raise
+                cur.execute("ROLLBACK TO SAVEPOINT batch_song")
+                results.append({"index": index, "error": str(exc.detail)})
+            cur.execute("RELEASE SAVEPOINT batch_song")
+        return {"ok": all(result.get("item") is not None for result in results), "results": results}
+
+
 @router.post("/song-groups", response_model=SongMutation, status_code=201)
 def create_group(payload: GroupCreate, request: Request, context: AuthSessionContext = Depends(get_current_auth_context)):
     assert_valid_csrf(request, context)
     if payload.version_label:
         raise HTTPException(422, "新歌曲组的首个版本必须为默认项")
     with catalog_errors(), get_write_db_connection() as conn, conn.cursor() as cur:
-        cur.execute("INSERT INTO song_groups(group_name) VALUES (%s) RETURNING id", (payload.group_name,))
-        group_id = cur.fetchone()[0]
-        song_id = insert_version(cur, payload, group_id)
+        lock_song_title(cur, payload.song_name)
+        if find_default_version(cur, payload) is not None:
+            raise HTTPException(409, "同名歌曲及相同归属的默认版本已存在，请选择已有歌曲组")
+        song_id = insert_group(cur, payload)
         audit(cur, context, "song_create", "song", song_id, payload.model_dump(mode="json"))
         return {"ok": True, "item": read_song(cur, song_id)}
 
@@ -106,12 +166,10 @@ def correct_ownership(payload: OwnershipUpdate, request: Request, song_id: int =
     with catalog_errors(), get_write_db_connection() as conn, conn.cursor() as cur:
         lock_revision(cur, "song_list", song_id, payload.expected_revision)
         before = read_song(cur, song_id)["ownership"]
-        cur.execute("SELECT band_id FROM song_list WHERE id = %s", (song_id,))
-        legacy_band_id = cur.fetchone()[0]
         save_ownership(cur, song_id, payload.ownership)
         cur.execute("UPDATE song_list SET revision = revision + 1 WHERE id = %s", (song_id,))
         audit(cur, context, "song_ownership_update", "song", song_id,
-              {"before": before, "legacy_band_id": legacy_band_id, "after": payload.ownership.model_dump(), "reason": payload.reason})
+              {"before": before, "after": payload.ownership.model_dump(), "reason": payload.reason})
         return {"ok": True, "item": read_song(cur, song_id)}
 
 

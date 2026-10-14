@@ -659,7 +659,7 @@ test("group picker exposes every page and retains the selection", async () => {
 
 
 
-// 测试点：资料、归属、组名和排序共用确认、恢复与单次原子保存。
+// 测试点：资料与归属共用原子保存，所选候选使用已加载或已保存的归属，候选旧数据不覆盖回显。
 test("one save reviews the complete song and group draft", async () => {
   const user = userEvent.setup();
   let leave: ((next: () => void) => void) | null = null;
@@ -667,6 +667,7 @@ test("one save reviews the complete song and group draft", async () => {
     registerLeaveGuard={guard => { leave = guard; }} onManage={() => {}} />);
   await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
   const name = await screen.findByLabelText("歌曲名称");
+  expect(within(screen.getByLabelText("选择要编辑的歌曲")).getByRole("option", { selected: true })).toHaveTextContent("乐队甲");
   expect(screen.queryByRole("button", { name: "歌曲组管理" })).not.toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "保存修改" })).toHaveLength(1);
   expect(screen.getAllByRole("button", { name: "恢复原值" })).toHaveLength(1);
@@ -722,6 +723,7 @@ test("one save reviews the complete song and group draft", async () => {
   }), "csrf");
   expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
   expect(within(screen.getByRole("table", { name: "歌曲操作记录" })).getAllByRole("row")).toHaveLength(2);
+  expect(within(screen.getByLabelText("选择要编辑的歌曲")).getByRole("option", { selected: true })).toHaveTextContent("新曲名 / 普通版 / 待回填");
   fireEvent.change(name, { target: { value: "下一次修改" } });
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认提交" }));

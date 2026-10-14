@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from typing import Any, Literal
 
 from fastapi import HTTPException
-from psycopg2 import Error
+from psycopg2 import Error, OperationalError
 from psycopg2.errors import CheckViolation, ForeignKeyViolation, QueryCanceled, UniqueViolation
 
 from app.schemas.song_catalog import Ownership
@@ -19,6 +19,10 @@ def catalog_errors():
         raise HTTPException(422, "Referenced catalog record does not exist or is in use") from exc
     except QueryCanceled as exc:
         raise HTTPException(504, "Database query timeout") from exc
+    except OperationalError as exc:
+        if "timeout expired" in str(exc).lower():
+            raise HTTPException(504, "Database connection timeout") from exc
+        raise HTTPException(500, "Database error") from exc
     except Error as exc:
         raise HTTPException(500, "Database error") from exc
 
@@ -43,6 +47,38 @@ EVENT_TODAY_SQL = """CASE
          make_interval(secs => EXTRACT(timezone FROM COALESCE(l.start_time, l.opening_time))::double precision))::date
     ELSE NULL END"""
 VALID_PERFORMANCE_SQL = f"l.event_status <> 'cancelled' AND l.live_date <= ({EVENT_TODAY_SQL})"
+
+# Use the same persisted ownership and ordering as read_ownership. Legacy band_id
+# is a migration hint and must never silently turn pending ownership into a band.
+SONG_OWNERSHIP_LABEL_SQL = """CASE WHEN s.owner_mode IS NULL THEN '待回填' ELSE
+    concat_ws(' / ',
+        (SELECT string_agg(b.band_name, ' / ' ORDER BY sb.display_order, sb.band_id)
+         FROM song_bands sb JOIN band_attrs b ON b.id = sb.band_id WHERE sb.song_id = s.id),
+        (SELECT string_agg(b.band_name || '：' || member_names.names, ' / ' ORDER BY g.display_order, g.band_id)
+         FROM song_member_groups g JOIN band_attrs b ON b.id = g.band_id
+         CROSS JOIN LATERAL (
+             SELECT string_agg(p.display_name, '、' ORDER BY m.display_order, m.member_id) AS names
+             FROM song_members m JOIN members p ON p.id = m.member_id
+             WHERE m.song_id = g.song_id AND m.band_id = g.band_id
+         ) member_names WHERE g.song_id = s.id)
+    ) END"""
+
+SONG_OWNERSHIP_DETAIL_SQL = """jsonb_build_object(
+    'mode', COALESCE(s.owner_mode, 'pending'),
+    'band_ids', COALESCE((SELECT jsonb_agg(b.band_id ORDER BY b.display_order, b.band_id)
+        FROM song_bands b WHERE b.song_id=s.id), '[]'::jsonb),
+    'bands', COALESCE((SELECT jsonb_agg(jsonb_build_object('band_id', b.band_id, 'band_name', a.band_name)
+        ORDER BY b.display_order, b.band_id) FROM song_bands b JOIN band_attrs a ON a.id=b.band_id
+        WHERE b.song_id=s.id), '[]'::jsonb),
+    'member_groups', COALESCE((SELECT jsonb_agg(jsonb_build_object('band_id', g.band_id,
+        'member_ids', (SELECT jsonb_agg(m.member_id ORDER BY m.display_order, m.member_id)
+        FROM song_members m WHERE m.song_id=g.song_id AND m.band_id=g.band_id)) ORDER BY g.display_order, g.band_id)
+        FROM song_member_groups g WHERE g.song_id=s.id), '[]'::jsonb),
+    'groups', COALESCE((SELECT jsonb_agg(jsonb_build_object('band_id', g.band_id, 'band_name', a.band_name,
+        'members', (SELECT jsonb_agg(jsonb_build_object('member_id', m.member_id, 'display_name', p.display_name)
+        ORDER BY m.display_order, m.member_id) FROM song_members m JOIN members p ON p.id=m.member_id
+        WHERE m.song_id=g.song_id AND m.band_id=g.band_id)) ORDER BY g.display_order, g.band_id)
+        FROM song_member_groups g JOIN band_attrs a ON a.id=g.band_id WHERE g.song_id=s.id), '[]'::jsonb))"""
 
 # Aliases s (song) and stl (setlist) are used by both single and batch Live reads.
 LIVE_COVER_SQL = """CASE
@@ -140,13 +176,9 @@ def read_album(cur: Any, album_id: int) -> dict[str, Any]:
         revision, owner_mode FROM albums WHERE id = %s""", (album_id,))
     album = one(cur)
     album["ownership"] = read_ownership(cur, album_id, album.pop("owner_mode"), resource="album")
-    cur.execute("""SELECT t.id AS album_track_id, t.song_id, t.track_order, t.edition_label, section.section_name,
+    cur.execute(f"""SELECT t.id AS album_track_id, t.song_id, t.track_order, t.edition_label, section.section_name,
         s.song_name, s.version_label, s.group_id,
-        COALESCE((SELECT string_agg(b.band_name, ' / ' ORDER BY owner.display_order, owner.band_id)
-            FROM (SELECT band_id, display_order FROM song_bands WHERE song_id = s.id
-                  UNION ALL SELECT band_id, display_order FROM song_member_groups WHERE song_id = s.id) owner
-            JOIN band_attrs b ON b.id = owner.band_id),
-            (SELECT band_name FROM band_attrs WHERE id = s.band_id), '待回填') AS band_name
+        {SONG_OWNERSHIP_LABEL_SQL} AS band_name
         FROM album_tracks t
         JOIN song_list s ON s.id = t.song_id
         JOIN album_sections section ON section.id = t.section_id
@@ -176,8 +208,7 @@ def save_ownership(cur: Any, song_id: int, ownership: Ownership, *, resource: Li
     cur.execute(f"DELETE FROM {resource}_members WHERE {resource}_id = %s", (song_id,))
     cur.execute(f"DELETE FROM {resource}_member_groups WHERE {resource}_id = %s", (song_id,))
     cur.execute(f"DELETE FROM {resource}_bands WHERE {resource}_id = %s", (song_id,))
-    legacy = ", band_id = NULL" if resource == "song" else ""
-    cur.execute(f"UPDATE {table} SET owner_mode = %s{legacy} WHERE id = %s",
+    cur.execute(f"UPDATE {table} SET owner_mode = %s WHERE id = %s",
                 (None if ownership.mode == "pending" else ownership.mode, song_id))
     for order, band_id in enumerate(ownership.band_ids, 1):
         cur.execute(f"INSERT INTO {resource}_bands({resource}_id, band_id, display_order) VALUES (%s, %s, %s)",

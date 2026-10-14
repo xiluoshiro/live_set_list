@@ -95,7 +95,6 @@ export type CatalogSongItem = {
   ownership?: SongOwnershipDetail;
   song_id: number;
   song_name: string;
-  band_id: number | null;
   band_name: string | null;
   live_count: number;
 };
@@ -229,11 +228,6 @@ export type LiveScheduleHistoryItem = {
   note: string | null;
 };
 
-export type LiveDetailCoverBand = {
-  band_id: number;
-  band_name: string;
-};
-
 export type EventAttendeeMode = "partial" | "full";
 
 export type LiveDetailEventAttendee = {
@@ -257,7 +251,7 @@ export type LiveDetailRow = {
   band_members: LiveDetailBandMember[];
   other_members: LiveDetailOtherMember[];
   comments: string[];
-  cover_band?: LiveDetailCoverBand | null;
+  ownership?: SongOwnershipDetail;
 };
 
 export type LiveDetailResponse = {
@@ -504,38 +498,21 @@ export type FavoriteBatchResponse = {
 };
 
 export type ConsoleSongItem = {
-  group_id?: number;
-  version_label?: string;
-  owner_mode?: "bands" | "members" | "mixed" | null;
+  group_id: number;
+  version_label: string;
+  owner_mode: "bands" | "members" | "mixed" | null;
   song_id: number;
   song_name: string;
-  band_id: number | null;
-  cover: boolean;
-  band_name?: string;
+  band_name: string;
 };
 
 export type ConsoleSongListResponse = {
-  items: ConsoleSongItem[];
-  page: number;
-  page_size: number;
-  total: number;
-  total_pages: number;
+  items: ConsoleSongItem[]; page: number; page_size: number; total: number; total_pages: number;
 };
-
-export type ConsoleSongCreatePayload = {
-  song_name: string;
-  band_id: number;
-  cover: boolean;
-};
-
-export type ConsoleSongMutationResponse = {
-  ok: boolean;
-  item: ConsoleSongItem;
-};
-
+export type ConsoleSongBatchPayload = SongVersionDraft & { group_name: string; ownership: SongOwnership };
 export type ConsoleSongBatchCreateResponse = {
   ok: boolean;
-  created: ConsoleSongItem[];
+  results: { index: number; item: SongVersion | null; created: boolean; error: string | null }[];
 };
 
 export type ConsoleBandItem = {
@@ -1818,59 +1795,8 @@ export async function getCatalogStatistics(
   return expectJsonResponse<CatalogStatisticsResponse>(response);
 }
 
-export async function createConsoleSong(
-  payload: ConsoleSongCreatePayload,
-  csrfToken: string,
-): Promise<ConsoleSongMutationResponse> {
-  const response = await fetchWithTimeout(
-    `${BASE_URL}/api/console/songs`,
-    {
-      method: "POST",
-      headers: jsonHeaders(csrfToken),
-      body: JSON.stringify(payload),
-    },
-    {
-      requestKind: "console_song_create",
-      method: "POST",
-    },
-  );
-  return expectJsonResponse<ConsoleSongMutationResponse>(response);
-}
-
-export async function updateConsoleSong(
-  songId: number,
-  payload: ConsoleSongCreatePayload,
-  csrfToken: string,
-): Promise<ConsoleSongMutationResponse> {
-  const response = await fetchWithTimeout(
-    `${BASE_URL}/api/console/songs/${songId}`,
-    {
-      method: "PUT",
-      headers: jsonHeaders(csrfToken),
-      body: JSON.stringify(payload),
-    },
-    { requestKind: "console_song_update", method: "PUT" },
-  );
-  return expectJsonResponse<ConsoleSongMutationResponse>(response);
-}
-
-export async function createConsoleSongsBatch(
-  songs: ConsoleSongCreatePayload[],
-  csrfToken: string,
-): Promise<ConsoleSongBatchCreateResponse> {
-  const response = await fetchWithTimeout(
-    `${BASE_URL}/api/console/songs:batch`,
-    {
-      method: "POST",
-      headers: jsonHeaders(csrfToken),
-      body: JSON.stringify({ songs }),
-    },
-    {
-      requestKind: "console_song_batch_create",
-      method: "POST",
-    },
-  );
-  return expectJsonResponse<ConsoleSongBatchCreateResponse>(response);
+export async function createConsoleSongsBatch(songs: ConsoleSongBatchPayload[], csrfToken: string): Promise<ConsoleSongBatchCreateResponse> {
+  return songCatalogWrite<ConsoleSongBatchCreateResponse>("/songs:batch", "POST", { songs }, csrfToken);
 }
 
 export async function createConsoleVenue(

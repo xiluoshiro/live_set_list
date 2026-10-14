@@ -840,15 +840,23 @@
 
 .console-confirm-batch-song-table {
   width: 100%;
-  min-width: 0;
+  min-width: 540px;
   table-layout: fixed;
 }
 
+.console-confirm-batch-song-table th:nth-child(1),
+.console-confirm-batch-song-table td:nth-child(1) {
+  width: 30%;
+}
+
 .console-confirm-batch-song-table th:nth-child(2),
-.console-confirm-batch-song-table td:nth-child(2),
-.console-confirm-batch-song-table th:nth-child(4),
-.console-confirm-batch-song-table td:nth-child(4) {
-  width: 56px;
+.console-confirm-batch-song-table td:nth-child(2) {
+  width: 20%;
+}
+
+.console-confirm-batch-song-table th:nth-child(3),
+.console-confirm-batch-song-table td:nth-child(3) {
+  width: 50%;
 }
 
 .console-confirm-setlist-table code {
@@ -1620,6 +1628,10 @@
   gap: 8px;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+.bands-floating-menu.console-multiselect-menu {
+  z-index: calc(var(--z-popover) + 1);
 }
 
 .band-member-floating-menu {

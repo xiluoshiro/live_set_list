@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import type { LiveDetailBandMember, LiveDetailRow } from "../api";
 import { getBandRepresentativeColor } from "./BandIconsCell";
+import { ownershipLabel } from "./SongDetailPage";
 import { ContentState } from "./ContentState";
 
 type OtherPopoverState = {
@@ -209,9 +210,7 @@ function normalizeRows(rows: LiveDetailRow[]): LiveDetailRow[] {
         : [String(other.value ?? "")].filter((v) => v !== ""),
     })),
     comments: Array.isArray(row.comments) ? row.comments.map((item) => String(item)) : [],
-    cover_band: row.cover_band && row.cover_band.band_id > 0
-      ? { band_id: Number(row.cover_band.band_id), band_name: String(row.cover_band.band_name) }
-      : null,
+    ownership: row.ownership,
   }));
 }
 
@@ -315,7 +314,9 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                 const previewOthers = row.other_members.slice(0, 2);
                 const extraCount = Math.max(0, row.other_members.length - previewOthers.length);
                 const validComments = row.comments.filter((c) => c.trim() !== "");
-                const coverColor = getBandRepresentativeColor(row.cover_band?.band_id ?? 0);
+                const coverBands = [...new Map([...(row.ownership?.bands ?? []), ...(row.ownership?.groups ?? [])].map(band => [band.band_id, band])).values()];
+                const coverColor = coverBands.length === 1 ? getBandRepresentativeColor(coverBands[0].band_id) : null;
+                const coverLabel = row.ownership && row.ownership.mode !== "pending" ? ownershipLabel({ ownership: row.ownership }) : "";
                 return (
                   <tr key={rowKey}>
                     <td>{row.row_id}</td>
@@ -388,18 +389,14 @@ export function MemberStatusTable({ rows, loading = false, error = null }: Membe
                           {validComments.map((comment, commentIndex) => (
                             <span
                               key={`${rowKey}-${comment}-${commentIndex}`}
-                              className={`comment-tag${comment === "翻唱" && row.cover_band ? " cover" : ""}`}
-                              style={comment === "翻唱" && row.cover_band && coverColor ? ({ "--band-color": coverColor } as CSSProperties) : undefined}
-                              title={comment === "翻唱" && row.cover_band ? `翻唱 ${row.cover_band.band_name} 的歌曲` : undefined}
+                              className={`comment-tag${comment === "翻唱" && coverLabel ? " cover" : ""}`}
+                              style={comment === "翻唱" && coverLabel && coverColor ? ({ "--band-color": coverColor } as CSSProperties) : undefined}
+                              title={comment === "翻唱" && coverLabel ? `翻唱 ${coverLabel} 的歌曲` : undefined}
                             >
                               {comment}
-                              {comment === "翻唱" && row.cover_band && (
-                                <img
-                                  src={`/icons/Band_${row.cover_band.band_id}.svg`}
-                                  alt={row.cover_band.band_name}
-                                  className="comment-cover-band-icon"
-                                />
-                              )}
+                              {comment === "翻唱" && coverBands.map(band => (
+                                <img key={band.band_id} src={`/icons/Band_${band.band_id}.svg`} alt={band.band_name} className="comment-cover-band-icon" />
+                              ))}
                             </span>
                           ))}
                         </div>

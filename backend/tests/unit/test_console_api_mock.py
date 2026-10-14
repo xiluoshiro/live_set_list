@@ -81,7 +81,7 @@ def _build_connection_mock(
 
 def _valid_song_payload(**overrides):
     """Return a minimal valid song-create request body with optional field overrides."""
-    payload = {"song_name": "Mock Song", "band_id": 1, "cover": False}
+    payload = {"song_name": "Mock Song", "group_id": 1, "expected_group_revision": 1, "ownership": {"mode": "bands", "band_ids": [1]}}
     payload.update(overrides)
     return payload
 
@@ -163,10 +163,11 @@ def test_console_lookup_mock_requires_authenticated_editor_role():
 # 测试点：只读查询无需 CSRF，Venue 响应保留真实 IANA 时区，歌曲返回分页信息。
 def test_console_lookup_mock_returns_items_without_csrf_for_editor():
     _set_authenticated_role("editor")
-    songs_conn, _ = _build_connection_mock(
+    songs_conn, songs_cur = _build_connection_mock(
         fetchone_side_effect=[(1,)],
-        fetchall_side_effect=[[(1, "Yes! BanG_Dream!", 1, False, "Poppin'Party")]],
+        fetchall_side_effect=[[(1, 1, "Yes! BanG_Dream!", "", "bands", "Poppin'Party")]],
     )
+    songs_cur.description = [type("Column", (), {"name": name})() for name in ("song_id", "group_id", "song_name", "version_label", "owner_mode", "band_name")]
     bands_conn, _ = _build_connection_mock(
         fetchall_side_effect=[[(2, "Roselia", "rsl", ["Yukina", "Sayo"])]],
     )
@@ -189,8 +190,9 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
             {
                 "song_id": 1,
                 "song_name": "Yes! BanG_Dream!",
-                "band_id": 1,
-                "cover": False,
+                "group_id": 1,
+                "version_label": "",
+                "owner_mode": "bands",
                 "band_name": "Poppin'Party",
             }
         ],
@@ -430,7 +432,7 @@ def test_console_update_live_mock_requires_valid_csrf():
         ("/api/console/bands", _valid_band_payload(members=[])),
         ("/api/console/songs", {}),
         ("/api/console/songs", _valid_song_payload(song_name="   ")),
-        ("/api/console/songs", _valid_song_payload(cover="not-bool")),
+        ("/api/console/songs", _valid_song_payload(expected_group_revision=0)),
         ("/api/console/venues", {}),
         ("/api/console/venues", _valid_venue_payload(venue_name="   ")),
         ("/api/console/lives", {}),
@@ -456,103 +458,12 @@ def test_console_insert_mock_rejects_schema_invalid_payloads(path: str, json_bod
     assert response.status_code == 422
 
 
-# 测试点：新增歌曲允许使用 id=0 的 Other bands 作为归属乐队。
-def test_console_create_song_mock_accepts_other_bands_id_zero():
-    _set_authenticated_role("editor")
-    conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (99,)])
-
-    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
-        client = TestClient(app)
-        response = client.post(
-            "/api/console/songs",
-            json=_valid_song_payload(song_name="Other Band Cover", band_id=0, cover=True),
-            headers={"X-CSRF-Token": CSRF_TOKEN},
-        )
-
-    assert response.status_code == 201
-    assert response.json()["item"] == {
-        "song_id": 99,
-        "song_name": "Other Band Cover",
-        "band_id": 0,
-        "cover": True,
-    }
 
 
-# 测试点：新增歌曲成功响应保留 ID、名称、Band 和翻唱字段；落库和审计由集成测试验证。
-def test_console_create_song_mock_success_persists_and_audits():
-    _set_authenticated_role("editor")
-    conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (99,)])
-
-    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
-        client = TestClient(app)
-        response = client.post(
-            "/api/console/songs",
-            json=_valid_song_payload(song_name="FIRE BIRD", band_id=2, cover=True),
-            headers={"X-CSRF-Token": CSRF_TOKEN},
-        )
-
-    assert response.status_code == 201
-    assert response.json() == {
-        "ok": True,
-        "item": {"song_id": 99, "song_name": "FIRE BIRD", "band_id": 2, "cover": True},
-    }
 
 
-# 测试点：新增歌曲应区分关联 band 不存在和歌曲唯一键冲突。
-def test_console_create_song_mock_business_errors():
-    _set_authenticated_role("editor")
-    missing_band_conn, _ = _build_connection_mock(fetchone_side_effect=[None])
-
-    duplicate_conn, duplicate_cursor = _build_connection_mock(fetchone_side_effect=[(1,)])
-
-    def duplicate_execute(query: str, params=None):
-        if "INSERT INTO song_list" in query:
-            raise UniqueViolation("duplicate song")
-
-    duplicate_cursor.execute.side_effect = duplicate_execute
-
-    with patch("app.routers.console_write.get_write_db_connection", return_value=missing_band_conn):
-        client = TestClient(app)
-        missing_band_response = client.post(
-            "/api/console/songs",
-            json=_valid_song_payload(band_id=999),
-            headers={"X-CSRF-Token": CSRF_TOKEN},
-        )
-
-    with patch("app.routers.console_write.get_write_db_connection", return_value=duplicate_conn):
-        duplicate_response = client.post(
-            "/api/console/songs",
-            json=_valid_song_payload(song_name="Yes! BanG_Dream!"),
-            headers={"X-CSRF-Token": CSRF_TOKEN},
-        )
-
-    assert missing_band_response.status_code == 404
-    assert missing_band_response.json()["detail"] == "Band id 999 not found"
-    assert duplicate_response.status_code == 409
-    assert duplicate_response.json()["detail"] == "Song name already exists: Yes! BanG_Dream!"
 
 
-# 测试点：歌曲更新响应及写入参数保留请求的 ID、名称、Band 和翻唱标记。
-def test_console_update_song_mock_returns_updated_fields():
-    _set_authenticated_role("editor")
-    conn, cursor = _build_connection_mock(fetchone_side_effect=[(1,), (99,)])
-
-    with patch("app.routers.console_write.get_write_db_connection", return_value=conn):
-        client = TestClient(app)
-        response = client.put(
-            "/api/console/songs/99",
-            json=_valid_song_payload(song_name="Updated Song", band_id=2, cover=True),
-            headers={"X-CSRF-Token": CSRF_TOKEN},
-        )
-
-    assert response.status_code == 200
-    assert response.json()["item"] == {
-        "song_id": 99,
-        "song_name": "Updated Song",
-        "band_id": 2,
-        "cover": True,
-    }
-    assert cursor.execute.call_args_list[1].args[1] == ("Updated Song", 2, True, 99)
 
 
 # 测试点：新增未公开 Venue 返回初始名称版本和场馆自身时区。

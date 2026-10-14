@@ -37,8 +37,8 @@ export const MOCK_LIVES: LiveInsertRow[] = [
 ];
 
 export const MOCK_SONGS: SongInsertRow[] = [
-  { song_id: 201, song_name: "春日序曲", band_id: 1, cover: false },
-  { song_id: 202, song_name: "逆光海岸", band_id: 2, cover: false },
+  { song_id: 201, song_name: "春日序曲" },
+  { song_id: 202, song_name: "逆光海岸" },
 ];
 
 export const MOCK_VENUES: VenueOption[] = [

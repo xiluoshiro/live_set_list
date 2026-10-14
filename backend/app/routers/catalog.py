@@ -8,7 +8,7 @@ from psycopg2.errors import QueryCanceled
 
 from app.auth import AuthUser, get_current_user_optional
 from app.db import get_db_connection
-from app.song_catalog import read_ownership
+from app.song_catalog import SONG_OWNERSHIP_LABEL_SQL, read_ownership
 from app.favorites import get_favorite_live_id_set
 from app.live_list_filters import effective_band_ids_sql
 from app.logging_config import get_logger
@@ -164,24 +164,21 @@ ORDER BY live_count DESC, b.band_name, b.band_id
 LIMIT %s
 """
 
-SEARCH_SONGS_QUERY = """
+SEARCH_SONGS_QUERY = f"""
 SELECT
     s.id,
     g.group_name,
-    s.band_id,
-    b.band_name,
+    {SONG_OWNERSHIP_LABEL_SQL} AS band_name,
     COUNT(DISTINCT ls.live_id) AS live_count,
     s.owner_mode, s.group_id, s.version_label
 FROM song_list s
 JOIN song_groups g ON g.id = s.group_id
-LEFT JOIN band_attrs b
-    ON b.id = s.band_id
 LEFT JOIN live_setlist ls
     ON ls.song_group_id = s.group_id
 WHERE s.version_label = '' AND EXISTS(SELECT 1 FROM song_list version
     WHERE version.group_id = s.group_id AND
     (g.group_name || ' ' || version.song_name || ' ' || version.version_label) ILIKE %s ESCAPE '\\')
-GROUP BY s.id, g.group_name, s.band_id, b.band_name
+GROUP BY s.id, g.group_name
 ORDER BY live_count DESC, g.group_name, s.id
 LIMIT %s
 """
@@ -330,7 +327,7 @@ def search_catalog(
                 song_rows = cur.fetchall()
                 cur.execute(SEARCH_VENUES_QUERY, (pattern, limit))
                 venue_rows = cur.fetchall()
-                song_ownership = {int(row[0]): read_ownership(cur, int(row[0]), row[5]) for row in song_rows}
+                song_ownership = {int(row[0]): read_ownership(cur, int(row[0]), row[4]) for row in song_rows}
     except QueryCanceled as exc:
         logger.exception("search_catalog timeout q=%s limit=%s", query_text, limit)
         raise HTTPException(status_code=504, detail="Database query timeout") from exc
@@ -361,12 +358,11 @@ def search_catalog(
             {
                 "song_id": int(row[0]),
                 "song_name": row[1],
-                "band_id": int(row[2]) if row[2] is not None else None,
-                "band_name": row[3],
-                "live_count": int(row[4]),
+                "band_name": row[2],
+                "live_count": int(row[3]),
                 "ownership": song_ownership[int(row[0])],
-                "group_id": row[6],
-                "version_label": row[7],
+                "group_id": row[5],
+                "version_label": row[6],
             }
             for row in song_rows
         ],

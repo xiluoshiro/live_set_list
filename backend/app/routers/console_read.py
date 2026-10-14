@@ -20,14 +20,8 @@ from app.schemas.console import (
     ConsoleSongListResponse,
     ConsoleLiveSetlistEditResponse,
 )
-from app.song_lookup import (
-    SONG_LOOKUP_SQL_FROM_CHARS,
-    SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS,
-    SONG_LOOKUP_SQL_TO_CHARS,
-    normalize_song_lookup_text,
-    song_lookup_sql,
-)
-from app.song_catalog import catalog_errors, rows as catalog_rows
+from app.song_lookup import normalize_song_lookup_text, song_lookup_sql
+from app.song_catalog import SONG_OWNERSHIP_LABEL_SQL, catalog_errors, rows as catalog_rows
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -565,228 +559,40 @@ def get_editable_live_setlist(
         ],
     }
 
-@router.get(
-    "/songs",
-    response_model=ConsoleSongListResponse,
-    response_model_exclude_unset=True,
-    summary="查询歌曲候选",
-    description="`editor+` 用户查询控制台录入时可选择的歌曲。支持按歌名前缀和归属 Band 筛选。",
-    responses={
-        401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
-        403: {"model": AuthErrorResponse, "description": "缺少权限"},
-        422: {"model": ValidationErrorResponse, "description": "查询参数验证失败"},
-        500: {"model": ErrorResponse, "description": "数据库一般错误"},
-        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
-    },
-)
+@router.get("/songs", response_model=ConsoleSongListResponse)
 def list_songs(
-    q: str | None = Query(default=None, max_length=255, description="Song title prefix"),
-    limit: int = Query(default=20, ge=1, le=100, description="Maximum number of songs to return"),
-    page: int = Query(default=1, ge=1, description="Result page"),
-    band_id: int | None = Query(default=None, ge=0, description="Owning band_attrs.id"),
+    q: str | None = Query(default=None, max_length=255),
+    limit: int = Query(default=20, ge=1, le=100),
+    page: int = Query(default=1, ge=1),
+    band_id: int | None = Query(default=None, ge=1),
     groups_only: bool = Query(default=False),
     _: Any = Depends(require_role("editor")),
 ):
-    """Return song_list rows for the console song selector without mutating any data."""
     query_text = _normalize_lookup_query(q)
-    normalized_query_text = normalize_song_lookup_text(query_text)
+    expression, normalization_params = song_lookup_sql("g.group_name" if groups_only else "s.song_name")
+    conditions = [f"{expression} ILIKE %s ESCAPE '\\'"]
+    params: tuple[Any, ...] = (*normalization_params, _build_prefix_lookup_pattern(normalize_song_lookup_text(query_text)))
     if groups_only:
-        expression, params = song_lookup_sql("g.group_name")
-        where = f"{expression} ILIKE %s AND (%s::int IS NULL OR s.band_id = %s OR EXISTS(SELECT 1 FROM song_bands b WHERE b.song_id=s.id AND b.band_id=%s) OR EXISTS(SELECT 1 FROM song_member_groups m WHERE m.song_id=s.id AND m.band_id=%s))"
-        values = (*params, _build_prefix_lookup_pattern(normalized_query_text), band_id, band_id, band_id, band_id)
-        source = "FROM song_groups g JOIN song_list s ON s.group_id=g.id AND s.version_label=''"
-        with catalog_errors(), get_db_connection() as conn, conn.cursor() as cur:
-            cur.execute(f"SELECT count(*) {source} WHERE {where}", values)
-            total = cur.fetchone()[0]
-            pages = max(1, ceil(total / limit))
-            safe_page = min(page, pages)
-            cur.execute(f"""SELECT s.id AS song_id, g.id AS group_id, g.group_name AS song_name,
-                s.band_id, s.is_cover AS cover, s.version_label, s.owner_mode,
-                COALESCE((SELECT string_agg(b.band_name, ' / ' ORDER BY b.id) FROM band_attrs b
-                  WHERE b.id IN (SELECT band_id FROM song_bands WHERE song_id=s.id
-                    UNION SELECT band_id FROM song_member_groups WHERE song_id=s.id)),
-                  (SELECT band_name FROM band_attrs WHERE id=s.band_id), '待回填') AS band_name
-                {source} WHERE {where} ORDER BY g.group_name, g.id LIMIT %s OFFSET %s""",
-                        (*values, limit, (safe_page - 1) * limit))
-            return {"items": catalog_rows(cur), "page": safe_page, "page_size": limit, "total": total, "total_pages": pages}
-    band_filter_sql = " AND (band_id = %s OR id IN (SELECT song_id FROM song_bands WHERE band_id = %s UNION SELECT song_id FROM song_member_groups WHERE band_id = %s))" if band_id is not None else ""
-    band_filter_params = (band_id, band_id, band_id) if band_id is not None else ()
-
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                if query_text:
-                    normalized_song_list_sql = """
-                        WITH normalized_song_list AS (
-                            SELECT
-                                s.id,
-                                s.song_name,
-                                s.band_id,
-                                s.is_cover,
-                                COALESCE(b.band_name, (SELECT string_agg(ob.band_name, ' / ' ORDER BY owner.display_order) FROM (SELECT band_id, display_order FROM song_bands WHERE song_id = s.id UNION ALL SELECT band_id, display_order FROM song_member_groups WHERE song_id = s.id) owner JOIN band_attrs ob ON ob.id = owner.band_id), '待回填') AS band_name,
-                                s.group_id, s.version_label, s.owner_mode,
-                                regexp_replace(
-                                    regexp_replace(
-                                        regexp_replace(
-                                            regexp_replace(
-                                                translate(s.song_name, %s, %s),
-                                                %s,
-                                                '\\1',
-                                                'g'
-                                            ),
-                                            %s,
-                                            '\\1',
-                                            'g'
-                                        ),
-                                        %s,
-                                        '\\1\\2',
-                                        'g'
-                                    ),
-                                    %s,
-                                    '\\1\\2',
-                                    'g'
-                                ) AS normalized_song_name
-                            FROM song_list AS s
-                            LEFT JOIN band_attrs AS b ON b.id = s.band_id
-                        )
-                    """
-                    normalization_params = (
-                        SONG_LOOKUP_SQL_FROM_CHARS,
-                        SONG_LOOKUP_SQL_TO_CHARS,
-                        SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[0],
-                        SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[1],
-                        SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[2],
-                        SONG_LOOKUP_SQL_PUNCTUATION_WHITESPACE_PATTERNS[3],
-                    )
-                    prefix_params = (
-                        _build_prefix_lookup_pattern(query_text),
-                        _build_prefix_lookup_pattern(normalized_query_text),
-                    )
-                    cur.execute(
-                        f"""
-                        {normalized_song_list_sql}
-                        SELECT COUNT(*)
-                        FROM normalized_song_list
-                        WHERE (
-                            song_name ILIKE %s ESCAPE '\\'
-                            OR normalized_song_name ILIKE %s ESCAPE '\\'
-                        )
-                        {band_filter_sql}
-                        """,
-                        (*normalization_params, *prefix_params, *band_filter_params),
-                    )
-                elif band_id is not None:
-                    cur.execute(f"SELECT COUNT(*) FROM song_list WHERE true {band_filter_sql}", band_filter_params)
-                else:
-                    cur.execute("SELECT COUNT(*) FROM song_list")
-                total_row = cur.fetchone()
-                total = int(total_row[0]) if total_row is not None else 0
-                total_pages = max(1, (total + limit - 1) // limit)
-                safe_page = min(page, total_pages)
-                offset = (safe_page - 1) * limit
-
-                if query_text:
-                    cur.execute(
-                        f"""
-                        {normalized_song_list_sql}
-                        SELECT id, song_name, band_id, is_cover, band_name, group_id, version_label, owner_mode
-                        FROM normalized_song_list
-                        WHERE (
-                            song_name ILIKE %s ESCAPE '\\'
-                            OR normalized_song_name ILIKE %s ESCAPE '\\'
-                        )
-                        {band_filter_sql}
-                        ORDER BY
-                            CASE
-                                WHEN song_name ILIKE %s ESCAPE '\\' THEN 0
-                                WHEN normalized_song_name ILIKE %s ESCAPE '\\' THEN 1
-                                ELSE 2
-                            END,
-                            song_name,
-                            id
-                        LIMIT %s OFFSET %s
-                        """,
-                        (
-                            *normalization_params,
-                            *prefix_params,
-                            *band_filter_params,
-                            _build_exact_lookup_pattern(query_text),
-                            _build_exact_lookup_pattern(normalized_query_text),
-                            limit,
-                            offset,
-                        ),
-                    )
-                elif band_id is not None:
-                    cur.execute(
-                        """
-                        SELECT s.id, s.song_name, s.band_id, s.is_cover, COALESCE(b.band_name, (SELECT string_agg(ob.band_name, ' / ' ORDER BY owner.display_order) FROM (SELECT band_id, display_order FROM song_bands WHERE song_id = s.id UNION ALL SELECT band_id, display_order FROM song_member_groups WHERE song_id = s.id) owner JOIN band_attrs ob ON ob.id = owner.band_id), '待回填') AS band_name, s.group_id, s.version_label, s.owner_mode
-                        FROM song_list AS s
-                        LEFT JOIN band_attrs AS b ON b.id = s.band_id
-                        WHERE s.band_id = %s OR s.id IN (SELECT song_id FROM song_bands WHERE band_id = %s UNION SELECT song_id FROM song_member_groups WHERE band_id = %s)
-                        ORDER BY s.song_name, s.id
-                        LIMIT %s OFFSET %s
-                        """,
-                        (band_id, band_id, band_id, limit, offset),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        SELECT s.id, s.song_name, s.band_id, s.is_cover, COALESCE(b.band_name, (SELECT string_agg(ob.band_name, ' / ' ORDER BY owner.display_order) FROM (SELECT band_id, display_order FROM song_bands WHERE song_id = s.id UNION ALL SELECT band_id, display_order FROM song_member_groups WHERE song_id = s.id) owner JOIN band_attrs ob ON ob.id = owner.band_id), '待回填') AS band_name, s.group_id, s.version_label, s.owner_mode
-                        FROM song_list AS s
-                        LEFT JOIN band_attrs AS b ON b.id = s.band_id
-                        ORDER BY s.song_name, s.id
-                        LIMIT %s OFFSET %s
-                        """,
-                        (limit, offset),
-                    )
-                rows = cur.fetchall()
-    except QueryCanceled as exc:
-        logger.exception(
-            "list_songs timeout q=%s band_id=%s limit=%s page=%s",
-            query_text,
-            band_id,
-            limit,
-            page,
-        )
-        raise HTTPException(status_code=504, detail="Database query timeout") from exc
-    except OperationalError as exc:
-        logger.exception(
-            "list_songs operational error q=%s band_id=%s limit=%s page=%s",
-            query_text,
-            band_id,
-            limit,
-            page,
-        )
-        if "timeout expired" in str(exc).lower():
-            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-    except Error as exc:
-        logger.exception(
-            "list_songs failed q=%s band_id=%s limit=%s page=%s",
-            query_text,
-            band_id,
-            limit,
-            page,
-        )
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-
-    return {
-        "items": [
-            {
-                "song_id": int(row[0]),
-                "song_name": row[1],
-                "band_id": int(row[2]) if row[2] is not None else None,
-                "cover": bool(row[3]),
-                "band_name": row[4] or "待回填",
-                **({"group_id": row[5], "version_label": row[6], "owner_mode": row[7]} if len(row) > 7 and (row[2] is None or row[6] or row[7]) else {}),
-            }
-            for row in rows
-        ],
-        "page": safe_page,
-        "page_size": limit,
-        "total": total,
-        "total_pages": total_pages,
-    }
+        conditions.append("s.version_label = ''")
+    if band_id is not None:
+        conditions.append("s.id IN (SELECT song_id FROM song_bands WHERE band_id = %s UNION SELECT song_id FROM song_member_groups WHERE band_id = %s)")
+        params += (band_id, band_id)
+    source = "FROM song_list s JOIN song_groups g ON g.id = s.group_id"
+    where = " AND ".join(conditions)
+    name = "g.group_name" if groups_only else "s.song_name"
+    with catalog_errors(), get_db_connection() as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT count(*) {source} WHERE {where}", params)
+        total = cur.fetchone()[0]
+        pages = max(1, ceil(total / limit))
+        safe_page = min(page, pages)
+        cur.execute(f"""SELECT s.id AS song_id, s.group_id, {name} AS song_name,
+            s.version_label, s.owner_mode, {SONG_OWNERSHIP_LABEL_SQL} AS band_name
+            {source} WHERE {where}
+            ORDER BY CASE WHEN {name} ILIKE %s ESCAPE '\\' THEN 0
+                WHEN {expression} ILIKE %s ESCAPE '\\' THEN 1 ELSE 2 END, {name}, s.id
+            LIMIT %s OFFSET %s""", (*params, _build_exact_lookup_pattern(query_text),
+                *normalization_params, _build_exact_lookup_pattern(normalize_song_lookup_text(query_text)), limit, (safe_page - 1) * limit))
+        return {"items": catalog_rows(cur), "page": safe_page, "page_size": limit, "total": total, "total_pages": pages}
 
 
 @router.get(

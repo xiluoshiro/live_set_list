@@ -34,8 +34,6 @@ export type SongInsertRow = {
   group_id?: number;
   song_id: number;
   song_name: string;
-  band_id: number | null;
-  cover: boolean;
   band_name?: string;
 };
 

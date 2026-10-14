@@ -41,7 +41,7 @@ const detailRows: LiveDetailRow[] = [
       { key: "打击乐", value: ["额外一轨"] },
     ],
     comments: ["翻唱"],
-    cover_band: { band_id: 4, band_name: "Roselia" },
+    ownership: { mode: "bands", band_ids: [4], member_groups: [], bands: [{ band_id: 4, band_name: "Roselia" }], groups: [] },
   },
 ];
 
@@ -73,9 +73,9 @@ describe("MemberStatusTable", () => {
     expect(within(coverTag).getByRole("img", { name: "Roselia" })).toHaveAttribute("src", "/icons/Band_4.svg");
   });
 
-  // 测试点：is_cover 产生的旧翻唱标签不应附带新的乐队 SVG。
-  test("旧翻唱标签保持纯文字", () => {
-    render(<MemberStatusTable rows={[{ ...detailRows[1], cover_band: null }]} />);
+  // 测试点：没有归属资料的缓存详情仍可显示文字标记。
+  test("缺少归属资料时展示文字标记", () => {
+    render(<MemberStatusTable rows={[{ ...detailRows[1], ownership: undefined }]} />);
 
     const coverTag = screen.getByText("翻唱");
     expect(within(coverTag).queryByRole("img")).not.toBeInTheDocument();

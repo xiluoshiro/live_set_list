@@ -1,3 +1,4 @@
+import { ownershipLabel } from "./SongDetailPage";
 import { formatTimedLabel } from "../liveTimeFormat";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 
@@ -209,8 +210,8 @@ function attendanceText(member: LiveDetailBandMember): string {
   return `部分成员 ${present}/${expected}`;
 }
 
-function formatTrackComment(comment: string, coverBand: LiveDetailRow["cover_band"]): string {
-  return comment === "翻唱" && coverBand ? `翻唱自 ${coverBand.band_name}` : comment;
+function formatTrackComment(comment: string, owner: LiveDetailRow["ownership"]): string {
+  return comment === "翻唱" && owner && owner.mode !== "pending" ? `翻唱自 ${ownershipLabel({ ownership: owner })}` : comment;
 }
 
 function formatScheduleHistoryParts(
@@ -337,7 +338,7 @@ function StageTrackInspector({ row }: { row: StageRow }) {
             <h4>资料标记</h4>
             <ul className="stage-detail-list">
               {row.comments.map((comment) => (
-                <li key={comment}>{formatTrackComment(comment, row.cover_band)}</li>
+                <li key={comment}>{formatTrackComment(comment, row.ownership)}</li>
               ))}
               {row.other_members.map((other) => (
                 <li key={other.key}>{other.key}：{other.value.join(" / ") || "未记录"}</li>
@@ -444,7 +445,7 @@ function StageFlow({
                               <strong>{row.song_name}</strong>
                             </span>
                             {row.comments.length > 0 && (
-                              <span className="stage-track-meta">{row.comments.map((comment) => formatTrackComment(comment, row.cover_band)).join(" / ")}</span>
+                              <span className="stage-track-meta">{row.comments.map((comment) => formatTrackComment(comment, row.ownership)).join(" / ")}</span>
                             )}
                           </button>
                         </Collapsible.Trigger>

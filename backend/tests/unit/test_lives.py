@@ -302,8 +302,10 @@ def test_get_live_detail_success_maps_rows_and_rules():
             "M",
             1,
             301,
+            "M1",
+            "cover",
         ),
-        ("EN1", "Song 2", None, False, True, 2, "Afterglow", 13, "EN", 1, 302),
+        ("EN1", "Song 2", None, False, True, None, None, 13, "EN", 1, 302, "EN1", "unknown"),
     ]
     performance_rows = [
         (
@@ -349,7 +351,6 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert first_row["song_id"] == 301
     assert first_row["song_name"] == "Song 1"
     assert first_row["comments"] == ["短版", "翻唱"]
-    assert first_row["cover_band"] is None
     assert first_row["other_members"] == [
         {"key": "嘉宾", "value": ["Ommy", "荒幡亮平"]},
         {"key": "键盘支援", "value": ["远程连线"]},
@@ -373,8 +374,7 @@ def test_get_live_detail_success_maps_rows_and_rules():
     assert second_row["absolute_order"] == 13
     assert second_row["segment_type"] == "EN"
     assert second_row["song_id"] == 302
-    assert second_row["comments"] == ["翻唱"]
-    assert second_row["cover_band"] is None
+    assert second_row["comments"] == []
     assert second_row["other_members"] == []
     assert second_row["band_members"] == []
 
@@ -656,6 +656,7 @@ def test_get_live_details_batch_success_and_partial_missing():
             True,
             1,
             "Poppin'Party",
+            1, "A", 1, 301, "A1", "cover",
         ),
         (
             1,
@@ -666,6 +667,7 @@ def test_get_live_details_batch_success_and_partial_missing():
             False,
             2,
             "Afterglow",
+            1, "B", 1, 302, "B1", "cover",
         ),
     ]
     performance_rows = [
@@ -696,14 +698,12 @@ def test_get_live_details_batch_success_and_partial_missing():
     assert first_item["url"] == "https://example.com/live/2"
     assert payload["items"][1]["performance_group"] == {"group_id": 7, "group_title": "Group 7"}
     assert first_item["detail_rows"][0]["comments"] == ["短版", "翻唱"]
-    assert first_item["detail_rows"][0]["cover_band"] is None
     assert first_item["detail_rows"][0]["other_members"] == [{"key": "嘉宾", "value": ["Guest A"]}]
     assert first_item["detail_rows"][0]["band_members"][0]["total_count"] == 6
     assert first_item["detail_rows"][0]["band_members"][0]["is_full"] is False
     assert first_item["detail_rows"][0]["band_members"][0]["attendance_status"] == "partial"
     second_item = payload["items"][1]
     assert second_item["detail_rows"][0]["comments"] == ["翻唱"]
-    assert second_item["detail_rows"][0]["cover_band"] == {"band_id": 2, "band_name": "Afterglow"}
 
     assert cursor.execute.call_args_list[0] == call(BATCH_LIVE_DETAIL_HEADERS_QUERY, ([2, 999, 1],))
     assert cursor.execute.call_args_list[1] == call(BATCH_LIVE_DETAIL_ROWS_QUERY, ([2, 999, 1],))

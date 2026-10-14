@@ -108,9 +108,10 @@ def test_console_lookup_endpoints_return_seeded_options(
             {
                 "song_id": 1,
                 "song_name": "Yes! BanG_Dream!",
-                "band_id": 1,
-                "cover": False,
-                "band_name": "Poppin'Party",
+                "group_id": 1,
+                "version_label": "",
+                "owner_mode": None,
+                "band_name": "待回填",
             }
         ],
         "page": 1,
@@ -164,7 +165,7 @@ def test_console_song_lookup_prioritizes_exact_title_match(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, is_cover, group_id) SELECT seed.song_name, seed.is_cover, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
             ("R", 1, False),
         )
         song_id = cursor.fetchone()[0]
@@ -179,7 +180,7 @@ def test_console_song_lookup_prioritizes_exact_title_match(
 
     assert response.status_code == 200
     assert response.json()["items"] == [
-        {"song_id": song_id, "song_name": "R", "band_id": 1, "cover": False, "band_name": "Poppin'Party"}
+        {"song_id": song_id, "group_id": song_id, "song_name": "R", "version_label": "", "owner_mode": None, "band_name": "待回填"}
     ]
 
 
@@ -193,7 +194,7 @@ def test_console_song_lookup_supports_server_side_pagination(
         cursor.execute(
             """
             WITH seed(song_name, band_id, is_cover) AS (VALUES ('Pagination Probe A', 1, false),
-                ('Pagination Probe B', 1, false)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name
+                ('Pagination Probe B', 1, false)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, is_cover, group_id) SELECT seed.song_name, seed.is_cover, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name
             RETURNING id
             """
         )
@@ -213,9 +214,10 @@ def test_console_song_lookup_supports_server_side_pagination(
             {
                 "song_id": inserted_ids[1],
                 "song_name": "Pagination Probe B",
-                "band_id": 1,
-                "cover": False,
-                "band_name": "Poppin'Party",
+                "group_id": inserted_ids[1],
+                "version_label": "",
+                "owner_mode": None,
+                "band_name": "待回填",
             }
         ],
         "page": 2,
@@ -225,7 +227,7 @@ def test_console_song_lookup_supports_server_side_pagination(
     }
 
 
-# 测试点：歌曲候选应支持单独或组合使用归属 Band，并让分页总数只统计筛选命中项。
+# 测试点：正式歌曲归属支持单独或组合乐队筛选，分页只统计归属命中项。
 def test_console_song_lookup_filters_by_owning_band(
     integration_test_client,
     integration_admin_connection,
@@ -235,11 +237,15 @@ def test_console_song_lookup_filters_by_owning_band(
         cursor.execute(
             """
             WITH seed(song_name, band_id, is_cover) AS (VALUES ('Band Filter Probe Poppin', 1, false),
-                ('Band Filter Probe Roselia', 2, false)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name
-            RETURNING id, band_id
+                ('Band Filter Probe Roselia', 2, false)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, is_cover, group_id) SELECT seed.song_name, seed.is_cover, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name
+            RETURNING id, song_name
             """
         )
-        inserted_by_band = {int(row[1]): int(row[0]) for row in cursor.fetchall()}
+        inserted_by_band = {1 if "Poppin" in row[1] else 2: int(row[0]) for row in cursor.fetchall()}
+        cursor.execute("""WITH owners AS (UPDATE song_list SET owner_mode='bands' WHERE id=ANY(%s) RETURNING id, song_name)
+            INSERT INTO song_bands(song_id,band_id,display_order)
+            SELECT id, CASE WHEN song_name='Band Filter Probe Poppin' THEN 1 ELSE 2 END, 1 FROM owners""",
+            (list(inserted_by_band.values()),))
 
     _login_and_get_csrf_for(
         integration_test_client,
@@ -255,24 +261,16 @@ def test_console_song_lookup_filters_by_owning_band(
     )
 
     assert combined_response.status_code == 200
-    assert combined_response.json() == {
-        "items": [
-            {
-                "song_id": inserted_by_band[2],
-                "song_name": "Band Filter Probe Roselia",
-                "band_id": 2,
-                "cover": False,
-                "band_name": "Roselia",
-            }
-        ],
-        "page": 1,
-        "page_size": 20,
-        "total": 1,
-        "total_pages": 1,
+    combined = combined_response.json()
+    assert [item["song_id"] for item in combined["items"]] == [inserted_by_band[2]]
+    assert combined["items"][0]["band_name"] == "Roselia"
+    assert {key: value for key, value in combined.items() if key != "items"} == {
+        "page": 1, "page_size": 20, "total": 1, "total_pages": 1,
     }
     assert band_only_response.status_code == 200
     band_only_body = band_only_response.json()
-    assert all(item["band_id"] == 2 for item in band_only_body["items"])
+    assert all(integration_test_client.get(f"/api/songs/{item['song_id']}").json()["ownership"]["band_ids"] == [2]
+               for item in band_only_body["items"])
     assert inserted_by_band[2] in {item["song_id"] for item in band_only_body["items"]}
     assert band_only_body["total"] == len(band_only_body["items"])
 
@@ -285,11 +283,11 @@ def test_console_song_lookup_only_matches_title_prefix(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, is_cover, group_id) SELECT seed.song_name, seed.is_cover, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name",
             ("Sing Alive", 1, False),
         )
         cursor.execute(
-            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, is_cover, group_id) SELECT seed.song_name, seed.is_cover, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
             ("V.I.P MONSTER", 1, False),
         )
         prefix_song_id = cursor.fetchone()[0]
@@ -310,9 +308,10 @@ def test_console_song_lookup_only_matches_title_prefix(
         {
             "song_id": prefix_song_id,
             "song_name": "V.I.P MONSTER",
-            "band_id": 1,
-            "cover": False,
-            "band_name": "Poppin'Party",
+            "group_id": prefix_song_id,
+            "version_label": "",
+            "owner_mode": None,
+            "band_name": "待回填",
         }
     ]
 
@@ -326,7 +325,7 @@ def test_console_song_lookup_matches_punctuation_equivalent_title(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, is_cover, group_id) SELECT seed.song_name, seed.is_cover, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
             ("Song ‘A’，B；C〜D", 1, False),
         )
         song_id = cursor.fetchone()[0]
@@ -344,9 +343,10 @@ def test_console_song_lookup_matches_punctuation_equivalent_title(
         {
             "song_id": song_id,
             "song_name": "Song ‘A’，B；C〜D",
-            "band_id": 1,
-            "cover": False,
-            "band_name": "Poppin'Party",
+            "group_id": song_id,
+            "version_label": "",
+            "owner_mode": None,
+            "band_name": "待回填",
         }
     ]
 
@@ -359,7 +359,7 @@ def test_console_song_lookup_matches_modifier_apostrophe_pair(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, is_cover, group_id) SELECT seed.song_name, seed.is_cover, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
             ("ぽっぴん'しゃっふる", 1, False),
         )
         song_id = cursor.fetchone()[0]
@@ -374,9 +374,10 @@ def test_console_song_lookup_matches_modifier_apostrophe_pair(
         {
             "song_id": song_id,
             "song_name": "ぽっぴん'しゃっふる",
-            "band_id": 1,
-            "cover": False,
-            "band_name": "Poppin'Party",
+            "group_id": song_id,
+            "version_label": "",
+            "owner_mode": None,
+            "band_name": "待回填",
         }
     ]
     left_response = integration_test_client.get("/api/console/songs?q=ぽっぴんʻしゃっふる&limit=10")
@@ -393,12 +394,12 @@ def test_console_song_lookup_ignores_only_whitespace_adjacent_to_punctuation(
     integration_admin_connection.autocommit = True
     with integration_admin_connection.cursor() as cursor:
         cursor.execute(
-            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, is_cover, group_id) SELECT seed.song_name, seed.is_cover, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name RETURNING id",
             ("LET’S あちあちトレーニング！", 1, False),
         )
         song_id = cursor.fetchone()[0]
         cursor.execute(
-            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, band_id, is_cover, group_id) SELECT seed.*, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name",
+            "WITH seed(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)), new_groups AS (INSERT INTO song_groups(group_name) SELECT song_name FROM seed RETURNING id, group_name) INSERT INTO song_list (song_name, is_cover, group_id) SELECT seed.song_name, seed.is_cover, new_groups.id FROM seed JOIN new_groups ON new_groups.group_name = seed.song_name",
             ("LET’S あち あちトレーニング！", 1, False),
         )
 
@@ -415,9 +416,10 @@ def test_console_song_lookup_ignores_only_whitespace_adjacent_to_punctuation(
         {
             "song_id": song_id,
             "song_name": "LET’S あちあちトレーニング！",
-            "band_id": 1,
-            "cover": False,
-            "band_name": "Poppin'Party",
+            "group_id": song_id,
+            "version_label": "",
+            "owner_mode": None,
+            "band_name": "待回填",
         }
     ]
 
@@ -500,99 +502,8 @@ def test_console_lookup_endpoints_do_not_mutate_database(
     assert _count_rows(integration_admin_connection, "SELECT COUNT(*) FROM venue_list") == venue_count_before
 
 
-# 测试点：单曲入口保存所选乐队的正式归属及审计，详情可读，后续修改和清空乐队同步更新归属。
-def test_console_create_song_persists_row_and_audit_log(
-    integration_test_client,
-    integration_admin_connection,
-):
-    """Verify the console song-create endpoint inserts one song and one matching audit log row."""
-    csrf_token = _login_and_get_csrf_for(
-        integration_test_client,
-        username=TEST_DEFAULT_ADMIN_USERNAME,
-        password=TEST_DEFAULT_ADMIN_PASSWORD,
-    )
-
-    response = integration_test_client.post(
-        "/api/console/songs",
-        headers={"X-CSRF-Token": csrf_token},
-        json={"song_name": "Console Created Song", "band_id": 2, "cover": False},
-    )
-
-    assert response.status_code == 201
-    assert response.json() == {
-        "ok": True,
-        "item": {
-            "song_id": 203,
-            "song_name": "Console Created Song",
-            "band_id": 2,
-            "cover": False,
-        },
-    }
-
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT id, song_name, band_id, is_cover FROM song_list WHERE id = %s",
-            (203,),
-        )
-        row = cursor.fetchone()
-
-    assert row == (203, "Console Created Song", 2, False)
-    assert _get_latest_audit_row(integration_admin_connection, user_id=1) == (
-        "song_create",
-        "203",
-        {"band_id": 2, "cover": False},
-    )
-    song = integration_test_client.get("/api/songs/203").json()
-    assert song["ownership"]["mode"] == "bands"
-    assert song["ownership"]["bands"] == [{"band_id": 2, "band_name": "Roselia"}]
-    changed = integration_test_client.put("/api/console/songs/203", headers={"X-CSRF-Token": csrf_token},
-        json={"song_name": "Console Created Song", "band_id": 1, "cover": False})
-    assert changed.status_code == 200, changed.text
-    assert integration_test_client.get("/api/songs/203").json()["ownership"]["band_ids"] == [1]
-    cleared = integration_test_client.put("/api/console/songs/203", headers={"X-CSRF-Token": csrf_token},
-        json={"song_name": "Console Created Song", "band_id": 0, "cover": True})
-    assert cleared.status_code == 200, cleared.text
-    assert integration_test_client.get("/api/songs/203").json()["ownership"]["mode"] == "pending"
 
 
-# 测试点：歌曲可归属 Other bands，且不同乐队可复用同一歌曲名。
-def test_console_create_song_accepts_other_bands_and_same_name_for_another_band(
-    integration_test_client,
-    integration_admin_connection,
-):
-    """Verify band id 0 and the song-name-plus-band unique constraint both allow valid new songs."""
-    csrf_token = _login_and_get_csrf_for(
-        integration_test_client,
-        username=TEST_DEFAULT_ADMIN_USERNAME,
-        password=TEST_DEFAULT_ADMIN_PASSWORD,
-    )
-
-    other_bands_response = integration_test_client.post(
-        "/api/console/songs",
-        headers={"X-CSRF-Token": csrf_token},
-        json={"song_name": "Shared Cover Title", "band_id": 0, "cover": True},
-    )
-    named_band_response = integration_test_client.post(
-        "/api/console/songs",
-        headers={"X-CSRF-Token": csrf_token},
-        json={"song_name": "Shared Cover Title", "band_id": 2, "cover": False},
-    )
-
-    assert other_bands_response.status_code == 201
-    assert named_band_response.status_code == 201
-    assert other_bands_response.json()["item"]["band_id"] == 0
-    assert named_band_response.json()["item"]["band_id"] == 2
-
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT band_id, is_cover FROM song_list WHERE song_name = %s ORDER BY band_id",
-            ("Shared Cover Title",),
-        )
-        rows = cursor.fetchall()
-
-    assert rows == [(0, True), (2, False)]
 
 
 # 测试点：新增歌曲接口应拒绝 viewer 和缺失 CSRF 的写请求，防止前端可见性绕过后直接落库。
@@ -607,9 +518,9 @@ def test_console_create_song_requires_editor_role_and_csrf(
         password="viewer-test-pass",
     )
     viewer_response = integration_test_client.post(
-        "/api/console/songs",
+        "/api/console/song-groups",
         headers={"X-CSRF-Token": viewer_csrf},
-        json={"song_name": "Viewer Forbidden Song", "band_id": 1, "cover": False},
+        json={"song_name": "Viewer Forbidden Song", "group_name": "Viewer Forbidden Song", "ownership": {"mode": "pending"}},
     )
 
     editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
@@ -619,8 +530,8 @@ def test_console_create_song_requires_editor_role_and_csrf(
     )
     assert editor_login_response.status_code == 200
     missing_csrf_response = integration_test_client.post(
-        "/api/console/songs",
-        json={"song_name": "Missing CSRF Song", "band_id": 1, "cover": False},
+        "/api/console/song-groups",
+        json={"song_name": "Missing CSRF Song", "group_name": "Missing CSRF Song", "ownership": {"mode": "pending"}},
     )
 
     assert viewer_response.status_code == 403
@@ -1685,9 +1596,9 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
     )
 
     duplicate_song_response = integration_test_client.post(
-        "/api/console/songs",
+        "/api/console/song-groups",
         headers={"X-CSRF-Token": csrf_token},
-        json={"song_name": "Yes! BanG_Dream!", "band_id": 1, "cover": False},
+        json={"song_name": "Yes! BanG_Dream!", "group_name": "Yes! BanG_Dream!", "ownership": {"mode": "pending"}},
     )
     missing_song_response = integration_test_client.post(
         "/api/console/lives/41/setlist",
@@ -1737,7 +1648,6 @@ def test_console_endpoints_surface_conflict_and_missing_song_errors(
     )
 
     assert duplicate_song_response.status_code == 409
-    assert duplicate_song_response.json()["detail"] == "Song name already exists: Yes! BanG_Dream!"
     assert missing_song_response.status_code == 404
     assert missing_song_response.json()["detail"] == "Song ids not found: 999"
     assert conflicting_order_response.status_code == 400
@@ -1894,55 +1804,48 @@ def test_console_append_live_setlist_rejects_when_live_has_existing_rows(
     assert response.json()["detail"] == "Live id 1 already has setlist data"
 
 
-# 测试点：批量入口保存每首歌的所选乐队归属，部分冲突跳过且重复提交不改变已保存归属。
-def test_console_create_songs_batch_persists_and_skips_conflicts(
-    integration_test_client,
-    integration_admin_connection,
-):
-    """Verify batch song creation writes multiple rows and skips duplicates."""
-    editor_user_id = _get_user_id(integration_admin_connection, "editor_tester")
-    csrf_token = _login_and_get_csrf_for(
-        integration_test_client,
-        username="editor_tester",
-        password="editor-test-pass",
-    )
-
-    response = integration_test_client.post(
-        "/api/console/songs:batch",
-        headers={"X-CSRF-Token": csrf_token},
-        json={
-            "songs": [
-                {"song_name": "Batch Song A", "band_id": 2, "cover": False},
-                {"song_name": "Batch Song B", "band_id": 1, "cover": True},
-                {"song_name": "Yes! BanG_Dream!", "band_id": 1, "cover": False},
-            ]
-        },
-    )
-
-    assert response.status_code == 201
-    data = response.json()
-    assert data["ok"] is False
-    assert len(data["created"]) == 2
-    assert data["created"][0]["song_name"] == "Batch Song A"
-    assert data["created"][0]["band_id"] == 2
-    assert data["created"][1]["song_name"] == "Batch Song B"
-    assert data["created"][1]["cover"] is True
-    for item in data["created"]:
-        song = integration_test_client.get(f"/api/songs/{item['song_id']}").json()
-        assert song["ownership"]["mode"] == "bands"
-        assert song["ownership"]["band_ids"] == [item["band_id"]]
-
-    integration_admin_connection.autocommit = True
-    with integration_admin_connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT id FROM song_list WHERE song_name = %s",
-            ("Batch Song A",),
-        )
-        assert cursor.fetchone() is not None
-        cursor.execute(
-            "SELECT id FROM song_list WHERE song_name = %s",
-            ("Batch Song B",),
-        )
-        assert cursor.fetchone() is not None
-
-    assert _get_latest_audit_row(integration_admin_connection, user_id=editor_user_id)[0] == "song_create"
+# 测试点：批量新增保留完整归属、逐项报告错误，重复及单曲入口复用相同身份且不重复审计。
+def test_batch_catalog_ownership_roundtrip_and_retry(integration_test_client, integration_admin_connection):
+    client = integration_test_client
+    csrf = _login_and_get_csrf_for(client, username=TEST_DEFAULT_ADMIN_USERNAME, password=TEST_DEFAULT_ADMIN_PASSWORD)
+    headers = {"X-CSRF-Token": csrf}
+    member = client.post("/api/console/members", headers=headers, json={"display_name": "固定成员"}).json()["member_id"]
+    owners = [
+        {"mode": "pending", "band_ids": [], "member_groups": []},
+        {"mode": "bands", "band_ids": [2, 1], "member_groups": []},
+        {"mode": "members", "band_ids": [], "member_groups": [{"band_id": 3, "member_ids": [member]}]},
+        {"mode": "mixed", "band_ids": [2], "member_groups": [{"band_id": 1, "member_ids": [member]}]},
+    ]
+    songs = [{"song_name": "批量同名曲", "group_name": "批量同名曲", "ownership": owner} for owner in owners]
+    invalid = {"song_name": "无效乐队曲", "group_name": "无效乐队曲", "ownership": {"mode": "bands", "band_ids": [99999]}}
+    response = client.post("/api/console/songs:batch", headers=headers, json={"songs": [*songs, invalid]})
+    assert response.status_code == 201, response.text
+    result = response.json()
+    assert result["ok"] is False
+    assert [entry["index"] for entry in result["results"]] == [0, 1, 2, 3, 4]
+    assert result["results"][4]["error"]
+    items = [entry["item"] for entry in result["results"][:4]]
+    assert len({song["group_id"] for song in items}) == 4
+    for item, owner in zip(items, owners):
+        assert {key: item["ownership"][key] for key in owner} == owner
+        assert client.get(f"/api/songs/{item['song_id']}").json() == item
+        assert client.get(f"/api/console/songs/{item['song_id']}").json() == item
+    assert _count_rows(integration_admin_connection, "SELECT count(*) FROM song_groups WHERE group_name='无效乐队曲'") == 0
+    audit_before = _count_rows(integration_admin_connection, "SELECT count(*) FROM audit_logs WHERE action='song_create'")
+    retry = [{**song, "song_name": "批量同名曲"} for song in songs]
+    retry[1]["ownership"] = {"mode": "bands", "band_ids": [1, 2], "member_groups": []}
+    repeated = client.post("/api/console/songs:batch", headers=headers, json={"songs": retry})
+    assert repeated.status_code == 201, repeated.text
+    assert repeated.json()["ok"] is True
+    assert all(not entry["created"] for entry in repeated.json()["results"])
+    assert [entry["item"]["song_id"] for entry in repeated.json()["results"]] == [item["song_id"] for item in items]
+    assert _count_rows(integration_admin_connection, "SELECT count(*) FROM audit_logs WHERE action='song_create'") == audit_before
+    assert client.post("/api/console/song-groups", headers=headers, json=songs[1]).status_code == 409
+    album = client.post("/api/console/albums", headers=headers, json={
+        "album_name": "批量曲收录盘", "ownership": owners[3], "tracks": [{"song_id": item["song_id"]} for item in items],
+    })
+    assert album.status_code == 201, album.text
+    assert album.json()["ownership"]["mode"] == "mixed"
+    lookup = client.get("/api/console/songs?q=批量同名曲&groups_only=true").json()["items"]
+    labels = {item["song_id"]: item["band_name"] for item in lookup}
+    assert [track["band_name"] for track in album.json()["tracks"]] == [labels[item["song_id"]] for item in items]

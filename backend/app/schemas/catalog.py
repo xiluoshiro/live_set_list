@@ -20,7 +20,6 @@ class CatalogSongItem(BaseModel):
     ownership: OwnershipDetail
     song_id: int = Field(..., description="song_list.id")
     song_name: str = Field(..., description="Song title")
-    band_id: int | None = Field(..., description="Legacy song band hint")
     band_name: str | None = Field(default=None, description="Owning band display name")
     live_count: int = Field(..., description="Matched live count for this song")
 

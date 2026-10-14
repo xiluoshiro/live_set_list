@@ -137,8 +137,8 @@ def test_directory_sort_and_pagination(integration_test_client, integration_admi
 def test_directory_normalized_name_search(integration_test_client):
     client = integration_test_client
     headers = auth(client)
-    song = create_group(client, headers, "Ｗｈａｔ’s the POPIPA！？")
-    for query in ("What's the POPIPA!?", "Ｗｈａｔ’s the POPIPA！？"):
+    song = create_group(client, headers, "目录 Ｗｈａｔ’s the POPIPA！？")
+    for query in ("目录 What's the POPIPA!?", "目录 Ｗｈａｔ’s the POPIPA！？"):
         result = client.get("/api/song-groups", params={"q": query}).json()
         assert song["group_id"] in [item["group_id"] for item in result["items"]]
     literal = create_group(client, headers, "百分比 100%")

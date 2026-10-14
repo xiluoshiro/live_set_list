@@ -34,9 +34,6 @@ from app.schemas.console import (
     ConsoleLiveSetlistAppendResponse,
     ConsoleSongBatchCreateRequest,
     ConsoleSongBatchCreateResponse,
-    ConsoleSongCreateRequest,
-    ConsoleSongMutationResponse,
-    ConsoleSongUpdateRequest,
     ConsoleLiveSetlistReplaceResponse,
 )
 
@@ -62,14 +59,6 @@ def _write_console_audit_log(
         """,
         (user_id, action, resource_type, resource_id, Json(payload_json) if payload_json is not None else None),
     )
-
-
-def _save_console_song_band(cur: Any, song_id: int, band_id: int) -> None:
-    """Persist the explicit band selected by the single/batch Setlist song form."""
-    cur.execute("DELETE FROM song_bands WHERE song_id = %s", (song_id,))
-    cur.execute("UPDATE song_list SET owner_mode = %s WHERE id = %s", ("bands" if band_id > 0 else None, song_id))
-    if band_id > 0:
-        cur.execute("INSERT INTO song_bands(song_id, band_id, display_order) VALUES (%s, %s, 1)", (song_id, band_id))
 
 
 def _raise_business_error(status_code: int, message: str) -> None:
@@ -352,261 +341,28 @@ def _build_live_mutation_item(
     }
 
 
-@router.post(
-    "/songs",
-    status_code=201,
-    response_model=SongMutation | ConsoleSongMutationResponse,
-    summary="新增歌曲",
-    description="`editor+` 用户新增歌曲基础信息。",
-    responses={
-        400: {"model": ErrorResponse, "description": "业务参数错误"},
-        401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
-        403: {"model": AuthErrorResponse, "description": "缺少权限或 CSRF 校验失败"},
-        404: {"model": ErrorResponse, "description": "关联 band 不存在"},
-        409: {"model": ErrorResponse, "description": "歌曲唯一键冲突"},
-        422: {"model": ValidationErrorResponse, "description": "请求体验证失败"},
-        500: {"model": ErrorResponse, "description": "数据库一般错误"},
-        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
-    },
-)
-def create_song(
-    payload: VersionCreate | ConsoleSongCreateRequest,
-    request: Request,
-    _: Any = Depends(require_role("editor")),
-    context: AuthSessionContext = Depends(get_current_auth_context),
-):
-    """Insert one new song from the console page after auth, CSRF, and band checks pass."""
-    if isinstance(payload, VersionCreate):
-        from app.routers.console_song_catalog import create_version
-        return create_version(payload, request, context)
-    assert_valid_csrf(request, context)
-
-    try:
-        with get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM band_attrs WHERE id = %s", (payload.band_id,))
-                if cur.fetchone() is None:
-                    raise HTTPException(status_code=404, detail=f"Band id {payload.band_id} not found")
-
-                cur.execute(
-                    """
-                    WITH input(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)),
-                    new_group AS (INSERT INTO song_groups(group_name) SELECT song_name FROM input
-                        WHERE NOT EXISTS(SELECT 1 FROM song_list s WHERE s.song_name=input.song_name
-                            AND s.band_id=input.band_id AND s.version_label='') RETURNING id)
-                    INSERT INTO song_list (song_name, band_id, is_cover, group_id)
-                    SELECT input.*, new_group.id FROM input CROSS JOIN new_group
-                    RETURNING id
-                    """,
-                    (payload.song_name, payload.band_id, payload.cover),
-                )
-                created_row = cur.fetchone()
-                if created_row is None:
-                    raise HTTPException(status_code=409, detail=f"Song name already exists: {payload.song_name}")
-                song_id = int(created_row[0])
-                _save_console_song_band(cur, song_id, payload.band_id)
-
-                _write_console_audit_log(
-                    cur,
-                    user_id=context.user.id,
-                    action="song_create",
-                    resource_type="song",
-                    resource_id=str(song_id),
-                    payload_json={"band_id": payload.band_id, "cover": payload.cover},
-                )
-    except HTTPException:
-        raise
-    except UniqueViolation as exc:
-        logger.exception("create_song conflict user_id=%s song_name=%s", context.user.id, payload.song_name)
-        raise HTTPException(status_code=409, detail=f"Song name already exists: {payload.song_name}") from exc
-    except QueryCanceled as exc:
-        logger.exception("create_song timeout user_id=%s song_name=%s", context.user.id, payload.song_name)
-        raise HTTPException(status_code=504, detail="Database query timeout") from exc
-    except OperationalError as exc:
-        logger.exception("create_song operational error user_id=%s song_name=%s", context.user.id, payload.song_name)
-        if "timeout expired" in str(exc).lower():
-            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-    except Error as exc:
-        logger.exception("create_song failed user_id=%s song_name=%s", context.user.id, payload.song_name)
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-
-    return {
-        "ok": True,
-        "item": {
-            "song_id": song_id,
-            "song_name": payload.song_name,
-            "band_id": payload.band_id,
-            "cover": payload.cover,
-        },
-    }
+@router.post("/songs", status_code=201, response_model=SongMutation)
+def create_song(payload: VersionCreate, request: Request,
+                _: Any = Depends(require_role("editor")),
+                context: AuthSessionContext = Depends(get_current_auth_context)):
+    from app.routers.console_song_catalog import create_version
+    return create_version(payload, request, context)
 
 
-@router.put(
-    "/songs/{song_id}",
-    response_model=SongMutation | ConsoleSongMutationResponse,
-    summary="更新歌曲",
-    description="`editor+` 用户更新歌曲名称、归属 Band 和翻唱属性。",
-)
-def update_song(
-    payload: VersionUpdate | ConsoleSongUpdateRequest,
-    request: Request,
-    song_id: int = Path(..., ge=1),
-    _: Any = Depends(require_role("editor")),
-    context: AuthSessionContext = Depends(get_current_auth_context),
-):
-    if isinstance(payload, VersionUpdate):
-        from app.routers.console_song_catalog import update_version
-        return update_version(payload, song_id, request, context)
-    assert_valid_csrf(request, context)
-    try:
-        with get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM band_attrs WHERE id = %s", (payload.band_id,))
-                if cur.fetchone() is None:
-                    raise HTTPException(status_code=404, detail=f"Band id {payload.band_id} not found")
-                cur.execute(
-                    """
-                    UPDATE song_list
-                    SET song_name = %s, band_id = %s, is_cover = %s, revision = revision + 1
-                    WHERE id = %s AND (owner_mode IS NULL OR (owner_mode = 'bands' AND band_id IS NOT NULL))
-                    RETURNING id
-                    """,
-                    (payload.song_name, payload.band_id, payload.cover, song_id),
-                )
-                if cur.fetchone() is None:
-                    raise HTTPException(status_code=404, detail=f"Song id {song_id} not found")
-                _save_console_song_band(cur, song_id, payload.band_id)
-                _write_console_audit_log(
-                    cur,
-                    user_id=context.user.id,
-                    action="song_update",
-                    resource_type="song",
-                    resource_id=str(song_id),
-                    payload_json={"song_name": payload.song_name, "band_id": payload.band_id, "cover": payload.cover},
-                )
-    except HTTPException:
-        raise
-    except UniqueViolation as exc:
-        raise HTTPException(status_code=409, detail=f"Song name already exists for band {payload.band_id}: {payload.song_name}") from exc
-    except QueryCanceled as exc:
-        raise HTTPException(status_code=504, detail="Database query timeout") from exc
-    except OperationalError as exc:
-        if "timeout expired" in str(exc).lower():
-            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-    except Error as exc:
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-    return {
-        "ok": True,
-        "item": {
-            "song_id": song_id,
-            "song_name": payload.song_name,
-            "band_id": payload.band_id,
-            "cover": payload.cover,
-        },
-    }
+@router.put("/songs/{song_id}", response_model=SongMutation)
+def update_song(payload: VersionUpdate, request: Request, song_id: int = Path(ge=1),
+                _: Any = Depends(require_role("editor")),
+                context: AuthSessionContext = Depends(get_current_auth_context)):
+    from app.routers.console_song_catalog import update_version
+    return update_version(payload, song_id, request, context)
 
 
-@router.post(
-    "/songs:batch",
-    status_code=201,
-    response_model=ConsoleSongBatchCreateResponse,
-    summary="批量新增歌曲",
-    description="`editor+` 用户批量新增歌曲。每个请求项独立处理，一项失败不影响其他项。",
-    responses={
-        401: {"model": AuthErrorResponse, "description": "未登录或 session 已失效"},
-        403: {"model": AuthErrorResponse, "description": "缺少权限或 CSRF 校验失败"},
-        422: {"model": ValidationErrorResponse, "description": "请求体验证失败"},
-        500: {"model": ErrorResponse, "description": "数据库一般错误"},
-        504: {"model": ErrorResponse, "description": "数据库连接或查询超时"},
-    },
-)
-def create_songs_batch(
-    payload: ConsoleSongBatchCreateRequest,
-    request: Request,
-    _: Any = Depends(require_role("editor")),
-    context: AuthSessionContext = Depends(get_current_auth_context),
-):
-    """Insert multiple songs from the console page in one request."""
-    assert_valid_csrf(request, context)
-
-    created: list[dict[str, Any]] = []
-
-    try:
-        with get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                for song in payload.songs:
-                    cur.execute("SAVEPOINT batch_song_sp")
-                    try:
-                        cur.execute("SELECT 1 FROM band_attrs WHERE id = %s", (song.band_id,))
-                        if cur.fetchone() is None:
-                            logger.warning(
-                                "batch song skip band_not_found user_id=%s song_name=%s band_id=%s",
-                                context.user.id,
-                                song.song_name,
-                                song.band_id,
-                            )
-                            cur.execute("RELEASE SAVEPOINT batch_song_sp")
-                            continue
-
-                        cur.execute(
-                            """
-                            WITH input(song_name, band_id, is_cover) AS (VALUES (%s, %s, %s)),
-                            new_group AS (INSERT INTO song_groups(group_name) SELECT song_name FROM input
-                                WHERE NOT EXISTS(SELECT 1 FROM song_list s WHERE s.song_name=input.song_name
-                                    AND s.band_id=input.band_id AND s.version_label='') RETURNING id)
-                            INSERT INTO song_list (song_name, band_id, is_cover, group_id)
-                            SELECT input.*, new_group.id FROM input CROSS JOIN new_group
-                            RETURNING id
-                            """,
-                            (song.song_name, song.band_id, song.cover),
-                        )
-                        created_row = cur.fetchone()
-                        if created_row is None:
-                            cur.execute("RELEASE SAVEPOINT batch_song_sp")
-                            continue
-                        song_id = int(created_row[0])
-                        _save_console_song_band(cur, song_id, song.band_id)
-
-                        _write_console_audit_log(
-                            cur,
-                            user_id=context.user.id,
-                            action="song_create",
-                            resource_type="song",
-                            resource_id=str(song_id),
-                            payload_json={"band_id": song.band_id, "cover": song.cover},
-                        )
-
-                        created.append({
-                            "song_id": song_id,
-                            "song_name": song.song_name,
-                            "band_id": song.band_id,
-                            "cover": song.cover,
-                        })
-                        cur.execute("RELEASE SAVEPOINT batch_song_sp")
-                    except UniqueViolation:
-                        cur.execute("ROLLBACK TO SAVEPOINT batch_song_sp")
-                        logger.warning(
-                            "batch song skip duplicate user_id=%s song_name=%s",
-                            context.user.id,
-                            song.song_name,
-                        )
-    except HTTPException:
-        raise
-    except QueryCanceled as exc:
-        logger.exception("batch create_songs timeout user_id=%s count=%s", context.user.id, len(payload.songs))
-        raise HTTPException(status_code=504, detail="Database query timeout") from exc
-    except OperationalError as exc:
-        logger.exception("batch create_songs operational error user_id=%s", context.user.id)
-        if "timeout expired" in str(exc).lower():
-            raise HTTPException(status_code=504, detail="Database connection timeout") from exc
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-    except Error as exc:
-        logger.exception("batch create_songs failed user_id=%s", context.user.id)
-        raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
-
-    return {"ok": len(created) == len(payload.songs), "created": created}
+@router.post("/songs:batch", status_code=201, response_model=ConsoleSongBatchCreateResponse)
+def create_songs_batch(payload: ConsoleSongBatchCreateRequest, request: Request,
+                       _: Any = Depends(require_role("editor")),
+                       context: AuthSessionContext = Depends(get_current_auth_context)):
+    from app.routers.console_song_catalog import create_groups_batch
+    return create_groups_batch(payload, request, context)
 
 
 @router.post(

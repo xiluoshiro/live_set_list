@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.song_catalog import CatalogModel, GroupCreate, SongVersion
 from app.schemas.lives import DatePhase, EventStatus, LiveScheduleHistoryItem
 from app.schemas.geography import LocationFields, LocationWrite, VenueLocation
 
@@ -29,49 +30,32 @@ def _strip_required_text(value: str) -> str:
     return normalized
 
 
-class ConsoleSongCreateRequest(BaseModel):
-    song_name: str = Field(..., min_length=1, max_length=255, description="Song title")
-    band_id: int = Field(..., ge=0, description="band_attrs.id; 0 represents Other bands")
-    cover: bool = Field(default=False, description="Whether the song is a cover")
-
-    @field_validator("song_name")
-    @classmethod
-    def validate_song_name(cls, value: str) -> str:
-        """Normalize song_name before the console song-create endpoint consumes it."""
-        return _strip_required_text(value)
-
-
 class ConsoleSongItem(BaseModel):
-    song_id: int = Field(..., description="Created song ID")
-    song_name: str = Field(..., description="Song title")
-    band_id: int | None = Field(..., description="Legacy band hint; nullable for new ownership")
-    cover: bool = Field(..., description="Whether the song is a cover")
+    song_id: int
+    song_name: str
+    group_id: int
+    version_label: str
+    owner_mode: Literal["bands", "members", "mixed"] | None
+    band_name: str
 
 
-class ConsoleSongLookupItem(ConsoleSongItem):
-    group_id: int | None = None
-    version_label: str = ""
-    owner_mode: Literal["bands", "members", "mixed"] | None = None
-    band_name: str = Field(..., description="Owning band display name")
+ConsoleSongLookupItem = ConsoleSongItem
 
 
-class ConsoleSongMutationResponse(BaseModel):
-    ok: bool = Field(..., description="Whether the write succeeded")
-    item: ConsoleSongItem = Field(..., description="Created song payload")
+class ConsoleSongBatchCreateRequest(CatalogModel):
+    songs: list[GroupCreate] = Field(min_length=1, max_length=100)
 
 
-ConsoleSongUpdateRequest = ConsoleSongCreateRequest
-
-
-class ConsoleSongBatchCreateRequest(BaseModel):
-    songs: list[ConsoleSongCreateRequest] = Field(
-        ..., min_length=1, max_length=100, description="Songs to create in batch"
-    )
+class ConsoleSongBatchResult(BaseModel):
+    index: int
+    item: SongVersion | None = None
+    created: bool = False
+    error: str | None = None
 
 
 class ConsoleSongBatchCreateResponse(BaseModel):
-    ok: bool = Field(..., description="Whether all creates succeeded")
-    created: list[ConsoleSongItem] = Field(default_factory=list, description="Successfully created songs")
+    ok: bool
+    results: list[ConsoleSongBatchResult]
 
 
 class ConsoleSongListResponse(BaseModel):

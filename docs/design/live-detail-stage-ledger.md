@@ -333,7 +333,7 @@ JOINT PERFORMANCE
 翻唱文案应区分：
 
 - `song_list.is_cover=true`：显示“翻唱”，不捏造原 Band。
-- 实际出演 Band 不包含歌曲目录 Band：显示“翻唱自 {cover_band.band_name}”。
+- 正式版本归属与实际出演乐队不相交且出演资料完整：显示“翻唱自 {ownership}”，保留全部乐队和成员归属。
 
 ### 8.5 长歌单导航
 
@@ -667,7 +667,7 @@ frontend/src/components/ui/
 - 单条与批量详情对同一 Live 返回一致的结构化曲目字段。
 - `absolute_order` 顺序与数据库一致。
 - 未知 `segment_type` 原样返回。
-- 现有 `comments`、`cover_band`、阵容和收藏语义无回归。
+- 短版标记、正式归属翻唱判定、阵容和收藏语义保持一致。V46 详情使用完整 `ownership` 表达翻唱来源。
 - 后端单元、集成和全量 functional 通过。
 
 ### 18.2 建立全新页面根节点和视觉令牌

@@ -24,14 +24,14 @@ const groupFields = (group: SongGroup) => ({ group_name: group.group_name.trim()
 const versionSummary = (group: SongGroup | null) => group?.versions.map(v => `#${v.song_id} ${v.version_label || "默认版本"}`).join(" / ") ?? "";
 type HistoryEntry = { song: SongVersion; action: "create" | "update"; summary: string };
 
-export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, onManage }: {
+export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, onManage, onSaved, initialSongName }: {
   variant: "create" | "edit"; active: boolean; bands: BandOption[];
   registerLeaveGuard: (guard: ((proceed: () => void) => void) | null) => void;
-  onManage: () => void;
+  onManage: () => void; onSaved?: (song: SongVersion) => void; initialSongName?: string;
 }) {
   const { csrfToken } = useAuth();
   const formId = useId();
-  const [createDraft, setCreateDraft] = useState(emptyFields);
+  const [createDraft, setCreateDraft] = useState(() => ({ ...emptyFields(), song_name: initialSongName ?? "" }));
   const [editDraft, setEditDraft] = useState(emptyFields);
   const [owner, setOwner] = useState<SongOwnership>(emptyOwner);
   const [createOwner, setCreateOwner] = useState<SongOwnership>(emptyOwner);
@@ -55,8 +55,8 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const querySongs = () => setSearch({ query: query.trim(), bandFilter, page: 1 });
   const [candidates, setCandidates] = useState<CatalogPage<ConsoleSongItem> | null>(null);
-  const [candidateLabels, setCandidateLabels] = useState<Record<number, string>>({});
   const candidateLabel = (s: ConsoleSongItem) => `#${s.song_id} ${s.song_name} / ${s.version_label || "默认版本"} / ${s.band_name ?? "待回填"}`;
+  const selectedSongLabel = original ? `#${original.song_id} ${original.song_name} / ${original.version_label || "默认版本"} / ${ownershipLabel(original)}` : "";
   const [members, setMembers] = useState<CatalogMember[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [clearAfterCreate, setClearAfterCreate] = useState(true);
@@ -97,7 +97,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     setCandidates(null);
     const params = new URLSearchParams({ q: search.query, page: String(search.page), limit: "20" });
     if (search.bandFilter) params.set("band_id", search.bandFilter);
-    void getCatalogConsole<CatalogPage<ConsoleSongItem>>(`/songs?${params}`).then(result => { if (current) { setCandidates(result); setCandidateLabels(labels => ({ ...labels, ...Object.fromEntries(result.items.map(s => [s.song_id, candidateLabel(s)])) })); } })
+    void getCatalogConsole<CatalogPage<ConsoleSongItem>>(`/songs?${params}`).then(result => { if (current) setCandidates(result); })
       .catch(e => { if (current) setError(String(e)); })
       .finally(() => { if (current) setCandidatesLoading(false); });
     return () => { current = false; };
@@ -154,6 +154,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       if (creating) { if (!newGroup) setGroupRevision(value => value === null ? null : value + 1); if (clearAfterCreate) clear(); } else restore(result.item, result.group);
       setMessage(`已${creating ? "新增" : "更新"}歌曲 #${result.item.song_id} ${result.item.song_name}`);
       setConfirm(false);
+      onSaved?.(result.item);
     } catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   };
@@ -222,8 +223,8 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         onChange={event => { if (event.target.value) guard(() => void loadSong(Number(event.target.value))); }}>
         <option value="">选择要编辑的歌曲</option>
         {original && !candidates?.items.some(song => song.song_id === original.song_id) &&
-          <option value={original.song_id}>{candidateLabels[original.song_id] ?? `#${original.song_id} ${original.song_name} / ${original.version_label || "默认版本"} / ${ownershipLabel(original)}`}</option>}
-        {candidates?.items.map(song => <option key={song.song_id} value={song.song_id}>{candidateLabel(song)}</option>)}
+          <option value={original.song_id}>{selectedSongLabel}</option>}
+        {candidates?.items.map(song => <option key={song.song_id} value={song.song_id}>{original?.song_id === song.song_id ? selectedSongLabel : candidateLabel(song)}</option>)}
       </select>
       <div className="tour-candidate-pager">
         <button type="button" className="console-ghost-btn" disabled={fieldsDisabled || candidatesLoading || !candidates || candidates.page <= 1} onClick={() => setSearch(value => ({ ...value, page: value.page - 1 }))}>上一页</button>

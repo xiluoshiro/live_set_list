@@ -33,7 +33,7 @@ describe("console lookup api", () => {
   test("getConsoleSongs 会按 q/band_id/limit/page 请求 console songs", async () => {
     fetchMock.mockResolvedValueOnce(
       makeJsonResponse({
-        items: [{ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, cover: false, band_name: "Poppin'Party" }],
+        items: [{ song_id: 1, group_id: 1, song_name: "Yes! BanG_Dream!", version_label: "", owner_mode: "bands", band_name: "Poppin'Party" }],
         page: 2,
         page_size: 10,
         total: 12,
@@ -44,7 +44,7 @@ describe("console lookup api", () => {
 
     const payload = await getConsoleSongs("  BanG  ", 10, 2, 1);
 
-    expect(payload.items[0]).toEqual({ song_id: 1, song_name: "Yes! BanG_Dream!", band_id: 1, cover: false, band_name: "Poppin'Party" });
+    expect(payload.items[0]).toEqual({ song_id: 1, group_id: 1, song_name: "Yes! BanG_Dream!", version_label: "", owner_mode: "bands", band_name: "Poppin'Party" });
     expect(payload.total_pages).toBe(2);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs?limit=10&q=BanG&page=2&band_id=1");
@@ -148,46 +148,21 @@ describe("console lookup api", () => {
     }));
   });
 
-  test("createConsoleSong 会携带 CSRF 写入 song", async () => {
-    // 测试点：新增歌曲封装应调用 console song 写接口，并传递后端要求的 CSRF header。
-    fetchMock.mockResolvedValueOnce(
-      makeJsonResponse({
-        ok: true,
-        item: { song_id: 903, song_name: "新曲", band_id: 2, cover: false },
-      }, true, 201),
-    );
-    const { createConsoleSong } = await import("../api");
-    const requestPayload = { song_name: "新曲", band_id: 2, cover: false };
-
-    const payload = await createConsoleSong(requestPayload, "csrf-token");
-
-    expect(payload.item).toEqual({ song_id: 903, song_name: "新曲", band_id: 2, cover: false });
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs");
-    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
-      credentials: "include",
-      method: "POST",
-      headers: expect.objectContaining({ "content-type": "application/json", "x-csrf-token": "csrf-token" }),
-      body: JSON.stringify(requestPayload),
-    }));
-  });
-
-  // 测试点：歌曲管理更新封装应使用目标 song_id 发起带 CSRF 的 PUT。
-  test("updateConsoleSong 通过 PUT 更新歌曲属性", async () => {
-    fetchMock.mockResolvedValueOnce(makeJsonResponse({
-      ok: true,
-      item: { song_id: 903, song_name: "改名曲", band_id: 2, cover: true },
-    }));
-    const { updateConsoleSong } = await import("../api");
-    const requestPayload = { song_name: "改名曲", band_id: 2, cover: true };
-
-    await updateConsoleSong(903, requestPayload, "csrf-token");
-
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs/903");
-    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
-      method: "PUT",
-      headers: expect.objectContaining({ "content-type": "application/json", "x-csrf-token": "csrf-token" }),
-      body: JSON.stringify(requestPayload),
-    }));
+  // 测试点：批量新增透传完整归属与 CSRF，并通知资料缓存刷新。
+  test("批量新增歌曲携带归属并发出写入通知", async () => {
+    fetchMock.mockResolvedValueOnce(makeJsonResponse({ ok: true, results: [] }, true, 201));
+    const { createConsoleSongsBatch, SONG_CATALOG_CHANGE } = await import("../api");
+    const listener = vi.fn();
+    window.addEventListener(SONG_CATALOG_CHANGE, listener);
+    const songs = [{ song_name: "合唱曲", group_name: "合唱曲", version_label: "", cover_urls: [], ownership: { mode: "bands" as const, band_ids: [1, 2], member_groups: [] } }];
+    try {
+      await createConsoleSongsBatch(songs, "csrf-token");
+      expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs:batch");
+      expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
+        credentials: "include", method: "POST", headers: expect.objectContaining({ "x-csrf-token": "csrf-token" }), body: JSON.stringify({ songs }),
+      }));
+      expect(listener).toHaveBeenCalledOnce();
+    } finally { window.removeEventListener(SONG_CATALOG_CHANGE, listener); }
   });
 
   // 测试点：Setlist 管理封装会读取原始行，并使用完整集合 PUT 覆盖目标 Live。
