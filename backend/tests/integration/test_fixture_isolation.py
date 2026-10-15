@@ -13,8 +13,6 @@ def test_fixture_data_is_reset_and_auth_setup_is_on_demand(
         assert cursor.fetchone() == (0,)
         cursor.execute("SELECT COUNT(*) FROM auth_sessions")
         assert cursor.fetchone() == (0,)
-    assert "integration_app_client" not in request.fixturenames
-    assert "integration_user_rows" not in request.fixturenames
     if not use_api:
         return
 

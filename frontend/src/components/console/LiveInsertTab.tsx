@@ -1,3 +1,4 @@
+import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
 import { useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
 
 import type { ConsoleBandHistory, ConsoleLiveBandLineupContext } from "../../api";
@@ -888,19 +889,10 @@ export function LiveInsertTab({
         </div>
       )}
 
-      {pasteConfirmOpen && (
-        <div className="modal-mask" role="presentation" onClick={() => setPasteConfirmOpen(false)}>
-          <div
-            className="modal console-confirm-modal wide setlist-paste-confirm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="paste-confirm-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-head">
-              <h2 id="paste-confirm-title">确认应用到表格</h2>
-            </div>
-            <div className="console-confirm-body">
+      {pasteConfirmOpen && <ConsoleConfirmDialog title="确认应用到表格" size="wide" className="setlist-paste-confirm"
+        confirmLabel="确认应用" onClose={() => setPasteConfirmOpen(false)}
+        onConfirm={() => { setPasteConfirmOpen(false); onApplySetlistPaste(); }}>
+
               {renderPreviewTable()}
               {setlistParseWarnings.length > 0 && (
                 <ul className="setlist-paste-warnings" style={{ marginTop: 12 }}>
@@ -910,30 +902,7 @@ export function LiveInsertTab({
                     </li>
                   ))}
                 </ul>
-              )}
-            </div>
-            <div className="console-confirm-actions">
-              <button
-                type="button"
-                className="console-ghost-btn"
-                onClick={() => setPasteConfirmOpen(false)}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="console-submit-btn"
-                onClick={() => {
-                  setPasteConfirmOpen(false);
-                  onApplySetlistPaste();
-                }}
-              >
-                确认提交
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              )}      </ConsoleConfirmDialog>}
 
       {setlistParsePreviewOpen && (
         <div className="song-modal-backdrop" role="presentation" onClick={onCloseFullSetlistPreview}>

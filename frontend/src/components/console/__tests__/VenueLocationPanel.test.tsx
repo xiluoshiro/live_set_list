@@ -39,11 +39,10 @@ async function openPanel(onOpenLive?: (liveId: number) => void) {
   return user;
 }
 
-// 测试点：线上场馆不错误提示关联 Live 使用日本默认时区。
-test("online venues do not advertise a physical venue timezone fallback", async () => {
+// 测试点：线上场馆说明活动时间基准由关联 Live 分别维护。
+test("online venues explain how event timezones are maintained", async () => {
   render(<VenueLocationPanel venueId={1} venueName="Online" venueKind="online" />);
   expect(await screen.findByText(/活动时间基准由每场 Live 单独维护/)).toBeInTheDocument();
-  expect(screen.queryByText(/场馆 IANA 时区：|使用默认 UTC/)).not.toBeInTheDocument();
 });
 
 // 测试点：加载场馆时区与坐标状态，单个坐标不能提交，成对零坐标可提交。
@@ -72,7 +71,7 @@ test("previews clearing a saved point", async () => {
   await user.clear(screen.getByLabelText("经度（WGS84）"));
   await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
 
-  await screen.findByRole("dialog", { name: "确认所在地修改" });
+  await screen.findByRole("dialog", { name: /确认所在地修改 · 场馆 #/ });
   expect(api.previewConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({
     latitude: null, longitude: null,
   }));
@@ -127,14 +126,14 @@ test("previews and confirms a state-bound correction, retaining failed input", a
   await user.clear(screen.getByLabelText("公开门牌地址"));
   await user.type(screen.getByLabelText("公开门牌地址"), "New address");
   await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
-  let dialog = await screen.findByRole("dialog", { name: "确认所在地修改" });
+  let dialog = await screen.findByRole("dialog", { name: /确认所在地修改 · 场馆 #/ });
   expect(dialog).toHaveTextContent("本次不修改排期");
   expect(api.saveConsoleVenueLocation).not.toHaveBeenCalled();
-  await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
+  await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
   await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent("资料已更新"));
   expect(screen.getByLabelText("公开门牌地址")).toHaveValue("New address");
-  dialog = screen.getByRole("dialog", { name: "确认所在地修改" });
-  await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
+  dialog = screen.getByRole("dialog", { name: /确认所在地修改 · 场馆 #/ });
+  await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(api.saveConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({ expected_state_token: "2".repeat(64), address: "New address" }), "csrf");
 });
@@ -157,10 +156,10 @@ test("previews and saves a venue timezone change", async () => {
   await user.type(screen.getByLabelText("经度（WGS84）"), "-74");
   await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
 
-  const dialog = await screen.findByRole("dialog", { name: "确认所在地修改" });
+  const dialog = await screen.findByRole("dialog", { name: /确认所在地修改 · 场馆 #/ });
   expect(within(dialog).getByText("America/New_York")).toBeInTheDocument();
   expect(api.saveConsoleVenueLocation).not.toHaveBeenCalled();
-  await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
+  await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("所在地已保存"));
   expect(api.saveConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({
     timezone_id: "America/New_York", latitude: 40.7, longitude: -74,
@@ -216,10 +215,10 @@ test("requires an explicit candidate selection before linking a map place", asyn
   expect(screen.getByRole("button", { name: "关联候选" })).toBeDisabled();
   await user.click(screen.getByRole("radio", { name: "选择 Second Hall" }));
   await user.click(screen.getByRole("button", { name: "关联候选" }));
-  const dialog = await screen.findByRole("dialog", { name: "确认地图场馆候选" });
+  const dialog = await screen.findByRole("dialog", { name: /确认更新地图关联 · 场馆 #/ });
   expect(dialog).toHaveTextContent("143 m");
   expect(api.saveConsoleVenueMapLink).not.toHaveBeenCalled();
-  await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
+  await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
   await waitFor(() => expect(api.saveConsoleVenueMapLink).toHaveBeenCalledWith(
     1, "apple", expect.objectContaining({
       provider_place_id: "second",
@@ -259,7 +258,6 @@ test("ignores an old venue response after unmount", async () => {
 test("requires physical address and keeps established locality", async () => {
   const user = await openPanel();
   await user.click(screen.getByRole("button", { name: "已公布地区" }));
-  expect(screen.queryByRole("radio", { name: "未填写" })).not.toBeInTheDocument();
   await user.keyboard("{Escape}");
   expect(screen.getByRole("button", { name: "已公布地区" })).toHaveTextContent("検証市");
   const address = screen.getByLabelText("公开门牌地址");

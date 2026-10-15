@@ -1,3 +1,7 @@
+import { refreshConsoleAfterSave } from "./consoleSave";
+import { ConsoleEditorLock } from "./ConsoleEditorLock";
+import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
+import { useConsoleDraftGuard } from "./ConsoleDraftGuard";
 import { MemberAdminSection } from "./MemberAdminSection";
 import { useEffect, useMemo, useState } from "react";
 
@@ -76,16 +80,20 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
     useState<ConsoleBandTransitionLiveCandidate[]>([]);
   const [transitionLiveId, setTransitionLiveId] = useState<number | null>(null);
   const [confirmLineup, setConfirmLineup] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const applyHistory = (nextHistory: ConsoleBandHistory) => {
+    setSelectedBandId(nextHistory.band_id); setHistory(nextHistory);
+    setLineupLabel(""); setLineupChangeType("replacement"); setLineupMembers(nextHistory.current_members.join("\n"));
+    setLineupValidFrom(""); setLineupNote(""); setTransitionDate(""); setTransitionCandidates([]); setTransitionLiveId(null);
+  };
 
   const loadHistory = async (bandId: number) => {
     setSelectedBandId(bandId);
     setLoading(true);
     try {
       const nextHistory = await getConsoleBandHistory(bandId);
-      setHistory(nextHistory);
-      setLineupMembers(nextHistory.current_members.join("\n"));
-      setTransitionCandidates([]);
-      setTransitionLiveId(null);
+      applyHistory(nextHistory);
     } catch (error) {
       setHistory(null);
       onMessage(`加载 Band 历史失败：${errorMessage(error)}`);
@@ -105,7 +113,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
   }, [history?.band_id, realBands, selectedBandId]);
 
   const submitCreate = async () => {
-    setSubmitting(true);
+    setSubmitting(true); setSaveError("");
     try {
       const result = await createConsoleBand(
         {
@@ -123,12 +131,10 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
       setCreateAbbr("");
       setCreateMembers("");
       setCreateValidFrom("");
-      setSelectedBandId(result.item.band_id);
-      setHistory(result.history);
-      await onBandsChanged();
-      onMessage(`已新增 Band #${result.item.band_id}，并原子建立名称版本、V1 阵容和成员`);
+      applyHistory(result.history);
+      await refreshConsoleAfterSave([onBandsChanged], `已新增 Band #${result.item.band_id}，并原子建立名称版本、V1 阵容和成员`, onMessage);
     } catch (error) {
-      onMessage(`新增 Band 失败：${errorMessage(error)}`);
+      setSaveError(`新增 Band 失败：${errorMessage(error)}`);
     } finally {
       setSubmitting(false);
     }
@@ -151,7 +157,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
 
   const submitLineup = async () => {
     if (selectedBandId === null) return;
-    setSubmitting(true);
+    setSubmitting(true); setSaveError("");
     try {
       const nextHistory = await createConsoleBandLineupVersion(
         selectedBandId,
@@ -165,23 +171,12 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
         },
         auth.csrfToken ?? "",
       );
-      setHistory(nextHistory);
-      setLineupLabel("");
-      setLineupMembers(nextHistory.current_members.join("\n"));
-      setLineupValidFrom("");
-      setLineupNote("");
-      setTransitionDate("");
-      setTransitionCandidates([]);
-      setTransitionLiveId(null);
-      setConfirmLineup(false);
-      await onBandsChanged();
-      onMessage(
-        `已追加 Band #${selectedBandId} 的 V${
-          nextHistory.lineup_versions[nextHistory.lineup_versions.length - 1]?.version_no ?? ""
-        } 阵容`,
-      );
+      applyHistory(nextHistory); setConfirmLineup(false);
+      await refreshConsoleAfterSave([onBandsChanged], `已追加 Band #${selectedBandId} 的 V${
+        nextHistory.lineup_versions[nextHistory.lineup_versions.length - 1]?.version_no ?? ""
+      } 阵容`, onMessage);
     } catch (error) {
-      onMessage(`新增阵容版本失败：${errorMessage(error)}`);
+      setSaveError(`新增阵容版本失败：${errorMessage(error)}`);
     } finally {
       setSubmitting(false);
     }
@@ -196,6 +191,11 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
   const addedMembers = nextMembers.filter((member) => !currentMemberSet.has(member));
   const removedMembers = (currentLineup?.members ?? []).filter((member) => !nextMemberSet.has(member));
   const selectedTransition = transitionCandidates.find((candidate) => candidate.live_id === transitionLiveId);
+  const lineupDirty = !!history && (!!lineupLabel.trim() || !!lineupValidFrom || !!lineupNote.trim() || !!transitionDate ||
+    transitionLiveId !== null || lineupChangeType !== "replacement" || JSON.stringify(nextMembers) !== JSON.stringify(history.current_members));
+  const { guard, dialog: discardDialog } = useConsoleDraftGuard({ dirty: lineupDirty,
+    busy: submitting || confirmLineup || confirmCreate, label: `乐队 #${selectedBandId} 的阵容`,
+    onDiscard: () => { if (history) applyHistory(history); } });
   const createDisabled =
     submitting || createName.trim() === "" || parseMembers(createMembers).length === 0
     || (createValidFrom !== "" && !isIsoCalendarDate(createValidFrom));
@@ -207,6 +207,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
 
   return (
     <section className="tour-admin-section" aria-label="乐队管理">
+    <ConsoleEditorLock locked={loading || submitting || confirmLineup || confirmCreate}>
       <div className="tour-admin-toolbar">
         <label htmlFor="band-admin-select">已有 Band</label>
         <ConsoleEditSelect
@@ -216,7 +217,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
           value={selectedBandId}
           disabled={loading}
           options={realBands.map(band => ({ id: band.band_id, label: `#${band.band_id} ${band.band_name}` }))}
-          onSelect={id => void loadHistory(id)} />
+          onSelect={id => guard(() => void loadHistory(id))} />
         <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setCreating((value) => !value)}>
           {creating ? "收起新增" : "新增 Band"}
         </button>
@@ -241,7 +242,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
           </div>
           <p className="console-admin-hint">服务端将在一个事务中写入稳定 Band、当前名称、V1 阵容及全部成员。</p>
           <div className="console-submit-row">
-            <button type="button" className="console-submit-btn" disabled={createDisabled} onClick={() => setConfirmCreate(true)}>
+            <button type="button" className="console-submit-btn" disabled={createDisabled} onClick={() => { setSaveError(""); setConfirmCreate(true); }}>
               检查新增资料
             </button>
           </div>
@@ -331,7 +332,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
               </div>
             )}
             <div className="console-submit-row">
-              <button type="button" className="console-submit-btn" disabled={lineupDisabled} onClick={() => setConfirmLineup(true)}>
+              <button type="button" className="console-submit-btn" disabled={lineupDisabled} onClick={() => { setSaveError(""); setConfirmLineup(true); }}>
                 检查版本变化
               </button>
             </div>
@@ -339,32 +340,20 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
         </>
       )}
 
-      {confirmCreate && (
-        <div className="modal-mask" onClick={() => !submitting && setConfirmCreate(false)}>
-          <div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="band-create-title" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head"><h2 id="band-create-title">确认新增 Band</h2></div>
-            <div className="console-confirm-body">
+      {confirmCreate && <ConsoleConfirmDialog title={"确认新增 Band"} busy={submitting} error={saveError}
+        confirmLabel="确认提交" onClose={() => setConfirmCreate(false)} onConfirm={submitCreate}>
+
               <CompactConfirmationTable ariaLabel="新增 Band 确认" rows={[
                 ["编号段", createIdRange === "regular" ? "1–99" : "101+"],
                 ["名称", createName.trim()],
                 ["缩写", createAbbr.trim() || "-"],
                 ["V1 生效日", createValidFrom || "-"],
                 ["V1 成员", parseMembers(createMembers).join(" / ")],
-              ]} />
-            </div>
-            <div className="console-confirm-actions">
-              <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirmCreate(false)}>取消</button>
-              <button type="button" className="console-submit-btn" disabled={submitting} onClick={() => void submitCreate()}>确认新增</button>
-            </div>
-          </div>
-        </div>
-      )}
+              ]} />      </ConsoleConfirmDialog>}
 
-      {confirmLineup && currentLineup && (
-        <div className="modal-mask" onClick={() => !submitting && setConfirmLineup(false)}>
-          <div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="band-lineup-title" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head"><h2 id="band-lineup-title">确认追加阵容版本</h2></div>
-            <div className="console-confirm-body">
+      {confirmLineup && currentLineup && <ConsoleConfirmDialog title={`确认追加阵容版本 · Band #${selectedBandId}`} busy={submitting} error={saveError}
+        confirmLabel="确认追加" onClose={() => setConfirmLineup(false)} onConfirm={submitLineup}>
+
               <CompactConfirmationTable ariaLabel="阵容版本变化确认" rows={[
                 ["版本", `V${currentLineup.version_no} → V${currentLineup.version_no + 1}`],
                 ["版本标签", lineupLabel.trim() || "-"],
@@ -376,16 +365,10 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
                 ["移除成员", removedMembers.join(" / ") || "-"],
                 ["备注", lineupNote.trim() || "-"],
                 ["交接 Live", selectedTransition ? `#${selectedTransition.live_id} ${selectedTransition.live_name}` : "无"],
-              ]} />
-            </div>
-            <div className="console-confirm-actions">
-              <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirmLineup(false)}>取消</button>
-              <button type="button" className="console-submit-btn" disabled={submitting} onClick={() => void submitLineup()}>确认追加</button>
-            </div>
-          </div>
-        </div>
-      )}
+              ]} />      </ConsoleConfirmDialog>}
+      {discardDialog}
       <MemberAdminSection />
-    </section>
+    </ConsoleEditorLock>
+  </section>
   );
 }

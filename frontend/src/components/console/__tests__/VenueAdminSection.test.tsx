@@ -1,3 +1,4 @@
+import { ConsoleDraftProvider } from "../ConsoleDraftGuard";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -156,7 +157,7 @@ describe("VenueAdminSection", () => {
     expect(apiMocks.createConsoleVenue).not.toHaveBeenCalled();
     const dialog = screen.getByRole("dialog", { name: "确认新增场馆" });
     expect(within(dialog).getByRole("table", { name: "新增场馆确认" })).toHaveTextContent("未公开");
-    await user.click(within(dialog).getByRole("button", { name: "提交插入" }));
+    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleVenue).toHaveBeenCalledWith("Third Hall", "csrf-token", "undisclosed", expect.objectContaining({ locality_id: null, address: null })));
     expect(screen.queryByLabelText("已有 Venue")).not.toBeInTheDocument();
@@ -174,12 +175,12 @@ describe("VenueAdminSection", () => {
     expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
     await user.type(screen.getByLabelText("生效日期"), "2026-09-04");
     await user.click(screen.getByRole("button", { name: "保存修改" }));
-    const dialog = await screen.findByRole("dialog", { name: "确认场馆修改" });
+    const dialog = await screen.findByRole("dialog", { name: /确认更新场馆 #/ });
     expect(dialog).toHaveTextContent("First Hall");
     expect(dialog).toHaveTextContent("Renamed Hall");
     expect(dialog).toHaveTextContent("2026-09-04");
     expect(apiMocks.saveConsoleVenueEdit).not.toHaveBeenCalled();
-    await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
+    await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
     await waitFor(() => expect(apiMocks.saveConsoleVenueEdit).toHaveBeenCalledWith(1, expect.objectContaining({
       venue_kind: "undisclosed", location: expect.objectContaining({ address: null }),
       name_change: { version_id: 11, expected_name: "First Hall", venue_name: "Renamed Hall", valid_from: "2026-09-04" },
@@ -196,9 +197,9 @@ describe("VenueAdminSection", () => {
     await user.type(screen.getByLabelText("名称"), "New Hall");
     await user.type(screen.getByLabelText("生效日期"), "2026-09-04");
     await user.click(screen.getAllByRole("button", { name: "保存修改" })[0]);
-    const dialog = await screen.findByRole("dialog", { name: "确认场馆修改" });
+    const dialog = await screen.findByRole("dialog", { name: /确认更新场馆 #/ });
     expect(dialog).toHaveTextContent("保留原名称版本");
-    await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
+    await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("write failed");
     expect(screen.getByLabelText("名称")).toHaveValue("New Hall");
     await user.click(within(dialog).getByRole("button", { name: "取消" }));
@@ -222,4 +223,21 @@ describe("VenueAdminSection", () => {
 
     expect(await screen.findByRole("table", { name: "Venue 历史名称" })).toHaveTextContent("First Hall");
   });
+  // 测试点：场馆查询和对象切换均保护当前修改，只有确认放弃后才加载另一场馆。
+  test("preserves venue drafts across a canceled query and selection", async () => {
+    const user = userEvent.setup();
+    render(<ConsoleDraftProvider><VenueAdminSection variant="edit" onMessage={vi.fn()} onVenuesChanged={vi.fn()} /></ConsoleDraftProvider>);
+    await waitFor(() => expect(screen.getByLabelText("名称")).toHaveValue("First Hall"));
+    await user.type(screen.getByLabelText("名称"), " Draft");
+    const loaded = apiMocks.getConsoleVenuePage.mock.calls.length;
+    await user.click(screen.getAllByRole("button", { name: "查询" })[0]);
+    await user.click(screen.getByRole("button", { name: "继续编辑" }));
+    expect(apiMocks.getConsoleVenuePage).toHaveBeenCalledTimes(loaded);
+    expect(screen.getByLabelText("名称")).toHaveValue("First Hall Draft");
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await user.click(screen.getByRole("button", { name: "放弃修改" }));
+    await waitFor(() => expect(screen.getByLabelText("名称")).toHaveValue("Second Hall"));
+    expect(apiMocks.saveConsoleVenueEdit).not.toHaveBeenCalled();
+  });
+
 });

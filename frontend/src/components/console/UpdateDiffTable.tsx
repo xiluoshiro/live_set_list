@@ -27,7 +27,7 @@ export function UpdateDiffTable({
           </tr>
         </thead>
         <tbody>
-          {changes.map((change) => (
+          {changes.filter(change => change.before !== change.after).map((change) => (
             <tr key={change.field}>
               <th>{change.field}</th>
               <td>{change.before}</td>

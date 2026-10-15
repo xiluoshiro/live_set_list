@@ -10,7 +10,8 @@
   padding: 24px 0 48px;
 }
 
-.console-admin > .page-title {
+.console-admin > .page-title,
+.console-admin > .console-editor-fields > .page-title {
   margin-bottom: 20px;
 }
 
@@ -717,7 +718,8 @@
   font-weight: 650;
 }
 
-.tour-admin-block > h3:not(:first-child) {
+.tour-admin-block > h3:not(:first-child),
+.tour-admin-block > .console-editor-fields > h3:not(:first-child) {
   margin-top: 24px;
 }
 
@@ -748,6 +750,13 @@
   overflow: hidden;
 }
 
+.console-editor-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
 .console-confirm-modal > .modal-head {
   justify-content: flex-start;
   padding-bottom: 14px;
@@ -764,7 +773,7 @@
 }
 
 .console-confirm-modal.compact {
-  width: fit-content;
+  width: min(680px, calc(100vw - 40px));
   min-width: min(320px, calc(100vw - 40px));
   max-width: min(720px, calc(100vw - 40px));
 }
@@ -795,9 +804,14 @@
 }
 
 .console-confirm-body {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   margin-top: 10px;
+}
+
+.console-confirm-body > * {
+  flex-shrink: 0;
 }
 
 .modal.console-confirm-modal > .console-confirm-body {
@@ -828,10 +842,33 @@
 
 .live-update-diff-table {
   width: 100%;
+  table-layout: fixed;
+}
+
+.live-update-diff-table th {
+  width: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.live-update-diff-table th,
+.live-update-diff-table td {
+  vertical-align: top;
+}
+
+.live-update-diff-table td {
+  max-width: none;
+  white-space: pre-wrap;
 }
 
 .live-update-diff-table th:first-child {
   width: 140px;
+}
+
+@media (max-width: 600px) {
+  .live-update-diff-table th:first-child {
+    width: 28%;
+  }
 }
 
 .console-confirm-setlist-table {

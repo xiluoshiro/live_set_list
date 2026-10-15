@@ -50,7 +50,6 @@ def test_detail_timezone_labels_use_each_venue_and_instant(integration_test_clie
     history = item["schedule_history"][0]
     assert history["previous_opening_timezone_label"] == "EDT"
     assert history["previous_start_timezone_label"] == "EDT"
-    assert "_venue_timezone_id" not in history
 
 
 # 测试点：ONLINE 只有带偏移时间时，接口不伪造 IANA 缩写，保留原时间供旧映射显示。

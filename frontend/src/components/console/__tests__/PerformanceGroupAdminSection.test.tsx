@@ -239,7 +239,7 @@ describe("PerformanceGroupAdminSection", () => {
     const titleInput = screen.getByLabelText("活动组名称");
     await user.type(titleInput, "Test");
 
-    const submitButton = screen.getByRole("button", { name: "新建" });
+    const submitButton = screen.getByRole("button", { name: "提交插入" });
     expect(submitButton).toBeDisabled();
   });
 
@@ -283,9 +283,9 @@ describe("PerformanceGroupAdminSection", () => {
     await user.clear(titleInput);
     await user.type(titleInput, "My Tour 2026");
 
-    await user.click(screen.getByRole("button", { name: "新建" }));
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "确认创建活动组" });
+    const dialog = await screen.findByRole("dialog", { name: "确认新增活动组" });
     expect(within(dialog).getByText("Tokyo")).toBeInTheDocument();
     expect(within(dialog).getByText("Osaka")).toBeInTheDocument();
   });
@@ -344,10 +344,10 @@ describe("PerformanceGroupAdminSection", () => {
     await user.clear(titleInput);
     await user.type(titleInput, "New Tour 2026");
 
-    await user.click(screen.getByRole("button", { name: "新建" }));
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "确认创建活动组" });
-    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
+    const dialog = await screen.findByRole("dialog", { name: "确认新增活动组" });
+    await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => {
       expect(createConsolePerformanceGroupMock).toHaveBeenCalledWith(
@@ -406,10 +406,10 @@ describe("PerformanceGroupAdminSection", () => {
     await user.clear(titleInput);
     await user.type(titleInput, "Bad Group");
 
-    await user.click(screen.getByRole("button", { name: "新建" }));
+    await user.click(screen.getByRole("button", { name: "提交插入" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "确认创建活动组" });
-    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
+    const dialog = await screen.findByRole("dialog", { name: "确认新增活动组" });
+    await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => {
       expect(screen.getByText(/Live already belongs to another group/)).toBeInTheDocument();
@@ -453,19 +453,25 @@ describe("PerformanceGroupAdminSection", () => {
       expect(titleInput).toHaveValue("Existing Group");
     });
 
+    expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+    updateConsolePerformanceGroupMock.mockRejectedValueOnce(new Error("活动组写入失败"));
     await user.clear(screen.getByLabelText("活动组名称"));
     await user.type(screen.getByLabelText("活动组名称"), "Updated Group");
 
     await user.click(screen.getByRole("button", { name: "添加" }));
 
-    await user.click(screen.getByRole("button", { name: "更新" }));
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "确认更新活动组" });
+    const dialog = await screen.findByRole("dialog", { name: /确认更新活动组 #/ });
     const diffTable = within(dialog).getByRole("table", { name: "活动组修改内容" });
     expect(within(diffTable).getByText("group_title")).toBeInTheDocument();
     expect(within(diffTable).getByText("live_ids[live_id=12]")).toBeInTheDocument();
     expect(within(dialog).queryByText("Existing Group Day 1")).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
+    await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("活动组写入失败");
+    expect(diffTable).toHaveTextContent("Updated Group");
+    await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
+
 
     await waitFor(() => {
       expect(updateConsolePerformanceGroupMock).toHaveBeenCalledWith(

@@ -1,3 +1,7 @@
+import { refreshConsoleAfterSave } from "./consoleSave";
+import { ConsoleEditorLock } from "./ConsoleEditorLock";
+import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
+import { useConsoleDraftGuard } from "./ConsoleDraftGuard";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -11,7 +15,7 @@ import {
   type ConsolePerformanceGroupUpsertPayload,
 } from "../../api";
 import { getGroupedLiveShortTitle } from "../performanceGroupHelpers";
-import { UpdateDiffTable, type UpdateChange } from "./UpdateDiffTable";
+import type { UpdateChange } from "./UpdateDiffTable";
 
 type DraftStop = {
   live_id: number;
@@ -122,6 +126,7 @@ export function PerformanceGroupAdminSection({
   const [candidateLoading, setCandidateLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [insertedGroups, setInsertedGroups] = useState<
     ConsolePerformanceGroupMutationResponse["item"][]
   >([]);
@@ -139,11 +144,12 @@ export function PerformanceGroupAdminSection({
     setCandidates([]);
   };
 
-  const loadGroupList = async () => {
+  const loadGroupList = async (reportFailure = true) => {
     try {
       const response = await getConsolePerformanceGroups();
       setGroups(response.items);
     } catch (error) {
+      if (!reportFailure) throw error;
       onMessage(`加载活动组列表失败：${errorMessage(error)}`);
     }
   };
@@ -202,7 +208,7 @@ export function PerformanceGroupAdminSection({
     }
   };
 
-  const queryCandidates = async (query = candidateQuery) => {
+  const queryCandidates = async (query = candidateQuery, reportFailure = true) => {
     setCandidateLoading(true);
     setCandidatePage(1);
     try {
@@ -214,6 +220,7 @@ export function PerformanceGroupAdminSection({
       setCandidates(response.items);
       setCandidateTotalPages(response.total_pages);
     } catch (error) {
+      if (!reportFailure) throw error;
       onMessage(`查询 Live 候选失败：${errorMessage(error)}`);
     } finally {
       setCandidateLoading(false);
@@ -277,9 +284,13 @@ export function PerformanceGroupAdminSection({
     [originalPayload, originalStops, payload, sortedStops],
   );
 
+  const dirty = !isNew && updateChanges.length > 0;
+  const { guard, dialog: discardDialog } = useConsoleDraftGuard({ dirty, busy: submitting || confirming,
+    label: `活动组 #${selectedGroupId}`, onDiscard: resetForm });
+
   const submit = async () => {
-    if (!csrfToken || !canSubmit) return;
-    setSubmitting(true);
+    if (!csrfToken || !canSubmit || (!isNew && !dirty)) return;
+    setSubmitting(true); setSaveError("");
     try {
       const wasNew = isNew;
       const response = wasNew
@@ -294,14 +305,11 @@ export function PerformanceGroupAdminSection({
         setInsertedGroups((current) => [response.item, ...current]);
       }
       resetForm();
-      await Promise.all([loadGroupList(), queryCandidates("")]);
-      onMessage(
-        `${wasNew ? "创建" : "更新"}活动组成功：#${response.item.group_id} ${response.item.group_title}`,
-      );
+      await refreshConsoleAfterSave([() => loadGroupList(false), () => queryCandidates("", false)],
+        `${wasNew ? "创建" : "更新"}活动组成功：#${response.item.group_id} ${response.item.group_title}`, onMessage);
       onGroupDataChanged?.();
     } catch (error) {
-      setConfirming(false);
-      onMessage(`保存活动组失败：${errorMessage(error)}`);
+      setSaveError(`保存活动组失败：${errorMessage(error)}`);
     } finally {
       setSubmitting(false);
     }
@@ -309,6 +317,7 @@ export function PerformanceGroupAdminSection({
 
   return (
     <section className="tour-admin-section" aria-label="活动组管理">
+    <ConsoleEditorLock locked={loading || submitting || confirming}>
       <div className="tour-admin-toolbar">
         <label htmlFor="pg-admin-select">已有活动组</label>
         <select
@@ -317,7 +326,7 @@ export function PerformanceGroupAdminSection({
           value={selectedGroupId ?? ""}
           onChange={(event) => {
             const groupId = Number(event.target.value);
-            if (groupId > 0) void loadSelectedGroup(groupId);
+            if (groupId > 0) guard(() => void loadSelectedGroup(groupId));
           }}
           disabled={loading || groups.length === 0}
         >
@@ -331,10 +340,7 @@ export function PerformanceGroupAdminSection({
         <button
           type="button"
           className="console-submit-btn"
-          onClick={() => {
-            resetForm();
-            void queryCandidates("");
-          }}
+          onClick={() => guard(() => { resetForm(); void queryCandidates(""); })}
         >
           新建活动组
         </button>
@@ -517,52 +523,25 @@ export function PerformanceGroupAdminSection({
         <button
           type="button"
           className="console-ghost-btn"
-          onClick={() => {
-            resetForm();
-            void queryCandidates("");
-          }}
+          onClick={() => guard(() => { resetForm(); void queryCandidates(""); })}
         >
           清空
         </button>
         <button
           type="button"
           className="console-submit-btn"
-          disabled={!canSubmit || loading}
-          onClick={() => setConfirming(true)}
+          disabled={!canSubmit || loading || submitting || (!isNew && !dirty)}
+          onClick={() => { setSaveError(""); setConfirming(true); }}
         >
-          {isNew ? "新建" : "更新"}
+          {isNew ? "提交插入" : "保存修改"}
         </button>
       </div>
 
-      {confirming && (
-        <div
-          className="modal-mask"
-          onClick={() => !submitting && setConfirming(false)}
-        >
-          <div
-            className="modal console-confirm-modal compact tour"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="pg-confirm-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-head">
-              <h2 id="pg-confirm-title">
-                确认{isNew ? "创建" : "更新"}活动组
-              </h2>
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="modal-action-btn close"
-                  aria-label="关闭"
-                  disabled={submitting}
-                  onClick={() => setConfirming(false)}
-                >
-                  <span className="modal-action-glyph close">✕</span>
-                </button>
-              </div>
-            </div>
-            <div className="console-confirm-body">
+      {discardDialog}
+      {confirming && <ConsoleConfirmDialog title={isNew ? "确认新增活动组" : `确认更新活动组 #${selectedGroupId}`}
+        changes={isNew ? undefined : updateChanges} changesLabel="活动组修改内容" busy={submitting} error={saveError} confirmLabel={isNew ? "确认提交" : "确认更新"}
+        disabled={!isNew && !dirty} onClose={() => setConfirming(false)} onConfirm={submit}>
+
               {isNew ? (
                 <>
                   <div className="console-confirm-table-wrap">
@@ -609,30 +588,8 @@ export function PerformanceGroupAdminSection({
                   </div>
                 </>
               ) : (
-                <UpdateDiffTable changes={updateChanges} ariaLabel="活动组修改内容" />
-              )}
-            </div>
-            <div className="console-confirm-actions">
-              <button
-                type="button"
-                className="console-ghost-btn"
-                disabled={submitting}
-                onClick={() => setConfirming(false)}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="console-submit-btn"
-                disabled={submitting}
-                onClick={() => void submit()}
-              >
-                {submitting ? "提交中..." : "确认提交"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                null
+              )}      </ConsoleConfirmDialog>}
 
       <div className="console-table-wrap live-history-wrap">
         <table
@@ -665,6 +622,7 @@ export function PerformanceGroupAdminSection({
           </tbody>
         </table>
       </div>
-    </section>
+    </ConsoleEditorLock>
+  </section>
   );
 }

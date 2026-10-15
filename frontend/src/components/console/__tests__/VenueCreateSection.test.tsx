@@ -48,7 +48,7 @@ test("creates complete location after preview and retains selection across searc
   expect(dialog.getByRole("table")).toHaveTextContent("Tokyo address");
   expect(dialog.getByRole("table")).toHaveTextContent("35.6, 139.7");
   expect(api.createConsoleVenue).not.toHaveBeenCalled();
-  await user.click(dialog.getByRole("button", { name: "提交插入" }));
+  await user.click(dialog.getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(api.createConsoleVenue).toHaveBeenCalledWith("New Hall", "csrf", "physical", {
     locality_id: 1, address: "Tokyo address", latitude: 35.6, longitude: 139.7, timezone_id: "Asia/Tokyo",
     coordinate_system: "WGS84", google_place: null,
@@ -67,7 +67,7 @@ test("clears fields forbidden by venue kind", async () => {
   expect(screen.getByLabelText("已公布地区")).toHaveTextContent("JP / 東京都");
   expect(within(screen.getByLabelText("类型")).getAllByRole("option").map(option => option.textContent)).toEqual(["实体场馆", "未公开"]);
   const dialog = await confirm(user);
-  await user.click(dialog.getByRole("button", { name: "提交插入" }));
+  await user.click(dialog.getByRole("button", { name: "确认提交" }));
   expect(api.createConsoleVenue).toHaveBeenCalledWith("New Hall", "csrf", "undisclosed", expect.objectContaining({ locality_id: 1, address: null, latitude: null, timezone_id: "Asia/Tokyo" }));
 });
 
@@ -81,10 +81,10 @@ test("preserves draft on failure and distinguishes refresh failure", async () =>
   await user.click(screen.getByLabelText("新增成功后清空表单"));
   api.createConsoleVenue.mockRejectedValueOnce(new Error("duplicate name"));
   let dialog = await confirm(user);
-  await user.click(dialog.getByRole("button", { name: "提交插入" }));
+  await user.click(dialog.getByRole("button", { name: "确认提交" }));
   expect(await dialog.findByRole("alert")).toHaveTextContent("duplicate name");
   expect(screen.getByLabelText("名称")).toHaveValue("New Hall");
-  await user.click(dialog.getByRole("button", { name: "提交插入" }));
+  await user.click(dialog.getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(onMessage).toHaveBeenLastCalledWith(expect.stringContaining("无需重复提交"));
   expect(screen.getByLabelText("名称")).toHaveValue("New Hall");

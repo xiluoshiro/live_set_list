@@ -1,3 +1,4 @@
+import type { ConsoleLeaveGuard } from "./components/console/ConsoleDraftGuard";
 import { SongCatalog } from "./components/SongCatalog";
 import { normalizeSongBrowse, songBrowseFromSearch, songCatalogHref, type SongBrowseState } from "./songCatalogNavigation";
 import { SONG_CATALOG_STORAGE_KEY, SONG_CATALOG_WRITE_EVENT } from "./songCatalogSync";
@@ -87,6 +88,7 @@ type TabKey = "home" | "favorites" | "all" | "songs" | "tours" | "tour_detail" |
 type ListTabKey = "favorites" | "all";
 type MainTabKey = Exclude<TabKey, "detail" | "tour_detail" | "performance_group_detail" | "venue_detail">;
 type AppHistoryState = {
+  navigationIndex?: number;
   songId?: number | null;
   albumId?: number | null;
   songBrowse?: SongBrowseState;
@@ -331,6 +333,12 @@ function App() {
     buildListSnapshotKey(listTab, 1, pageSize, currentListFiltersKey)
   );
 
+  const consoleLeaveGuard = useRef<ConsoleLeaveGuard | null>(null);
+  const registerConsoleLeaveGuard = useCallback((guard: ConsoleLeaveGuard | null) => { consoleLeaveGuard.current = guard; }, []);
+  const historyIndex = useRef<number>(window.history.state?.navigationIndex ?? 0);
+  const restoringConsoleHistory = useRef<number | null>(null);
+  const approvedConsoleHistory = useRef(false);
+
   const captureCurrentListState = (state: AppHistoryState): AppHistoryState => {
     if (tab === "songs") return { ...state, songScrollY: window.scrollY };
     if (tab !== "all" && tab !== "favorites") return state;
@@ -430,19 +438,24 @@ function App() {
     if (state.catalogBandId !== undefined) setSelectedCatalogBandId(state.catalogBandId);
   };
 
-  const pushHistoryState = (state: AppHistoryState) => {
+  const pushHistoryState = (state: AppHistoryState, authorized = false) => {
+    if (!authorized && state.tab !== "console" && consoleLeaveGuard.current) {
+      consoleLeaveGuard.current(() => pushHistoryState(state, true));
+      return;
+    }
     if (state.tab === "songs" && !state.songBrowse) state = { ...state, songBrowse };
     if (state.tab === "songs" && tab === "songs") state = { ...state,
       songReturnHref: window.location.pathname + window.location.search,
       songBackLabel: albumId !== null ? "返回唱片" : songId !== null ? "返回歌曲" : "歌曲资料" };
     if (isAppHistoryState(window.history.state)) {
-      window.history.replaceState(captureCurrentListState(window.history.state), "", window.location.href);
+      window.history.replaceState({ ...captureCurrentListState(window.history.state), navigationIndex: historyIndex.current }, "", window.location.href);
     }
     const nextPath = state.tab === "detail" && state.detailLiveId
       ? `/lives/${state.detailLiveId}`
       : state.tab === "venue_detail" && state.detailVenueId
         ? `/venues/${state.detailVenueId}`
       : state.tab === "songs" ? songCatalogHref(state.songId ?? null, state.albumId ?? null, normalizeSongBrowse(state.songBrowse)) : "/";
+    state = { ...state, navigationIndex: ++historyIndex.current };
     window.history.pushState(state, "", nextPath);
     applyHistoryState(state);
   };
@@ -518,9 +531,23 @@ function App() {
       if (current.tab === "songs") applyHistoryState(current);
     }
     const onPopState = (event: PopStateEvent) => {
-      if (isAppHistoryState(event.state)) {
-        applyHistoryState(event.state);
+      if (!isAppHistoryState(event.state)) return;
+      const targetIndex = event.state.navigationIndex ?? 0;
+      if (approvedConsoleHistory.current) {
+        approvedConsoleHistory.current = false;
+      } else if (restoringConsoleHistory.current !== null) {
+        const destination = restoringConsoleHistory.current;
+        restoringConsoleHistory.current = null;
+        const proceed = () => { approvedConsoleHistory.current = true; window.history.go(destination - historyIndex.current); };
+        if (consoleLeaveGuard.current) consoleLeaveGuard.current(proceed); else proceed();
+        return;
+      } else if (consoleLeaveGuard.current && targetIndex !== historyIndex.current) {
+        restoringConsoleHistory.current = targetIndex;
+        window.history.go(historyIndex.current - targetIndex);
+        return;
       }
+      historyIndex.current = targetIndex;
+      applyHistoryState(event.state);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -1639,7 +1666,7 @@ function App() {
             )}
           </section>
         ) : showConsolePanel ? (
-          <ConsoleInsertPanel initialMode="live_create" onLiveDataChanged={handleConsoleLiveDataChanged} />
+          <ConsoleInsertPanel initialMode="live_create" onLiveDataChanged={handleConsoleLiveDataChanged} onLeaveGuard={registerConsoleLeaveGuard} />
         ) : (
           <AboutPanel />
         )}

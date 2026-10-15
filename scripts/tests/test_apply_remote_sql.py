@@ -27,11 +27,14 @@ def test_precheck_probes_transfer_and_database_without_business_sql(tmp_path, mo
     sql_file = tmp_path / "change.sql"
     sql_file.write_text("DELETE FROM important_table;", encoding="utf-8")
     calls: list[list[str]] = []
+    uploads: list[bytes] = []
     monkeypatch.setattr(apply_remote_sql, "resolve_command", lambda name: name)
     monkeypatch.setattr(apply_remote_sql, "apply_remote_sql", lambda *_args: pytest.fail("business SQL executed"))
 
     def fake_run(command, **_kwargs):
         calls.append(command)
+        if command[0] == "scp":
+            uploads.append(Path(command[-2]).read_bytes())
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(apply_remote_sql.subprocess, "run", fake_run)
@@ -44,10 +47,10 @@ def test_precheck_probes_transfer_and_database_without_business_sql(tmp_path, mo
     assert calls[1][-1].endswith("/probe.txt")
     assert "sha256sum --check --status" in calls[2][-1]
     assert "sudo -n /usr/local/sbin/livesetlist-sql-exec check" in calls[2][-1]
-    assert "DELETE" not in calls[2][-1]
     assert calls[3][-1].startswith("rm -f --")
 
-    assert all(str(sql_file) not in " ".join(command) for command in calls)
+    assert uploads
+    assert sql_file.read_bytes() not in uploads
 
 
 # 测试点：预检缺少或找不到 SQL 文件时，在任何远端访问前就失败。

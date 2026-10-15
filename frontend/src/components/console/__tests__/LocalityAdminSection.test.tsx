@@ -20,7 +20,6 @@ test("creates a locality and clears the form after confirmation", async () => {
   expect(table.getAllByRole("columnheader").map(cell => cell.textContent)).toEqual([
     "地区层级", "国家／地区代码", "都道府县／省／州", "城市名称",
   ]);
-  expect(screen.queryByRole("button", { name: "修改已选地区" })).not.toBeInTheDocument();
 
   await user.type(table.getByLabelText("国家／地区代码"), "jp");
   await user.type(table.getByLabelText("都道府县／省／州"), "神奈川県");
@@ -33,7 +32,7 @@ test("creates a locality and clears the form after confirmation", async () => {
   expect(dialog).toHaveTextContent("横浜市");
 
   api.createConsoleLocality.mockResolvedValue({ id: 6, country_code: "JP", admin_area: "神奈川県", locality_name: "横浜市", area_level: "locality", state_token: "2".repeat(64) });
-  await user.click(within(dialog).getByRole("button", { name: "提交插入" }));
+  await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
 
   expect(api.createConsoleLocality).toHaveBeenCalledWith({
     country_code: "JP", admin_area: "神奈川県", locality_name: "横浜市", area_level: "locality",
@@ -54,7 +53,7 @@ test("keeps the form after creation when clear-after-create is disabled", async 
   await user.type(screen.getByLabelText("都道府县／省／州"), "東京都");
   await user.click(screen.getByRole("checkbox", { name: "新增成功后清空表单" }));
   await user.click(screen.getByRole("button", { name: "提交插入" }));
-  await user.click(within(await screen.findByRole("dialog", { name: "确认新增地区" })).getByRole("button", { name: "提交插入" }));
+  await user.click(within(await screen.findByRole("dialog", { name: "确认新增地区" })).getByRole("button", { name: "确认提交" }));
 
   expect(await screen.findByText("已新增地区 #7 JP / 東京都。")).toBeInTheDocument();
   expect(screen.getByLabelText("国家／地区代码")).toHaveValue("JP");

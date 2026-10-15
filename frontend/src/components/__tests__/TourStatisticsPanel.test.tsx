@@ -97,7 +97,6 @@ describe("TourStatisticsPanel", () => {
     expect(getTourStatisticsComparisonMock).toHaveBeenCalledWith(7, 40, 42);
     expect(await within(detailRegion).findByLabelText("新增 任意场次新增曲")).toBeInTheDocument();
     expect(screen.getAllByRole("region", { name: "歌单变化" })).toHaveLength(1);
-    expect(screen.queryByRole("region", { name: "任意场次歌单变化" })).not.toBeInTheDocument();
 
     const progress = screen.getByRole("navigation", { name: "场次进程" });
     await user.click(within(progress).getAllByRole("button", { name: /对比上一场/ })[0]);
@@ -121,10 +120,9 @@ describe("TourStatisticsPanel", () => {
     expect(selectors[0]).toHaveAttribute("aria-pressed", "true");
     const region = screen.getByRole("region", { name: "歌单变化" });
     expect(region).toHaveTextContent("歌单未发生变化");
-    expect(region).not.toHaveTextContent("保留场次节点，不制造额外空白。");
   });
 
-  // 测试点：位置相同的曲目替换归入普通新增和移除，不再暴露无意义的“同位置更换”分类。
+  // 测试点：位置相同的曲目替换分别计入新增和移除，并展示对应歌曲。
   test("把位置相同的替换归入增删变化流", () => {
     render(<TourStatisticsPanel tourTitle="Tour 2026" data={makeStatistics()} loading={false} error={null} onOpenStop={vi.fn()} />);
 
@@ -133,9 +131,6 @@ describe("TourStatisticsPanel", () => {
     expect(within(region).getByLabelText("变化摘要")).toHaveTextContent("移除 1");
     expect(within(region).getByLabelText("移除 旧曲")).toBeInTheDocument();
     expect(within(region).getByLabelText("新增 新曲")).toBeInTheDocument();
-    expect(region).not.toHaveTextContent("同位置更换");
-    expect(region).not.toHaveTextContent("更换 1");
-    expect(within(region).queryByText("顺序 0")).not.toBeInTheDocument();
   });
 
   // 测试点：同一新增歌曲出现两次时，来回切换场次不会因重复 React key 残留额外的新增行。

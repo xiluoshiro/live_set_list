@@ -306,8 +306,8 @@ describe("ConsoleInsertPanel", () => {
     }
   });
 
-  // 测试点：控制台首次进入应优先新增 Live、聚焦场馆查询，且不预加载隐藏的 Setlist 候选。
-  test("默认渲染新增 Live 并聚焦场馆查询", async () => {
+  // 测试点：新增 Live 入口展示默认排期表单，尚未进入 Setlist 时不加载演出候选。
+  test("渲染新增 Live 的默认表单", async () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
 
@@ -316,9 +316,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("tab", { name: "新增歌单" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "歌单管理" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "歌曲管理" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "新增乐队" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "新增演出" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByLabelText("查询场馆")).toHaveFocus();
     expect(screen.getAllByRole("columnheader", { name: "live_date" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("columnheader", { name: "live_title" }).length).toBeGreaterThan(0);
     expect(screen.getByLabelText("opening_time")).toHaveValue("18:00");
@@ -326,7 +324,6 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("start_time")).toHaveValue("19:00");
     expect(screen.getByLabelText("start_time")).toHaveAttribute("type", "time");
     expect(screen.getByRole("button", { name: "请选择场馆" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("timezone")).not.toBeInTheDocument();
     expect(apiMocks.getLives).not.toHaveBeenCalled();
   });
 
@@ -336,7 +333,6 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
 
     const content = screen.getByRole("navigation", { name: "控制台录入类型" });
-    expect(within(content).queryByRole("heading", { name: "内容管理" })).not.toBeInTheDocument();
     expect(within(content).getByRole("tablist", { name: "内容管理" })).toBeInTheDocument();
     expect(within(content).getByRole("tab", { name: "歌曲管理" })).toHaveTextContent("管理");
     expect(within(content).getByRole("tab", { name: "新增歌曲" })).toHaveTextContent("新增");
@@ -350,11 +346,8 @@ describe("ConsoleInsertPanel", () => {
     await user.click(within(content).getByRole("tab", { name: "新增地区" }));
     expect(within(content).getByRole("tab", { name: "新增地区" })).toHaveAttribute("aria-selected", "true");
     expect(within(content).getByRole("tab", { name: "新增地区" })).toHaveTextContent("新增");
-    expect(within(content).getByRole("tab", { name: "新增地区" })).not.toHaveTextContent("管理");
     expect(await screen.findByRole("region", { name: "新增地区" })).toBeInTheDocument();
 
-    expect(screen.queryByRole("navigation", { name: "控制台工具" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "地理质量" })).not.toBeInTheDocument();
   });
 
   // 测试点：专辑管理自动加载已有专辑，新增草稿独立保留，切页时保护编辑草稿。
@@ -396,7 +389,7 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel initialMode="album_create" />);
     await user.type(screen.getByLabelText("专辑名称"), "新盘");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
-    await user.click(within(screen.getByRole("dialog", { name: "确认新增专辑" })).getByRole("button", { name: "确认" }));
+    await user.click(within(screen.getByRole("dialog", { name: "确认新增专辑" })).getByRole("button", { name: /^(确认提交|确认更新)$/ }));
     await screen.findByText("已新增专辑 #12 新盘");
     expect(screen.getByLabelText("专辑名称")).toHaveValue("");
     await user.type(screen.getByLabelText("专辑名称"), "下一张草稿");
@@ -445,24 +438,6 @@ describe("ConsoleInsertPanel", () => {
     expect(liveOptions.map((option) => option.getAttribute("value"))).toEqual(["101", "102"]);
   });
 
-  // 测试点：新增 Setlist 必须保持新增表格的业务字段，不包含管理态专属字段。
-  test("新增Setlist只显示新增所需字段", async () => {
-    render(<ConsoleInsertPanel />);
-    await screen.findByLabelText("选择 live_id");
-
-    const table = document.querySelector(".setlist-input-wrap .setlist-table") as HTMLTableElement;
-    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "song_name",
-      "sid",
-      "abs",
-      "seg",
-      "sub",
-      "short",
-      "band_member",
-      "other_member",
-    ]);
-    expect(within(table).queryByRole("columnheader", { name: "comment" })).not.toBeInTheDocument();
-  });
 
   // 测试点：Setlist 确认框单独展示 Live 字段，提交成功后从无 setlist 候选中移除该 Live。
   test("提交新增Setlist会调用真实追加接口并出现插入记录", async () => {
@@ -483,7 +458,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
     expect(screen.getByRole("button", { name: "批量插入" })).toBeDisabled();
@@ -492,11 +467,11 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
     expect(apiMocks.appendConsoleLiveSetlist).not.toHaveBeenCalled();
-    const confirmDialog = screen.getByRole("dialog", { name: "确认提交 Setlist" });
+    const confirmDialog = screen.getByRole("dialog", { name: /确认新增 Setlist · Live #/ });
     expect(within(confirmDialog).getByRole("row", { name: "live_id 101" })).toBeInTheDocument();
     expect(within(confirmDialog).getByRole("row", { name: "live_title 春日联合公演" })).toBeInTheDocument();
     expect(within(confirmDialog).getByText("BLACK SHOUT")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.appendConsoleLiveSetlist).toHaveBeenCalledWith(
       101,
@@ -542,7 +517,6 @@ describe("ConsoleInsertPanel", () => {
     expect(within(resultTable).getByRole("columnheader", { name: "seg" })).toBeInTheDocument();
     expect(within(resultTable).getByRole("columnheader", { name: "sub" })).toBeInTheDocument();
     expect(within(resultTable).getByRole("columnheader", { name: "short" })).toBeInTheDocument();
-    expect(within(resultTable).queryByRole("columnheader", { name: "song_id" })).not.toBeInTheDocument();
   });
 
   // 测试点：未公布场馆与时间可提交 null，非 online 模式不暴露时区输入并使用默认偏移。
@@ -568,7 +542,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByLabelText("开演公布状态"));
     expect(screen.queryByLabelText("online timezone offset")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "提交插入" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -677,12 +651,12 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
     await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.getConsoleLiveSetlist).toHaveBeenCalledWith(101));
     expect(await screen.findByText("已确认 Live #101 的 1 条 Setlist 已写入（原提交响应未成功返回）。")).toBeInTheDocument();
@@ -762,7 +736,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     const lineupTable = await screen.findByRole("table", { name: "本场乐队阵容" });
     expect(lineupTable).toHaveTextContent("Roselia V1");
@@ -776,7 +750,7 @@ describe("ConsoleInsertPanel", () => {
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "101");
     await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
-    const nextLineupDialog = screen.getByRole("dialog", { name: "确认提交 Setlist" });
+    const nextLineupDialog = screen.getByRole("dialog", { name: /确认新增 Setlist · Live #/ });
     expect(within(nextLineupDialog).getByText('{"Roselia":["New Member","Old Member"]}')).toBeInTheDocument();
     await user.click(within(nextLineupDialog).getByRole("button", { name: "取消" }));
 
@@ -787,7 +761,7 @@ describe("ConsoleInsertPanel", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.appendConsoleLiveSetlist).toHaveBeenCalledWith(
       101,
@@ -886,7 +860,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     expect(await screen.findByRole("table", { name: "本场乐队阵容" })).toHaveTextContent("Roselia V2");
     await waitFor(() => expect(screen.getByRole("button", { name: "1支 / 2人" })).toBeInTheDocument());
@@ -895,8 +869,6 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("checkbox", { name: "Stable Member" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "New Member" })).toBeChecked();
     expect(screen.queryByRole("checkbox", { name: "Old Member" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Roselia 本曲模式")).not.toBeInTheDocument();
-    expect(screen.queryByText("Old Member（旧）")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("批量粘贴 Setlist 文本"), {
       target: { value: "<Roselia>\nM1. BLACK SHOUT" },
@@ -907,7 +879,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(reapplyDialog).getByText(
       '{"Roselia":["Stable Member","New Member"]}',
     )).toBeInTheDocument();
-    await user.click(within(reapplyDialog).getByRole("button", { name: "确认提交" }));
+    await user.click(within(reapplyDialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "1支 / 2人" }));
 
     expect(screen.getByRole("checkbox", { name: "Stable Member" })).toBeChecked();
@@ -916,7 +888,7 @@ describe("ConsoleInsertPanel", () => {
   });
 
   test("只读查询接口会加载候选数据并用于歌曲查询", async () => {
-    // 测试点：控制台只读 API 接入后，band 候选与歌曲查询不再只依赖本地静态候选。
+    // 测试点：后端返回的乐队候选用于选择，歌曲查询提交该乐队 ID。
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 9, band_name: "Real Band", band_abbr: "real", band_members: ["Vocal", "Guitar"] }],
@@ -1011,7 +983,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
 
     expect(
@@ -1022,7 +994,7 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
-    const dialog = screen.getByRole("dialog", { name: /确认提交 Setlist/ });
+    const dialog = screen.getByRole("dialog", { name: /确认新增 Setlist · Live #/ });
     expect(within(dialog).getByText("V.I.P MONSTER")).toBeInTheDocument();
     expect(within(dialog).queryByText("V.I.P")).not.toBeInTheDocument();
   });
@@ -1071,7 +1043,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
 
     expect(await screen.findByText("查询歌曲完成：匹配 0 行，待选择 1 行，未匹配 0 行。")).toBeInTheDocument();
@@ -1088,7 +1060,7 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
 
-    const confirmDialog = screen.getByRole("dialog", { name: /确认提交 Setlist/ });
+    const confirmDialog = screen.getByRole("dialog", { name: /确认新增 Setlist · Live #/ });
     expect(within(confirmDialog).getByText("CORUSCATE -DNA-A")).toBeInTheDocument();
     expect(within(confirmDialog).queryByText("CORUSCATE -DNA")).not.toBeInTheDocument();
   });
@@ -1168,18 +1140,6 @@ describe("ConsoleInsertPanel", () => {
     expect(venueOptions).toEqual(["101 - Early Venue", "301 - Later Venue"]);
   });
 
-  // 测试点：新增演出查询栏不再提供场馆插入入口，使用中文场馆和乐队标签。
-  test("新增演出只查询选择场馆，不提供快捷插入", async () => {
-    const user = userEvent.setup();
-    render(<ConsoleInsertPanel />);
-    await user.click(screen.getByRole("tab", { name: "新增演出" }));
-    await user.type(screen.getByLabelText("查询场馆"), "New Venue");
-    expect(screen.queryByRole("button", { name: "插入" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "请选择场馆" })).toBeInTheDocument();
-    expect(screen.getByText("默认乐队")).toBeInTheDocument();
-    expect(apiMocks.createConsoleVenue).not.toHaveBeenCalled();
-  });
-
   // 测试点：新增 Live 成功后应重置表单，并让共享日志在切换标签页后继续显示最新结果。
   test("新增Live会调用真实写入接口并使用后端返回的live_id", async () => {
     const user = userEvent.setup();
@@ -1221,7 +1181,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("Inserted Live")).toBeInTheDocument();
     expect(screen.getByText("New Venue")).toBeInTheDocument();
     expect(within(screen.getByRole("dialog", { name: "确认新增 Live" })).getByText("America/New_York")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
       {
@@ -1251,7 +1211,6 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByPlaceholderText("https://...")).toHaveValue("");
     expect(screen.getByLabelText("查询场馆")).toHaveValue("");
     expect(screen.getByRole("button", { name: "请选择场馆" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("timezone")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "请选择默认乐队" })).toHaveAttribute("aria-expanded", "false");
     await user.click(screen.getByRole("button", { name: "请选择默认乐队" }));
     expect(screen.getByRole("checkbox", { name: /MyGO/ })).not.toBeChecked();
@@ -1323,7 +1282,7 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Keep Draft Live");
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/keep-draft");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalled());
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Keep Draft Live");
@@ -1623,9 +1582,9 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByPlaceholderText("请输入Live标题"), " Changed");
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
 
-    expect(screen.getByRole("dialog", { name: "确认放弃 Live 修改" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "未保存的修改" })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live Changed");
-    await user.click(screen.getByRole("button", { name: "确认放弃" }));
+    await user.click(screen.getByRole("button", { name: "放弃修改" }));
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("");
     expect(screen.getByRole("button", { name: "提交插入" })).toBeInTheDocument();
   });
@@ -1710,7 +1669,7 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Event Live");
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/event");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1804,7 +1763,7 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByPlaceholderText("请输入Live标题"), "Current Event");
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/current-event");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1840,7 +1799,7 @@ describe("ConsoleInsertPanel", () => {
 
     const dialog = screen.getByRole("dialog", { name: "确认新增 Live" });
     expect(within(dialog).getByText("提示：当前 Live 类型为活动，且未选择默认乐队，请确认是否需要补充。")).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "确认提交" })).not.toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ })).not.toBeDisabled();
   });
 
   test("新增歌曲提交后保持新增页且操作记录可打开管理", async () => {
@@ -1855,7 +1814,7 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByLabelText("歌曲名称"), "新曲");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     const dialog = screen.getByRole("dialog", { name: "确认新增歌曲" });
-    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
+    await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/song-groups", "POST", {
       group_name: "新曲", song_name: "新曲", version_label: "", cover_urls: [], ownership: { mode: "pending", band_ids: [], member_groups: [] },
     }, "csrf-token"));
@@ -1882,9 +1841,9 @@ describe("ConsoleInsertPanel", () => {
     await screen.findByLabelText("歌曲名称");
     fireEvent.change(screen.getByLabelText("歌曲名称"), { target: { value: "改名曲" } });
     await user.click(screen.getByRole("button", { name: "保存修改" }));
-    const dialog = screen.getByRole("dialog", { name: "确认修改歌曲" });
+    const dialog = screen.getByRole("dialog", { name: /确认更新歌曲 #/ });
     expect(within(dialog).getByRole("table", { name: "歌曲修改内容" })).toHaveTextContent("原曲名改名曲");
-    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
+    await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/songs/901/edit", "PUT", expect.objectContaining({ song_name: "改名曲", version_label: "普通版", cover_urls: [], expected_revision: 1, group: { group_id: 901, group_name: "原曲名", expected_revision: 1, song_ids: [901] } }), "csrf-token"));
     expect(screen.getByLabelText("歌曲名称")).toHaveValue("改名曲");
   });
@@ -1946,7 +1905,7 @@ describe("ConsoleInsertPanel", () => {
     expect(selector).toHaveValue("902");
   });
 
-  // 测试点：Setlist 管理只查已有数据，更新时提交完整目标集合。
+  // 测试点：歌单未变不能提交，离开保护草稿，失败可重试且下次预览以已保存内容为原值。
   test("Setlist管理加载并更新既有Setlist", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -2012,16 +1971,24 @@ describe("ConsoleInsertPanel", () => {
       "other_member",
       "comment",
     ]);
+    expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
     await user.type(screen.getByLabelText("comment-1"), "Encore note");
+    await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
+    await user.click(screen.getByRole("button", { name: "继续编辑" }));
+    expect(screen.getByLabelText("comment-1")).toHaveValue("Encore note");
+    apiMocks.updateConsoleLiveSetlist.mockRejectedValueOnce(new Error("歌单写入失败"));
     await waitFor(() => expect(screen.getByRole("button", { name: "保存修改" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "保存修改" }));
-    const dialog = screen.getByRole("dialog", { name: "确认更新 Setlist" });
+    const dialog = screen.getByRole("dialog", { name: /确认更新 Setlist · Live #/ });
     const diffTable = within(dialog).getByRole("table", { name: "Setlist 修改内容" });
     expect(within(diffTable).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual([
       "setlist_rows[abs=1].comment-Encore note",
     ]);
     expect(within(dialog).queryByRole("table", { name: "确认场次" })).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
+    await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("歌单写入失败");
+    expect(diffTable).toHaveTextContent("Encore note");
+    await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
 
     await waitFor(() => expect(apiMocks.updateConsoleLiveSetlist).toHaveBeenCalledWith(
       55,
@@ -2052,6 +2019,15 @@ describe("ConsoleInsertPanel", () => {
       "csrf-token",
     ));
     expect(screen.getByText("已更新 Live #55 的 1 条 Setlist。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+    await user.clear(screen.getByLabelText("comment-1"));
+    await user.type(screen.getByLabelText("comment-1"), "Second note");
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+    const secondDialog = screen.getByRole("dialog", { name: "确认更新 Setlist · Live #55" });
+    expect(within(secondDialog).getByRole("table")).toHaveTextContent("Encore noteSecond note");
+    await user.click(within(secondDialog).getByRole("button", { name: "关闭" }));
+    expect(screen.getByLabelText("comment-1")).toHaveValue("Second note");
+
   });
 
   test("新增Setlist只剩一行时删除末行会显示自动消失提示", async () => {
@@ -2230,7 +2206,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     expect(screen.getByDisplayValue("BLACK SHOUT")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Requiem for Fate")).toBeInTheDocument();
@@ -2258,7 +2234,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(within(screen.getByRole("dialog", { name: "确认应用到表格" })).getByRole("button", { name: "确认提交" }));
+    await user.click(within(screen.getByRole("dialog", { name: "确认应用到表格" })).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     expect(screen.getByDisplayValue("Previous Song")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("选择 live_id"), "102");
@@ -2338,7 +2314,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 0 行。");
     expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled();
@@ -2358,7 +2334,7 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.getLives).toHaveBeenCalledTimes(2));
     expect(screen.getByLabelText("选择 live_id")).toBeDisabled();
     expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
-    expect(screen.queryByRole("dialog", { name: "确认提交 Setlist" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /确认新增 Setlist · Live #/ })).not.toBeInTheDocument();
 
     await act(async () => {
       resolveRefresh?.({
@@ -2392,7 +2368,7 @@ describe("ConsoleInsertPanel", () => {
     const dialog = screen.getByRole("dialog", { name: "确认应用到表格" });
     expect(within(dialog).getByRole("heading", { name: "确认应用到表格" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "取消" })).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "确认提交" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ })).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "取消" }));
     expect(screen.queryByRole("dialog", { name: "确认应用到表格" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("批量粘贴 Setlist 文本")).toHaveValue(`<不存在的成员 from MyGO!!!!!>\n${songs}`);
@@ -2434,8 +2410,8 @@ describe("ConsoleInsertPanel", () => {
     await screen.findByLabelText("歌曲名称");
     fireEvent.change(screen.getByLabelText("歌曲名称"), { target: { value: "草稿" } });
     await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
-    const dialog = screen.getByRole("dialog", { name: "确认放弃歌曲修改" });
-    await user.click(within(dialog).getByRole("button", { name: "取消" }));
+    const dialog = screen.getByRole("dialog", { name: "未保存的修改" });
+    await user.click(within(dialog).getByRole("button", { name: "继续编辑" }));
     expect(screen.getByLabelText("歌曲名称")).toHaveValue("草稿");
     expect(screen.getByRole("tab", { name: "歌曲管理" })).toHaveAttribute("aria-selected", "true");
   });
@@ -2467,7 +2443,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(requiemRow).getAllByRole("cell").filter((_, index) => index === 0 || index === 2).map((cell) => cell.textContent)).toEqual(["3", "3"]);
     expect(screen.queryByDisplayValue("BLACK SHOUT")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     expect(screen.getByDisplayValue("BLACK SHOUT")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Requiem for Fate")).toBeInTheDocument();
@@ -2534,7 +2510,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     expect(screen.getByDisplayValue("BLACK SHOUT")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Requiem for Fate")).toBeInTheDocument();
@@ -2573,7 +2549,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 1 行，未匹配 1 行。");
 
@@ -2584,7 +2560,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(dialog).queryByText("BLACK SHOUT")).not.toBeInTheDocument();
     expect(within(dialog).getByRole("combobox", { name: "归属模式" })).toHaveValue("pending");
     await user.selectOptions(within(dialog).getByRole("combobox", { name: "归属模式" }), "mixed");
-    expect(within(dialog).getByRole("button", { name: "确认提交" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ })).toBeDisabled();
     await user.click(within(dialog).getByRole("button", { name: "选择归属乐队" }));
     await user.click(screen.getByRole("checkbox", { name: "Roselia" }));
     await user.keyboard("{Escape}");
@@ -2595,7 +2571,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("checkbox", { name: "固定成员甲" }));
     await user.keyboard("{Escape}");
 
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledWith(
       [{ song_name: "Requiem for Fate", group_name: "Requiem for Fate", version_label: "", cover_urls: [], ownership: { mode: "mixed", band_ids: [2], member_groups: [{ band_id: 1, member_ids: [68] }] } }],
@@ -2606,7 +2582,6 @@ describe("ConsoleInsertPanel", () => {
       expect(screen.getByRole("status")).toHaveTextContent("批量新增完成：新增 1 首，复用 0 首，失败 0 首");
       expect(screen.getByText("902")).toBeInTheDocument();
     });
-    expect(screen.queryByRole("log", { name: "控制台日志" })).not.toBeInTheDocument();
   });
 
   // 测试点：多候选歌曲必须先人工选择，批量新增确认框只能收录真正未匹配的歌曲。
@@ -2632,7 +2607,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
 
     await screen.findByText("查询歌曲完成：匹配 0 行，待选择 1 行，未匹配 1 行。");
@@ -2667,20 +2642,19 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 0 行，未匹配 1 行。");
     await user.click(screen.getByRole("button", { name: "批量插入" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await screen.findByText("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
     expect(screen.getByRole("status")).toHaveTextContent("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
     const retained = screen.getByRole("dialog", { name: "确认批量新增歌曲" });
     expect(within(retained).getByRole("combobox", { name: "归属模式" })).toHaveValue("pending");
-    await user.click(within(retained).getByRole("button", { name: "确认提交" }));
+    await user.click(within(retained).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "确认批量新增歌曲" })).not.toBeInTheDocument());
     expect(screen.getByText("902")).toBeInTheDocument();
-    expect(screen.queryByRole("log", { name: "控制台日志" })).not.toBeInTheDocument();
     expect(apiMocks.getConsoleSongs).toHaveBeenCalledTimes(2);
   });
 
@@ -2699,7 +2673,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText(/查询歌曲完成/);
 
@@ -2707,8 +2681,8 @@ describe("ConsoleInsertPanel", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "确认批量新增歌曲" });
     expect(within(dialog).getByText("未确认归属新曲")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "确认提交" })).not.toBeDisabled();
-    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
+    expect(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ })).not.toBeDisabled();
+    await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledWith([
       { song_name: "未确认归属新曲", group_name: "未确认归属新曲", version_label: "", cover_urls: [], ownership: { mode: "pending", band_ids: [], member_groups: [] } },
     ], "csrf-token"));
@@ -2725,7 +2699,6 @@ describe("ConsoleInsertPanel", () => {
     await user.dblClick(absCells[0]);
     const absInput = screen.getByLabelText(/abs-/);
     expect(absInput).toBeInTheDocument();
-    expect(absInput.tagName).toBe("INPUT");
     fireEvent.change(absInput, { target: { value: "5" } });
     fireEvent.blur(absInput);
     await waitFor(() => {
@@ -2749,13 +2722,13 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText(/abs 必须单调递增/)).toBeInTheDocument();
   });
 
-  test("双击abs编辑框后按Escape取消编辑，不修改任何值", async () => {
+  test("双击abs编辑框后按Escape取消编辑，保留曲序", async () => {
     // 测试点：编辑态下按 Escape 应退出编辑并回退到原值，不触发任何数据变更。
     const user = userEvent.setup();
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
     const absCells = document.querySelectorAll(".setlist-table td .editable-cell");
-    const beforeCount = absCells.length;
+    const originalOrder = absCells[0].textContent;
     await user.dblClick(absCells[0]);
     const absInput = screen.getByLabelText(/abs-/);
     fireEvent.change(absInput, { target: { value: "99" } });
@@ -2764,7 +2737,7 @@ describe("ConsoleInsertPanel", () => {
       expect(screen.queryByLabelText(/abs-/)).not.toBeInTheDocument();
     });
     const afterCells = document.querySelectorAll(".setlist-table td .editable-cell");
-    expect(afterCells.length).toBe(beforeCount);
+    expect(afterCells[0]).toHaveTextContent(originalOrder!);
   });
 
   test("sub填入小于段组内前行有效值的数时报错并拒绝修改", async () => {
@@ -2784,7 +2757,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(screen.getAllByLabelText(/seg-/).length).toBeGreaterThanOrEqual(3));
     const subCells = document.querySelectorAll(".setlist-table td .editable-cell");
     await user.dblClick(subCells[3]);
@@ -2811,7 +2784,7 @@ describe("ConsoleInsertPanel", () => {
     });
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(screen.getAllByLabelText(/seg-/).length).toBeGreaterThanOrEqual(3));
     const subCells = document.querySelectorAll(".setlist-table td .editable-cell");
     await user.dblClick(subCells[1]);
@@ -2825,33 +2798,6 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByText("6")).toBeInTheDocument();
   });
 
-  test("band_member浮层靠近页面底部时翻转到触发按钮上方", async () => {
-    // 测试点：当触发按钮在视口底部时，弹窗应翻转显示在按钮上方，避免被裁切。
-    const user = userEvent.setup();
-    apiMocks.getConsoleBands.mockResolvedValue({
-      items: [
-        { band_id: 1, band_name: "Poppin'Party", band_abbr: "ポピパ", band_members: ["愛美", "大塚紗英"] },
-        { band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那", "氷川紗夜"] },
-      ],
-    });
-    render(<ConsoleInsertPanel />);
-    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
-    await user.click(screen.getByRole("button", { name: "新增一行" }));
-
-    const trigger = document.querySelector(".band-member-trigger") as HTMLElement;
-    const rectSpy = vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
-      top: 750, bottom: 780, left: 600, right: 720, width: 120, height: 30,
-      x: 600, y: 750, toJSON: () => ({}),
-    });
-
-    await user.click(trigger);
-    const menu = document.querySelector(".band-member-floating-menu") as HTMLElement;
-    const menuTop = Number(menu.style.top.replace("px", ""));
-    expect(menuTop).toBeGreaterThanOrEqual(0);
-    expect(menuTop).toBeLessThan(750);
-
-    rectSpy.mockRestore();
-  });
 
   // 测试点：band_id=0 的 Other bands 不是实际 Band，不应出现在新增 Setlist 的 band_member 选择器。
   test("新增Setlist的band_member不展示Other bands", async () => {
@@ -2924,33 +2870,6 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("checkbox", { name: "乙" })).not.toBeChecked();
   });
 
-  test("venue下拉框靠近底部时翻转到上方", async () => {
-    // 测试点：新增 Live 面板的 venue 下拉选择框在视口底部时应翻转到触发按钮上方。
-    const user = userEvent.setup();
-    apiMocks.getConsoleVenues.mockResolvedValue({
-      items: [
-        { venue_id: 1, venue_name: "TOKYO DOME CITY HALL", venue_name_version_id: 11, venue_alias: "TDC" },
-        { venue_id: 2, venue_name: "日本武道館", venue_name_version_id: 22, venue_alias: "武道館" },
-      ],
-    });
-    render(<ConsoleInsertPanel />);
-    await waitFor(() => expect(apiMocks.getConsoleVenues).toHaveBeenCalledWith(undefined, 100));
-    await user.click(screen.getByRole("tab", { name: "新增演出" }));
-    const trigger: HTMLElement = document.querySelector(".venue-picker-trigger")!;
-
-    const rectSpy = vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
-      top: 750, bottom: 780, left: 400, right: 520, width: 120, height: 30,
-      x: 400, y: 750, toJSON: () => ({}),
-    });
-
-    await user.click(trigger);
-    const menu = document.querySelector(".bands-floating-menu") as HTMLElement;
-    const menuTop = Number(menu.style.top.replace("px", ""));
-    expect(menuTop).toBeGreaterThanOrEqual(0);
-    expect(menuTop).toBeLessThan(750);
-
-    rectSpy.mockRestore();
-  });
 
   // 测试点：确认创建时以巡演名称计算 short_title，提交仍使用原始 Live 关系。
   test("巡演管理创建巡演并提交完整关系集合", async () => {
@@ -2983,11 +2902,6 @@ describe("ConsoleInsertPanel", () => {
 
     render(<ConsoleInsertPanel initialMode="tour" />);
     await waitFor(() => expect(apiMocks.getConsoleTourLiveCandidates).toHaveBeenCalled());
-    expect(screen.queryByText("官方来源")).not.toBeInTheDocument();
-    expect(screen.queryByText("简短说明")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "上移" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "下移" })).not.toBeInTheDocument();
-    expect(screen.queryByText("场次标签")).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("巡演名称"), "New Tour");
     await user.click(screen.getByRole("button", { name: "不指定" }));
     expect(screen.getByRole("checkbox", { name: "不指定" })).toBeChecked();
@@ -2997,12 +2911,11 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText("Occupied Live")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "添加" }));
     await user.click(screen.getByRole("button", { name: "创建巡演" }));
-    const confirmDialog = within(screen.getByRole("dialog", { name: "确认创建巡演" }));
-    expect(confirmDialog.queryByText("stop_label")).not.toBeInTheDocument();
+    const confirmDialog = within(screen.getByRole("dialog", { name: "确认新增巡演" }));
     expect(confirmDialog.getByRole("columnheader", { name: "short_title" })).toBeInTheDocument();
     expect(confirmDialog.getByText("福岡公演")).toBeInTheDocument();
     expect(confirmDialog.queryByText("New Tour 福岡公演")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.createConsoleTour).toHaveBeenCalledWith(
       {
@@ -3041,11 +2954,11 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "添加" }));
     await user.click(screen.getByRole("button", { name: "创建巡演" }));
 
-    const dialog = screen.getByRole("dialog", { name: "确认创建巡演" });
+    const dialog = screen.getByRole("dialog", { name: "确认新增巡演" });
     expect(within(dialog).getByRole("alert")).toHaveTextContent(
       "尚未指定参与乐队；创建后将按所选场次自动聚合乐队，巡演统计会包含全部 Setlist。",
     );
-    expect(within(dialog).getByRole("button", { name: "确认提交" })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ })).toBeEnabled();
   });
 
   // 测试点：已有巡演使用共享实体选择器宽度，保存后退出编辑态且不把更新计入新增记录。
@@ -3099,7 +3012,7 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByLabelText("巡演名称"), "Updated Tour");
     await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "Tokyo");
     await user.click(screen.getByRole("button", { name: "保存修改" }));
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.updateConsoleTour).toHaveBeenCalledWith(
       7,

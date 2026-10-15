@@ -6,7 +6,7 @@ export function ChoiceMenu({ position, menuRef, name, options, selectedId, onSel
   options: { id: number; label: string }[]; selectedId: number | null;
   onSelect: (id: number) => void;
 }) {
-  return <div className="bands-floating-menu" ref={menuRef}
+  return <div className="bands-floating-menu" ref={menuRef} data-console-popover
     onMouseDown={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}
     style={{ top: position.top, left: position.left, width: position.width }}>
     {options.map(option => <label key={option.id}>

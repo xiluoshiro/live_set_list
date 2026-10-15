@@ -1,3 +1,7 @@
+import { refreshConsoleAfterSave } from "./console/consoleSave";
+import { ConsoleEditorLock } from "./console/ConsoleEditorLock";
+import { ConsoleConfirmDialog } from "./console/ConsoleConfirmDialog";
+import { ConsoleDraftProvider, useConsoleDraftGuard, useConsoleLeaveGuard, type ConsoleLeaveGuard } from "./console/ConsoleDraftGuard";
 import { AlbumAdminSection } from "./console/AlbumAdminSection";
 import { previewConsoleLiveClock } from "../api";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -61,7 +65,6 @@ import { resolveConsoleEditSelection } from "./console/ConsoleEditSelect";
 import { VenueAdminSection } from "./console/VenueAdminSection";
 import { LocalityAdminSection } from "./console/LocalityAdminSection";
 import {
-  UpdateDiffTable,
   type UpdateChange,
 } from "./console/UpdateDiffTable";
 import {
@@ -112,6 +115,7 @@ type LiveInsertDraft = {
 type ConsoleInsertPanelProps = {
   onLiveDataChanged?: () => void;
   initialMode?: ConsoleMode;
+  onLeaveGuard?: (guard: ConsoleLeaveGuard | null) => void;
 };
 
 const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; label: string }; manage?: { value: ConsoleMode; label: string } }[] = [
@@ -148,11 +152,6 @@ type PendingConfirmation =
       changes: Array<{ field: string; before: string; after: string }>;
       scheduleChangeKind: "correction" | "reschedule" | null;
       scheduleChangeNote: string | null;
-    }
-  | {
-      kind: "live_discard";
-      title: string;
-      target: { type: "edit"; liveId: number } | { type: "mode"; mode: ConsoleMode };
     }
   | {
       kind: "setlist";
@@ -433,7 +432,7 @@ function formatSetlistRowSummary(
   songName: string | undefined,
 ): string {
   const title = songName ? `${row.song_group_id} · ${songName}` : String(row.song_group_id);
-  return `${title}; ${row.segment_type}${row.sub_order}; short=${row.is_short ? "true" : "false"}`;
+  return `${title}; ${row.segment_type}${row.sub_order}; short=${row.is_short ? "true" : "false"}; 阵容=${formatConfirmationValue(row.band_performances)}; 其他成员=${formatConfirmationValue(row.other_member)}; 备注=${formatConfirmationValue(row.comment)}`;
 }
 
 function buildSetlistUpdateChanges(
@@ -578,7 +577,12 @@ function persistedSetlistMatchesPayload(
     === JSON.stringify(normalizeSetlistPayloadForComparison(expected));
 }
 
-export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" }: ConsoleInsertPanelProps = {}) {
+export function ConsoleInsertPanel(props: ConsoleInsertPanelProps = {}) {
+  return <ConsoleDraftProvider onLeaveGuard={props.onLeaveGuard}><ConsoleInsertPanelContent {...props} /></ConsoleDraftProvider>;
+}
+
+function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" }: ConsoleInsertPanelProps) {
+  const leaveConsole = useConsoleLeaveGuard();
   const auth = useAuth();
   const [mode, setMode] = useState<ConsoleMode>(initialMode);
   const [qualityTargetVenueId, setQualityTargetVenueId] = useState<number | null>(null);
@@ -592,6 +596,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const [transientNotice, setTransientNotice] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [confirmationSubmitting, setConfirmationSubmitting] = useState(false);
+  const [confirmationError, setConfirmationError] = useState("");
 
   const [selectedLiveId, setSelectedLiveId] = useState<number>(0);
   const [livePage, setLivePage] = useState(1);
@@ -838,7 +843,58 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     || (mode === "live_edit" && requiresScheduleChangeKind && scheduleChangeKind === null);
   const hasExistingSetlist = (setlistDetailData?.detail_rows ?? []).length > 0;
   // 校验规则 3：候选刷新期间或当前 live_id 已不在本页候选中时不可提交。
+  function currentSetlistPayload(): ConsoleLiveSetlistAppendPayload {
+    const validRows = setlistRows.filter(row => row.song_name.trim() !== "");
+    const validDerivedSegments = getDerivedSegments(validRows);
+    const setlistPayload = validRows.map((row, payloadIndex) => {
+      const derived = validDerivedSegments[payloadIndex];
+      const originalIndex = setlistRows.findIndex((r) => r.row_key === row.row_key);
+      const versionedBandNames = new Set([
+        ...Object.keys(row.band_member),
+        ...Object.keys(row.band_performances ?? {}),
+      ]);
+      const bandPerformances = [...versionedBandNames].flatMap((bandName) => {
+        const band = bands.find((item) => item.band_name === bandName);
+        if (!band) return [];
+        const fallbackMembers = row.band_member[bandName] ?? [];
+        const performance = row.band_performances?.[bandName] ?? {
+          band_id: band.band_id,
+          lineup_usage: "base" as const,
+          handover_baseline: null,
+          members: [...fallbackMembers],
+        };
+        return [{ ...performance, members: [...performance.members] }];
+      });
+      const bandMember = Object.fromEntries(
+        bandPerformances.flatMap((performance) => {
+          const bandName = bands.find((band) => band.band_id === performance.band_id)?.band_name;
+          return bandName ? [[bandName, [...performance.members]]] : [];
+        }),
+      );
+      return {
+        song_group_id: Number(row.song_group_id),
+        absolute_order: effectiveAbs[originalIndex],
+        segment_type: derived.segmentType,
+        sub_order: effectiveSub[originalIndex],
+        is_short: row.is_short,
+        band_member: bandMember,
+        band_performances: bandPerformances,
+        other_member: buildOtherMemberPayloadObject(row.other_member, otherMemberValueSeparator),
+        comment: row.comment?.trim() || null,
+      };
+    });
+    const payload: ConsoleLiveSetlistAppendPayload = {
+      band_lineup_contexts: activeSetlistBands
+        .map((band) => lineupContexts[band.band_id])
+        .filter((context): context is ConsoleLiveBandLineupContext => context !== undefined),
+      setlist_rows: setlistPayload,
+    };
+    return payload;
+  }
+  const isSetlistDirty = mode === "setlist_edit" && originalSetlistPayload !== null &&
+    JSON.stringify(normalizeSetlistPayloadForComparison(originalSetlistPayload)) !== JSON.stringify(normalizeSetlistPayloadForComparison(currentSetlistPayload()));
   const isSetlistSubmitDisabled =
+    (mode === "setlist_edit" && !isSetlistDirty) ||
     isLiveLoading ||
     selectedSetlistLive === undefined ||
     !usesVersionedLineups ||
@@ -1204,6 +1260,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     page: number,
     candidateType = liveCandidateType,
     candidateEventStatus = liveCandidateEventStatus,
+    reportFailure = true,
   ) => {
     setLiveCandidateLoading(true);
     try {
@@ -1221,6 +1278,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         }
       }
     } catch (error) {
+      if (!reportFailure) throw error;
       selectFirstLiveCandidateAfterQueryRef.current = false;
       setLiveCandidates([]);
       setMessage(`加载可编辑 Live 失败：${errorMessage(error)}`);
@@ -1420,55 +1478,35 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }
   };
 
-  const requestLiveForEdit = (liveId: number) => {
-    if (isLiveDirty) {
-      setPendingConfirmation({
-        kind: "live_discard",
-        title: "确认放弃 Live 修改",
-        target: { type: "edit", liveId },
-      });
-      return;
-    }
-    void loadLiveForEdit(liveId);
-  };
+  const liveDraft = useConsoleDraftGuard({ active: mode === "live_edit", dirty: isLiveDirty,
+    busy: confirmationSubmitting || pendingConfirmation !== null, label: `Live #${editingLiveId}`, onDiscard: restoreLiveForm });
+  const setlistDraft = useConsoleDraftGuard({ active: mode === "setlist_edit", dirty: isSetlistDirty,
+    busy: confirmationSubmitting || pendingConfirmation !== null, label: `Setlist · Live #${selectedLiveId}`,
+    onDiscard: () => { setOriginalSetlistPayload(null); setSetlistRows(INITIAL_SETLIST_ROWS.map(row => ({ ...row }))); } });
+  const requestLiveForEdit = (liveId: number) => liveDraft.guard(() => void loadLiveForEdit(liveId));
 
-  const songLeaveGuard = useRef<((proceed: () => void) => void) | null>(null);
   const modalSongLeaveGuard = useRef<((proceed: () => void) => void) | null>(null);
-  const albumLeaveGuard = useRef<((proceed: () => void) => void) | null>(null);
 
-  const changeConsoleMode = (nextMode: ConsoleMode, confirmed = false) => {
-    if (!confirmed && nextMode !== mode && mode === "album_edit") {
-      albumLeaveGuard.current?.(() => changeConsoleMode(nextMode, true));
-      if (albumLeaveGuard.current) return;
-    }
-    if (!confirmed && nextMode !== mode && (mode === "song_edit" || mode === "song")) {
-      songLeaveGuard.current?.(() => changeConsoleMode(nextMode, true));
-      if (songLeaveGuard.current) return;
-    }
-    if (mode === "live_edit" && nextMode !== "live_edit" && isLiveDirty) {
-      setPendingConfirmation({
-        kind: "live_discard",
-        title: "确认放弃 Live 修改",
-        target: { type: "mode", mode: nextMode },
-      });
-      return;
-    }
-    if (nextMode === "live_create" && mode !== "live_create") {
-      setEditingLiveId(null);
-      setOriginalLivePayload(null);
-      resetLiveForm();
-    } else if (nextMode === "live_edit" && mode !== "live_edit") {
-      setEditingLiveId(null);
-      setOriginalLivePayload(null);
-      resetLiveForm();
-    } else if (nextMode === "setlist" && mode !== "setlist") {
-      setLivePage(1);
-      setSelectedLiveId(0);
-    } else if (nextMode === "setlist_edit" && mode !== "setlist_edit") {
-      setSelectedLiveId(0);
-    }
-    if (nextMode === "venue") setQualityTargetVenueId(null);
-    setMode(nextMode);
+  const changeConsoleMode = (nextMode: ConsoleMode) => {
+    if (nextMode === mode) return;
+    leaveConsole(() => {
+      if (nextMode === "live_create" && mode !== "live_create") {
+        setEditingLiveId(null);
+        setOriginalLivePayload(null);
+        resetLiveForm();
+      } else if (nextMode === "live_edit" && mode !== "live_edit") {
+        setEditingLiveId(null);
+        setOriginalLivePayload(null);
+        resetLiveForm();
+      } else if (nextMode === "setlist" && mode !== "setlist") {
+        setLivePage(1);
+        setSelectedLiveId(0);
+      } else if (nextMode === "setlist_edit" && mode !== "setlist_edit") {
+        setSelectedLiveId(0);
+      }
+      if (nextMode === "venue") setQualityTargetVenueId(null);
+      setMode(nextMode);
+    });
   };
 
   const changeSetlistLivePage = (nextPage: number) => {
@@ -1491,7 +1529,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     void querySetlistEditLives();
   }, [mode]);
 
-  const loadScheduleAttention = async (attention: "" | "upcoming" | "today" | "overdue" = scheduleAttentionFilter) => {
+  const loadScheduleAttention = async (attention: "" | "upcoming" | "today" | "overdue" = scheduleAttentionFilter, reportFailure = true) => {
     setScheduleAttentionLoading(true);
     try {
       const response = await getConsoleLiveCandidates("", 1, 10, "", undefined, "scheduled", false, attention);
@@ -1505,6 +1543,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setScheduleAttentionCounts(counts);
       setScheduleAttentionFilter(attention);
     } catch (error) {
+      if (!reportFailure) throw error;
       setScheduleAttentionItems([]);
       setMessage(`加载待补排期失败：${errorMessage(error)}`);
     } finally {
@@ -2139,58 +2178,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       setMessage("提交setlist失败：登录态已失效，请重新登录。");
       return;
     }
-    const validDerivedSegments = getDerivedSegments(validRows);
-    const setlistPayload = validRows.map((row, payloadIndex) => {
-      const derived = validDerivedSegments[payloadIndex];
-      const originalIndex = setlistRows.findIndex((r) => r.row_key === row.row_key);
-      const versionedBandNames = new Set([
-        ...Object.keys(row.band_member),
-        ...Object.keys(row.band_performances ?? {}),
-      ]);
-      const bandPerformances = [...versionedBandNames].flatMap((bandName) => {
-        const band = bands.find((item) => item.band_name === bandName);
-        if (!band) return [];
-        const fallbackMembers = row.band_member[bandName] ?? [];
-        const performance = row.band_performances?.[bandName] ?? {
-          band_id: band.band_id,
-          lineup_usage: "base" as const,
-          handover_baseline: null,
-          members: [...fallbackMembers],
-        };
-        return [{ ...performance, members: [...performance.members] }];
-      });
-      const bandMember = Object.fromEntries(
-        bandPerformances.flatMap((performance) => {
-          const bandName = bands.find((band) => band.band_id === performance.band_id)?.band_name;
-          return bandName ? [[bandName, [...performance.members]]] : [];
-        }),
-      );
-      return {
-        song_group_id: Number(row.song_group_id),
-        absolute_order: effectiveAbs[originalIndex],
-        segment_type: derived.segmentType,
-        sub_order: effectiveSub[originalIndex],
-        is_short: row.is_short,
-        band_member: bandMember,
-        band_performances: bandPerformances,
-        other_member: buildOtherMemberPayloadObject(row.other_member, otherMemberValueSeparator),
-        comment: row.comment?.trim() || null,
-      };
-    });
-    const previewRows = setlistPayload.map((row, idx) => ({
-      ...row,
-      song_name: resolveSetlistPreviewSongName(validRows[idx]),
-    }));
-
-    const payload: ConsoleLiveSetlistAppendPayload = {
-      band_lineup_contexts: activeSetlistBands
-        .map((band) => lineupContexts[band.band_id])
-        .filter((context): context is ConsoleLiveBandLineupContext => context !== undefined),
-      setlist_rows: setlistPayload,
-    };
+    const payload = currentSetlistPayload();
+    const previewRows = payload.setlist_rows.map((row, idx) => ({ ...row, song_name: resolveSetlistPreviewSongName(validRows[idx]) }));
+    if (mode === "setlist_edit" && !isSetlistDirty) return;
+    setConfirmationError("");
     setPendingConfirmation({
       kind: "setlist",
-      title: mode === "setlist_edit" ? "确认更新 Setlist" : "确认提交 Setlist",
+      title: mode === "setlist_edit" ? `确认更新 Setlist · Live #${targetLive.live_id}` : `确认新增 Setlist · Live #${targetLive.live_id}`,
       action: mode === "setlist_edit" ? "update" : "create",
       live: targetLive,
       payload,
@@ -2345,6 +2339,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           return before === after ? [] : [{ field, before, after }];
         })
       : [];
+    setConfirmationError("");
     setPendingConfirmation({
       kind: "live",
       title: action === "create" ? "确认新增 Live" : `确认更新 Live #${editingLiveId}`,
@@ -2374,12 +2369,14 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           other_member: JSON.stringify(row.other_member),
         })),
       };
+      setOriginalSetlistPayload(structuredClone(payload));
+      setOriginalSetlistSongNames(Object.fromEntries(previewRows.map(row => [row.absolute_order, row.song_name])));
       setSubmittedBundles((current) => [updatedBundle, ...current]);
       setDisplayedBundle(updatedBundle);
       onLiveDataChanged?.();
       setMessage(`已更新 Live #${targetLive.live_id} 的 ${response.item.total_setlist_row_count} 条 Setlist。`);
     } catch (error) {
-      setMessage(`更新 Setlist 失败：${errorMessage(error)}`);
+      throw new Error(`更新 Setlist 失败：${errorMessage(error)}`);
     }
   };
 
@@ -2489,18 +2486,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         setOriginalLivePayload(savedPayload);
         applyLivePayloadToForm(savedPayload);
       }
-      if (action === "update") {
-        await loadLiveCandidatePage(
-          liveCandidateQuery,
-          liveCandidatePage,
-          liveCandidateType,
-          liveCandidateEventStatus,
-        );
-      }
-      if (mode === "live_edit") await loadScheduleAttention(scheduleAttentionFilter);
-      setMessage(`已${action === "create" ? "新增" : "更新"}Live #${inserted.live_id}（${inserted.live_title}）`);
+      const refreshers: Array<() => Promise<unknown>> = [];
+      if (action === "update") refreshers.push(() => loadLiveCandidatePage(
+        liveCandidateQuery, liveCandidatePage, liveCandidateType, liveCandidateEventStatus, false));
+      if (mode === "live_edit") refreshers.push(() => loadScheduleAttention(scheduleAttentionFilter, false));
+      await refreshConsoleAfterSave(refreshers, `已${action === "create" ? "新增" : "更新"}Live #${inserted.live_id}（${inserted.live_title}）`, setMessage);
     } catch (error) {
-      setMessage(`${action === "create" ? "新增" : "更新"}Live失败：${errorMessage(error)}`);
+      throw new Error(`${action === "create" ? "新增" : "更新"}Live失败：${errorMessage(error)}`);
     }
   };
 
@@ -2608,7 +2600,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
       return;
     }
 
-    setConfirmationSubmitting(true);
+    setConfirmationSubmitting(true); setConfirmationError("");
     try {
       if (pendingConfirmation.kind === "live") {
         await saveLive(
@@ -2619,18 +2611,6 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           pendingConfirmation.scheduleChangeNote,
           auth.csrfToken,
         );
-      } else if (pendingConfirmation.kind === "live_discard") {
-        if (pendingConfirmation.target.type === "edit") await loadLiveForEdit(pendingConfirmation.target.liveId);
-        else {
-          setEditingLiveId(null);
-          setOriginalLivePayload(null);
-          resetLiveForm();
-          if (pendingConfirmation.target.mode === "setlist") {
-            setLivePage(1);
-            setSelectedLiveId(0);
-          }
-          setMode(pendingConfirmation.target.mode);
-        }
       } else if (pendingConfirmation.kind === "batch_song") {
         if (!await executeBatchSongInsert(pendingConfirmation.rows, auth.csrfToken)) return;
       } else {
@@ -2642,6 +2622,8 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         );
       }
       setPendingConfirmation(null);
+    } catch (error) {
+      setConfirmationError(errorMessage(error));
     } finally {
       setConfirmationSubmitting(false);
     }
@@ -2650,17 +2632,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
   const renderPendingConfirmationBody = () => {
     if (!pendingConfirmation) return null;
 
-    if (pendingConfirmation.kind === "live_discard") {
-      return <p className="console-admin-hint">当前 Live 有未保存修改。确认放弃这些修改吗？</p>;
-    }
-
     if (pendingConfirmation.kind === "live") {
       const payload = pendingConfirmation.payload;
       const shouldWarnMissingEventBands = payload.live_type === "event" && payload.default_band_ids.length === 0;
       return (
         <>
           {pendingConfirmation.action === "update" ? (
-            <UpdateDiffTable changes={pendingConfirmation.changes} ariaLabel="Live 修改内容" />
+            null
           ) : (
             <CompactConfirmationTable
               rows={[
@@ -2746,7 +2724,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
     }
 
     if (pendingConfirmation.action === "update") {
-      return <UpdateDiffTable changes={pendingConfirmation.changes} ariaLabel="Setlist 修改内容" />;
+      return null;
     }
 
     return (
@@ -2833,7 +2811,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           {transientNotice}
         </div>
       )}
-      <section className="console-admin">
+      <section className="console-admin"><ConsoleEditorLock locked={confirmationSubmitting || pendingConfirmation !== null || (mode === "setlist_edit" && isLiveLoading) || (mode === "live_edit" && liveCandidateLoading)}>
       <PageTitle title="控制台" />
       {message && <p className="console-admin-hint" role="status" aria-live="polite">{message}</p>}
 
@@ -3021,11 +2999,11 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           setlistParsePreviewRows={setlistParsePreviewRows}
           setlistParsePreviewOpen={setlistParsePreviewOpen}
           onSelectedLiveIdChange={(liveId) => {
-            if (mode === "setlist_edit") void loadSetlistForEdit(liveId);
+            if (mode === "setlist_edit") setlistDraft.guard(() => void loadSetlistForEdit(liveId));
             else setSelectedLiveId(liveId);
           }}
           onLiveQueryChange={setSetlistEditQuery}
-          onQueryLives={querySetlistEditLives}
+          onQueryLives={() => setlistDraft.guard(() => void querySetlistEditLives())}
           onLivePageChange={changeSetlistLivePage}
           onSetlistPasteTextChange={updateSetlistPasteText}
           onPreviewSetlistPaste={buildSetlistPastePreview}
@@ -3072,13 +3050,13 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
 
       <AlbumAdminSection variant={mode === "album_create" ? "create" : "edit"}
         active={mode === "album_create" || mode === "album_edit"}
-        registerLeaveGuard={guard => { albumLeaveGuard.current = guard; }}
+        registerLeaveGuard={() => {}}
         onManage={() => setMode("album_edit")} />
       <SongCatalogAdmin
         active={mode === "song_create" || mode === "song_edit" || mode === "song"}
         variant={mode === "song_create" ? "create" : "edit"}
         bands={bands}
-        registerLeaveGuard={guard => { songLeaveGuard.current = guard; }}
+        registerLeaveGuard={() => {}}
         onManage={() => setMode("song_edit")}
       />
 
@@ -3124,59 +3102,16 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
         />
       )}
 
-      {pendingConfirmation && (
-        <div className="modal-mask" onClick={closePendingConfirmation}>
-          <div
-            className={`modal console-confirm-modal ${pendingConfirmation.kind === "setlist" ? "wide" : "compact"} ${pendingConfirmation.kind}`}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="console-confirm-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-head">
-              <h2 id="console-confirm-title">{pendingConfirmation.title}</h2>
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="modal-action-btn close"
-                  aria-label="关闭"
-                  onClick={closePendingConfirmation}
-                  disabled={confirmationSubmitting}
-                >
-                  <span className="modal-action-glyph close">✕</span>
-                </button>
-              </div>
-            </div>
-            <div className="console-confirm-body">
-              {renderPendingConfirmationBody()}
-            </div>
-            <div className="console-confirm-actions">
-              <button
-                type="button"
-                className="console-ghost-btn"
-                onClick={closePendingConfirmation}
-                disabled={confirmationSubmitting}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="console-submit-btn"
-                onClick={() => void confirmPendingInsert()}
-                disabled={confirmationSubmitting || (pendingConfirmation.kind === "batch_song" && (pendingConfirmation.rows.length === 0 || pendingConfirmation.rows.some(row => !ownershipValid(row.ownership))))}
-              >
-                {confirmationSubmitting
-                  ? "提交中..."
-                  : pendingConfirmation.kind === "live_discard"
-                    ? "确认放弃"
-                    : pendingConfirmation.kind === "live" && pendingConfirmation.action === "update"
-                      ? "确认更新"
-                      : "确认提交"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {liveDraft.dialog}{setlistDraft.dialog}
+      {pendingConfirmation && <ConsoleConfirmDialog title={pendingConfirmation.title}
+        size={pendingConfirmation.kind === "setlist" ? "wide" : "compact"} className={pendingConfirmation.kind}
+        changes={(pendingConfirmation.kind === "live" || pendingConfirmation.kind === "setlist") && pendingConfirmation.action === "update" ? pendingConfirmation.changes : undefined}
+        changesLabel={pendingConfirmation.kind === "live" ? "Live 修改内容" : "Setlist 修改内容"}
+        busy={confirmationSubmitting} error={confirmationError} onClose={closePendingConfirmation} onConfirm={confirmPendingInsert}
+        disabled={pendingConfirmation.kind === "batch_song" && (pendingConfirmation.rows.length === 0 || pendingConfirmation.rows.some(row => !ownershipValid(row.ownership)))}
+        confirmLabel={(pendingConfirmation.kind === "live" || pendingConfirmation.kind === "setlist") && pendingConfirmation.action === "update" ? "确认更新" : "确认提交"}>
+        {renderPendingConfirmationBody()}
+      </ConsoleConfirmDialog>}
 
       {setlistDetailOpen && (
         <div className="modal-mask" onClick={() => setSetlistDetailOpen(false)}>
@@ -3234,6 +3169,7 @@ export function ConsoleInsertPanel({ onLiveDataChanged, initialMode = "setlist" 
           </div>
         </div>
       )}
+      </ConsoleEditorLock>
       </section>
     </>
   );

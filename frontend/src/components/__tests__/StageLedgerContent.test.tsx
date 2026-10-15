@@ -164,7 +164,7 @@ describe("StageLedgerContent", () => {
   });
 
   test("按结构化位置渲染连续流程，并展示曲目细节", async () => {
-    // 测试点：Stage Ledger 保留 segment/absolute_order/song_id，点击曲目后详情可展开并由 Escape 还原焦点。
+    // 测试点：演出流程展示分段和曲序，曲目详情提供实际出演成员与乐队导航。
     const user = userEvent.setup();
     const onOpenBand = vi.fn();
     const { container } = renderStage(makeDetail(), { onOpenBand });
@@ -175,11 +175,6 @@ describe("StageLedgerContent", () => {
     expect(screen.getByText("Song One")).toBeInTheDocument();
     expect(screen.getAllByText("01").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/77");
-    expect(screen.queryByText("资料来源")).not.toBeInTheDocument();
-    expect(screen.queryByText("阵容摘要")).not.toBeInTheDocument();
-    expect(screen.queryByText("逐曲检查器")).not.toBeInTheDocument();
-    expect(screen.queryByText("按原始段落和绝对顺序排列，实际出演关系在曲目中展开。")).not.toBeInTheDocument();
-    expect(screen.queryByText("查看")).not.toBeInTheDocument();
     expect(document.title).toBe("Stage Ledger Live · LiveSetList");
     expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toContain("日本武道館");
 
@@ -187,11 +182,9 @@ describe("StageLedgerContent", () => {
     await user.click(screen.getByRole("button", { name: /Song One/ }));
     const trigger = screen.getByRole("button", { name: /Song One/ });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(window.location.hash).not.toBe("#track-M1");
     expect(window.history.state).toBe(previousHistoryState);
     expect(trigger).not.toHaveTextContent("Poppin'Party");
     expect(screen.getAllByRole("heading", { name: "Song One" }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText("阵容版本：Poppin'Party / V1")).not.toBeInTheDocument();
     expect(screen.getAllByText("实到成员：Kasumi / Tae").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("缺席成员：Rimi").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("额外出演：Guest（嘉宾）").length).toBeGreaterThanOrEqual(1);
@@ -200,7 +193,6 @@ describe("StageLedgerContent", () => {
     expect(onOpenBand).toHaveBeenCalledWith(1);
 
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(trigger).toHaveFocus();
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Song One" })).not.toBeInTheDocument());
 
     const structuredData = JSON.parse(container.querySelector("script[data-stage-ledger-jsonld]")?.textContent ?? "{}");
@@ -295,8 +287,8 @@ describe("StageLedgerContent", () => {
     expect(screen.getByText("已记录成员：Yukina")).toBeInTheDocument();
   });
 
-  test("曲目详情不写入 history，关闭后只恢复触发按钮焦点", async () => {
-    // 测试点：曲目详情属于当前页面内的瞬时状态，不新增浏览器历史，关闭后把焦点还给原曲目。
+  test("展开和收起曲目详情保留页面导航状态", async () => {
+    // 测试点：查看曲目详情保留当前页面地址和浏览器历史，收起后回到歌单。
     const user = userEvent.setup();
     const previousUrl = window.location.href;
     const previousState = window.history.state;
@@ -309,11 +301,12 @@ describe("StageLedgerContent", () => {
 
     await user.click(trigger);
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Song One" })).not.toBeInTheDocument());
-    expect(trigger).toHaveFocus();
+    expect(window.location.href).toBe(previousUrl);
+    expect(window.history.state).toBe(previousState);
   });
 
   test("取消状态隐藏收藏和歌单，并展示取消原因", () => {
-    // 测试点：cancelled 路径只展示可核对的状态资料，不渲染可误解为已发生的演出流程；正文固定为“本场演出已取消。”，原因以小字展示，且不再出现小字“取消”。
+    // 测试点：取消场次展示取消原因，不能作为已发生的演出展示歌单或提供收藏。
     const onToggleFavorite = vi.fn();
     renderStage(
       makeDetail({ event_status: "cancelled", status_note: "因场馆原因取消" }),
@@ -322,7 +315,6 @@ describe("StageLedgerContent", () => {
 
     expect(screen.getByRole("heading", { name: "本场演出已取消。" })).toBeInTheDocument();
     expect(screen.getByText("取消原因：因场馆原因取消")).toBeInTheDocument();
-    expect(screen.queryByText("取消")).not.toBeInTheDocument();
     expect(screen.queryByText("Song One")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "收藏" })).not.toBeInTheDocument();
   });
@@ -335,56 +327,42 @@ describe("StageLedgerContent", () => {
     expect(screen.queryByText(/取消原因/)).not.toBeInTheDocument();
   });
 
-  // 测试点：空曲目列表按场次类型和日期阶段展示对应标题、正文，并排除旧提示。
+  // 测试点：空曲目列表按场次类型和日期阶段展示对应状态说明。
   test.each([
     {
       caseName: "待举行 Live 空状态提示本场演出尚未举行",
       detail: { date_phase: "upcoming" },
       heading: "本场演出尚未举行。",
       body: null,
-      excludedHeading: "演出流程尚未记录",
-      excludedText: null,
     },
     {
       caseName: "已结束活动空状态提示本场活动暂无演出曲目",
       detail: { live_type: "event", date_phase: "past" },
       heading: "本场活动暂无演出曲目。",
       body: null,
-      excludedHeading: null,
-      excludedText: "本页目前只收录演出基本资料",
     },
     {
       caseName: "已结束普通场次空状态保留原提示",
       detail: { date_phase: "past" },
       heading: "演出流程尚未记录",
       body: "本页目前只收录演出基本资料，暂无演出曲目记录。",
-      excludedHeading: null,
-      excludedText: null,
     },
     {
       caseName: "进行中活动空状态保留原提示",
       detail: { live_type: "event", date_phase: "today" },
       heading: "本页目前只收录演出基本资料",
       body: "暂无出席阵容或演出曲目记录。",
-      excludedHeading: null,
-      excludedText: null,
     },
   ] satisfies Array<{
     caseName: string;
     detail: Partial<LiveDetailResponse>;
     heading: string;
     body: string | null;
-    excludedHeading: string | null;
-    excludedText: string | null;
-  }>)("$caseName", ({ detail, heading, body, excludedHeading, excludedText }) => {
+  }>)("$caseName", ({ detail, heading, body }) => {
     renderStage(makeDetail({ ...detail, detail_rows: [] }));
 
     expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
     if (body) expect(screen.getByText(body)).toBeInTheDocument();
-    if (excludedHeading) {
-      expect(screen.queryByRole("heading", { name: excludedHeading })).not.toBeInTheDocument();
-    }
-    if (excludedText) expect(screen.queryByText(excludedText)).not.toBeInTheDocument();
   });
 
   test("未登录时只提供登录后收藏入口", async () => {

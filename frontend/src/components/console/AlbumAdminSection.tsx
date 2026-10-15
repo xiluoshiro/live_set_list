@@ -1,7 +1,9 @@
+import { ConsoleEditorLock } from "./ConsoleEditorLock";
+import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
+import { useConsoleDraftGuard } from "./ConsoleDraftGuard";
 import { useEffect, useId, useRef, useState } from "react";
 import { getCatalogConsole, songCatalogWrite, type CatalogPage, type AlbumDetail, type AlbumDraft, type AlbumSummary, type AlbumTrackWrite, type ConsoleSongItem } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
-import { UpdateDiffTable } from "./UpdateDiffTable";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { albumTitle } from "../../albumTitle";
 import { ConsoleCandidatePager } from "./ConsoleChoiceSelect";
@@ -70,17 +72,17 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const loadGeneration = useRef(0);
   const locked = busy || confirm || (!creating && albumsLoading);
-  const [discard, setDiscard] = useState<(() => void) | null>(null);
   const payload = albumPayload(draft);
   const dirty = JSON.stringify(payload) !== JSON.stringify(albumPayload(!creating && original ? fields(original) : emptyAlbum()));
-  const guard = (next: () => void) => { if (!creating && original && dirty) setDiscard(() => next); else next(); };
-  const closeConfirmation = () => { if (!busy) { setConfirm(false); setDiscard(null); } };
+  const { guard, dialog: discardDialog } = useConsoleDraftGuard({ active, dirty: !creating && !!original && dirty, busy: busy || confirm,
+    label: `专辑 #${original?.album_id}`, onDiscard: () => { if (original) setEditDraft(fields(original)); } });
+  const closeConfirmation = () => { if (!busy) setConfirm(false); };
   const queryAlbums = () => { if (!locked) setAlbumSearch(value => ({ query: albumQuery.trim(), page: 1, refresh: value.refresh + 1, selectFirst: true })); };
   const querySongs = () => {
     setSelectedSong("");
     setSongSearch(value => ({ query: songQuery.trim(), refresh: value.refresh + 1 }));
   };
-  useEffect(() => { setConfirm(false); setDiscard(null); setMessage(""); setError(""); }, [active, creating]);
+  useEffect(() => { setConfirm(false); setMessage(""); setError(""); }, [active, creating]);
   useEffect(() => {
     if (!active || creating) return;
     registerLeaveGuard(guard);
@@ -188,6 +190,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
   ];
   if (!active) return null;
   return <section className="tour-admin-section" aria-label={creating ? "新增专辑" : "专辑管理"}>
+    <ConsoleEditorLock locked={locked}>
     {error && <p role="alert">{error}</p>}
     {message && <p className="console-admin-hint" role="status">{message}</p>}
     {!creating && <div>
@@ -281,27 +284,13 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
         </tbody>
       </table>
     </div>
-    {(confirm || discard) && <div className="modal-mask" onClick={closeConfirmation}><div className="modal compact console-confirm-modal" role="dialog" aria-modal="true"
-      aria-label={discard ? "未保存的修改" : creating ? "确认新增专辑" : "确认修改专辑"}
-      aria-describedby={discard ? `${formId}-discard-description` : undefined}
-      onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === "Escape") closeConfirmation(); }}>
-      <div className="modal-head"><h2>{discard ? "未保存的修改" : creating ? "确认新增专辑" : "确认修改专辑"}</h2>
-        <div className="modal-actions"><button type="button" className="modal-action-btn close" aria-label="关闭" disabled={busy} onClick={closeConfirmation}>
-          <span className="modal-action-glyph close">✕</span>
-        </button></div>
-      </div>
-      <div className="console-confirm-body">
-        {discard ? <p id={`${formId}-discard-description`} className="console-admin-hint">专辑 #{original!.album_id} 有未保存修改。离开后将丢弃这些修改。</p> : <>
-          {error && <p role="alert">{error}</p>}
-          {creating ? <CompactConfirmationTable rows={changes.map(({ field, after }) => [field, after] as const)} /> : <UpdateDiffTable changes={changes} />}
-        </>}
-      </div>
-      <div className="console-confirm-actions">
-        <button type="button" className="console-ghost-btn" disabled={busy} autoFocus={!!discard} onClick={closeConfirmation}>{discard ? "继续编辑" : "取消"}</button>
-        <button type="button" className="console-submit-btn" disabled={busy} onClick={() => {
-          if (discard) { setDraft(original ? fields(original) : emptyAlbum()); discard(); setDiscard(null); } else void save();
-        }}>{discard ? "放弃修改" : "确认"}</button>
-      </div>
-    </div></div>}
+    {discardDialog}
+    {confirm && <ConsoleConfirmDialog title={creating ? "确认新增专辑" : `确认更新专辑 #${original!.album_id}`}
+      changes={creating ? undefined : changes} changesLabel="专辑修改内容" busy={busy} error={error} confirmLabel={creating ? "确认提交" : "确认更新"}
+      onClose={closeConfirmation} onConfirm={save}>
+      {creating ? <CompactConfirmationTable rows={changes.map(({ field, after }) => [field, after] as const)} /> :
+        null}
+    </ConsoleConfirmDialog>}
+  </ConsoleEditorLock>
   </section>;
 }

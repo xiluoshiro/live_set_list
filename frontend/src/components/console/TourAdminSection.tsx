@@ -1,3 +1,7 @@
+import { refreshConsoleAfterSave } from "./consoleSave";
+import { ConsoleEditorLock } from "./ConsoleEditorLock";
+import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
+import { useConsoleDraftGuard } from "./ConsoleDraftGuard";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -13,7 +17,7 @@ import {
 } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { getTourStopShortTitle } from "../tourHelpers";
-import { UpdateDiffTable, type UpdateChange } from "./UpdateDiffTable";
+import type { UpdateChange } from "./UpdateDiffTable";
 import type { BandOption, Position } from "./types";
 
 type DraftStop = {
@@ -66,7 +70,7 @@ function formatBandSelection(bandIds: number[], bands: BandOption[]): string {
 }
 
 function formatStop(stop: DraftStop): string {
-  return `${stop.live_id} · ${stop.live_date} · ${stop.live_title}`;
+  return `${stop.live_id} · ${stop.live_date} · ${stop.live_title}${stop.stop_label ? ` · ${stop.stop_label}` : ""}`;
 }
 
 function buildTourUpdateChanges(
@@ -142,6 +146,7 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
   const [candidateLoading, setCandidateLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [insertedTours, setInsertedTours] = useState<ConsoleTourMutationResponse["item"][]>([]);
 
   const resetForm = () => {
@@ -257,7 +262,7 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
     }
   };
 
-  const queryCandidates = async (query = candidateQuery) => {
+  const queryCandidates = async (query = candidateQuery, reportFailure = true) => {
     setCandidateLoading(true);
     setCandidatePage(1);
     try {
@@ -265,6 +270,7 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
       setCandidates(response.items);
       setCandidateTotalPages(response.total_pages);
     } catch (error) {
+      if (!reportFailure) throw error;
       onMessage(`查询 Live 候选失败：${errorMessage(error)}`);
     } finally {
       setCandidateLoading(false);
@@ -329,9 +335,13 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
     [originalPayload, originalStops, payload, sortedBands, stops],
   );
 
+  const dirty = !isNew && updateChanges.length > 0;
+  const { guard, dialog: discardDialog } = useConsoleDraftGuard({ dirty, busy: submitting || confirming,
+    label: `巡演 #${selectedTourId}`, onDiscard: resetForm });
+
   const submit = async () => {
-    if (!auth.csrfToken || !canSubmit) return;
-    setSubmitting(true);
+    if (!auth.csrfToken || !canSubmit || (!isNew && !dirty)) return;
+    setSubmitting(true); setSaveError("");
     try {
       const wasNew = isNew;
       const response = wasNew
@@ -342,12 +352,11 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
         setInsertedTours((current) => [response.item, ...current]);
       }
       resetForm();
-      await Promise.all([loadTourList(), queryCandidates("")]);
-      onMessage(`${wasNew ? "创建" : "更新"}巡演成功：#${response.item.tour_id} ${response.item.tour_title}`);
+      await refreshConsoleAfterSave([loadTourList, () => queryCandidates("", false)],
+        `${wasNew ? "创建" : "更新"}巡演成功：#${response.item.tour_id} ${response.item.tour_title}`, onMessage);
       onTourDataChanged?.();
     } catch (error) {
-      setConfirming(false);
-      onMessage(`保存巡演失败：${errorMessage(error)}`);
+      setSaveError(`保存巡演失败：${errorMessage(error)}`);
     } finally {
       setSubmitting(false);
     }
@@ -355,6 +364,7 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
 
   return (
     <section className="tour-admin-section" aria-label="巡演管理">
+    <ConsoleEditorLock locked={loading || submitting || confirming}>
       <div className="tour-admin-toolbar">
         <label htmlFor="tour-admin-select">已有巡演</label>
         <select
@@ -363,14 +373,14 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
           value={selectedTourId ?? ""}
           onChange={(event) => {
             const tourId = Number(event.target.value);
-            if (tourId > 0) void loadSelectedTour(tourId);
+            if (tourId > 0) guard(() => void loadSelectedTour(tourId));
           }}
           disabled={loading || tours.length === 0}
         >
           <option value="">选择要编辑的巡演</option>
           {tours.map((tour) => <option key={tour.tour_id} value={tour.tour_id}>#{tour.tour_id} {tour.tour_title}</option>)}
         </select>
-        <button type="button" className="console-submit-btn" onClick={() => { resetForm(); void queryCandidates(""); }}>新建巡演</button>
+        <button type="button" className="console-submit-btn" onClick={() => guard(() => { resetForm(); void queryCandidates(""); })}>新建巡演</button>
       </div>
 
       <div className="tour-admin-fields">
@@ -483,20 +493,15 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
       </div>
 
       <div className="console-submit-row">
-        <button type="button" className="console-ghost-btn" onClick={() => { resetForm(); void queryCandidates(""); }}>清空</button>
-        <button type="button" className="console-submit-btn" disabled={!canSubmit || loading} onClick={() => setConfirming(true)}>{isNew ? "创建巡演" : "保存修改"}</button>
+        <button type="button" className="console-ghost-btn" onClick={() => guard(() => { resetForm(); void queryCandidates(""); })}>清空</button>
+        <button type="button" className="console-submit-btn" disabled={!canSubmit || loading || submitting || (!isNew && !dirty)} onClick={() => { setSaveError(""); setConfirming(true); }}>{isNew ? "创建巡演" : "保存修改"}</button>
       </div>
 
-      {confirming && (
-        <div className="modal-mask" onClick={() => !submitting && setConfirming(false)}>
-          <div className="modal console-confirm-modal compact tour" role="dialog" aria-modal="true" aria-labelledby="tour-confirm-title" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head">
-              <h2 id="tour-confirm-title">确认{isNew ? "创建" : "更新"}巡演</h2>
-              <div className="modal-actions">
-                <button type="button" className="modal-action-btn close" aria-label="关闭" disabled={submitting} onClick={() => setConfirming(false)}><span className="modal-action-glyph close">✕</span></button>
-              </div>
-            </div>
-            <div className="console-confirm-body">
+      {discardDialog}
+      {confirming && <ConsoleConfirmDialog title={isNew ? "确认新增巡演" : `确认更新巡演 #${selectedTourId}`}
+        changes={isNew ? undefined : updateChanges} changesLabel="巡演修改内容" busy={submitting} error={saveError} confirmLabel={isNew ? "确认提交" : "确认更新"}
+        disabled={!isNew && !dirty} onClose={() => setConfirming(false)} onConfirm={submit}>
+
               {isNew && selectedBandIds.length === 0 && (
                 <p className="console-admin-hint tour-band-validation" role="alert">
                   尚未指定参与乐队；创建后将按所选场次自动聚合乐队，巡演统计会包含全部 Setlist。
@@ -521,16 +526,8 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
                   </div>
                 </>
               ) : (
-                <UpdateDiffTable changes={updateChanges} ariaLabel="巡演修改内容" />
-              )}
-            </div>
-            <div className="console-confirm-actions">
-              <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirming(false)}>取消</button>
-              <button type="button" className="console-submit-btn" disabled={submitting} onClick={() => void submit()}>{submitting ? "提交中..." : "确认提交"}</button>
-            </div>
-          </div>
-        </div>
-      )}
+                null
+              )}      </ConsoleConfirmDialog>}
 
       <div className="console-table-wrap live-history-wrap">
         <table className="console-admin-table live-history-table tour-history-table" aria-label="新增巡演记录">
@@ -549,6 +546,7 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
           </tbody>
         </table>
       </div>
-    </section>
+    </ConsoleEditorLock>
+  </section>
   );
 }

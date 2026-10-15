@@ -1,3 +1,4 @@
+import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
 import { useEffect, useRef, useState } from "react";
 import {
   createConsoleVenue, getConsoleTimezones,
@@ -131,10 +132,9 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
           onTimezone={setTimezone} onAddress={setAddress} onLocality={setLocality} onName={setName}
           onGooglePlace={setGooglePlace} onReview={setMapReview} onDone={() => setMapOpen(false)} />}
     </div>
-    {confirm && <div className="modal-mask" onClick={() => !submitting && setConfirm(false)}><div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="venue-create-confirm-title" onClick={e => e.stopPropagation()}>
-      <div className="modal-head"><h2 id="venue-create-confirm-title">确认新增场馆</h2></div>
-      <div className="console-confirm-body"><CompactConfirmationTable ariaLabel="新增场馆确认" rows={rows} />{message && <p role="alert">{message}</p>}</div>
-      <div className="console-confirm-actions"><button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirm(false)}>取消</button><button type="button" className="console-submit-btn" disabled={submitting || !!validation} onClick={() => void submit()}>{submitting ? "正在提交…" : "提交插入"}</button></div>
-    </div></div>}
+    {confirm && <ConsoleConfirmDialog title="确认新增场馆" busy={submitting} error={message} disabled={!!validation}
+      confirmLabel="确认提交" onClose={() => setConfirm(false)} onConfirm={submit}>
+      <CompactConfirmationTable ariaLabel="新增场馆确认" rows={rows} />
+    </ConsoleConfirmDialog>}
   </>;
 }

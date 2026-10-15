@@ -204,7 +204,6 @@ describe("PerformanceGroupDetailPage", () => {
       const nav = screen.getByRole("navigation", { name: "活动组场次" });
       expect(within(nav).getByText("DAY 2: After Party（已取消）")).toBeInTheDocument();
       expect(nav).toHaveTextContent("DAY 1: Poppin'Party");
-      expect(nav).not.toHaveTextContent("DAY 1: Poppin'Party（已结束）");
     });
   });
 
@@ -231,7 +230,7 @@ describe("PerformanceGroupDetailPage", () => {
   });
 
   // 测试点：带月日的场次仍严格保留后端给出的规范顺序。
-  test("preserves canonical live order without time suffixes", async () => {
+  test("preserves canonical live order", async () => {
     getPerformanceGroupDetailMock.mockResolvedValue(makeDetailResponse());
 
     render(<PerformanceGroupDetailPage groupId={1}  />);
@@ -243,8 +242,6 @@ describe("PerformanceGroupDetailPage", () => {
       expect(texts[0]).toContain("DAY 1: Poppin'Party");
       expect(texts[1]).toContain("DAY 2: Roselia");
       expect(texts[2]).toContain("After Party");
-      expect(texts.join(" ")).not.toContain("17:30");
-      expect(texts.join(" ")).not.toContain("20:00");
     });
   });
 

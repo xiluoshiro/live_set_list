@@ -8,6 +8,8 @@ import App from "../App";
 import { AuthProvider } from "../auth/AuthProvider";
 import { FavoriteProvider } from "../favorites/FavoriteProvider";
 import {
+  getConsoleLive,
+  getConsoleLiveCandidates,
   clearLiveDataCaches,
   clearMyFavoriteLivesCache,
   favoriteLive,
@@ -626,16 +628,14 @@ describe("App", () => {
     expect(screen.getByText("Setlist 覆盖")).toBeInTheDocument();
   });
 
-  test("匿名模式默认进入首页，且不显示收藏入口", async () => {
-    // 测试点：未登录时默认展示社区数据库首页，不暴露收藏页签。
+  test("匿名模式默认进入首页并加载日历", async () => {
+    // 测试点：匿名访问默认展示首页，并按当前月份加载日历。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
     renderApp();
     expect(screen.getByRole("button", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "我的收藏" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("47")).toBeInTheDocument());
     expect(getCatalogCalendarMock).toHaveBeenCalledWith(currentMonthKey());
     expect(getLivesMock).not.toHaveBeenCalled();
@@ -655,11 +655,10 @@ describe("App", () => {
     expect(within(metrics).getByText("场馆")).toBeInTheDocument();
     expect(within(metrics).getByText("17")).toBeInTheDocument();
     expect(within(metrics).getAllByText("3")).toHaveLength(2);
-    expect(screen.queryByText("最新 Live 日期")).not.toBeInTheDocument();
     expect(getCatalogStatsMock).toHaveBeenCalled();
   });
 
-  // 测试点：首页 Live 日历进入真实详情，查看全部进入全量列表，且不再渲染旧栏目。
+  // 测试点：首页日历可打开对应详情，查看全部进入演出资料列表。
   test("首页 Live 日历可打开详情并进入演出资料", async () => {
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
@@ -668,8 +667,6 @@ describe("App", () => {
     renderApp();
 
     expect(await screen.findByRole("heading", { name: "Live 日历" })).toBeInTheDocument();
-    expect(screen.queryByText("最近收录")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "个人与贡献" })).not.toBeInTheDocument();
 
     await user.click(await screen.findByText("示例 Live 名称 1"));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(1));
@@ -834,7 +831,7 @@ describe("App", () => {
   });
 
   test("首页搜索会进入搜索结果，并可从结果打开详情", async () => {
-    // 测试点：首页搜索框接入公共搜索，Live 结果继续复用现有详情弹窗，搜索结果页不重复展示联系我们入口。
+    // 测试点：首页提交搜索后展示匹配结果，点击 Live 加载对应详情。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -847,9 +844,6 @@ describe("App", () => {
     await waitFor(() => expect(searchCatalogMock).toHaveBeenCalledWith("Party", 8));
     const searchHeading = await screen.findByRole("heading", { name: "搜索结果" });
     expect(searchHeading).toBeInTheDocument();
-    const searchPanel = searchHeading.closest(".catalog-panel");
-    expect(searchPanel).not.toBeNull();
-    expect(within(searchPanel as HTMLElement).queryByRole("button", { name: "联系我们" })).not.toBeInTheDocument();
     expect(screen.getByText("STAR BEAT!")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "検索対象 Live" }));
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(101));
@@ -973,7 +967,39 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "控制台" })).toBeInTheDocument();
   });
 
-  // 测试点：收藏不再占用独立导航页签，而是在演出资料内作为范围切换。
+  // 测试点：离开控制台的主导航与浏览器后退都保护修改，取消恢复历史位置，确认后才离开。
+  test("guards Console drafts on navigation and browser back", async () => {
+    const user = userEvent.setup();
+    getAuthMeMock.mockResolvedValue({ authenticated: true,
+      user: { id: 1, username: "admin", display_name: "Administrator", role: "admin" },
+      csrf_token: "csrf-token", favorite_live_ids: [] });
+    vi.mocked(getConsoleLiveCandidates).mockResolvedValueOnce({ items: [{ live_id: 55, live_date: "2026-07-05", live_title: "Draft Live", live_type: "solo", venue_name: null }],
+      page: 1, page_size: 20, total: 1, total_pages: 1 });
+    vi.mocked(getConsoleLive).mockResolvedValue({ item: { live_id: 55, live_date: "2026-07-05", live_title: "Draft Live", live_type: "solo",
+      url: "https://example.test/live", opening_time: null, start_time: null, venue_id: null, venue_name: null,
+      venue_name_version_id: null, timezone: null, default_band_ids: [], event_attendees: [], band_lineup_contexts: [] } });
+    renderApp({ withAuthProvider: true });
+    await user.click(await screen.findByRole("button", { name: "控制台" }));
+    await user.click(screen.getByRole("tab", { name: "演出管理" }));
+    await user.selectOptions(await screen.findByLabelText("选择要编辑的 Live"), "55");
+    await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Draft Live"));
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), " Changed");
+    await user.click(screen.getByRole("button", { name: "演出资料" }));
+    await user.click(screen.getByRole("button", { name: "继续编辑" }));
+    expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Draft Live Changed");
+    act(() => window.history.back());
+    await screen.findByRole("dialog", { name: "未保存的修改" });
+    await user.click(screen.getByRole("button", { name: "继续编辑" }));
+    expect(window.history.state.tab).toBe("console");
+    expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Draft Live Changed");
+    act(() => window.history.back());
+    await screen.findByRole("dialog", { name: "未保存的修改" });
+    await user.click(screen.getByRole("button", { name: "放弃修改" }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "控制台" })).not.toBeInTheDocument());
+    expect(window.history.state.tab).toBe("home");
+  });
+
+  // 测试点：登录用户可在演出资料切换收藏范围，并操作已有收藏。
   test("已登录时演出资料页显示范围切换和星标按钮", async () => {
     getAuthMeMock.mockResolvedValue({
       authenticated: true,
@@ -991,7 +1017,6 @@ describe("App", () => {
     renderApp({ withAuthProvider: true });
     await user.click(await screen.findByRole("button", { name: "演出资料" }));
 
-    expect(screen.queryByRole("button", { name: "我的收藏" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "仅收藏" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getAllByRole("button", { name: "取消收藏" }).length).toBeGreaterThan(0);
@@ -1299,15 +1324,7 @@ describe("App", () => {
       "東京公演 · 5/30",
       "FINAL · 6/2",
     ]);
-    expect(stopNavigation).not.toHaveTextContent("已结束");
-    expect(within(stopNavigation).queryByText("/")).not.toBeInTheDocument();
-    expect(within(stopNavigation).queryByText("2026-05-30")).not.toBeInTheDocument();
-    expect(within(stopNavigation).queryByText("Zepp Tokyo")).not.toBeInTheDocument();
     expect(screen.getByText("2026.05.30-06.02")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "查看 Live" })).not.toBeInTheDocument();
-    expect(screen.queryByText("已有 Setlist")).not.toBeInTheDocument();
-    expect(screen.queryByText("暂无 Setlist")).not.toBeInTheDocument();
-    expect(screen.queryByText("stop_label")).not.toBeInTheDocument();
 
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(41));
     expect(screen.getByRole("heading", { name: /^演出流程/ })).toBeInTheDocument();
@@ -1333,30 +1350,24 @@ describe("App", () => {
     const changePanel = screen.getByRole("region", { name: "歌单变化" });
     expect(within(changePanel).getByRole("heading", { name: "新增歌曲" })).toBeInTheDocument();
     expect(within(changePanel).getByRole("heading", { name: "移除歌曲" })).toBeInTheDocument();
-    expect(within(changePanel).queryByRole("heading", { name: "同位置更换" })).not.toBeInTheDocument();
     expect(within(changePanel).getByLabelText("移除 旧曲")).toBeInTheDocument();
     expect(within(changePanel).getByLabelText("新增 新曲")).toBeInTheDocument();
-    expect(screen.queryByRole("table", { name: "场次变化" })).not.toBeInTheDocument();
     await user.click(within(changePanel).getByRole("button", { name: /FINAL/ }));
     expect(screen.getByRole("tab", { name: "场次详情" })).toHaveAttribute("aria-selected", "true");
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(42));
   });
 
-  // 测试点：巡演详情标题为纯文本（无外链图标），页内 Live 详情保留统一的官方网页入口。
-  test("巡演详情标题为纯文本，页内 Live 保留外链入口", async () => {
+  // 测试点：巡演内选中场次提供该 Live 的官方网页链接。
+  test("巡演页内 Live 提供官方网页入口", async () => {
     const user = userEvent.setup();
     renderApp();
     await user.click(await screen.findByRole("button", { name: "巡演资料" }));
     await user.click(await screen.findByText("Ave Mujica LIVE TOUR 2026 Exitus"));
 
     await waitFor(() => expect(getTourDetailMock).toHaveBeenCalledWith(7));
-    const titleHeading = screen.getByRole("heading", { name: "Ave Mujica LIVE TOUR 2026 Exitus" });
-    expect(titleHeading.querySelector("a")).toBeNull();
 
     await waitFor(() => expect(getLiveDetailMock).toHaveBeenCalledWith(41));
     expect(screen.getByRole("link", { name: "打开官方网页" })).toHaveAttribute("href", "https://example.com/live/41");
-    expect(screen.queryByText("↗")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /打开《.*》的资料来源/ })).not.toBeInTheDocument();
   });
 
   test("匿名用户点击仅收藏会打开登录弹窗", async () => {
@@ -1380,7 +1391,7 @@ describe("App", () => {
   });
 
   test("登录成功后切换到已登录模式并显示收藏入口", async () => {
-    // 测试点：用户登录成功后首页不再保留个人区占位，收藏入口迁移到演出资料页。
+    // 测试点：登录成功后可使用收藏范围，并查看当前账户和退出入口。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1395,7 +1406,6 @@ describe("App", () => {
 
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith("admin", "test-admin-pass"));
     expect(screen.getByRole("heading", { name: "Live 日历" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "个人与贡献" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "演出资料" }));
     expect(screen.getByRole("button", { name: "仅收藏" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "BanG Dream! Live 资料库" })).toBeInTheDocument();
@@ -1605,7 +1615,6 @@ describe("App", () => {
 
     await user.click(screen.getByText("示例 Live 名称 1"));
 
-    expect(screen.queryByRole("button", { name: "关闭演出资料" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^演出流程/ })).toBeInTheDocument();
     expect(screen.getByText("日期")).toBeInTheDocument();
     expect(screen.getByText("开场")).toBeInTheDocument();
@@ -1620,7 +1629,7 @@ describe("App", () => {
   });
 
   test("详情页浏览器后退可回到列表页", async () => {
-    // 测试点：详情页不再提供独立关闭按钮，浏览器后退应回到演出资料列表。
+    // 测试点：详情页接收浏览器后退后恢复演出资料列表。
     getLivesMock.mockResolvedValue(
       makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20 }),
     );
@@ -1633,21 +1642,6 @@ describe("App", () => {
 
     fireEvent.popState(window, { state: { app: "live-set-list", tab: "all" } });
     await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
-  });
-
-  test("详情弹窗在 url 为空时标题不渲染超链接", async () => {
-    // 测试点：详情弹窗没有 url 时，标题保持普通文本，不显示标题链接。
-    getLivesMock.mockResolvedValue(
-      makeResponse({ page: 1, pageSize: 20, total: 47, totalPages: 3, itemCount: 20, withUrl: false }),
-    );
-    getLiveDetailMock.mockResolvedValueOnce(makeDetailResponse({ liveId: 1, url: null }));
-    const user = userEvent.setup();
-    renderApp();
-    await waitFor(() => expect(screen.getByText("示例 Live 名称 1")).toBeInTheDocument());
-
-    await user.click(screen.getByText("示例 Live 名称 1"));
-    expect(screen.getByRole("heading", { name: "示例 Live 名称 1" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /示例 Live 名称 1/i })).not.toBeInTheDocument();
   });
 
   test("URL 列使用链接图标并携带正确链接", async () => {

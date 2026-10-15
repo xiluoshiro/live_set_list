@@ -1,3 +1,6 @@
+import { ConsoleEditorLock } from "./ConsoleEditorLock";
+import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
+import { useConsoleDraftGuard } from "./ConsoleDraftGuard";
 import { SongGroupEditor, emptySongMove } from "./SongGroupEditor";
 import { useEffect, useId, useRef, useState } from "react";
 import {
@@ -8,7 +11,6 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { ownershipLabel } from "../SongCatalog";
 import type { BandOption } from "./types";
-import { UpdateDiffTable } from "./UpdateDiffTable";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleChoiceSelect, ConsoleCandidatePager } from "./ConsoleChoiceSelect";
 import { ConsoleEditSelect, resolveConsoleEditSelection } from "./ConsoleEditSelect";
@@ -66,7 +68,6 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
-  const [discard, setDiscard] = useState<(() => void) | null>(null);
   const loadGeneration = useRef(0);
   const creating = variant === "create";
   const draft = creating ? createDraft : editDraft;
@@ -77,8 +78,9 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const groupChanged = !!originalGroup && !!editGroup && JSON.stringify(groupFields(editGroup)) !== JSON.stringify(groupFields(originalGroup));
   const changed = !!original && (JSON.stringify(songPayload(editDraft)) !== JSON.stringify(songFields(original)) || ownershipChanged || groupChanged || !!moveTarget.group_id);
   const dirty = changed || !!moveTarget.reason.trim();
-  const guard = (proceed: () => void) => { if (busy || confirm) return; if (!creating && dirty) setDiscard(() => proceed); else proceed(); };
-  useEffect(() => { setConfirm(false); setDiscard(null); }, [active, variant]);
+  const { guard, dialog: discardDialog } = useConsoleDraftGuard({ active, dirty: !creating && dirty, busy: busy || confirm,
+    label: `歌曲 #${original?.song_id}`, onDiscard: () => { if (original) restore(original); } });
+  useEffect(() => { setConfirm(false); }, [active, variant]);
   useEffect(() => {
     registerLeaveGuard(active ? guard : null);
     return () => registerLeaveGuard(null);
@@ -216,6 +218,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   </div>;
   if (!active) return null;
   return <section className="tour-admin-section" aria-label={creating ? "新增歌曲" : "歌曲管理"}>
+    <ConsoleEditorLock locked={fieldsDisabled}>
     {error && <p role="alert">{error}</p>}
     {message && <p className="console-admin-hint" role="status">{message}</p>}
     {!creating && <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar" role="search" aria-label="查询已有歌曲">
@@ -323,27 +326,17 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         </tbody>
       </table>
     </div>
-    {(confirm || discard) && <div className="modal-mask"><div className="modal compact console-confirm-modal" role="dialog" aria-modal="true"
-      aria-label={discard ? "确认放弃歌曲修改" : creating ? "确认新增歌曲" : "确认修改歌曲"}
-      onKeyDown={event => { if (event.key === "Escape" && !busy) { setConfirm(false); setDiscard(null); } }}>
-      <div className="modal-head"><h2>{discard ? "确认放弃歌曲修改" : creating ? "确认新增歌曲" : "确认修改歌曲"}</h2></div>
-      {discard && <p className="console-admin-hint">离开后将丢弃整页未保存的修改，包括归属、歌曲组和版本顺序。</p>}
-      {!discard && <div className="console-confirm-body">
-        {!creating && <p className="console-admin-hint">本次全部变更将一次保存，并更新所有引用处。</p>}
-        {error && <p role="alert">{error}</p>}
-        {creating ? <CompactConfirmationTable ariaLabel="新增歌曲确认" rows={[
-          ["歌曲名称", draft.song_name], ["版本标识", newGroup ? "默认版本" : draft.version_label || "默认版本"],
-          ["歌曲组", newGroup ? groupName.trim() || draft.song_name : selectedGroupName],
-          ["封面", coverSummary(songPayload(draft).cover_urls)],
-          ["归属模式", { pending: "待回填", mixed: "乐队与成员", bands: "乐队", members: "成员" }[ownership.mode]], ["归属", ownerSummary],
-        ]} /> : <UpdateDiffTable changes={changes} ariaLabel="歌曲修改内容" />}
-      </div>}
-      <div className="console-confirm-actions">
-        <button type="button" className="console-ghost-btn" disabled={busy} onClick={() => { setConfirm(false); setDiscard(null); }}>取消</button>
-        <button type="button" className="console-submit-btn" disabled={busy} onClick={() => {
-          if (discard) { const proceed = discard; setDiscard(null); if (original) restore(original); proceed(); } else void submit();
-        }}>{busy ? "提交中…" : discard ? "确认放弃" : "确认提交"}</button>
-      </div>
-    </div></div>}
+    {discardDialog}
+    {confirm && <ConsoleConfirmDialog title={creating ? "确认新增歌曲" : `确认更新歌曲 #${original!.song_id}`}
+      changes={creating ? undefined : changes} changesLabel="歌曲修改内容" busy={busy} error={error} confirmLabel={creating ? "确认提交" : "确认更新"}
+      onClose={() => setConfirm(false)} onConfirm={submit}>
+      {creating ? <CompactConfirmationTable ariaLabel="新增歌曲确认" rows={[
+        ["歌曲名称", draft.song_name], ["版本标识", newGroup ? "默认版本" : draft.version_label || "默认版本"],
+        ["歌曲组", newGroup ? groupName.trim() || draft.song_name : selectedGroupName],
+        ["封面", coverSummary(songPayload(draft).cover_urls)],
+        ["归属模式", { pending: "待回填", mixed: "乐队与成员", bands: "乐队", members: "成员" }[ownership.mode]], ["归属", ownerSummary],
+      ]} /> : null}
+    </ConsoleConfirmDialog>}
+  </ConsoleEditorLock>
   </section>;
 }

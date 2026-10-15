@@ -1,3 +1,4 @@
+import { useConsoleLeaveGuard } from "./ConsoleDraftGuard";
 import { useEffect, useState } from "react";
 
 import {
@@ -30,6 +31,7 @@ function dateText(value: string | null, emptyText: string): string {
 }
 
 export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenLive, initialVenueId, initialCreateName }: VenueAdminSectionProps) {
+  const leave = useConsoleLeaveGuard();
   const [venues, setVenues] = useState<ConsoleVenueItem[]>([]);
   const [selectedVenueId, setSelectedVenueId] = useState<number | null>(null);
   const [detail, setDetail] = useState<ConsoleVenueDetail | null>(null);
@@ -116,20 +118,20 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
           aria-label="搜索场馆"
           value={venueQuery}
           onChange={(event) => setVenueQuery(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") void loadVenuePage(venueQuery.trim(), 1); }}
+          onKeyDown={(event) => { if (event.key === "Enter") leave(() => void loadVenuePage(venueQuery.trim(), 1)); }}
         />
-        <button type="button" className="console-ghost-btn" disabled={loading} onClick={() => void loadVenuePage(venueQuery.trim(), 1)}>查询</button>
+        <button type="button" className="console-ghost-btn" disabled={loading} onClick={() => leave(() => void loadVenuePage(venueQuery.trim(), 1))}>查询</button>
         <ConsoleEditSelect
           id="venue-admin-select"
           label="已有 Venue" placeholder="暂无 Venue"
           value={selectedVenueId}
           disabled={loading || venues.length === 0}
           options={venues.map(venue => ({ id: venue.venue_id, label: `#${venue.venue_id} ${venue.venue_name}` }))}
-          onSelect={id => void loadDetail(id)} />
+          onSelect={id => leave(() => void loadDetail(id))} />
         <div className="tour-candidate-pager">
-          <button type="button" className="console-ghost-btn" disabled={loading || venuePage <= 1} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage - 1)}>上一页</button>
+          <button type="button" className="console-ghost-btn" disabled={loading || venuePage <= 1} onClick={() => leave(() => void loadVenuePage(searchedVenueQuery, venuePage - 1))}>上一页</button>
           <span>第 {venuePage} / {Math.max(1, venueTotalPages)} 页，共 {venueTotal} 个场馆</span>
-          <button type="button" className="console-ghost-btn" disabled={loading || venuePage >= venueTotalPages} onClick={() => void loadVenuePage(searchedVenueQuery, venuePage + 1)}>下一页</button>
+          <button type="button" className="console-ghost-btn" disabled={loading || venuePage >= venueTotalPages} onClick={() => leave(() => void loadVenuePage(searchedVenueQuery, venuePage + 1))}>下一页</button>
         </div>
       </div>
 

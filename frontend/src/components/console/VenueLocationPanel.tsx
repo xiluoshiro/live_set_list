@@ -1,3 +1,7 @@
+import { ConsoleEditorLock } from "./ConsoleEditorLock";
+import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
+import { useConsoleDraftGuard } from "./ConsoleDraftGuard";
+import { type UpdateChange } from "./UpdateDiffTable";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   deleteConsoleVenueMapLink, getConsoleTimezones, getConsoleVenueLocation,
@@ -26,8 +30,9 @@ const pointLabel = (point: { latitude: number | null; longitude: number | null }
   point.latitude === null ? "未填写" : `${point.latitude}, ${point.longitude}`;
 type Confirmation = {
   title: string;
+  changes?: UpdateChange[];
   rows: ReadonlyArray<readonly [string, ReactNode]>;
-  confirmLabel?: "提交插入" | "保存修改" | "取消关联";
+  confirmLabel?: "确认更新" | "取消关联";
   run: () => Promise<void>;
 };
 
@@ -141,6 +146,15 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
     || (savedGoogle?.provider_url ?? null) !== (googlePlace?.provider_url ?? null));
 
   const dirty = locationDirty || identityDirty;
+  const { dialog: discardDialog } = useConsoleDraftGuard({ dirty: dirty || !!mapUrl.trim(), busy: busy || !!confirmation,
+    label: `场馆 #${venueId} ${venueName}`, onDiscard: restore });
+  const locationChanges = (before: VenueLocation, after: VenueLocationWrite): UpdateChange[] => [
+    { field: "地区", before: before.locality ? cityLabel(before.locality) : "未填写", after: selectedCity ? cityLabel(selectedCity) : "未填写" },
+    { field: "地址", before: before.address ?? "未填写", after: after.address ?? "未填写" },
+    { field: "坐标", before: pointLabel(before), after: pointLabel(after) },
+    { field: "时区", before: before.timezone_id ?? "未填写", after: after.timezone_id ?? "未填写" },
+    { field: "Google Maps 场馆", before: before.map_links.find(link => link.provider === "google")?.provider_url ?? "未关联", after: after.google_place?.provider_url ?? "未关联" },
+  ].filter(change => change.before !== change.after);
   const kindLabel = (value: string) => value === "physical" ? "实体场馆" : value === "online" ? "线上" : "未公开";
   const previewEdit = () => perform(async () => {
     if (!data || !detail) return;
@@ -153,19 +167,14 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
     };
     const snapshot = await previewConsoleVenueEdit(venueId, payload);
     if (!alive.current) return;
-    const rows: [string, ReactNode][] = [["场馆", `#${venueId} ${venueName}`]];
-    if (identityDirty && venueKind !== savedKind) rows.push(["原类型", kindLabel(savedKind)], ["新类型", kindLabel(venueKind)]);
-    if (snapshot.name_change && currentVersion) {
-      rows.push(["原名称", currentVersion.venue_name], ["新名称", snapshot.name_change.venue_name],
-        ["生效日期", effectiveDate], ["既有 Live", "保留原名称版本"]);
-    }
-    if (locationDirty) rows.push(["原地区", data.locality ? cityLabel(data.locality) : "未填写"],
-      ["新地区", selectedCity ? cityLabel(selectedCity) : "未填写"],
-      ["原地址", data.address ?? "未填写"], ["新地址", draft.address ?? "未填写"],
-      ["原坐标", pointLabel(data)], ["新坐标", pointLabel(draft)],
-      ["原时区", data.timezone_id ?? "未填写"], ["新时区", draft.timezone_id ?? "未填写"],
-      ["Google Maps 场馆", draft.google_place?.name ?? "未关联"]);
-    setConfirmation({ title: "确认场馆修改", rows, run: async () => {
+    const rows: [string, ReactNode][] = [];
+    const changes: UpdateChange[] = [
+      { field: "类型", before: kindLabel(savedKind), after: kindLabel(venueKind) },
+      { field: "名称", before: currentVersion?.venue_name ?? venueName, after: snapshot.name_change?.venue_name ?? venueName },
+      ...locationChanges(data, snapshot.location),
+    ].filter(change => change.before !== change.after);
+    if (snapshot.name_change) rows.push(["生效日期", effectiveDate], ["既有 Live", "保留原名称版本"]);
+    setConfirmation({ title: "确认更新场馆", rows, changes, run: async () => {
       const saved = await saveConsoleVenueEdit(venueId, snapshot, auth.csrfToken ?? "");
       if (!alive.current) return;
       apply(saved.location); setVenueKind(saved.detail.venue_kind); setName(saved.detail.venue_name);
@@ -181,16 +190,8 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
     if (!alive.current) return;
     setConfirmation({
       title: "确认所在地修改",
-      rows: [
-        ["原城市", result.before.locality ? cityLabel(result.before.locality) : "未填写"],
-        ["新城市", selectedCity ? cityLabel(selectedCity) : "未填写"],
-        ["原地址", result.before.address ?? "未填写"], ["新地址", result.after.address ?? "未填写"],
-        ["原坐标", pointLabel(result.before)], ["新坐标", pointLabel(result.after)],
-        ["原时区", result.before.timezone_id ?? "待核验"], ["新时区", result.after.timezone_id ?? "待核验"],
-        ["Google Maps 场馆", result.after.google_place?.name ?? "未关联"],
-        ["本次变更字段", result.changed_fields.map(field => FIELD_LABELS[field] ?? field).join("、") || "无"],
-        ["关联 Live", `${result.live_count} 场（本次不修改排期）`],
-      ],
+      changes: locationChanges(result.before, result.after),
+      rows: [["关联 Live", `${result.live_count} 场（本次不修改排期）`]],
       run: async () => {
         const saved = await saveConsoleVenueLocation(venueId, result.after, auth.csrfToken ?? "");
         if (alive.current) {
@@ -202,7 +203,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
     });
   });
 
-  return <div className="tour-admin-block">
+  return <div className="tour-admin-block"><ConsoleEditorLock locked={busy || !!confirmation}>
       <h3>所在地与地图</h3>
       {message && <p role="status" className="console-admin-hint">{message}</p>}
       {busy && <p className="console-admin-hint">正在处理…</p>}
@@ -272,7 +273,8 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
           <button className="console-submit-btn" type="button" disabled={busy || dirty || !selectedMapCandidate} onClick={() => {
             if (!selectedMapCandidate) return;
             const candidate = selectedMapCandidate; const selectedProvider = provider; const stateToken = data.state_token;
-            setConfirmation({ title: "确认地图场馆候选", rows: [
+            setConfirmation({ title: "确认更新地图关联", changes: [{ field: PROVIDERS[selectedProvider],
+              before: data.map_links.find(link => link.provider === selectedProvider)?.provider_url ?? "未关联", after: candidate.provider_url }], rows: [
               ["地图", PROVIDERS[selectedProvider]], ["候选地点", candidate.name], ["候选地址", candidate.address || "未提供"],
               ["候选 WGS84 坐标", `${candidate.latitude}, ${candidate.longitude}`], ["与已保存坐标距离", `${candidate.distance_m} m`],
               ["平台地点 ID", candidate.provider_place_id],
@@ -308,7 +310,8 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
           <button className="console-submit-btn" type="button" disabled={busy || dirty || data.latitude === null || !mapUrl.trim()} onClick={() => {
             setMessage("");
             const url = mapUrl.trim(); const selectedProvider = provider; const stateToken = data.state_token;
-            setConfirmation({ title: "确认地图场馆关联", rows: [["地图", PROVIDERS[selectedProvider]], ["已保存坐标", pointLabel(data)], ["详情链接", url]], run: async () => {
+            setConfirmation({ title: "确认更新地图关联", changes: [{ field: PROVIDERS[selectedProvider],
+              before: data.map_links.find(link => link.provider === selectedProvider)?.provider_url ?? "未关联", after: url }], rows: [["地图", PROVIDERS[selectedProvider]], ["已保存坐标", pointLabel(data)], ["详情链接", url]], run: async () => {
               const saved = await saveConsoleVenueMapLink(venueId, selectedProvider, { provider_url: url }, stateToken, auth.csrfToken ?? "");
               if (alive.current) { setData(saved); setMapUrl(""); setMessage("地图关联已保存。"); }
             } });
@@ -316,7 +319,8 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
           <button className="console-ghost-btn" type="button" disabled={busy || dirty || !data.map_links.find(link => link.provider === provider)?.verified_at} onClick={() => {
             setMessage("");
             const selectedProvider = provider; const stateToken = data.state_token;
-            setConfirmation({ title: "确认取消地图关联", rows: [["地图", PROVIDERS[selectedProvider]], ["结果", "保留场馆坐标，可继续按坐标打开"]], confirmLabel: "取消关联", run: async () => {
+            setConfirmation({ title: "确认取消地图关联", changes: [{ field: PROVIDERS[selectedProvider],
+              before: data.map_links.find(link => link.provider === selectedProvider)?.provider_url ?? "未关联", after: "未关联" }], rows: [["地图", PROVIDERS[selectedProvider]], ["结果", "保留场馆坐标，可继续按坐标打开"]], confirmLabel: "取消关联", run: async () => {
               const saved = await deleteConsoleVenueMapLink(venueId, selectedProvider, stateToken, auth.csrfToken ?? "");
               if (alive.current) { setData(saved); setMessage("地图关联已取消。"); }
             } });
@@ -324,15 +328,13 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
         </div></>}
         </>}
       </>}
-    {confirmation && <div className="modal-mask" onClick={() => !busy && setConfirmation(null)}>
-      <div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="venue-location-confirm-title" onClick={e => e.stopPropagation()}>
-        <div className="modal-head"><h2 id="venue-location-confirm-title">{confirmation.title}</h2></div>
-        <div className="console-confirm-body"><CompactConfirmationTable ariaLabel={confirmation.title} rows={confirmation.rows} />{message && <p role="alert">{message}</p>}</div>
-        <div className="console-confirm-actions">
-          <button className="console-ghost-btn" type="button" disabled={busy} onClick={() => setConfirmation(null)}>取消</button>
-          <button className="console-submit-btn" type="button" disabled={busy} onClick={() => void perform(async () => { await confirmation.run(); if (alive.current) setConfirmation(null); })}>{confirmation.confirmLabel ?? "保存修改"}</button>
-        </div>
-      </div>
-    </div>}
+    {discardDialog}
+    {confirmation && <ConsoleConfirmDialog title={confirmation.title === "确认更新场馆" ? `确认更新场馆 #${venueId}` : `${confirmation.title} · 场馆 #${venueId}`}
+      changes={confirmation.changes} changesLabel="场馆修改内容" busy={busy} error={message} confirmLabel={confirmation.confirmLabel ?? "确认更新"}
+      onClose={() => { setConfirmation(null); setMessage(""); }}
+      onConfirm={() => perform(async () => { await confirmation.run(); if (alive.current) setConfirmation(null); })}>
+      {confirmation.rows.length > 0 && <CompactConfirmationTable ariaLabel={confirmation.title} rows={confirmation.rows} />}
+    </ConsoleConfirmDialog>}
+  </ConsoleEditorLock>
   </div>;
 }

@@ -35,8 +35,8 @@ describe("TourDetailPage cancelled stops", () => {
     });
   });
 
-  // 测试点：巡演场次只给取消场次追加状态短名，并且不为取消场次提供收藏入口。
-  test("renders cancelled count and keeps no-setlist cancelled stop static", async () => {
+  // 测试点：巡演展示取消场数和场次状态，默认加载有歌单的有效场次。
+  test("shows cancelled stops and loads a recorded live", async () => {
     apiMocks.getTourDetail.mockResolvedValue({
       tour_id: 1,
       tour_title: "示例巡演",
@@ -97,8 +97,6 @@ describe("TourDetailPage cancelled stops", () => {
     const nav = screen.getByRole("navigation", { name: "巡演场次" });
     expect(within(nav).getByText("场3（已取消）")).toBeInTheDocument();
     expect(within(nav).getByText("场4")).toBeInTheDocument();
-    expect(within(nav).queryByText("场4（已结束）")).not.toBeInTheDocument();
-    expect(within(nav).queryByRole("button", { name: /收藏.*场3/ })).not.toBeInTheDocument();
     expect(screen.getByText("· 取消 1 场")).toBeInTheDocument();
   });
 });

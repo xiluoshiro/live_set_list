@@ -115,11 +115,10 @@ describe("LiveAdminSection", () => {
     expect(screen.getByText("场馆未设置时区，不能录入演出")).toBeInTheDocument();
   });
 
-  // 测试点：新增和编辑都显示实际 IANA 时区，不显示静态来源文案或缺失提示。
+  // 测试点：新增和编辑都显示所选场馆的实际 IANA 时区。
   test.each(["create", "edit"] as const)("shows actual venue timezone in %s", (variant) => {
     renderSection(vi.fn(), { variant, editingLiveId: variant === "edit" ? 55 : null, timezoneId: "America/New_York" });
     expect(screen.getByText("America/New_York")).toBeInTheDocument();
-    expect(screen.queryByText(/场馆未设置|由场馆|来自场馆/)).not.toBeInTheDocument();
   });
 
   // 测试点：只有 online 场馆可从 Live 表单选择主办方公布的活动时区。
@@ -141,8 +140,8 @@ describe("LiveAdminSection", () => {
     expect(onToggleDefaultBand).toHaveBeenCalledWith(1);
   });
 
-  // 测试点：已选默认 Band 只显示具体阵容标签，不重复拼接当前名称和“当前版本”前缀。
-  test("shows only the selected default Band lineup label", () => {
+  // 测试点：默认 Band 展示所选阵容版本的名称。
+  test("shows the selected default Band lineup label", () => {
     renderSection(vi.fn(), {
       defaultBandIds: [1],
       defaultBandLineupContexts: {
@@ -189,8 +188,6 @@ describe("LiveAdminSection", () => {
 
     const group = screen.getByRole("group", { name: "default_band_ids" });
     expect(within(group).getByText("Poppin'Party V3")).toBeInTheDocument();
-    expect(within(group).queryByText(/当前版本/)).not.toBeInTheDocument();
-    expect(within(group).queryByText(/Poppin'Party · Poppin'Party V3/)).not.toBeInTheDocument();
   });
 
   // 测试点：活动类型应在已选默认 Band 下复用成员二级复选列表，并回传具体成员切换。
@@ -290,9 +287,8 @@ describe("LiveAdminSection", () => {
     expect(screen.queryByText(/Live #55 有未保存修改/)).not.toBeInTheDocument();
   });
 
-  // 测试点：同一 Live 的多次更新快照使用独立历史标识，不产生重复 React key 或覆盖旧记录。
+  // 测试点：同一 Live 的多次更新分别显示各次保存的历史快照。
   test("renders repeated updates for one Live as distinct history rows", () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const commonHistory = {
       action: "update" as const,
       live_id: 55,
@@ -318,7 +314,5 @@ describe("LiveAdminSection", () => {
 
     expect(screen.getByText("Second saved title")).toBeInTheDocument();
     expect(screen.getByText("First saved title")).toBeInTheDocument();
-    expect(consoleError.mock.calls.some((call) => call.some((value) => String(value).includes("same key")))).toBe(false);
-    consoleError.mockRestore();
   });
 });

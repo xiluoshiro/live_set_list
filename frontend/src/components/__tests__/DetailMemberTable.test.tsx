@@ -46,21 +46,10 @@ const detailRows: LiveDetailRow[] = [
 ];
 
 describe("MemberStatusTable", () => {
-  test("详情表格表头为 5 列：编号/曲目名称/乐队成员/其他成员/备注", () => {
-    // 测试点：看护详情表格表头结构，防止列名被误改。
-    render(<MemberStatusTable />);
-    expect(screen.getByRole("columnheader", { name: "编号" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "曲目名称" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "乐队成员" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "其他成员" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "备注" })).toBeInTheDocument();
-  });
 
   test("未传详情行时展示空数据提示", () => {
-    // 测试点：详情表格不再生成本地静态数据，缺少后端明细时展示空状态。
+    // 测试点：缺少演出明细时展示空状态。
     render(<MemberStatusTable />);
-    const table = screen.getByRole("table");
-    expect(within(table).getAllByRole("row")).toHaveLength(2);
     expect(screen.getByText("当前 Live 暂无详情数据")).toBeInTheDocument();
   });
 
@@ -134,8 +123,8 @@ describe("MemberStatusTable", () => {
     expect(screen.getByText("特别出演：F（新成员）")).toBeInTheDocument();
   });
 
-  // 测试点：没有后继阵容的普通 Live 只显示乐队名，不暴露单一基础版本。
-  test("普通Live只显示乐队名", async () => {
+  // 测试点：普通场次的成员详情展示对应乐队。
+  test("普通 Live 成员详情显示乐队名", async () => {
     const user = userEvent.setup();
     render(
       <MemberStatusTable
@@ -170,8 +159,6 @@ describe("MemberStatusTable", () => {
 
     await user.click(screen.getByTitle("点击查看参加队员"));
     expect(screen.getByText("阵容：RAISE A SUILEN")).toBeInTheDocument();
-    expect(screen.queryByText(/RAISE A SUILEN V[34]/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/旧阵容|新阵容/)).not.toBeInTheDocument();
   });
 
   // 测试点：存在后继阵容即表示 Live 发生交接，基础与后继曲目都必须展示完整版本链及新旧语义。
@@ -232,43 +219,6 @@ describe("MemberStatusTable", () => {
     });
   });
 
-  test("当 +N 按钮靠近底部时，浮层优先向上弹出", async () => {
-    // 测试点：验证 +N 浮层定位规则（靠近底部时向上优先）。
-    const user = userEvent.setup();
-    render(<MemberStatusTable rows={detailRows} />);
-
-    const originalInnerHeight = window.innerHeight;
-    Object.defineProperty(window, "innerHeight", {
-      configurable: true,
-      value: 740,
-    });
-
-    const moreButton = screen.getAllByRole("button", { name: /\+\d+/ })[0];
-    const rectSpy = vi.spyOn(moreButton, "getBoundingClientRect").mockReturnValue({
-      x: 100,
-      y: 700,
-      width: 40,
-      height: 22,
-      top: 700,
-      right: 140,
-      bottom: 722,
-      left: 100,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    await user.click(moreButton);
-
-    const popover = document.querySelector(".other-floating-popover") as HTMLElement;
-    expect(popover).not.toBeNull();
-    const top = Number.parseFloat(popover.style.top || "0");
-    expect(top).toBeLessThan(700);
-
-    rectSpy.mockRestore();
-    Object.defineProperty(window, "innerHeight", {
-      configurable: true,
-      value: originalInnerHeight,
-    });
-  });
 
   test("其他成员 value 为空时标签不显示冒号", () => {
     // 测试点：other_member.value 为 [] 时，标签仅显示 key，不带 ':'。

@@ -1,3 +1,4 @@
+import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
 import { useRef, useState, type ReactNode } from "react";
 
 import { createConsoleLocality, type GeoLocality, type GeoLocalityCreate } from "../../api";
@@ -79,15 +80,9 @@ export function LocalityAdminSection({ onMessage }: { onMessage: (message: strin
         <button type="button" className="console-submit-btn" disabled={submitting || !!validation} onClick={() => { setMessage(""); setConfirm(true); }}>提交插入</button>
       </div>
     </div>
-    {confirm && <div className="modal-mask" onClick={() => !submitting && setConfirm(false)}>
-      <div className="modal console-confirm-modal compact" role="dialog" aria-modal="true" aria-labelledby="locality-confirm-title" onClick={event => event.stopPropagation()}>
-        <div className="modal-head"><h2 id="locality-confirm-title">确认新增地区</h2></div>
-        <div className="console-confirm-body"><CompactConfirmationTable ariaLabel="新增地区确认" rows={rows} />{message && <p role="alert">{message}</p>}</div>
-        <div className="console-confirm-actions">
-          <button type="button" className="console-ghost-btn" disabled={submitting} onClick={() => setConfirm(false)}>取消</button>
-          <button type="button" className="console-submit-btn" disabled={submitting || !!validation} onClick={() => void submit()}>{submitting ? "正在提交…" : "提交插入"}</button>
-        </div>
-      </div>
-    </div>}
+    {confirm && <ConsoleConfirmDialog title="确认新增地区" busy={submitting} error={message} disabled={!!validation}
+      confirmLabel="确认提交" onClose={() => setConfirm(false)} onConfirm={submit}>
+      <CompactConfirmationTable ariaLabel="新增地区确认" rows={rows} />
+    </ConsoleConfirmDialog>}
   </section>;
 }

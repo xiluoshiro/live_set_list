@@ -62,7 +62,7 @@ export function ConsoleMultiSelect({ label, options, value, disabled = false, hi
     <button ref={trigger} type="button" className="bands-picker-trigger tour-band-trigger default-band-picker-trigger"
       aria-label={`选择${label}`} aria-expanded={open} aria-controls={open ? menuId : undefined}
       title={summary} onClick={() => setOpen(current => !current)}>{summary}</button>
-    {open && !disabled && createPortal(<div ref={menu} id={menuId} className="bands-floating-menu console-multiselect-menu"
+    {open && !disabled && createPortal(<div ref={menu} id={menuId} data-console-popover className="bands-floating-menu console-multiselect-menu"
       role="group" aria-label={`${label}选项`} style={position}>
       {options.map(option => <label key={option.id}>
         <input type="checkbox" checked={value.includes(option.id)} onChange={event => onChange(event.target.checked
@@ -70,6 +70,6 @@ export function ConsoleMultiSelect({ label, options, value, disabled = false, hi
         <span>{option.label}</span>
       </label>)}
       {options.length === 0 && <p className="console-admin-hint">没有匹配的结果</p>}
-    </div>, document.body)}
+    </div>, trigger.current?.closest('[role="dialog"]') ?? document.body)}
   </fieldset>;
 }

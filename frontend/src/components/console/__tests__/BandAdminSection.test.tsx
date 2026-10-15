@@ -97,7 +97,7 @@ describe("BandAdminSection", () => {
 
     const dialog = screen.getByRole("dialog", { name: "确认新增 Band" });
     expect(within(dialog).getByRole("table", { name: "新增 Band 确认" })).toHaveTextContent("101+");
-    await user.click(within(dialog).getByRole("button", { name: "确认新增" }));
+    await user.click(within(dialog).getByRole("button", { name: "确认提交" }));
 
     await waitFor(() => expect(apiMocks.createConsoleBand).toHaveBeenCalledWith(
       {
@@ -160,7 +160,7 @@ describe("BandAdminSection", () => {
     await user.selectOptions(screen.getByLabelText("交接 Live（可空）"), "55");
     await user.click(screen.getByRole("button", { name: "检查版本变化" }));
 
-    const dialog = screen.getByRole("dialog", { name: "确认追加阵容版本" });
+    const dialog = screen.getByRole("dialog", { name: /确认追加阵容版本 · Band #/ });
     const table = within(dialog).getByRole("table", { name: "阵容版本变化确认" });
     expect(table).toHaveTextContent("V3 → V4");
     expect(within(table).getByRole("row", { name: "版本标签 Poppin'Party V4" })).toBeInTheDocument();
@@ -184,4 +184,29 @@ describe("BandAdminSection", () => {
       "csrf-token",
     ));
   });
+  // 测试点：切换乐队必须先确认放弃阵容草稿，新乐队不会沿用旧版本标签、日期或备注。
+  test("guards lineup drafts and clears them before loading another band", async () => {
+    const user = userEvent.setup();
+    apiMocks.getConsoleBandHistory.mockImplementation(async id => id === 1 ? initializedHistory : {
+      ...initializedHistory, band_id: 2, current_name: "Roselia", current_members: ["Yukina"],
+      lineup_versions: [{ ...initializedHistory.lineup_versions[0], members: ["Yukina"] }],
+    });
+    render(<BandAdminSection bands={[{ band_id: 1, band_name: "Poppin'Party" }, { band_id: 2, band_name: "Roselia" }]}
+      onMessage={vi.fn()} onBandsChanged={vi.fn()} />);
+    await waitFor(() => expect(screen.getByLabelText("新版本成员（每行一人）")).toHaveValue("Kasumi\nTae"));
+    await user.type(screen.getByLabelText("版本标签"), "旧乐队草稿");
+    await user.type(screen.getByLabelText("备注"), "旧备注");
+    await user.selectOptions(screen.getByLabelText("已有 Band"), "2");
+    await user.click(screen.getByRole("button", { name: "继续编辑" }));
+    expect(screen.getByLabelText("版本标签")).toHaveValue("旧乐队草稿");
+    expect(screen.getByLabelText("已有 Band")).toHaveValue("1");
+    await user.selectOptions(screen.getByLabelText("已有 Band"), "2");
+    await user.click(screen.getByRole("button", { name: "放弃修改" }));
+    await waitFor(() => expect(screen.getByLabelText("新版本成员（每行一人）")).toHaveValue("Yukina"));
+    expect(screen.getByLabelText("版本标签")).toHaveValue("");
+    expect(screen.getByLabelText("生效日期")).toHaveValue("");
+    expect(screen.getByLabelText("备注")).toHaveValue("");
+    expect(apiMocks.createConsoleBandLineupVersion).not.toHaveBeenCalled();
+  });
+
 });
