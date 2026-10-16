@@ -46,7 +46,8 @@ test("creates complete location after preview and retains selection across searc
   await user.selectOptions(screen.getByLabelText("场馆精确时区"), "Asia/Tokyo");
   const dialog = await confirm(user);
   expect(dialog.getByRole("table")).toHaveTextContent("Tokyo address");
-  expect(dialog.getByRole("table")).toHaveTextContent("35.6, 139.7");
+  expect(dialog.getByRole("table")).toHaveTextContent("35.6");
+  expect(dialog.getByRole("table")).toHaveTextContent("139.7");
   expect(api.createConsoleVenue).not.toHaveBeenCalled();
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(api.createConsoleVenue).toHaveBeenCalledWith("New Hall", "csrf", "physical", {

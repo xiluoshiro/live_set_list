@@ -70,7 +70,7 @@ function formatBandSelection(bandIds: number[], bands: BandOption[]): string {
 }
 
 function formatStop(stop: DraftStop): string {
-  return `${stop.live_id} · ${stop.live_date} · ${stop.live_title}${stop.stop_label ? ` · ${stop.stop_label}` : ""}`;
+  return `${stop.live_id} · ${stop.live_date} · ${stop.live_title}`;
 }
 
 function buildTourUpdateChanges(
@@ -107,13 +107,12 @@ function buildTourUpdateChanges(
         before: before ? formatStop(originalStopDetails.get(liveId) as DraftStop) : "-",
         after: after ? formatStop(currentStopDetails.get(liveId) as DraftStop) : "-",
       });
-      continue;
     }
-    if (before.stop_label !== after.stop_label) {
+    if (before?.stop_label !== after?.stop_label) {
       changes.push({
         field: `stops[live_id=${liveId}].stop_label`,
-        before: before.stop_label ?? "-",
-        after: after.stop_label ?? "-",
+        before: before?.stop_label ?? "-",
+        after: after?.stop_label ?? "-",
       });
     }
   }
@@ -520,8 +519,8 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
                   </div>
                   <div className="console-table-wrap console-confirm-setlist-wrap">
                     <table className="console-admin-table console-confirm-setlist-table" aria-label="确认场次">
-                      <thead><tr><th>live_date</th><th>live_id</th><th>short_title</th></tr></thead>
-                      <tbody>{stops.map((stop) => <tr key={stop.live_id}><td>{stop.live_date}</td><td>{stop.live_id}</td><td>{getTourStopShortTitle(stop.live_title, payload.tour_title)}</td></tr>)}</tbody>
+                      <thead><tr><th>live_date</th><th>live_id</th><th>short_title</th><th>stop_label</th></tr></thead>
+                      <tbody>{stops.map((stop) => <tr key={stop.live_id}><td>{stop.live_date}</td><td>{stop.live_id}</td><td>{getTourStopShortTitle(stop.live_title, payload.tour_title)}</td><td>{stop.stop_label || "-"}</td></tr>)}</tbody>
                     </table>
                   </div>
                 </>

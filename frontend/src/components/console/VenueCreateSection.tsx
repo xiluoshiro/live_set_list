@@ -83,8 +83,9 @@ export function VenueCreateSection({ onMessage, onVenuesChanged, initialName = "
   const rows: [string, string][] = [["名称", name.trim()], ["类型", KINDS[kind]]];
   rows.push(["已公布地区", locality ? localityLabel(locality) : "未填写"]);
   rows.push(["场馆精确时区", timezone]);
-  if (physical) rows.push(["公开门牌地址", location.address ?? "未填写"], ["WGS84 坐标", location.latitude === null ? "未填写" : `${location.latitude}, ${location.longitude}`],
-    ["Google Maps 场馆", googlePlace?.name ?? "未关联"]);
+  if (physical) rows.push(["公开门牌地址", location.address ?? "未填写"],
+    ["纬度（WGS84）", String(location.latitude ?? "未填写")], ["经度（WGS84）", String(location.longitude ?? "未填写")],
+    ["Google Maps 详情链接", googlePlace?.provider_url ?? "未关联"], ["Google Maps 平台地点 ID", googlePlace?.provider_place_id ?? "未关联"]);
 
   const submit = async () => {
     if (validation || submittingRef.current) return;

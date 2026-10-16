@@ -15,7 +15,8 @@ import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleChoiceSelect, ConsoleCandidatePager } from "./ConsoleChoiceSelect";
 import { ConsoleEditSelect, resolveConsoleEditSelection } from "./ConsoleEditSelect";
 import { ownershipFields } from "./OwnershipFields";
-import { CoverEditor, coverSummary } from "./CoverEditor";
+import { CoverEditor } from "./CoverEditor";
+import { coverChanges, ownershipChanges } from "./confirmationFields";
 import { coverPayload, coverUrlsError, filledCovers } from "../../albumLinks";
 
 const emptyFields = (): SongVersionDraft => ({ song_name: "", version_label: "", cover_urls: [] });
@@ -24,7 +25,6 @@ const songPayload = (draft: SongVersionDraft): SongVersionDraft => ({ ...draft, 
 const emptyOwner = (): SongOwnership => ({ mode: "pending", band_ids: [], member_groups: [] });
 const ownerFields = (song: SongVersion): SongOwnership => ({ mode: song.ownership.mode, band_ids: song.ownership.band_ids, member_groups: song.ownership.member_groups });
 const groupFields = (group: SongGroup) => ({ group_name: group.group_name.trim(), song_ids: group.versions.map(v => v.song_id) });
-const versionSummary = (group: SongGroup | null) => group?.versions.map(v => `#${v.song_id} ${v.version_label || "默认版本"}`).join(" / ") ?? "";
 type HistoryEntry = { song: SongVersion; action: "create" | "update"; summary: string };
 
 export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, onManage, onSaved, initialSongName }: {
@@ -181,14 +181,16 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const changes = [
       { field: "歌曲名称", before: original?.song_name ?? "", after: draft.song_name },
       { field: "版本标识", before: original?.version_label ?? "", after: draft.version_label },
-      { field: "封面", before: coverSummary(original?.cover_urls ?? []), after: coverSummary(songPayload(draft).cover_urls) },
+      ...coverChanges(original?.cover_urls ?? [], songPayload(draft).cover_urls),
     ].filter(change => creating || change.before !== change.after);
-  if (!creating && ownershipChanged) changes.push(
-    { field: "归属（当前版本）", before: original ? ownershipLabel(original) : "", after: ownerSummary },
-  );
+  if (!creating && original) changes.push(...ownershipChanges(ownerFields(original), ownership, bands, members)
+    .filter(change => change.before !== change.after));
   if (!creating && groupChanged) changes.push(...[
     { field: "歌曲组名称（整组）", before: originalGroup?.group_name ?? "", after: editGroup?.group_name.trim() ?? "" },
-    { field: "版本顺序（整组）", before: versionSummary(originalGroup), after: versionSummary(editGroup) },
+    ...(editGroup?.versions ?? []).map((version, index) => ({
+      field: `版本 #${version.song_id} ${version.version_label || "默认版本"} 顺序`,
+      before: String((originalGroup?.versions.findIndex(item => item.song_id === version.song_id) ?? -1) + 1), after: String(index + 1),
+    })),
   ].filter(change => change.before !== change.after));
   if (!creating && moveTarget.group_id) changes.push(
     { field: "当前版本归组", before: original?.group_name ?? "", after: `${moveTarget.group_name}（移至末尾）` },
@@ -333,8 +335,10 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       {creating ? <CompactConfirmationTable ariaLabel="新增歌曲确认" rows={[
         ["歌曲名称", draft.song_name], ["版本标识", newGroup ? "默认版本" : draft.version_label || "默认版本"],
         ["歌曲组", newGroup ? groupName.trim() || draft.song_name : selectedGroupName],
-        ["封面", coverSummary(songPayload(draft).cover_urls)],
-        ["归属模式", { pending: "待回填", mixed: "乐队与成员", bands: "乐队", members: "成员" }[ownership.mode]], ["归属", ownerSummary],
+        ...coverChanges([], songPayload(draft).cover_urls).map(({ field, after }) => [field, after] as const),
+        ...ownershipChanges(emptyOwner(), ownership, bands, members)
+          .filter(change => change.field === "归属模式" || change.after !== "无")
+          .map(({ field, after }) => [field, after] as const),
       ]} /> : null}
     </ConsoleConfirmDialog>}
   </ConsoleEditorLock>

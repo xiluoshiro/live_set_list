@@ -1,4 +1,5 @@
 import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
+import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
 
 import type { ConsoleBandHistory, ConsoleLiveBandLineupContext } from "../../api";
@@ -190,21 +191,30 @@ export function LiveInsertTab({
             <th>seg</th>
             <th>sub</th>
             <th>song_name</th>
+            <th>short</th>
             <th>band_member</th>
             <th>other_member</th>
+            <th>comment</th>
           </tr>
         </thead>
         <tbody>
-          {setlistParsePreviewRows.map((row) => (
+          {setlistParsePreviewRows.map((row) => {
+            const otherMembers = row.other_member.filter(entry => entry.member_key.trim() || entry.member_value.trim());
+            return (
             <tr key={row.row_key}>
               <td>{row.absolute_order}</td>
               <td>{row.segment_start_type || "-"}</td>
               <td>{row.sub_order}</td>
               <td>{row.song_name}</td>
-              <td><code>{JSON.stringify(row.band_member)}</code></td>
-              <td>{summarizeOtherMember(row)}</td>
+              <td>{row.is_short ? "true" : "false"}</td>
+              <td>{Object.keys(row.band_member).length ? <CompactConfirmationTable rows={Object.entries(row.band_member).map(([band, members]) => [band, members.join(" / ")] as const)} /> : "-"}</td>
+              <td>{otherMembers.length ? <CompactConfirmationTable rows={otherMembers.flatMap((entry, index) => [
+                [`${index + 1}. key`, entry.member_key] as const, [`${index + 1}. value`, entry.member_value] as const,
+              ])} /> : "-"}</td>
+              <td>{row.comment || "-"}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

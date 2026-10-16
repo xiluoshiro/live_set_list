@@ -8,7 +8,8 @@ import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { albumTitle } from "../../albumTitle";
 import { ConsoleCandidatePager } from "./ConsoleChoiceSelect";
 import { ConsoleEditSelect, resolveConsoleEditSelection } from "./ConsoleEditSelect";
-import { CoverEditor, coverSummary } from "./CoverEditor";
+import { CoverEditor } from "./CoverEditor";
+import { coverChanges } from "./confirmationFields";
 import { albumLinksError, coverPayload, filledCovers } from "../../albumLinks";
 import { getTodayDateInputValue } from "./helpers";
 
@@ -22,8 +23,6 @@ const fields = (album: AlbumDetail): AlbumDraft => ({
   tracks: album.tracks.map(t => ({ album_track_id: t.album_track_id, song_id: t.song_id, track_order: t.track_order,
     edition_label: t.edition_label, section_name: t.section_name ?? "" })),
 });
-const trackSummary = (track: AlbumTrackWrite | undefined, label: string) => track
-  ? `${track.section_name ? `${track.section_name} · ` : ""}${track.track_order}. ${label}${track.edition_label ? ` / ${track.edition_label}` : ""}` : "";
 type HistoryEntry = { album: AlbumDetail; action: "create" | "update" };
 const numberTracks = (tracks: AlbumTrackWrite[]) => {
   const counts = new Map<string, number>();
@@ -181,12 +180,17 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     { field: "发行标识", before: original?.release_label ?? "", after: draft.release_label },
     { field: "日期", before: original?.release_date ?? "未知", after: draft.release_date ?? "未知" },
     { field: "专辑页面", before: original?.album_url ?? "", after: draft.album_url ?? "" },
-    { field: "封面", before: coverSummary(original?.cover_urls ?? []), after: coverSummary(payload.cover_urls) },
-    ...Array.from({ length: Math.max(originalTracks.length, draft.tracks.length) }, (_, index) => ({
-      field: `曲目 ${index + 1}`,
-      before: trackSummary(originalTracks[index], originalTracks[index] ? songLabel(originalTracks[index]) : ""),
-      after: trackSummary(draft.tracks[index], draft.tracks[index] ? songLabels[draft.tracks[index].song_id] ?? `#${draft.tracks[index].song_id}` : ""),
-    })),
+    ...coverChanges(original?.cover_urls ?? [], payload.cover_urls),
+    ...Array.from({ length: Math.max(originalTracks.length, draft.tracks.length) }, (_, index) => {
+      const before = originalTracks[index], after = draft.tracks[index];
+      const prefix = `曲目 ${index + 1}`;
+      return [
+        { field: `${prefix} 歌曲`, before: before ? songLabel(before) : "", after: after ? before?.song_id === after.song_id ? songLabel(before) : songLabels[after.song_id] ?? `#${after.song_id}` : "" },
+        { field: `${prefix} 碟号/发行版`, before: before?.section_name ?? "", after: after?.section_name ?? "" },
+        { field: `${prefix} 曲序`, before: before ? String(before.track_order) : "", after: after ? String(after.track_order) : "" },
+        { field: `${prefix} 器乐`, before: before ? before.edition_label || "否" : "", after: after ? after.edition_label || "否" : "" },
+      ];
+    }).flat(),
   ];
   if (!active) return null;
   return <section className="tour-admin-section" aria-label={creating ? "新增专辑" : "专辑管理"}>

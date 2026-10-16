@@ -2,8 +2,6 @@ import { useId } from "react";
 import { AlbumCover } from "../AlbumCover";
 import type { CoverEntry } from "../../api";
 
-export const coverSummary = (covers: CoverEntry[]) => covers.map(({ url, name }, i) => `${i + 1}${i === 0 ? "（默认）" : ""}. ${name ? `${name} · ` : ""}${url}`).join("\n");
-
 export function CoverEditor({ title, covers, locked, onChange }: {
   title: string; covers: CoverEntry[]; locked: boolean; onChange: (covers: CoverEntry[]) => void;
 }) {

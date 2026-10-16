@@ -751,7 +751,7 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "提交插入" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     const nextLineupDialog = screen.getByRole("dialog", { name: /确认新增 Setlist · Live #/ });
-    expect(within(nextLineupDialog).getByText('{"Roselia":["New Member","Old Member"]}')).toBeInTheDocument();
+    expect(nextLineupDialog).toHaveTextContent("New Member / Old Member");
     await user.click(within(nextLineupDialog).getByRole("button", { name: "取消" }));
 
     await user.click(screen.getByRole("button", { name: "1支 / 2人" }));
@@ -876,9 +876,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "解析" }));
     await user.click(screen.getByRole("button", { name: "应用到表格" }));
     const reapplyDialog = screen.getByRole("dialog", { name: "确认应用到表格" });
-    expect(within(reapplyDialog).getByText(
-      '{"Roselia":["Stable Member","New Member"]}',
-    )).toBeInTheDocument();
+    expect(reapplyDialog).toHaveTextContent("Stable Member / New Member");
     await user.click(within(reapplyDialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await user.click(screen.getByRole("button", { name: "1支 / 2人" }));
 

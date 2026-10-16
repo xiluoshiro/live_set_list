@@ -1,6 +1,7 @@
 import { refreshConsoleAfterSave } from "./console/consoleSave";
 import { ConsoleEditorLock } from "./console/ConsoleEditorLock";
 import { ConsoleConfirmDialog } from "./console/ConsoleConfirmDialog";
+import { bandFieldChanges, confirmationFieldChanges } from "./console/confirmationFields";
 import { ConsoleDraftProvider, useConsoleDraftGuard, useConsoleLeaveGuard, type ConsoleLeaveGuard } from "./console/ConsoleDraftGuard";
 import { AlbumAdminSection } from "./console/AlbumAdminSection";
 import { previewConsoleLiveClock } from "../api";
@@ -403,18 +404,7 @@ function formatLivePayloadValue(field: keyof ConsoleLiveUpsertPayload, value: Co
   if ((field === "venue_id" || field === "opening_time" || field === "start_time") && value === null) return "未公布";
   if (field === "default_band_ids") return (value as number[]).join(", ") || "-";
   if (field === "event_status") return EVENT_STATUS_LABELS[(value as EventStatus | undefined) ?? "scheduled"];
-  if (field === "status_note") return formatConfirmationValue(value);
-  if (field === "event_attendees") {
-    return (value as ConsoleLiveUpsertPayload["event_attendees"])
-      .map((attendee) => `${attendee.band_id}: ${attendee.members.join(" / ")}`)
-      .join("; ") || "-";
-  }
-  if (field === "band_lineup_contexts") {
-    return (value as ConsoleLiveBandLineupContext[] | undefined)
-      ?.map((context) => `${context.band_id}:${context.band_name_version_id}/${context.base_lineup_version_id}`)
-      .join("; ") || "-";
-  }
-  return String(value);
+  return formatConfirmationValue(value);
 }
 
 function formatConfirmationValue(value: unknown): string {
@@ -427,12 +417,12 @@ function formatConfirmationValue(value: unknown): string {
   return String(value);
 }
 
-function formatSetlistRowSummary(
-  row: ConsoleLiveSetlistRowPayload,
-  songName: string | undefined,
-): string {
-  const title = songName ? `${row.song_group_id} · ${songName}` : String(row.song_group_id);
-  return `${title}; ${row.segment_type}${row.sub_order}; short=${row.is_short ? "true" : "false"}; 阵容=${formatConfirmationValue(row.band_performances)}; 其他成员=${formatConfirmationValue(row.other_member)}; 备注=${formatConfirmationValue(row.comment)}`;
+function liveConfirmationFields(before: ConsoleLiveUpsertPayload | null, after: ConsoleLiveUpsertPayload): UpdateChange[] {
+  return (Object.keys(after) as Array<keyof ConsoleLiveUpsertPayload>).flatMap((field) => {
+    if (field === "event_attendees") return bandFieldChanges(field, before?.event_attendees ?? [], after.event_attendees);
+    if (field === "band_lineup_contexts") return bandFieldChanges(field, before?.band_lineup_contexts ?? [], after.band_lineup_contexts ?? []);
+    return [{ field, before: before ? formatLivePayloadValue(field, before[field]) : "-", after: formatLivePayloadValue(field, after[field]) }];
+  });
 }
 
 function buildSetlistUpdateChanges(
@@ -442,16 +432,7 @@ function buildSetlistUpdateChanges(
   currentRows: SetlistConfirmRow[],
 ): UpdateChange[] {
   if (original === null) return [];
-  const changes: UpdateChange[] = [];
-  const originalContexts = new Map((original.band_lineup_contexts ?? []).map((context) => [context.band_id, context]));
-  const currentContexts = new Map((current.band_lineup_contexts ?? []).map((context) => [context.band_id, context]));
-  for (const bandId of [...new Set([...originalContexts.keys(), ...currentContexts.keys()])].sort((a, b) => a - b)) {
-    const before = formatConfirmationValue(originalContexts.get(bandId));
-    const after = formatConfirmationValue(currentContexts.get(bandId));
-    if (before !== after) {
-      changes.push({ field: `band_lineup_contexts[band_id=${bandId}]`, before, after });
-    }
-  }
+  const changes = bandFieldChanges("band_lineup_contexts", original.band_lineup_contexts ?? [], current.band_lineup_contexts ?? []);
 
   const originalRows = new Map(original.setlist_rows.map((row) => [row.absolute_order, row]));
   const nextRows = new Map(current.setlist_rows.map((row) => [row.absolute_order, row]));
@@ -469,27 +450,17 @@ function buildSetlistUpdateChanges(
   for (const absoluteOrder of [...new Set([...originalRows.keys(), ...nextRows.keys()])].sort((a, b) => a - b)) {
     const beforeRow = originalRows.get(absoluteOrder);
     const afterRow = nextRows.get(absoluteOrder);
-    if (!beforeRow || !afterRow) {
-      changes.push({
-        field: `setlist_rows[abs=${absoluteOrder}]`,
-        before: beforeRow
-          ? formatSetlistRowSummary(beforeRow, originalSongNames[absoluteOrder])
-          : "-",
-        after: afterRow
-          ? formatSetlistRowSummary(afterRow, nextSongNames.get(absoluteOrder))
-          : "-",
-      });
-      continue;
-    }
     for (const field of rowFields) {
-      const before = field === "song_group_id"
-        ? `${beforeRow.song_group_id}${originalSongNames[absoluteOrder] ? ` · ${originalSongNames[absoluteOrder]}` : ""}`
-        : formatConfirmationValue(beforeRow[field]);
-      const after = field === "song_group_id"
-        ? `${afterRow.song_group_id}${nextSongNames.get(absoluteOrder) ? ` · ${nextSongNames.get(absoluteOrder)}` : ""}`
-        : formatConfirmationValue(afterRow[field]);
-      if (before !== after) {
-        changes.push({ field: `setlist_rows[abs=${absoluteOrder}].${field}`, before, after });
+      const path = `setlist_rows[abs=${absoluteOrder}].${field}`;
+      if (field === "band_performances") {
+        changes.push(...bandFieldChanges(path, beforeRow?.band_performances ?? [], afterRow?.band_performances ?? []));
+      } else if (field === "song_group_id") {
+        changes.push({ field: path,
+          before: beforeRow ? `${beforeRow.song_group_id}${originalSongNames[absoluteOrder] ? ` · ${originalSongNames[absoluteOrder]}` : ""}` : "-",
+          after: afterRow ? `${afterRow.song_group_id}${nextSongNames.get(absoluteOrder) ? ` · ${nextSongNames.get(absoluteOrder)}` : ""}` : "-",
+        });
+      } else {
+        changes.push(...confirmationFieldChanges(path, beforeRow?.[field], afterRow?.[field]));
       }
     }
   }
@@ -2331,13 +2302,8 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
 
     const selectedVenue = venues.find((venue) => venue.venue_id === selectedVenueId);
     const normalizedPayload = normalizeLivePayload(currentLivePayload);
-    const fields = Object.keys(normalizedPayload) as Array<keyof ConsoleLiveUpsertPayload>;
     const changes = action === "update" && editingLiveId !== null && originalLivePayload !== null
-      ? fields.flatMap((field) => {
-          const before = formatLivePayloadValue(field, originalLivePayload[field]);
-          const after = formatLivePayloadValue(field, normalizedPayload[field]);
-          return before === after ? [] : [{ field, before, after }];
-        })
+      ? liveConfirmationFields(originalLivePayload, normalizedPayload)
       : [];
     setConfirmationError("");
     setPendingConfirmation({
@@ -2642,24 +2608,9 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
           ) : (
             <CompactConfirmationTable
               rows={[
-              ["live_date", payload.live_date],
-              ["live_title", payload.live_title],
-              ["live_type", formatLiveType(payload.live_type)],
-              ["url", payload.url],
-              ["opening_time", payload.opening_time ?? "未公布"],
-              ["start_time", payload.start_time ?? "未公布"],
-              ["timezone", currentTimezoneLabel],
-              ["venue_id", payload.venue_id ?? "未公布"],
+              ...liveConfirmationFields(null, payload).map(({ field, after }) => [field, field === "live_type" ? formatLiveType(payload.live_type) : after] as const),
+              ["时间基准", currentTimezoneLabel],
               ["venue_name", pendingConfirmation.venueName],
-              ["default_band_ids", payload.default_band_ids.join(", ") || "-"],
-              [
-                "event_attendees",
-                payload.event_attendees
-                  .map((attendee) => `${attendee.band_id}: ${attendee.members.join(" / ")}`)
-                  .join("; ") || "-",
-              ],
-              ["event_status", EVENT_STATUS_LABELS[payload.event_status ?? "scheduled"]],
-              ["status_note", payload.status_note],
               ]}
             />
           )}
@@ -2668,13 +2619,10 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
               提示：当前 Live 类型为活动，且未选择默认乐队，请确认是否需要补充。
             </p>
           )}
-          {pendingConfirmation.scheduleChangeKind && (
-            <p className="console-admin-hint" role="status">
-              本次排期变化：
-              {pendingConfirmation.scheduleChangeKind === "correction" ? "资料修正" : "主办方正式改期"}
-              {pendingConfirmation.scheduleChangeNote ? `（${pendingConfirmation.scheduleChangeNote}）` : ""}
-            </p>
-          )}
+          {pendingConfirmation.scheduleChangeKind && <CompactConfirmationTable rows={[
+            ["排期变化类型", pendingConfirmation.scheduleChangeKind === "correction" ? "资料修正" : "主办方正式改期"],
+            ["排期变化说明", pendingConfirmation.scheduleChangeNote || "-"],
+          ]} />}
           {(payload.event_status === "cancelled" || payload.event_status === "postponed")
             && (editingLiveHasSetlist || hasExistingSetlist) && (
             <p className="console-admin-hint console-admin-warning" role="alert">
@@ -2737,36 +2685,13 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
             ["setlist_rows", pendingConfirmation.previewRows.length],
           ]}
         />
-        <div className="console-table-wrap console-confirm-setlist-wrap">
-          <table className="console-admin-table console-confirm-setlist-table">
-            <thead>
-              <tr>
-                <th>abs</th>
-                <th>song_group_id</th>
-                <th>song_name</th>
-                <th>seg</th>
-                <th>sub</th>
-                <th>short</th>
-                <th>band_member</th>
-                <th>other_member</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pendingConfirmation.previewRows.map((row) => (
-                <tr key={row.absolute_order}>
-                  <td>{row.absolute_order}</td>
-                  <td>{row.song_group_id}</td>
-                  <td>{row.song_name}</td>
-                  <td>{row.segment_type}</td>
-                  <td>{row.sub_order}</td>
-                  <td>{row.is_short ? "true" : "false"}</td>
-                  <td><code>{JSON.stringify(row.band_member)}</code></td>
-                  <td><code>{JSON.stringify(row.other_member ?? {})}</code></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <CompactConfirmationTable ariaLabel="新增 Setlist 确认" rows={[
+          ...bandFieldChanges("band_lineup_contexts", [], pendingConfirmation.payload.band_lineup_contexts ?? []),
+          ...pendingConfirmation.previewRows.flatMap(({ band_performances, ...row }) => [
+            ...confirmationFieldChanges(`setlist_rows[abs=${row.absolute_order}]`, undefined, row),
+            ...bandFieldChanges(`setlist_rows[abs=${row.absolute_order}].band_performances`, [], band_performances),
+          ]),
+        ].map(({ field, after }) => [field, after] as const)} />
       </>
     );
   };

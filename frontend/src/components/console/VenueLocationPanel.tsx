@@ -151,10 +151,15 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
   const locationChanges = (before: VenueLocation, after: VenueLocationWrite): UpdateChange[] => [
     { field: "地区", before: before.locality ? cityLabel(before.locality) : "未填写", after: selectedCity ? cityLabel(selectedCity) : "未填写" },
     { field: "地址", before: before.address ?? "未填写", after: after.address ?? "未填写" },
-    { field: "坐标", before: pointLabel(before), after: pointLabel(after) },
+    { field: "纬度（WGS84）", before: String(before.latitude ?? "未填写"), after: String(after.latitude ?? "未填写") },
+    { field: "经度（WGS84）", before: String(before.longitude ?? "未填写"), after: String(after.longitude ?? "未填写") },
     { field: "时区", before: before.timezone_id ?? "未填写", after: after.timezone_id ?? "未填写" },
-    { field: "Google Maps 场馆", before: before.map_links.find(link => link.provider === "google")?.provider_url ?? "未关联", after: after.google_place?.provider_url ?? "未关联" },
+    ...mapLinkChanges(before, "google", after.google_place?.provider_url, after.google_place?.provider_place_id),
   ].filter(change => change.before !== change.after);
+  const mapLinkChanges = (before: VenueLocation, provider: MapProvider, url?: string | null, placeId?: string | null): UpdateChange[] => [
+    { field: `${PROVIDERS[provider]} 详情链接`, before: before.map_links.find(link => link.provider === provider)?.provider_url ?? "未关联", after: url ?? "未关联" },
+    { field: `${PROVIDERS[provider]} 平台地点 ID`, before: before.map_links.find(link => link.provider === provider)?.provider_place_id ?? "未关联", after: placeId ?? "未关联" },
+  ];
   const kindLabel = (value: string) => value === "physical" ? "实体场馆" : value === "online" ? "线上" : "未公开";
   const previewEdit = () => perform(async () => {
     if (!data || !detail) return;
@@ -273,11 +278,9 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
           <button className="console-submit-btn" type="button" disabled={busy || dirty || !selectedMapCandidate} onClick={() => {
             if (!selectedMapCandidate) return;
             const candidate = selectedMapCandidate; const selectedProvider = provider; const stateToken = data.state_token;
-            setConfirmation({ title: "确认更新地图关联", changes: [{ field: PROVIDERS[selectedProvider],
-              before: data.map_links.find(link => link.provider === selectedProvider)?.provider_url ?? "未关联", after: candidate.provider_url }], rows: [
+            setConfirmation({ title: "确认更新地图关联", changes: mapLinkChanges(data, selectedProvider, candidate.provider_url, candidate.provider_place_id), rows: [
               ["地图", PROVIDERS[selectedProvider]], ["候选地点", candidate.name], ["候选地址", candidate.address || "未提供"],
-              ["候选 WGS84 坐标", `${candidate.latitude}, ${candidate.longitude}`], ["与已保存坐标距离", `${candidate.distance_m} m`],
-              ["平台地点 ID", candidate.provider_place_id],
+              ["候选纬度（WGS84）", candidate.latitude], ["候选经度（WGS84）", candidate.longitude], ["与已保存坐标距离", `${candidate.distance_m} m`],
             ], run: async () => {
               const saved = await saveConsoleVenueMapLink(venueId, selectedProvider, {
                 provider_place_id: candidate.provider_place_id, provider_url: candidate.provider_url,
@@ -310,8 +313,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
           <button className="console-submit-btn" type="button" disabled={busy || dirty || data.latitude === null || !mapUrl.trim()} onClick={() => {
             setMessage("");
             const url = mapUrl.trim(); const selectedProvider = provider; const stateToken = data.state_token;
-            setConfirmation({ title: "确认更新地图关联", changes: [{ field: PROVIDERS[selectedProvider],
-              before: data.map_links.find(link => link.provider === selectedProvider)?.provider_url ?? "未关联", after: url }], rows: [["地图", PROVIDERS[selectedProvider]], ["已保存坐标", pointLabel(data)], ["详情链接", url]], run: async () => {
+            setConfirmation({ title: "确认更新地图关联", changes: mapLinkChanges(data, selectedProvider, url), rows: [["地图", PROVIDERS[selectedProvider]], ["已保存坐标", pointLabel(data)]], run: async () => {
               const saved = await saveConsoleVenueMapLink(venueId, selectedProvider, { provider_url: url }, stateToken, auth.csrfToken ?? "");
               if (alive.current) { setData(saved); setMapUrl(""); setMessage("地图关联已保存。"); }
             } });
@@ -319,8 +321,7 @@ export function VenueLocationPanel({ venueId, venueName, venueKind: savedKind, d
           <button className="console-ghost-btn" type="button" disabled={busy || dirty || !data.map_links.find(link => link.provider === provider)?.verified_at} onClick={() => {
             setMessage("");
             const selectedProvider = provider; const stateToken = data.state_token;
-            setConfirmation({ title: "确认取消地图关联", changes: [{ field: PROVIDERS[selectedProvider],
-              before: data.map_links.find(link => link.provider === selectedProvider)?.provider_url ?? "未关联", after: "未关联" }], rows: [["地图", PROVIDERS[selectedProvider]], ["结果", "保留场馆坐标，可继续按坐标打开"]], confirmLabel: "取消关联", run: async () => {
+            setConfirmation({ title: "确认取消地图关联", changes: mapLinkChanges(data, selectedProvider), rows: [["地图", PROVIDERS[selectedProvider]], ["结果", "保留场馆坐标，可继续按坐标打开"]], confirmLabel: "取消关联", run: async () => {
               const saved = await deleteConsoleVenueMapLink(venueId, selectedProvider, stateToken, auth.csrfToken ?? "");
               if (alive.current) { setData(saved); setMessage("地图关联已取消。"); }
             } });
