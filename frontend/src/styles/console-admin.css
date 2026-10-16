@@ -485,7 +485,8 @@
   background: var(--accent-primary-hover);
 }
 
-.tour-admin-section {
+.tour-admin-section,
+.tour-admin-section > .console-editor-fields {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
