@@ -19,8 +19,8 @@ import { CoverEditor } from "./CoverEditor";
 import { coverChanges, ownershipChanges } from "./confirmationFields";
 import { coverPayload, coverUrlsError, filledCovers } from "../../albumLinks";
 
-const emptyFields = (): SongVersionDraft => ({ song_name: "", version_label: "", cover_urls: [] });
-const songFields = (song: SongVersion): SongVersionDraft => ({ song_name: song.song_name, version_label: song.version_label, cover_urls: [...song.cover_urls] });
+const emptyFields = (): SongVersionDraft => ({ version_label: "", cover_urls: [] });
+const songFields = (song: SongVersion): SongVersionDraft => ({ version_label: song.version_label, cover_urls: [...song.cover_urls] });
 const songPayload = (draft: SongVersionDraft): SongVersionDraft => ({ ...draft, cover_urls: coverPayload(draft.cover_urls) });
 const emptyOwner = (): SongOwnership => ({ mode: "pending", band_ids: [], member_groups: [] });
 const ownerFields = (song: SongVersion): SongOwnership => ({ mode: song.ownership.mode, band_ids: song.ownership.band_ids, member_groups: song.ownership.member_groups });
@@ -34,7 +34,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
 }) {
   const { csrfToken } = useAuth();
   const formId = useId();
-  const [createDraft, setCreateDraft] = useState(() => ({ ...emptyFields(), song_name: initialSongName ?? "" }));
+  const [createDraft, setCreateDraft] = useState(emptyFields);
   const [editDraft, setEditDraft] = useState(emptyFields);
   const [owner, setOwner] = useState<SongOwnership>(emptyOwner);
   const [createOwner, setCreateOwner] = useState<SongOwnership>(emptyOwner);
@@ -45,7 +45,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const [editorGeneration, setEditorGeneration] = useState(0);
   const [newGroup, setNewGroup] = useState(true);
   const [groupRevision, setGroupRevision] = useState<number | null>(null);
-  const [groupName, setGroupName] = useState("");
+  const [groupName, setGroupName] = useState(initialSongName ?? "");
   const [groupId, setGroupId] = useState<number | null>(null);
   const [selectedGroupName, setSelectedGroupName] = useState("");
   const [groupQuery, setGroupQuery] = useState("");
@@ -160,7 +160,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         } : null,
       } : null;
       if (!creating && !editPayload) return;
-      const payload = creating ? { ...songPayload(draft), version_label: newGroup ? "" : draft.version_label, ownership, ...(newGroup ? { group_name: groupName.trim() || draft.song_name } : { group_id: groupId, expected_group_revision: groupRevision }) }
+      const payload = creating ? { ...songPayload(draft), version_label: newGroup ? "" : draft.version_label, ownership, ...(newGroup ? { group_name: groupName.trim() } : { group_id: groupId, expected_group_revision: groupRevision }) }
         : editPayload;
       const result = await songCatalogWrite<SongEditMutation>(path, creating ? "POST" : "PUT", payload, csrfToken);
       setHistory(value => [...value, { song: result.item, action: creating ? "create" : "update", summary: creating ? "新增歌曲" : changes.map(change => change.field).join("、") }]);
@@ -179,7 +179,6 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     ...ownership.member_groups.map(g => `${bands.find(b => b.band_id === g.band_id)?.band_name ?? `#${g.band_id}`}：${g.member_ids.map(id => members.find(m => m.member_id === id)?.display_name ?? `#${id}`).join("、")}`),
   ].join(" / ");
   const changes = [
-      { field: "歌曲名称", before: original?.song_name ?? "", after: draft.song_name },
       { field: "版本标识", before: original?.version_label ?? "", after: draft.version_label },
       ...coverChanges(original?.cover_urls ?? [], songPayload(draft).cover_urls),
     ].filter(change => creating || change.before !== change.after);
@@ -200,9 +199,6 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const fieldsDisabled = busy || confirm || candidatesLoading;
   const { bandOptions, hasBands, hasMembers, ownershipModeField, bandPicker, memberBandPicker, memberPickers } =
     ownershipFields(ownership, bands, members, fieldsDisabled, setOwnership);
-  const songNameField = <input aria-label="歌曲名称" disabled={fieldsDisabled} value={draft.song_name}
-    placeholder="请输入歌曲名称"
-    onChange={event => setDraft({ ...draft, song_name: event.target.value })} />;
   const versionField = <input aria-label="版本标识" disabled={fieldsDisabled || (creating && newGroup) || (!creating && original?.version_label === "")}
     placeholder={(creating && newGroup) || (!creating && original?.version_label === "") ? "默认版本" : "请输入版本标识"}
     value={creating && newGroup ? "" : draft.version_label} onChange={event => setDraft({ ...draft, version_label: event.target.value })} />;
@@ -210,7 +206,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     {creating && <label className="live-clear-after-create-option"><input type="checkbox" disabled={busy}
       checked={clearAfterCreate} onChange={event => setClearAfterCreate(event.target.checked)} />新增后清空数据</label>}
     <button type="button" className="console-ghost-btn" disabled={fieldsDisabled} onClick={() => { creating ? clear() : restore(original!); setError(""); setMessage(""); }}>{creating ? "清空数据" : "恢复原值"}</button>
-    <button type="button" className="console-submit-btn" disabled={fieldsDisabled || !draft.song_name.trim() || !ownerValid ||
+    <button type="button" className="console-submit-btn" disabled={fieldsDisabled || (creating && newGroup && !groupName.trim()) || !ownerValid ||
       (!creating && (!changed || !editGroup?.group_name.trim() ||
         (!!moveTarget.group_id && (!moveTarget.expected_revision || !moveTarget.reason.trim())))) || (creating && !newGroup && (!groupId || !groupRevision))}
       onClick={() => {
@@ -274,19 +270,19 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       <div className="console-table-wrap">
         <table className="console-admin-table song-create-form-table" data-ownership={ownership.mode} aria-label="新增歌曲资料">
           <colgroup>
-            <col /><col className="song-create-version-column" />{newGroup && <col />}
+            {newGroup && <col />}<col className="song-create-version-column" />
             <col className="song-create-mode-column" />
             {hasBands && <col className="song-create-band-column" />}
             {hasMembers && <col className="song-create-members-column" />}
           </colgroup>
           <thead><tr>
-            <th scope="col">歌曲名称</th><th scope="col">版本标识</th>{newGroup && <th scope="col">歌曲组名称</th>}
+            {newGroup && <th scope="col">歌曲名称</th>}<th scope="col">版本标识</th>
             <th scope="col">归属模式</th>{hasBands && <th scope="col">归属乐队</th>}{hasMembers && <th scope="col">成员所属乐队</th>}
           </tr></thead>
           <tbody><tr>
-            <td>{songNameField}</td><td>{versionField}</td>
-            {newGroup && <td><input aria-label="歌曲组名称" disabled={fieldsDisabled} value={groupName}
-              placeholder="默认使用歌曲名称" onChange={event => setGroupName(event.target.value)} /></td>}
+            {newGroup && <td><input aria-label="歌曲名称" disabled={fieldsDisabled} value={groupName}
+              placeholder="请输入歌曲名称" onChange={event => setGroupName(event.target.value)} /></td>}
+            <td>{versionField}</td>
             <td>{ownershipModeField}</td>{hasBands && <td>{bandPicker}</td>}
             {hasMembers && <td>{memberBandPicker}</td>}
           </tr></tbody>
@@ -298,9 +294,9 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       {formActions}
     </div> : original && <>
       <div className="console-table-wrap"><table className="console-admin-table song-edit-form-table" aria-label="歌曲资料">
-        <colgroup><col className="song-edit-id-column" /><col /><col className="song-create-version-column" /><col /></colgroup>
-        <thead><tr><th scope="col">song_id</th><th scope="col">歌曲名称</th><th scope="col">版本标识</th><th scope="col">所属歌曲组</th></tr></thead>
-        <tbody><tr><td><span className="readonly-cell">{original.song_id}</span></td><td>{songNameField}</td><td>{versionField}</td><td>{editGroup?.group_name ?? original.group_name}</td></tr></tbody>
+        <colgroup><col className="song-edit-id-column" /><col className="song-create-version-column" /><col /></colgroup>
+        <thead><tr><th scope="col">song_id</th><th scope="col">版本标识</th><th scope="col">所属歌曲组</th></tr></thead>
+        <tbody><tr><td><span className="readonly-cell">{original.song_id}</span></td><td>{versionField}</td><td>{editGroup?.group_name ?? original.group_name}</td></tr></tbody>
       </table></div>
       <CoverEditor title="歌曲封面" covers={draft.cover_urls} locked={fieldsDisabled}
         onChange={cover_urls => setDraft({ ...draft, cover_urls })} />
@@ -333,8 +329,8 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       changes={creating ? undefined : changes} changesLabel="歌曲修改内容" busy={busy} error={error} confirmLabel={creating ? "确认提交" : "确认更新"}
       onClose={() => setConfirm(false)} onConfirm={submit}>
       {creating ? <CompactConfirmationTable ariaLabel="新增歌曲确认" rows={[
-        ["歌曲名称", draft.song_name], ["版本标识", newGroup ? "默认版本" : draft.version_label || "默认版本"],
-        ["歌曲组", newGroup ? groupName.trim() || draft.song_name : selectedGroupName],
+        ["歌曲名称", newGroup ? groupName.trim() : selectedGroupName],
+        ["版本标识", newGroup ? "默认版本" : draft.version_label || "默认版本"],
         ...coverChanges([], songPayload(draft).cover_urls).map(({ field, after }) => [field, after] as const),
         ...ownershipChanges(emptyOwner(), ownership, bands, members)
           .filter(change => change.field === "归属模式" || change.after !== "无")

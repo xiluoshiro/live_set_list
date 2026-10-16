@@ -21,7 +21,7 @@ def directory_matches(
     pattern = "%" + normalize_song_lookup_text(q).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
     predicates = []
     params: list[object] = []
-    for column in ("g.group_name", "s.song_name", "s.version_label", "b.band_name"):
+    for column in ("g.group_name", "s.version_label", "b.band_name"):
         expression, normalization_params = song_lookup_sql(column)
         predicate = f"{expression} ILIKE %s"
         if column == "b.band_name":

@@ -90,7 +90,6 @@ class CoverFields(CatalogModel):
 
 
 class VersionFields(CoverFields):
-    song_name: str = Field(min_length=1, max_length=255)
     version_label: str = Field(default="", max_length=255)
 
 
@@ -259,6 +258,7 @@ SongDisplayCover = Annotated[SongOwnCover | SongAlbumCover, Field(discriminator=
 
 
 class SongVersion(VersionFields):
+    song_name: str = Field(description="Song title derived from the owning group")
     version_order: int
     song_id: int
     group_id: int

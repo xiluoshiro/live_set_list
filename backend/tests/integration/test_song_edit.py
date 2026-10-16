@@ -10,7 +10,7 @@ pytestmark = pytest.mark.integration
 
 def make_group(client, headers, name):
     response = client.post('/api/console/song-groups', headers=headers, json={
-        'group_name': name, 'song_name': name, 'ownership': {'mode': 'bands', 'band_ids': [1]},
+        'group_name': name, 'ownership': {'mode': 'bands', 'band_ids': [1]},
     })
     assert response.status_code == 201, response.text
     return response.json()['item']
@@ -19,7 +19,7 @@ def make_group(client, headers, name):
 def add_version(client, headers, group_id, label):
     group = client.get(f'/api/song-groups/{group_id}').json()
     response = client.post('/api/console/songs', headers=headers, json={
-        'group_id': group_id, 'expected_group_revision': group['revision'], 'song_name': '版本歌曲',
+        'group_id': group_id, 'expected_group_revision': group['revision'],
         'version_label': label, 'ownership': {'mode': 'bands', 'band_ids': [1]},
     })
     assert response.status_code == 201, response.text
@@ -30,7 +30,7 @@ def edit_payload(client, song_id):
     song = client.get(f'/api/songs/{song_id}').json()
     group = client.get(f"/api/song-groups/{song['group_id']}").json()
     return {
-        'song_name': song['song_name'], 'version_label': song['version_label'], 'cover_urls': song['cover_urls'],
+        'version_label': song['version_label'], 'cover_urls': song['cover_urls'],
         'expected_revision': song['revision'],
         'ownership': {key: song['ownership'][key] for key in ('mode', 'band_ids', 'member_groups')},
         'group': {'group_id': group['group_id'], 'group_name': group['group_name'],
@@ -44,7 +44,7 @@ def audit_count(conn, song_id):
         return cur.fetchone()[0]
 
 
-# 测试点：整页保存原子更新资料、归属及命名封面，公开读取一致且重试不能重复审计。
+# 测试点：整页保存组名、归属及封面后，全部版本和专辑曲目统一使用组名，重试不重复审计。
 def test_whole_page_save_updates_public_references_once(integration_test_client, integration_admin_connection):
     client = integration_test_client
     headers = auth(client)
@@ -55,7 +55,7 @@ def test_whole_page_save_updates_public_references_once(integration_test_client,
         'album_name': '引用专辑', 'tracks': [{'song_id': sid}],
     }).json()
     payload = edit_payload(client, sid)
-    payload.update(song_name='全局新名称', cover_urls=[{'url': 'https://example.test/cover.png', 'name': '通常盤'}],
+    payload.update(cover_urls=[{'url': 'https://example.test/cover.png', 'name': '通常盤'}],
                    ownership={'mode': 'bands', 'band_ids': [2]})
     payload['group']['group_name'] = '全局新组名'
     payload['group']['song_ids'].reverse()
@@ -68,8 +68,11 @@ def test_whole_page_save_updates_public_references_once(integration_test_client,
     assert saved['item']['ownership']['band_ids'] == [2]
     assert saved['item']['cover_urls'] == payload['cover_urls']
     assert client.get(f'/api/songs/{sid}').json() == saved['item']
-    assert client.get(f"/api/albums/{album['album_id']}").json()['tracks'][0]['song_name'] == '全局新名称'
-    assert client.get(f"/api/songs/{sibling['song_id']}").json()['song_name'] == '版本歌曲'
+    assert client.get(f"/api/albums/{album['album_id']}").json()['tracks'][0]['song_name'] == '全局新组名'
+    assert client.get(f"/api/songs/{sibling['song_id']}").json()['song_name'] == '全局新组名'
+    assert [item['song_id'] for item in client.get('/api/console/songs?q=全局新组名').json()['items']] == [sid, sibling['song_id']]
+    assert client.get('/api/catalog/search?q=全局新组名').json()['songs'][0]['song_name'] == '全局新组名'
+    assert client.get('/api/song-groups?q=全局新组名').json()['items'][0]['matched_song_ids'] == [sibling['song_id'], sid]
     assert audit_count(integration_admin_connection, sid) == 1
     with integration_admin_connection.cursor() as cur:
         cur.execute("SELECT payload_json FROM audit_logs WHERE action = 'song_edit' AND resource_id = %s", (str(sid),))
@@ -91,7 +94,7 @@ def test_failed_combined_save_leaves_no_partial_changes(integration_test_client,
     sid = song['song_id']
     before = client.get(f"/api/song-groups/{song['group_id']}").json()
     payload = edit_payload(client, sid)
-    payload.update(song_name='不应保存', ownership={'mode': 'bands', 'band_ids': [2]})
+    payload.update(ownership={'mode': 'bands', 'band_ids': [2]})
     payload['group']['group_name'] = '不应保存的组名'
     payload['group']['song_ids'].reverse()
     status = 422
@@ -114,6 +117,7 @@ def test_failed_combined_save_leaves_no_partial_changes(integration_test_client,
     assert audit_count(integration_admin_connection, sid) == 0
 
 
+# 测试点：移组后版本继承目标组名称，原组更名与移动一起提交且保留默认项。
 def test_move_and_source_group_changes_commit_together(integration_test_client):
     client = integration_test_client
     headers = auth(client)
@@ -122,7 +126,6 @@ def test_move_and_source_group_changes_commit_together(integration_test_client):
     destination = make_group(client, headers, '目标组')
     sid = song['song_id']
     payload = edit_payload(client, sid)
-    payload['song_name'] = '移动后的名称'
     payload['group']['group_name'] = '原组新名称'
     payload['move_to_group'] = {'group_id': destination['group_id'], 'expected_revision': 1, 'reason': '修正归组'}
     stale = copy.deepcopy(payload)
@@ -133,6 +136,7 @@ def test_move_and_source_group_changes_commit_together(integration_test_client):
     assert result.status_code == 200, result.text
     saved = result.json()
     assert saved['item']['group_id'] == destination['group_id']
+    assert saved['item']['song_name'] == '目标组'
     assert saved['item']['version_order'] == 2
     assert saved['group']['revision'] == 2
     old_group = client.get(f"/api/song-groups/{source['group_id']}").json()
@@ -148,7 +152,7 @@ def test_move_and_source_group_changes_commit_together(integration_test_client):
 
 # 测试点：旧移组留下序号空缺后，资料或组名修改仍可保存且保留全部版本序号。
 @pytest.mark.parametrize(('field', 'version_index'), [
-    ('song_name', 1), ('song_name', 2), ('version_label', 2),
+    ('group_name', 1), ('version_label', 2),
     ('cover_urls', 2), ('ownership', 2), ('group_name', 2),
 ])
 def test_metadata_edit_preserves_gapped_version_order(integration_test_client, field, version_index):
@@ -197,7 +201,7 @@ def test_metadata_edit_preserves_gapped_version_order(integration_test_client, f
         ]
 
 
-# 测试点：仅改名称会保存并增加歌曲 revision，省略封面保留名称且审计记录实际保存内容。
+# 测试点：修改组名会更新派生名称，省略封面时保留封面名称并审计实际保存内容。
 def test_name_only_edit_and_omitted_covers(integration_test_client, integration_admin_connection):
     client = integration_test_client
     headers = auth(client)
@@ -214,7 +218,7 @@ def test_name_only_edit_and_omitted_covers(integration_test_client, integration_
         assert saved['display_cover']['name'] == name
         payload = edit_payload(client, sid)
         del payload['cover_urls']
-        payload['song_name'] += '改'
+        payload['group']['group_name'] += '改'
         result = client.put(f'/api/console/songs/{sid}/edit', headers=headers, json=payload)
         assert result.status_code == 200, result.text
         assert result.json()['item']['cover_urls'] == saved['cover_urls']

@@ -77,11 +77,11 @@ def build_live_where(filters: LiveListFilters) -> tuple[str, list[object]]:
                 OR EXISTS (
                     SELECT 1
                     FROM live_setlist filter_setlist
-                    LEFT JOIN song_list filter_song
-                        ON filter_song.id = filter_setlist.song_id
+                    LEFT JOIN song_groups filter_song
+                        ON filter_song.id = filter_setlist.song_group_id
                     WHERE filter_setlist.live_id = l.id
                       AND (
-                          filter_song.song_name ILIKE %s ESCAPE '\\'
+                          filter_song.group_name ILIKE %s ESCAPE '\\'
                       )
                 )
                 OR EXISTS (

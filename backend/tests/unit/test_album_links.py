@@ -21,7 +21,7 @@ def test_album_links_preserve_urls_and_defaults():
 
 
 # 测试点：歌曲各写入口与专辑拒绝危险协议、凭据、控制字符、空值或超长地址，并定位出错的封面。
-@pytest.mark.parametrize("model,fields", [(AlbumWrite, {"album_name": "盘"}), (GroupCreate, {"song_name": "曲", "group_name": "曲", "ownership": {"mode": "pending"}}), (VersionCreate, {"song_name": "曲", "group_id": 1, "expected_group_revision": 1, "ownership": {"mode": "pending"}}), (VersionUpdate, {"song_name": "曲", "expected_revision": 1})])
+@pytest.mark.parametrize("model,fields", [(AlbumWrite, {"album_name": "盘"}), (GroupCreate, {"group_name": "曲", "ownership": {"mode": "pending"}}), (VersionCreate, {"group_id": 1, "expected_group_revision": 1, "ownership": {"mode": "pending"}}), (VersionUpdate, {"expected_revision": 1})])
 @pytest.mark.parametrize("url", [
     "http://example.test/a", "//example.test/a", "data:image/png;base64,abc", "javascript:alert(1)",
     "file:///a.png", "https://", "https://user:pass@example.test/a", "https://@example.test/a",

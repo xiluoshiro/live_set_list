@@ -22,7 +22,7 @@ def test_song_ownership_is_consistent_across_catalog_surfaces(integration_test_c
     owner = {"mode": mode, "band_ids": [2, 1] if mode in {"bands", "mixed"} else [],
              "member_groups": [{"band_id": 1, "member_ids": member_ids[::-1]}] if mode in {"members", "mixed"} else []}
     created = client.post("/api/console/song-groups", headers=headers, json={
-        "song_name": "统一归属曲", "group_name": "统一归属曲", "ownership": owner,
+        "group_name": "统一归属曲", "ownership": owner,
     })
     assert created.status_code == 201, created.text
     song = created.json()["item"]
@@ -56,7 +56,7 @@ def test_group_version_roundtrip_and_conflict(integration_test_client):
     client = integration_test_client
     headers = auth(client)
     result = client.post("/api/console/song-groups", headers=headers, json={
-        "group_name": "合唱曲", "song_name": "合唱曲", "version_label": "",
+        "group_name": "合唱曲", "version_label": "",
         "ownership": {"mode": "bands", "band_ids": [1, 2, 3]},
     })
     assert result.status_code == 201, result.text
@@ -68,10 +68,10 @@ def test_group_version_roundtrip_and_conflict(integration_test_client):
     search_item = client.get("/api/catalog/search?q=合唱曲").json()["songs"][0]
     assert search_item["ownership"]["band_ids"] == [1, 2, 3]
     assert any(item["song_id"] == sid for item in client.get("/api/console/songs?q=合唱曲").json()["items"])
-    payload = {"song_name": "新曲名", "expected_revision": song["revision"]}
+    payload = {"cover_urls": ["https://example.test/song.png"], "expected_revision": song["revision"]}
     assert client.put(f"/api/console/songs/{sid}", headers=headers, json=payload).status_code == 200
     assert client.put(f"/api/console/songs/{sid}", headers=headers, json=payload).status_code == 409
-    assert client.get(f"/api/songs/{sid}").json()["song_name"] == "新曲名"
+    assert client.get(f"/api/songs/{sid}").json()["cover_urls"] == [{"url": "https://example.test/song.png", "name": ""}]
 
 
 # 测试点：Instrumental 和通常版使用同一 song_id，曲序仅专辑内唯一，日期允许未知。
@@ -110,7 +110,7 @@ def test_member_ownership_and_atomic_failure(integration_test_client):
     headers = auth(client)
     member = client.post("/api/console/members", headers=headers, json={"display_name": "新成员"}).json()
     assert member["member_id"] >= 68
-    payload = {"group_name": "成员曲", "song_name": "成员曲", "ownership": {
+    payload = {"group_name": "成员曲", "ownership": {
         "mode": "members", "member_groups": [{"band_id": 1, "member_ids": [member["member_id"]]}]}}
     response = client.post("/api/console/song-groups", headers=headers, json=payload)
     assert response.status_code == 201, response.text
@@ -131,7 +131,7 @@ def test_catalog_access_and_exclusive_modes(integration_test_client):
     assert client.get("/api/song-groups").status_code == 200
     assert client.post("/api/console/song-groups", json={}).status_code == 401
     headers = auth(client)
-    payload = {"group_name": "非法", "song_name": "非法", "ownership": {"mode": "bands", "band_ids": [1],
+    payload = {"group_name": "非法", "ownership": {"mode": "bands", "band_ids": [1],
                "member_groups": [{"band_id": 2, "member_ids": [1]}]}}
     assert client.post("/api/console/song-groups", headers=headers, json=payload).status_code == 422
     payload["ownership"] = {"mode": "pending"}
@@ -207,7 +207,7 @@ def test_version_order_move_and_album_track_identity(integration_test_client):
     client = integration_test_client
     headers = auth(client)
     group = client.get("/api/song-groups/1").json()
-    payload = {"group_id": 1, "expected_group_revision": group["revision"], "song_name": "限定版",
+    payload = {"group_id": 1, "expected_group_revision": group["revision"],
                "version_label": "限定版", "ownership": {"mode": "pending"}}
     created = client.post("/api/console/songs", headers=headers, json=payload)
     assert created.status_code == 201, created.text
@@ -259,7 +259,7 @@ def test_mixed_version_uses_group_history_and_default(integration_test_client, i
     })
     assert response.status_code == 200, response.text
     response = client.post("/api/console/songs", headers=headers, json={
-        "group_id": 1, "expected_group_revision": 1, "song_name": "合作版名称", "version_label": "合作版",
+        "group_id": 1, "expected_group_revision": 1, "version_label": "合作版",
         "ownership": {"mode": "mixed", "band_ids": [2], "member_groups": [{"band_id": 3, "member_ids": [member["member_id"]]}]},
     })
     assert response.status_code == 201, response.text

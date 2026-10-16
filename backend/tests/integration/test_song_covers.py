@@ -15,7 +15,7 @@ def test_song_covers_roundtrip_and_default_group(integration_test_client):
     covers = [{"url": "https://example.test/song-b.png", "name": "正面"},
               {"url": "https://example.test/song-a.png", "name": "背面"}]
     response = client.post("/api/console/song-groups", headers=headers, json={
-        "group_name": "歌曲封面验收", "song_name": "歌曲封面验收", "ownership": {"mode": "pending"},
+        "group_name": "歌曲封面验收", "ownership": {"mode": "pending"},
         "cover_urls": covers,
     })
     assert response.status_code == 201, response.text
@@ -48,7 +48,7 @@ def test_song_covers_roundtrip_and_default_group(integration_test_client):
     assert client.get(f"/api/songs/{other['song_id']}").json()["display_cover"]["url"] == "https://example.test/other.png"
     for fields, expected_urls in (({}, covers), ({"cover_urls": list(reversed(covers))}, list(reversed(covers))),
                                   ({"cover_urls": [covers[0]]}, [covers[0]]), ({"cover_urls": []}, [])):
-        payload = {"song_name": song["song_name"], "expected_revision": song["revision"], **fields}
+        payload = {"expected_revision": song["revision"], **fields}
         response = client.put(f"/api/console/songs/{sid}", headers=headers, json=payload)
         assert response.status_code == 200, response.text
         song = response.json()["item"]
@@ -72,7 +72,7 @@ def test_version_cover_creation_and_validation(integration_test_client):
     headers = auth(client)
     default = create_group(client, headers, "版本封面")
     response = client.post("/api/console/songs", headers=headers, json={
-        "group_id": default["group_id"], "expected_group_revision": 1, "song_name": "特别版",
+        "group_id": default["group_id"], "expected_group_revision": 1,
         "version_label": "特别版", "ownership": {"mode": "pending"},
         "cover_urls": [" https://example.test/own.png "],
     })
@@ -83,7 +83,7 @@ def test_version_cover_creation_and_validation(integration_test_client):
     for invalid in (["http://example.test/a"], ["https://example.test/a", " https://example.test/a "], [None], [""],
                     [{"url": "https://example.test/a", "name": "名" * 256}]):
         response = client.put(f"/api/console/songs/{song['song_id']}", headers=headers, json={
-            "song_name": song["song_name"], "version_label": song["version_label"],
+            "version_label": song["version_label"],
             "expected_revision": song["revision"], "cover_urls": invalid,
         })
         assert response.status_code == 422, response.text

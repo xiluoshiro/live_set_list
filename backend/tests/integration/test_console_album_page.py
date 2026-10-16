@@ -45,7 +45,7 @@ def test_album_tracks_keep_version_and_ownership(integration_test_client):
     client = integration_test_client
     headers = auth(client)
     song = client.post('/api/console/songs', headers=headers, json={
-        'group_id': 1, 'expected_group_revision': 1, 'song_name': '同名曲', 'version_label': 'Acoustic',
+        'group_id': 1, 'expected_group_revision': 1, 'version_label': 'Acoustic',
         'ownership': {'mode': 'bands', 'band_ids': [1, 2]},
     }).json()['item']
     response = client.post('/api/console/albums', headers=headers, json={
@@ -54,5 +54,5 @@ def test_album_tracks_keep_version_and_ownership(integration_test_client):
     assert response.status_code == 201, response.text
     album = client.get(f"/api/console/albums/{response.json()['album_id']}").json()
     track = album['tracks'][0]
-    assert (track['song_id'], track['song_name'], track['version_label']) == (song['song_id'], '同名曲', 'Acoustic')
+    assert (track['song_id'], track['song_name'], track['version_label']) == (song['song_id'], song['group_name'], 'Acoustic')
     assert track['band_name'] == ' / '.join(band['band_name'] for band in song['ownership']['bands'])

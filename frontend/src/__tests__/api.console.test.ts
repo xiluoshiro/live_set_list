@@ -154,7 +154,7 @@ describe("console lookup api", () => {
     const { createConsoleSongsBatch, SONG_CATALOG_CHANGE } = await import("../api");
     const listener = vi.fn();
     window.addEventListener(SONG_CATALOG_CHANGE, listener);
-    const songs = [{ song_name: "合唱曲", group_name: "合唱曲", version_label: "", cover_urls: [], ownership: { mode: "bands" as const, band_ids: [1, 2], member_groups: [] } }];
+    const songs = [{ group_name: "合唱曲", version_label: "", cover_urls: [], ownership: { mode: "bands" as const, band_ids: [1, 2], member_groups: [] } }];
     try {
       await createConsoleSongsBatch(songs, "csrf-token");
       expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs:batch");

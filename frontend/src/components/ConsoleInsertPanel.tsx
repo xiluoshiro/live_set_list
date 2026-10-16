@@ -2520,7 +2520,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
 
   const executeBatchSongInsert = async (rows: BatchSongConfirmRow[], csrfToken: string) => {
     try {
-      const payload = rows.map(row => ({ song_name: row.song_name, group_name: row.song_name, version_label: "", cover_urls: [], ownership: row.ownership }));
+      const payload = rows.map(row => ({ group_name: row.song_name, version_label: "", cover_urls: [], ownership: row.ownership }));
       const response = await createConsoleSongsBatch(payload, csrfToken);
       const saved = response.results.filter(result => result.item !== null);
       setSetlistRows(current => current.map(row => {

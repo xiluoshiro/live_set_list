@@ -1814,36 +1814,36 @@ describe("ConsoleInsertPanel", () => {
     const dialog = screen.getByRole("dialog", { name: "确认新增歌曲" });
     await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/song-groups", "POST", {
-      group_name: "新曲", song_name: "新曲", version_label: "", cover_urls: [], ownership: { mode: "pending", band_ids: [], member_groups: [] },
+      group_name: "新曲", version_label: "", cover_urls: [], ownership: { mode: "pending", band_ids: [], member_groups: [] },
     }, "csrf-token"));
     expect(screen.getByRole("tab", { name: "新增歌曲" })).toHaveAttribute("aria-selected", "true");
     const table = screen.getByRole("table", { name: "歌曲操作记录" });
     expect(within(table).getByText("903")).toBeInTheDocument();
     await user.click(within(table).getByRole("button", { name: "编辑" }));
-    await screen.findByLabelText("歌曲名称");
+    await screen.findByLabelText("歌曲组名称");
     expect(apiMocks.getCatalogConsole).toHaveBeenCalledWith("/songs/903");
     expect(screen.getByRole("tab", { name: "歌曲管理" })).toHaveAttribute("aria-selected", "true");
   });
 
-  // 测试点：歌曲更新确认只列出实际变化的名称与翻唱属性，再通过 PUT 保存完整目标值。
+  // 测试点：歌曲更新确认列出整组名称变化，并通过 PUT 保存组名及并发版本号。
   test("歌曲管理更新具体版本并保留并发版本号", async () => {
     // 测试点：候选只负责选择，完整详情建立快照；基础修改不重写固定归属。
     const user = userEvent.setup();
     const song = catalogSongFixture(901, "原曲名");
     apiMocks.getSongGroup.mockResolvedValue({ group_id: song.group_id, group_name: song.group_name, revision: 1, versions: [song], display_cover: null });
     apiMocks.getCatalogConsole.mockImplementation(async (path: string) => path === "/songs/901" ? song : path === "/members" ? { items: [] } : { items: [song], page: 1, total_pages: 1 });
-    apiMocks.songCatalogWrite.mockResolvedValue({ item: { ...song, song_name: "改名曲", revision: 2 } });
+    apiMocks.songCatalogWrite.mockResolvedValue({ item: { ...song, song_name: "改名曲", group_name: "改名曲", revision: 2 }, group: { group_id: 901, group_name: "改名曲", revision: 2, versions: [song], display_cover: null } });
     render(<ConsoleInsertPanel />);
     await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "901");
-    await screen.findByLabelText("歌曲名称");
-    fireEvent.change(screen.getByLabelText("歌曲名称"), { target: { value: "改名曲" } });
+    await screen.findByLabelText("歌曲组名称");
+    fireEvent.change(screen.getByLabelText("歌曲组名称"), { target: { value: "改名曲" } });
     await user.click(screen.getByRole("button", { name: "保存修改" }));
     const dialog = screen.getByRole("dialog", { name: /确认更新歌曲 #/ });
     expect(within(dialog).getByRole("table", { name: "歌曲修改内容" })).toHaveTextContent("原曲名改名曲");
     await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
-    await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/songs/901/edit", "PUT", expect.objectContaining({ song_name: "改名曲", version_label: "普通版", cover_urls: [], expected_revision: 1, group: { group_id: 901, group_name: "原曲名", expected_revision: 1, song_ids: [901] } }), "csrf-token"));
-    expect(screen.getByLabelText("歌曲名称")).toHaveValue("改名曲");
+    await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/songs/901/edit", "PUT", expect.objectContaining({ version_label: "普通版", cover_urls: [], expected_revision: 1, group: { group_id: 901, group_name: "改名曲", expected_revision: 1, song_ids: [901] } }), "csrf-token"));
+    expect(screen.getByLabelText("歌曲组名称")).toHaveValue("改名曲");
   });
 
   // 测试点：歌曲显式查询重新选中首项，其他命中可切换，翻页沿用条件并保留编辑对象。
@@ -1860,11 +1860,11 @@ describe("ConsoleInsertPanel", () => {
       : path === "/members" ? { items: [] } : { items: path.includes("page=2") ? [] : [song, second], page: path.includes("page=2") ? 2 : 1, total_pages: 2 });
     render(<ConsoleInsertPanel />);
     await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
-    const name = await screen.findByLabelText("歌曲名称");
+    await screen.findByLabelText("歌曲组名称");
     const selector = screen.getByLabelText("选择要编辑的歌曲");
     expect(selector).toHaveValue("902");
     await user.selectOptions(selector, "903");
-    await waitFor(() => expect(name).toHaveValue("第二命中曲"));
+    await waitFor(() => expect(screen.getByLabelText("歌曲组名称")).toHaveValue("第二命中曲"));
     const query = screen.getByRole("textbox", { name: "搜索歌曲" });
     const filter = screen.getByRole("combobox", { name: "筛选归属乐队" });
     const searchRegion = screen.getByRole("search", { name: "查询已有歌曲" });
@@ -1872,10 +1872,10 @@ describe("ConsoleInsertPanel", () => {
     await user.type(query, "Song");
     await user.selectOptions(filter, "2");
     expect(apiMocks.getCatalogConsole).not.toHaveBeenCalled();
-    expect(name).toHaveValue("第二命中曲");
+    expect(screen.getByLabelText("歌曲组名称")).toHaveValue("第二命中曲");
     await user.click(within(searchRegion).getByRole("button", { name: "查询" }));
     await waitFor(() => expect(apiMocks.getCatalogConsole).toHaveBeenCalledWith("/songs?q=Song&page=1&limit=20&band_id=2"));
-    await waitFor(() => expect(name).toHaveValue("搜索命中曲"));
+    await waitFor(() => expect(screen.getByLabelText("歌曲组名称")).toHaveValue("搜索命中曲"));
     expect(selector).toHaveValue("902");
     apiMocks.getCatalogConsole.mockClear();
     await user.clear(query);
@@ -1886,20 +1886,20 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.getCatalogConsole).toHaveBeenCalledWith("/songs?q=Song&page=2&limit=20&band_id=2"));
     expect(selector).toHaveValue("902");
     expect(within(selector).getByRole("option", { name: "#902 搜索命中曲 / 普通版 / 待回填" })).toBeInTheDocument();
-    expect(screen.getByLabelText("歌曲名称")).toHaveValue("搜索命中曲");
+    expect(screen.getByLabelText("歌曲组名称")).toHaveValue("搜索命中曲");
     await user.type(query, "{Enter}");
     await waitFor(() => expect(apiMocks.getCatalogConsole).toHaveBeenCalledWith("/songs?q=Next&page=1&limit=20"));
     await user.selectOptions(selector, "903");
-    await waitFor(() => expect(name).toHaveValue("第二命中曲"));
+    await waitFor(() => expect(screen.getByLabelText("歌曲组名称")).toHaveValue("第二命中曲"));
     apiMocks.getCatalogConsole.mockClear();
     await user.click(within(searchRegion).getByRole("button", { name: "查询" }));
     await waitFor(() => expect(apiMocks.getCatalogConsole).toHaveBeenCalledWith("/songs?q=Next&page=1&limit=20"));
-    await waitFor(() => expect(name).toHaveValue("搜索命中曲"));
+    await waitFor(() => expect(screen.getByLabelText("歌曲组名称")).toHaveValue("搜索命中曲"));
     expect(selector).toHaveValue("902");
     await user.selectOptions(selector, "903");
-    await waitFor(() => expect(name).toHaveValue("第二命中曲"));
+    await waitFor(() => expect(screen.getByLabelText("歌曲组名称")).toHaveValue("第二命中曲"));
     await user.type(query, "{Enter}");
-    await waitFor(() => expect(name).toHaveValue("搜索命中曲"));
+    await waitFor(() => expect(screen.getByLabelText("歌曲组名称")).toHaveValue("搜索命中曲"));
     expect(selector).toHaveValue("902");
   });
 
@@ -2405,12 +2405,12 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel />);
     await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
     await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
-    await screen.findByLabelText("歌曲名称");
-    fireEvent.change(screen.getByLabelText("歌曲名称"), { target: { value: "草稿" } });
+    await screen.findByLabelText("歌曲组名称");
+    fireEvent.change(screen.getByLabelText("歌曲组名称"), { target: { value: "草稿" } });
     await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
     const dialog = screen.getByRole("dialog", { name: "未保存的修改" });
     await user.click(within(dialog).getByRole("button", { name: "继续编辑" }));
-    expect(screen.getByLabelText("歌曲名称")).toHaveValue("草稿");
+    expect(screen.getByLabelText("歌曲组名称")).toHaveValue("草稿");
     expect(screen.getByRole("tab", { name: "歌曲管理" })).toHaveAttribute("aria-selected", "true");
   });
 
@@ -2572,7 +2572,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledWith(
-      [{ song_name: "Requiem for Fate", group_name: "Requiem for Fate", version_label: "", cover_urls: [], ownership: { mode: "mixed", band_ids: [2], member_groups: [{ band_id: 1, member_ids: [68] }] } }],
+      [{ group_name: "Requiem for Fate", version_label: "", cover_urls: [], ownership: { mode: "mixed", band_ids: [2], member_groups: [{ band_id: 1, member_ids: [68] }] } }],
       "csrf-token",
     ));
     expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledTimes(1);
@@ -2682,7 +2682,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ })).not.toBeDisabled();
     await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledWith([
-      { song_name: "未确认归属新曲", group_name: "未确认归属新曲", version_label: "", cover_urls: [], ownership: { mode: "pending", band_ids: [], member_groups: [] } },
+      { group_name: "未确认归属新曲", version_label: "", cover_urls: [], ownership: { mode: "pending", band_ids: [], member_groups: [] } },
     ], "csrf-token"));
   });
 

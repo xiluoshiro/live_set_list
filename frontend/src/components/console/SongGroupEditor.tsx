@@ -55,13 +55,13 @@ export function SongGroupEditor({ song, group, currentDraft, currentOwner, targe
         placeholder="请输入歌曲组名称" onChange={e => onChange({ ...group, group_name: e.target.value })} /></td><td>{group.versions.length}</td></tr></tbody>
     </table></div>
     <div className="console-table-wrap"><table className="console-admin-table song-version-table" aria-label="歌曲版本顺序">
-      <colgroup><col className="song-edit-order-column" /><col className="song-edit-id-column" /><col /><col /><col /><col className="song-edit-actions-column" /></colgroup>
-      <thead><tr><th scope="col">顺序</th><th scope="col">song_id</th><th scope="col">歌曲名称</th><th scope="col">版本标识</th><th scope="col">归属</th><th scope="col">操作</th></tr></thead>
+      <colgroup><col className="song-edit-order-column" /><col className="song-edit-id-column" /><col /><col /><col className="song-edit-actions-column" /></colgroup>
+      <thead><tr><th scope="col">顺序</th><th scope="col">song_id</th><th scope="col">版本标识</th><th scope="col">归属</th><th scope="col">操作</th></tr></thead>
       <tbody>{group.versions.map((version, i) => {
         const current = version.song_id === song.song_id;
         return <tr key={version.song_id} aria-current={current ? "true" : undefined}>
           <td>{i + 1}</td><td>{version.song_id}{current && <span className="song-current-version">当前</span>}</td>
-          <td>{current ? currentDraft.song_name : version.song_name}</td><td>{(current ? currentDraft.version_label : version.version_label) || "默认版本"}</td>
+          <td>{(current ? currentDraft.version_label : version.version_label) || "默认版本"}</td>
           <td>{current ? currentOwner : ownershipLabel(version)}</td><td><div className="tour-admin-toolbar venue-create-actions">
             <button type="button" className="console-ghost-btn" disabled={locked || i === 0} onClick={() => move(i, -1)}>上移</button>
             <button type="button" className="console-ghost-btn" disabled={locked || i === group.versions.length - 1} onClick={() => move(i, 1)}>下移</button>

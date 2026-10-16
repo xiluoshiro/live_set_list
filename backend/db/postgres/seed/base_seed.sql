@@ -66,7 +66,7 @@ WITH seed(id, song_name, band_id, is_cover) AS (VALUES
     (200, '前へススメ！', 1, false),
     (201, '切ない Sandglass', 1, false),
     (202, 'Drive Your Heart', 1, false)), groups AS (INSERT INTO public.song_groups(id, group_name) SELECT id, song_name FROM seed RETURNING id)
-INSERT INTO public.song_list(id, song_name, is_cover, group_id, owner_mode) SELECT seed.id, seed.song_name, seed.is_cover, groups.id, NULL FROM seed JOIN groups ON groups.id = seed.id;
+INSERT INTO public.song_list(id, is_cover, group_id, owner_mode) SELECT seed.id, seed.is_cover, groups.id, NULL FROM seed JOIN groups ON groups.id = seed.id;
 
 INSERT INTO public.live_attrs (
     id,

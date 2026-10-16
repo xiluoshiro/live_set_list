@@ -83,15 +83,15 @@ WITH matched_live_ids AS (
         ON venue_version.id = l.venue_name_version_id
     LEFT JOIN live_setlist ls
         ON ls.live_id = l.id
-    LEFT JOIN song_list s
-        ON s.group_id = ls.song_group_id AND s.version_label = ''
+    LEFT JOIN song_groups g
+        ON g.id = ls.song_group_id
     LEFT JOIN effective_live_bands effective
         ON effective.live_id = l.id
     LEFT JOIN current_band_versions b
         ON b.band_id = effective.band_id
     WHERE l.live_title ILIKE %s ESCAPE '\\'
        OR venue_version.venue_name ILIKE %s ESCAPE '\\'
-       OR s.song_name ILIKE %s ESCAPE '\\'
+       OR g.group_name ILIKE %s ESCAPE '\\'
        OR b.band_name ILIKE %s ESCAPE '\\'
        OR b.band_abbr ILIKE %s ESCAPE '\\'
 ),
@@ -177,7 +177,7 @@ LEFT JOIN live_setlist ls
     ON ls.song_group_id = s.group_id
 WHERE s.version_label = '' AND EXISTS(SELECT 1 FROM song_list version
     WHERE version.group_id = s.group_id AND
-    (g.group_name || ' ' || version.song_name || ' ' || version.version_label) ILIKE %s ESCAPE '\\')
+    (g.group_name || ' ' || version.version_label) ILIKE %s ESCAPE '\\')
 GROUP BY s.id, g.group_name
 ORDER BY live_count DESC, g.group_name, s.id
 LIMIT %s
@@ -722,12 +722,13 @@ def get_catalog_statistics(
 
                 cur.execute(
                     f"""WITH candidate_lives AS ({candidate_sql}), performances AS (
-                      SELECT s.id, s.song_name, performing_band.band_id,
+                      SELECT s.id, g.group_name AS song_name, performing_band.band_id,
                              performing_band.band_name, s.is_cover,
                              cl.id AS live_id, cl.live_date, cl.live_title, ls.id AS setlist_id
                       FROM candidate_lives cl
                       JOIN live_setlist ls ON ls.live_id = cl.id
                       JOIN song_list s ON s.group_id = ls.song_group_id AND s.version_label = ''
+                      JOIN song_groups g ON g.id = s.group_id
                       JOIN live_setlist_band_performances performance
                         ON performance.setlist_id = ls.id
                       JOIN current_band_versions performing_band
@@ -786,7 +787,7 @@ def get_catalog_statistics(
                             ON effective.live_id = cl.id
                            AND effective.band_id = %s
                         ), song_plays AS (
-                          SELECT s.id, s.song_name, s.is_cover, b.band_name, bl.id AS live_id,
+                          SELECT s.id, g.group_name AS song_name, s.is_cover, b.band_name, bl.id AS live_id,
                                  bl.live_date, bl.live_title
                           FROM band_lives bl
                           JOIN current_band_versions b ON b.band_id = %s
@@ -795,6 +796,7 @@ def get_catalog_statistics(
                             ON performance.setlist_id = ls.id
                            AND performance.band_id = b.band_id
                           JOIN song_list s ON s.group_id = ls.song_group_id AND s.version_label = ''
+                          JOIN song_groups g ON g.id = s.group_id
                         ), play_counts AS (
                           SELECT id, COUNT(DISTINCT live_id) AS live_count FROM song_plays GROUP BY id
                         ), latest AS (

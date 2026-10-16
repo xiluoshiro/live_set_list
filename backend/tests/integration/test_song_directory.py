@@ -9,7 +9,7 @@ pytestmark = pytest.mark.integration
 
 def create_group(client: Any, headers: dict[str, str], name: str, ownership: dict[str, Any] | None = None) -> dict[str, Any]:
     response = client.post("/api/console/song-groups", headers=headers, json={
-        "group_name": name, "song_name": name, "ownership": ownership or {"mode": "pending"},
+        "group_name": name, "ownership": ownership or {"mode": "pending"},
     })
     assert response.status_code == 201, response.text
     return response.json()["item"]
@@ -18,7 +18,7 @@ def create_group(client: Any, headers: dict[str, str], name: str, ownership: dic
 def add_version(client: Any, headers: dict[str, str], group_id: int, name: str, band_id: int) -> dict[str, Any]:
     group = client.get(f"/api/song-groups/{group_id}").json()
     response = client.post("/api/console/songs", headers=headers, json={
-        "group_id": group_id, "expected_group_revision": group["revision"], "song_name": name,
+        "group_id": group_id, "expected_group_revision": group["revision"],
         "version_label": name, "ownership": {"mode": "bands", "band_ids": [band_id]},
     })
     assert response.status_code == 201, response.text

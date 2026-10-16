@@ -59,7 +59,7 @@ describe("api cache behavior", () => {
     expect(await api.getSongVersion(1)).toEqual({ song_id: 1, revision: 2 });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     fetchMock.mockResolvedValueOnce(makeJsonResponse({ ok: true }));
-    await api.songCatalogWrite("/songs/1", "PUT", { song_name: "新名称" }, "csrf");
+    await api.songCatalogWrite("/songs/1", "PUT", { version_label: "新版本", expected_revision: 2 }, "csrf");
     const { SONG_CATALOG_STORAGE_KEY } = await import("../songCatalogSync");
     expect(localStorage.getItem(SONG_CATALOG_STORAGE_KEY)).toBeTruthy();
     fetchMock.mockResolvedValueOnce(makeJsonResponse({ song_id: 1, revision: 3 }));

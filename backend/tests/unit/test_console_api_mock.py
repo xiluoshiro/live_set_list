@@ -81,7 +81,7 @@ def _build_connection_mock(
 
 def _valid_song_payload(**overrides):
     """Return a minimal valid song-create request body with optional field overrides."""
-    payload = {"song_name": "Mock Song", "group_id": 1, "expected_group_revision": 1, "ownership": {"mode": "bands", "band_ids": [1]}}
+    payload = {"group_id": 1, "expected_group_revision": 1, "ownership": {"mode": "bands", "band_ids": [1]}}
     payload.update(overrides)
     return payload
 
@@ -431,7 +431,7 @@ def test_console_update_live_mock_requires_valid_csrf():
         ("/api/console/bands", _valid_band_payload(id_range="unknown")),
         ("/api/console/bands", _valid_band_payload(members=[])),
         ("/api/console/songs", {}),
-        ("/api/console/songs", _valid_song_payload(song_name="   ")),
+        ("/api/console/songs", _valid_song_payload(expected_group_revision=0)),
         ("/api/console/songs", _valid_song_payload(expected_group_revision=0)),
         ("/api/console/venues", {}),
         ("/api/console/venues", _valid_venue_payload(venue_name="   ")),

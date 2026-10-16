@@ -569,7 +569,7 @@ def list_songs(
     _: Any = Depends(require_role("editor")),
 ):
     query_text = _normalize_lookup_query(q)
-    expression, normalization_params = song_lookup_sql("g.group_name" if groups_only else "s.song_name")
+    expression, normalization_params = song_lookup_sql("g.group_name")
     conditions = [f"{expression} ILIKE %s ESCAPE '\\'"]
     params: tuple[Any, ...] = (*normalization_params, _build_prefix_lookup_pattern(normalize_song_lookup_text(query_text)))
     if groups_only:
@@ -579,7 +579,7 @@ def list_songs(
         params += (band_id, band_id)
     source = "FROM song_list s JOIN song_groups g ON g.id = s.group_id"
     where = " AND ".join(conditions)
-    name = "g.group_name" if groups_only else "s.song_name"
+    name = "g.group_name"
     with catalog_errors(), get_db_connection() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT count(*) {source} WHERE {where}", params)
         total = cur.fetchone()[0]

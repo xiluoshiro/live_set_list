@@ -51,7 +51,7 @@ erDiagram
 | album_track_id | 一次收录关系 | 同一专辑可多次指向同一 song_id |
 | setlist_id | 一次独立演奏记录 | 统计按记录计次，不按 Live 去重 |
 
-`group_name` 是组的标题；`song_name` 保留现有具体条目的名称，避免迁移时改写历史名称；`version_label` 是“普通版”“三乐队合唱版”等可选自由文本。名称相同既不等于同组，也不等于同一个版本。
+`group_name` 是歌曲名称的唯一存储位置，同组全部版本共用该名称；`version_label` 是“三乐队合唱版”等可选自由文本，空值表示默认版本。版本不独立存储或编辑歌曲名称；读取响应中的 `song_name` 从所属组派生。名称相同既不等于同组，也不等于同一个版本。
 
 ## 4. 数据库结构
 
@@ -75,7 +75,6 @@ V40 已实现歌曲组歌单引用、混合归属和专辑子项。`live_setlist
 | 字段 | 类型及约束 | 用途 |
 | --- | --- | --- |
 | id | 保留现有 integer PK | song_id |
-| song_name | 保留现有字段，非空白 | 版本对应的歌曲名称 |
 | group_id | integer FK → song_groups | 扩展迁移填充后非空 |
 | version_label | text，非空，默认空字符串 | 空字符串表示歌曲组的默认项，作为现场判定基准 |
 | version_order | integer > 0 | 组内切换顺序，不是专辑曲序 |
@@ -459,7 +458,6 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 ```json
 {
   "group_name": "示意歌曲",
-  "song_name": "示意歌曲",
   "version_label": "",
   "ownership": {"mode": "bands", "band_ids": [1]}
 }
@@ -484,7 +482,7 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 
 处理顺序为“校验请求形状 → 开事务 → 锁 song_list → 比较 revision → 校验全部引用 → 保存旧归属审计快照 → 完整替换关系和模式 → revision 加一 → 审计 → 提交”。约束触发器检查的是提交后的最终组合。捕获冲突必须覆盖事务提交阶段，不能只捕获 INSERT / UPDATE；延迟约束可能在离开连接事务上下文时才报错。
 
-普通 `PUT /songs/{id}` 只接受 song_name、version_label、expected_revision；组内顺序由组操作更新，归组及归属由纠错服务更新。请求采用 extra=forbid，避免客户端传来的旧 band_id 被忽略后显示“保存成功”。
+普通 `PUT /songs/{id}` 接受 version_label、cover_urls、expected_revision；组内顺序由组操作更新，归组及归属由纠错服务更新。请求采用 extra=forbid，避免客户端传来的旧 band_id 被忽略后显示“保存成功”。
 
 专辑曲目整体保存：
 
@@ -577,7 +575,7 @@ setlist_id 原样返回现有 UUID。member_id 在历史人物回填完成前可
 ### 10.2 新增歌曲流程
 
 1. 进入 song_create，初始化独立新增草稿。明确是新建组还是为已有组添加版本；已有组候选只承担归属选择，不加载已有版本进入编辑。
-2. 新建组填写 group_name；已有组保存 group_id 和 expected_group_revision。填写 song_name、version_label、乐队 / 成员模式及固定关系。
+2. 新建组填写 group_name；已有组保存 group_id 和 expected_group_revision。填写 version_label、乐队 / 成员模式及固定关系；歌曲名称统一由所属组提供。
 3. 迁移期可按既定规则留归属整体为空，最终收紧后拒绝；页面拆分不扩大空值权限。专辑 Instrumental 仍只在专辑收录中操作，不在此创建歌曲。
 4. 点击“提交插入”打开现有风格的创建确认：明确“新组＋首个版本”或“已有组＋新版本”、歌名、版本和归属。确认过程使用固定 payload 快照；修改表单后必须重新生成确认内容。
 5. 新建组调用 `POST /api/console/song-groups`，向已有组加版本调用 `POST /api/console/songs`。仅在事务提交成功后更新操作记录、缓存和候选。

@@ -137,7 +137,7 @@ def read_ownership(cur: Any, song_id: int, mode: str | None) -> dict[str, Any]:
 
 
 def read_song(cur: Any, song_id: int) -> dict[str, Any]:
-    cur.execute("""SELECT s.id AS song_id, s.song_name, s.group_id, g.group_name,
+    cur.execute("""SELECT s.id AS song_id, g.group_name AS song_name, s.group_id, g.group_name,
         s.version_label, s.version_order, s.owner_mode, s.revision, s.is_cover AS legacy_cover, s.cover_urls
         FROM song_list s JOIN song_groups g ON g.id = s.group_id WHERE s.id = %s""", (song_id,))
     song = one(cur)
@@ -174,10 +174,11 @@ def read_album(cur: Any, album_id: int) -> dict[str, Any]:
         revision FROM albums WHERE id = %s""", (album_id,))
     album = one(cur)
     cur.execute(f"""SELECT t.id AS album_track_id, t.song_id, t.track_order, t.edition_label, section.section_name,
-        s.song_name, s.version_label, s.group_id,
+        g.group_name AS song_name, s.version_label, s.group_id,
         {SONG_OWNERSHIP_LABEL_SQL} AS band_name
         FROM album_tracks t
         JOIN song_list s ON s.id = t.song_id
+        JOIN song_groups g ON g.id = s.group_id
         JOIN album_sections section ON section.id = t.section_id
         WHERE t.album_id = %s ORDER BY section.display_order, t.track_order, t.id""", (album_id,))
     album["tracks"] = rows(cur)
