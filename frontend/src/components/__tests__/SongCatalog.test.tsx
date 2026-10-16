@@ -535,14 +535,18 @@ test("create keeps its mode and uses creation requests", async () => {
   expect(screen.getByLabelText("歌曲名称")).toHaveValue("合唱曲");
 });
 
-// 测试点：已有歌曲组先搜索选择；确认保留版本资料，提交携带组 ID 和已加载的修订号。
+// 测试点：已有歌曲组点击查询后选择；确认保留版本资料，提交携带组 ID 和已加载的修订号。
 test("create adds a version to the selected song group", async () => {
   const user = userEvent.setup();
   api.getSongGroup.mockResolvedValue({ group_id: 1, group_name: "合唱曲", revision: 7, versions: [version()] });
   render(<SongCatalogAdmin variant="create" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   expect(screen.getByLabelText("版本标识")).toBeDisabled();
   await user.selectOptions(screen.getByLabelText("歌曲组", { exact: true }), "existing");
+  await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("", 1));
+  const groupRequests = api.getSongGroups.mock.calls.length;
   await user.type(screen.getByLabelText("搜索歌曲组"), "合唱");
+  expect(api.getSongGroups).toHaveBeenCalledTimes(groupRequests);
+  await user.click(screen.getByRole("button", { name: "查询" }));
   await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("合唱", 1));
   await user.type(screen.getByLabelText("版本标识"), "新版");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
@@ -675,7 +679,7 @@ test("album gallery switches locally and resets on reopening", async () => {
   expect(await screen.findByText("1 / 2")).toBeInTheDocument();
 });
 
-// 测试点：歌曲组翻到后续页可选择，翻页保留已选组，搜索从第一页重新请求。
+// 测试点：歌曲组翻页保留已选组并沿用已提交关键词，点击查询才从第一页重新请求。
 test("group picker exposes every page and retains the selection", async () => {
   const user = userEvent.setup();
   api.getSongGroups.mockImplementation(async (q: string, index: number) => ({
@@ -697,6 +701,10 @@ test("group picker exposes every page and retains the selection", async () => {
   await screen.findByText("第 2 / 3 页，共 41 条");
   expect(screen.getByRole("button", { name: "选择歌曲组" })).toHaveTextContent("歌曲组 3");
   await user.type(screen.getByLabelText("搜索歌曲组"), "目标");
+  expect(api.getSongGroups).toHaveBeenLastCalledWith("", 2);
+  await user.click(screen.getByRole("button", { name: "下一页" }));
+  await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("", 3));
+  await user.click(screen.getByRole("button", { name: "查询" }));
   await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("目标", 1));
   await screen.findByText("第 1 / 3 页，共 41 条");
 });

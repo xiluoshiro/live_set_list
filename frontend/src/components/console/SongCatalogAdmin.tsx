@@ -49,8 +49,8 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const [groupId, setGroupId] = useState<number | null>(null);
   const [selectedGroupName, setSelectedGroupName] = useState("");
   const [groupQuery, setGroupQuery] = useState("");
+  const [groupSearch, setGroupSearch] = useState({ query: "", page: 1 });
   const [groups, setGroups] = useState<CatalogPage<SongGroupSummary> | null>(null);
-  const [groupPage, setGroupPage] = useState(1);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [bandFilter, setBandFilter] = useState("");
@@ -119,11 +119,11 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     if (!active || !creating || newGroup) return;
     let current = true;
     setGroupsLoading(true); setGroups(null);
-    void getSongGroups(groupQuery, groupPage).then(result => { if (current) setGroups(result); })
+    void getSongGroups(groupSearch.query, groupSearch.page).then(result => { if (current) setGroups(result); })
       .catch(e => { if (current) setError(String(e)); })
       .finally(() => { if (current) setGroupsLoading(false); });
     return () => { current = false; };
-  }, [active, creating, newGroup, groupQuery, groupPage]);
+  }, [active, creating, newGroup, groupSearch]);
   useEffect(() => {
     let current = true;
     setGroupRevision(null);
@@ -256,15 +256,17 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         <div className="live-id-selector live-create-query-row">
           <label className="live-management-label" htmlFor={`${formId}-group-query`}>搜索歌曲组</label>
           <input id={`${formId}-group-query`} className="venue-query-input live-management-primary-control" disabled={fieldsDisabled}
-            placeholder="歌曲组名称" value={groupQuery} onChange={event => { setGroupQuery(event.target.value); setGroupPage(1); }} />
+            placeholder="歌曲组名称" value={groupQuery} onChange={event => setGroupQuery(event.target.value)} />
+          <button type="button" className="console-ghost-btn" disabled={fieldsDisabled || groupsLoading}
+            onClick={() => setGroupSearch({ query: groupQuery.trim(), page: 1 })}>查询</button>
         </div>
         <div className="live-id-selector live-create-tools">
           <label className="live-management-label" htmlFor={`${formId}-group-select`}>选择歌曲组</label>
           <ConsoleChoiceSelect id={`${formId}-group-select`} label="选择歌曲组" disabled={fieldsDisabled || groupsLoading}
             value={groupId} selectedLabel={selectedGroupName} options={(groups?.items ?? []).map(group => ({ id: group.group_id, label: group.group_name }))}
             onChange={id => { setGroupId(id); setSelectedGroupName(groups?.items.find(group => group.group_id === id)?.group_name ?? ""); }} />
-          <ConsoleCandidatePager page={groupPage} totalPages={groups?.total_pages ?? groupPage} total={groups?.total ?? 0}
-            loading={groupsLoading} onPage={setGroupPage} />
+          <ConsoleCandidatePager page={groupSearch.page} totalPages={groups?.total_pages ?? groupSearch.page} total={groups?.total ?? 0}
+            loading={groupsLoading} onPage={page => setGroupSearch(value => ({ ...value, page }))} />
         </div>
       </>}
       <div className="console-table-wrap">

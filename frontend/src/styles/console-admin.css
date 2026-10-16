@@ -1316,6 +1316,8 @@
 .venue-create-timezone-column { width: 220px; }
 
 .song-create-form-table { table-layout: fixed; }
+.song-create-form > .live-id-selector { margin: 4px 0 12px; }
+.song-create-form > .live-id-selector > .tour-candidate-pager { margin-top: 0; }
 .song-create-form > section { margin-top: 16px; }
 .song-create-form-table[data-ownership="bands"] { min-width: 1100px; }
 .song-create-form-table[data-ownership="members"] { min-width: 1100px; }
