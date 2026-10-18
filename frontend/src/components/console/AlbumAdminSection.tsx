@@ -46,7 +46,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
   const [albumsLoading, setAlbumsLoading] = useState(false);
   const [albumsError, setAlbumsError] = useState("");
   const [albumQuery, setAlbumQuery] = useState("");
-  const [albumSearch, setAlbumSearch] = useState({ query: "", page: 1, refresh: 0, selectFirst: true });
+  const [albumSearch, setAlbumSearch] = useState({ query: "", page: 1, refresh: 0, selectFirst: false });
   const selectedSearch = useRef<typeof albumSearch | null>(null);
   const albums = albumResults?.items ?? [];
   const [original, setOriginal] = useState<AlbumDetail | null>(null);
@@ -76,7 +76,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
   const { guard, dialog: discardDialog } = useConsoleDraftGuard({ active, dirty: !creating && !!original && dirty, busy: busy || confirm,
     label: `专辑 #${original?.album_id}`, onDiscard: () => { if (original) setEditDraft(fields(original)); } });
   const closeConfirmation = () => { if (!busy) setConfirm(false); };
-  const queryAlbums = () => { if (!locked) setAlbumSearch(value => ({ query: albumQuery.trim(), page: 1, refresh: value.refresh + 1, selectFirst: true })); };
+  const queryAlbums = () => { if (!locked) setAlbumSearch(value => ({ query: albumQuery.trim(), page: 1, refresh: value.refresh + 1, selectFirst: !!albumQuery.trim() })); };
   const querySongs = () => {
     setSelectedSong("");
     setSongSearch(value => ({ query: songQuery.trim(), refresh: value.refresh + 1 }));

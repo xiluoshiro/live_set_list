@@ -568,13 +568,15 @@ test("create adds a version to the selected song group", async () => {
   expect(screen.getByLabelText("歌曲名称")).toHaveValue("");
 });
 
-// 测试点：管理自动加载命中版本，恢复保留对象，放弃确认取消后保留草稿；409 保留输入。
+// 测试点：管理手动选择后加载版本，恢复保留对象，放弃确认取消后保留草稿；409 保留输入。
 test("manage loads details and protects unsaved changes", async () => {
   const user = userEvent.setup();
   let guard: ((proceed: () => void) => void) | null = null;
   const leave = vi.fn();
   render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={value => { guard = value; }} onManage={() => {}} />);
   expect(screen.queryByLabelText("歌曲组名称")).not.toBeInTheDocument();
+  await screen.findByRole("option", { name: /#1 合唱曲/ });
+  await user.selectOptions(screen.getByLabelText("选择要编辑的歌曲"), "1");
   await screen.findByLabelText("歌曲组名称");
   expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("歌曲组名称"), { target: { value: "修改曲名" } });
@@ -605,6 +607,8 @@ test("automatic query selection protects the unsaved song draft", async () => {
     : path === "/songs/1" ? version() : path === "/songs/2" ? second
       : path.includes("q=next") ? queryResult : page([version()]));
   render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  await screen.findByRole("option", { name: /#1 合唱曲/ });
+  await user.selectOptions(screen.getByLabelText("选择要编辑的歌曲"), "1");
   const name = await screen.findByLabelText("歌曲组名称");
   fireEvent.change(name, { target: { value: "未保存曲名" } });
   await user.type(screen.getByLabelText("搜索歌曲"), "next");

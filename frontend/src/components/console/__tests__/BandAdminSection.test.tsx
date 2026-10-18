@@ -87,7 +87,6 @@ describe("BandAdminSection", () => {
       />,
     );
 
-    await screen.findByRole("table", { name: "乐队阵容时间线" });
     await user.click(screen.getByRole("button", { name: "新增 Band" }));
     await user.selectOptions(screen.getByLabelText("编号段"), "special");
     await user.type(screen.getByLabelText("当前名称"), "New Band");
@@ -147,6 +146,7 @@ describe("BandAdminSection", () => {
       />,
     );
 
+    await user.selectOptions(screen.getByLabelText("已有 Band"), "1");
     await user.type(await screen.findByLabelText("版本标签"), "Poppin'Party V4");
     await user.selectOptions(screen.getByLabelText("变化类型"), "addition");
     await user.type(screen.getByLabelText("生效日期"), "2026-07-29");
@@ -184,7 +184,7 @@ describe("BandAdminSection", () => {
       "csrf-token",
     ));
   });
-  // 测试点：切换乐队必须先确认放弃阵容草稿，新乐队不会沿用旧版本标签、日期或备注。
+  // 测试点：乐队默认不选中，手动选择及后续切换保留原有草稿保护。
   test("guards lineup drafts and clears them before loading another band", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBandHistory.mockImplementation(async id => id === 1 ? initializedHistory : {
@@ -193,6 +193,9 @@ describe("BandAdminSection", () => {
     });
     render(<BandAdminSection bands={[{ band_id: 1, band_name: "Poppin'Party" }, { band_id: 2, band_name: "Roselia" }]}
       onMessage={vi.fn()} onBandsChanged={vi.fn()} />);
+    expect(screen.getByLabelText("已有 Band")).toHaveValue("");
+    expect(apiMocks.getConsoleBandHistory).not.toHaveBeenCalled();
+    await user.selectOptions(screen.getByLabelText("已有 Band"), "1");
     await waitFor(() => expect(screen.getByLabelText("新版本成员（每行一人）")).toHaveValue("Kasumi\nTae"));
     await user.type(screen.getByLabelText("版本标签"), "旧乐队草稿");
     await user.type(screen.getByLabelText("备注"), "旧备注");

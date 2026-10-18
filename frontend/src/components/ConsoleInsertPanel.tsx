@@ -1259,7 +1259,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
   };
 
   const queryLiveCandidates = () => {
-    selectFirstLiveCandidateAfterQueryRef.current = true;
+    selectFirstLiveCandidateAfterQueryRef.current = !!(liveCandidateQuery.trim() || liveCandidateType || liveCandidateEventStatus);
     if (liveCandidatePage === 1) {
       void loadLiveCandidatePage(liveCandidateQuery, 1, liveCandidateType, liveCandidateEventStatus);
     } else {
@@ -1360,7 +1360,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
     }
   };
 
-  const querySetlistEditLives = async () => {
+  const querySetlistEditLives = async (selectFirst = false) => {
     setIsLiveLoading(true);
     try {
       const response = await getConsoleLiveCandidates(setlistEditQuery, 1, 100, "", true);
@@ -1373,9 +1373,10 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
         url: null,
       }));
       setSetlistEditLives(candidates);
-      const nextId = resolveConsoleEditSelection(candidates, live => live.live_id, null);
-      if (nextId !== null) await loadSetlistForEdit(nextId);
-      else {
+      const nextId = resolveConsoleEditSelection(candidates, live => live.live_id, selectedLiveId || null,
+        selectFirst && setlistEditQuery.trim() ? "query" : "preserve");
+      if (nextId !== null && selectFirst && setlistEditQuery.trim() && candidates.length) await loadSetlistForEdit(nextId);
+      else if (!candidates.length) {
         setSelectedLiveId(0);
         setMessage("没有符合条件的 Setlist。");
       }
@@ -2928,7 +2929,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
             else setSelectedLiveId(liveId);
           }}
           onLiveQueryChange={setSetlistEditQuery}
-          onQueryLives={() => setlistDraft.guard(() => void querySetlistEditLives())}
+          onQueryLives={() => setlistDraft.guard(() => void querySetlistEditLives(true))}
           onLivePageChange={changeSetlistLivePage}
           onSetlistPasteTextChange={updateSetlistPasteText}
           onPreviewSetlistPaste={buildSetlistPastePreview}

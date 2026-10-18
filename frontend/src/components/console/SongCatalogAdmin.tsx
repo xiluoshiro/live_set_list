@@ -54,10 +54,10 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [bandFilter, setBandFilter] = useState("");
-  const [search, setSearch] = useState({ query: "", bandFilter: "", page: 1, selectFirst: true });
+  const [search, setSearch] = useState({ query: "", bandFilter: "", page: 1, selectFirst: false });
   const selectedSearch = useRef<typeof search | null>(null);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
-  const querySongs = () => guard(() => setSearch({ query: query.trim(), bandFilter, page: 1, selectFirst: true }));
+  const querySongs = () => guard(() => setSearch({ query: query.trim(), bandFilter, page: 1, selectFirst: !!(query.trim() || bandFilter) }));
   const [candidates, setCandidates] = useState<CatalogPage<ConsoleSongItem> | null>(null);
   const candidateLabel = (s: ConsoleSongItem) => `#${s.song_id} ${s.song_name} / ${s.version_label || "默认版本"} / ${s.band_name ?? "待回填"}`;
   const selectedSongLabel = original ? `#${original.song_id} ${original.song_name} / ${original.version_label || "默认版本"} / ${ownershipLabel(original)}` : "";

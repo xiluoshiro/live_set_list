@@ -109,33 +109,46 @@ describe("VenueAdminSection", () => {
     apiMocks.saveConsoleVenueEdit.mockResolvedValue({ detail: details[1], location });
   });
 
-  // 测试点：场馆管理只读取当前分页，并提供搜索和翻页入口，避免一次加载全部 Venue。
+  // 测试点：场馆空条件不选中，提交有效条件后加载首项，只读取当前分页。
   test("loads a searchable paginated Venue selector", async () => {
     const user = userEvent.setup();
     renderSection();
 
     const selector = await screen.findByLabelText("已有 Venue");
-    expect(within(selector).getAllByRole("option")).toHaveLength(1);
-    expect(selector).toHaveValue("1");
-    const history = await screen.findByRole("table", { name: "Venue 历史名称" });
-    expect(history).toHaveTextContent("First Hall");
-    expect(within(history).queryByRole("button")).not.toBeInTheDocument();
+    await screen.findByRole("option", { name: "#1 First Hall" });
+    expect(selector).toHaveValue("");
+    expect(apiMocks.getConsoleVenue).not.toHaveBeenCalled();
     expect(screen.getByLabelText("搜索场馆")).toBeInTheDocument();
     expect(screen.getByText(/共 2 个场馆/)).toBeInTheDocument();
     expect(apiMocks.getConsoleVenuePage).toHaveBeenCalledWith("", 1, 20);
+    await user.type(screen.getByLabelText("搜索场馆"), "   ");
+    await user.click(screen.getByRole("button", { name: "查询" }));
+    await waitFor(() => expect(selector).toBeEnabled());
+    expect(selector).toHaveValue("");
+    expect(apiMocks.getConsoleVenue).not.toHaveBeenCalled();
+    await user.clear(screen.getByLabelText("搜索场馆"));
     await user.type(screen.getByLabelText("搜索场馆"), "First");
     await user.click(screen.getAllByRole("button", { name: "查询" })[0]);
     await waitFor(() => expect(apiMocks.getConsoleVenuePage).toHaveBeenLastCalledWith("First", 1, 20));
+    const history = await screen.findByRole("table", { name: "Venue 历史名称" });
+    expect(history).toHaveTextContent("First Hall");
+    expect(selector).toHaveValue("1");
+    expect(within(history).queryByRole("button")).not.toBeInTheDocument();
   });
 
-  // 测试点：切换 Venue 后仅加载目标详情，并让历史名称区跟随当前选择更新。
+  // 测试点：翻页保留已选场馆，手动切换后仅加载目标详情并更新历史名称。
   test("loads the selected Venue detail", async () => {
     const user = userEvent.setup();
     renderSection();
     const selector = await screen.findByLabelText("已有 Venue");
+    await screen.findByRole("option", { name: "#1 First Hall" });
+    await user.selectOptions(selector, "1");
     await waitFor(() => expect(selector).toHaveValue("1"));
 
     await user.click(screen.getByRole("button", { name: "下一页" }));
+    await screen.findByRole("option", { name: "#2 Second Hall" });
+    expect(selector).toHaveValue("1");
+    await user.selectOptions(selector, "2");
 
     expect(await screen.findByRole("table", { name: "Venue 历史名称" })).toHaveTextContent("Second Hall");
     expect(apiMocks.getConsoleVenue).toHaveBeenLastCalledWith(2);
@@ -168,6 +181,8 @@ describe("VenueAdminSection", () => {
   test("confirms a combined kind and formal rename edit", async () => {
     const user = userEvent.setup();
     renderSection();
+    await screen.findByRole("option", { name: "#1 First Hall" });
+    await user.selectOptions(screen.getByLabelText("已有 Venue"), "1");
     await screen.findByLabelText("名称");
     await user.selectOptions(screen.getByLabelText("类型"), "undisclosed");
     await user.clear(screen.getByLabelText("名称"));
@@ -192,6 +207,8 @@ describe("VenueAdminSection", () => {
     const user = userEvent.setup();
     apiMocks.saveConsoleVenueEdit.mockRejectedValueOnce(new Error("write failed"));
     renderSection();
+    await screen.findByRole("option", { name: "#1 First Hall" });
+    await user.selectOptions(screen.getByLabelText("已有 Venue"), "1");
     await screen.findByLabelText("名称");
     await user.clear(screen.getByLabelText("名称"));
     await user.type(screen.getByLabelText("名称"), "New Hall");
@@ -219,6 +236,7 @@ describe("VenueAdminSection", () => {
 
     expect(await screen.findByText("暂无可管理的 Venue。", { exact: false })).toBeInTheDocument();
     expect(onMessage).toHaveBeenCalledWith("加载 Venue 列表失败：network failed");
+    await user.type(screen.getByLabelText("搜索场馆"), "First");
     await user.click(screen.getAllByRole("button", { name: "查询" })[0]);
 
     expect(await screen.findByRole("table", { name: "Venue 历史名称" })).toHaveTextContent("First Hall");
@@ -227,6 +245,8 @@ describe("VenueAdminSection", () => {
   test("preserves venue drafts across a canceled query and selection", async () => {
     const user = userEvent.setup();
     render(<ConsoleDraftProvider><VenueAdminSection variant="edit" onMessage={vi.fn()} onVenuesChanged={vi.fn()} /></ConsoleDraftProvider>);
+    await screen.findByRole("option", { name: "#1 First Hall" });
+    await user.selectOptions(screen.getByLabelText("已有 Venue"), "1");
     await waitFor(() => expect(screen.getByLabelText("名称")).toHaveValue("First Hall"));
     await user.type(screen.getByLabelText("名称"), " Draft");
     const loaded = apiMocks.getConsoleVenuePage.mock.calls.length;
@@ -236,6 +256,8 @@ describe("VenueAdminSection", () => {
     expect(screen.getByLabelText("名称")).toHaveValue("First Hall Draft");
     await user.click(screen.getByRole("button", { name: "下一页" }));
     await user.click(screen.getByRole("button", { name: "放弃修改" }));
+    await screen.findByRole("option", { name: "#2 Second Hall" });
+    await user.selectOptions(screen.getByLabelText("已有 Venue"), "2");
     await waitFor(() => expect(screen.getByLabelText("名称")).toHaveValue("Second Hall"));
     expect(apiMocks.saveConsoleVenueEdit).not.toHaveBeenCalled();
   });

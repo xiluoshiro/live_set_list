@@ -271,7 +271,7 @@ test("cover rows start ready to edit and can be removed and re-added", async () 
   expect(within(table).getByLabelText("第 1 张封面 URL")).toHaveValue("");
 });
 
-// 测试点：专辑查询自动编辑首项且保护草稿，翻页与空结果保留编辑对象，放弃后才切换命中项。
+// 测试点：空条件不自动选中，有条件查询编辑首项且保护草稿，翻页与空结果保留编辑对象。
 test("album queries select the first match while paging and empty results preserve the draft", async () => {
   const user = userEvent.setup();
   const first = { album_id: 1, album_name: "首页专辑", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 1, tracks: [] };
@@ -281,12 +281,20 @@ test("album queries select the first match while paging and empty results preser
     if (path === "/albums/21") return second;
     if (path.startsWith("/songs")) return pageOf([]);
     const params = new URL(path, "http://test").searchParams;
-    if (params.get("q")) return pageOf([]);
+    if (params.get("q") === "没有结果") return pageOf([]);
     const page = Number(params.get("page"));
     return pageOf([page === 1 ? first : second], page, 21);
   });
   render(<AlbumAdminSection variant="edit" active registerLeaveGuard={() => {}} onManage={() => {}} />);
   const search = within(screen.getByRole("search", { name: "查询专辑" }));
+  await search.findByRole("option", { name: "#1 首页专辑" });
+  expect(search.getByLabelText("已有专辑")).toHaveValue("");
+  expect(screen.queryByLabelText("专辑名称")).not.toBeInTheDocument();
+  await user.type(search.getByLabelText("搜索专辑"), "   {Enter}");
+  await waitFor(() => expect(search.getByLabelText("已有专辑")).toBeEnabled());
+  expect(search.getByLabelText("已有专辑")).toHaveValue("");
+  await user.clear(search.getByLabelText("搜索专辑"));
+  await user.type(search.getByLabelText("搜索专辑"), "首页{Enter}");
   await waitFor(() => expect(screen.getByLabelText("专辑名称")).toHaveValue("首页专辑"));
   expect(search.getByLabelText("已有专辑")).toHaveValue("1");
   await user.click(search.getByRole("button", { name: "下一页" }));
@@ -298,6 +306,7 @@ test("album queries select the first match while paging and empty results preser
   await search.findByText("第 1 / 2 页，共 21 条");
   expect(search.getByLabelText("已有专辑")).toHaveValue("21");
   expect(screen.getByLabelText("专辑名称")).toHaveValue("待保存资料");
+  await user.clear(search.getByLabelText("搜索专辑"));
   await user.type(search.getByLabelText("搜索专辑"), "没有结果{Enter}");
   await screen.findByText("没有匹配的专辑。");
   expect(api.getCatalogConsole).toHaveBeenCalledWith("/albums?q=%E6%B2%A1%E6%9C%89%E7%BB%93%E6%9E%9C&page=1&limit=20");
@@ -309,6 +318,8 @@ test("album queries select the first match while paging and empty results preser
   expect(search.getByRole("option", { name: "#21 后页专辑" })).toBeInTheDocument();
   expect(search.getByLabelText("已有专辑")).toHaveValue("21");
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await user.type(search.getByLabelText("搜索专辑"), "首页{Enter}");
   let dialog = within(await screen.findByRole("dialog", { name: "未保存的修改" }));
   await user.click(dialog.getByRole("button", { name: "继续编辑" }));
   expect(screen.getByLabelText("专辑名称")).toHaveValue("待保存资料");

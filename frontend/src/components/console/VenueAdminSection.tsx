@@ -60,7 +60,7 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
     }
   };
 
-  const loadVenuePage = async (query: string, page: number, preferredVenueId?: number) => {
+  const loadVenuePage = async (query: string, page: number, preferredVenueId?: number, selectFirst = false) => {
     setLoading(true);
     try {
       const response = await getConsoleVenuePage(query, page, VENUE_PAGE_SIZE);
@@ -71,9 +71,9 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
       setVenueTotal(response.total ?? items.length);
       setVenueTotalPages(response.total_pages ?? 1);
 
-      const preferredId = preferredVenueId && items.some(item => item.venue_id === preferredVenueId)
-        ? preferredVenueId : selectedVenueId;
-      const nextVenueId = resolveConsoleEditSelection(items, venue => venue.venue_id, preferredId, "prefer-match");
+      const preferredId = preferredVenueId ?? selectedVenueId;
+      const nextVenueId = resolveConsoleEditSelection(items, venue => venue.venue_id, preferredId,
+        selectFirst && query.trim() ? "query" : "preserve");
       setSelectedVenueId(nextVenueId);
       if (nextVenueId === null) {
         setDetail(null);
@@ -118,14 +118,15 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
           aria-label="搜索场馆"
           value={venueQuery}
           onChange={(event) => setVenueQuery(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") leave(() => void loadVenuePage(venueQuery.trim(), 1)); }}
+          onKeyDown={(event) => { if (event.key === "Enter") leave(() => void loadVenuePage(venueQuery.trim(), 1, undefined, true)); }}
         />
-        <button type="button" className="console-ghost-btn" disabled={loading} onClick={() => leave(() => void loadVenuePage(venueQuery.trim(), 1))}>查询</button>
+        <button type="button" className="console-ghost-btn" disabled={loading} onClick={() => leave(() => void loadVenuePage(venueQuery.trim(), 1, undefined, true))}>查询</button>
         <ConsoleEditSelect
           id="venue-admin-select"
-          label="已有 Venue" placeholder="暂无 Venue"
+          label="已有 Venue" placeholder="选择要编辑的场馆"
           value={selectedVenueId}
           disabled={loading || venues.length === 0}
+          selectedOption={detail ? { id: detail.venue_id, label: `#${detail.venue_id} ${detail.venue_name}` } : undefined}
           options={venues.map(venue => ({ id: venue.venue_id, label: `#${venue.venue_id} ${venue.venue_name}` }))}
           onSelect={id => leave(() => void loadDetail(id))} />
         <div className="tour-candidate-pager">

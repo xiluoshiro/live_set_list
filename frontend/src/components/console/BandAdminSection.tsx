@@ -3,7 +3,7 @@ import { ConsoleEditorLock } from "./ConsoleEditorLock";
 import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
 import { useConsoleDraftGuard } from "./ConsoleDraftGuard";
 import { MemberAdminSection } from "./MemberAdminSection";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   createConsoleBand,
@@ -18,7 +18,7 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleDateInput, isIsoCalendarDate } from "./ConsoleDateInput";
-import { ConsoleEditSelect, resolveConsoleEditSelection } from "./ConsoleEditSelect";
+import { ConsoleEditSelect } from "./ConsoleEditSelect";
 import type { BandOption } from "./types";
 
 
@@ -101,16 +101,6 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (realBands.length === 0) {
-      setSelectedBandId(null);
-      setHistory(null);
-      return;
-    }
-    const nextId = resolveConsoleEditSelection(realBands, band => band.band_id, selectedBandId, "prefer-match");
-    if (nextId !== null && history?.band_id !== nextId) void loadHistory(nextId);
-  }, [history?.band_id, realBands, selectedBandId]);
 
   const submitCreate = async () => {
     setSubmitting(true); setSaveError("");
@@ -213,7 +203,7 @@ export function BandAdminSection({ bands, onMessage, onBandsChanged }: BandAdmin
         <ConsoleEditSelect
           id="band-admin-select"
           className="console-entity-select"
-          label="已有 Band" placeholder=""
+          label="已有 Band" placeholder="选择要编辑的乐队"
           value={selectedBandId}
           disabled={loading}
           options={realBands.map(band => ({ id: band.band_id, label: `#${band.band_id} ${band.band_name}` }))}

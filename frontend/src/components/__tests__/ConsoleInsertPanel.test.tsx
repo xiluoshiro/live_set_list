@@ -350,7 +350,7 @@ describe("ConsoleInsertPanel", () => {
 
   });
 
-  // 测试点：专辑管理自动加载已有专辑，新增草稿独立保留，切页时保护编辑草稿。
+  // 测试点：专辑管理需手动选择或有条件查询，新增草稿独立保留，切页时保护编辑草稿。
   test("专辑新增与管理分开，切换时保护编辑草稿", async () => {
     const user = userEvent.setup();
     const album = { album_id: 11, album_name: "已有专辑", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 3, tracks: [] };
@@ -358,6 +358,9 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel initialMode="album_create" />);
     await user.type(screen.getByLabelText("专辑名称"), "新增草稿");
     await user.click(screen.getByRole("tab", { name: "专辑管理" }));
+    await screen.findByRole("option", { name: "#11 已有专辑" });
+    expect(screen.getByLabelText("已有专辑")).toHaveValue("");
+    await user.selectOptions(screen.getByLabelText("已有专辑"), "11");
     expect(await screen.findByRole("textbox", { name: "专辑名称" })).toHaveValue("已有专辑");
     expect(screen.getByLabelText("已有专辑")).toHaveValue("11");
     await user.click(screen.getByRole("tab", { name: "新增专辑" }));
@@ -1599,13 +1602,10 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledWith("", 1, 20, "event"));
   });
 
-  // 测试点：Live 管理显式查询命中后会选中首个真实候选并加载编辑表单。
+  // 测试点：Live 管理空条件查询不选中，有条件查询才选中首个真实候选并加载编辑表单。
   test("Live管理查询命中后自动选中首个Live", async () => {
     const user = userEvent.setup();
-    apiMocks.getConsoleLiveCandidates
-      .mockResolvedValueOnce({ items: [], page: 1, page_size: 10, total: 0, total_pages: 1 })
-      .mockResolvedValueOnce({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 })
-      .mockResolvedValueOnce({
+    apiMocks.getConsoleLiveCandidates.mockResolvedValue({
         items: [{ live_id: 55, live_date: "2026-07-05", live_title: "Event Live", live_type: "event", venue_name: "New Venue" }],
         page: 1,
         page_size: 20,
@@ -1614,11 +1614,18 @@ describe("ConsoleInsertPanel", () => {
       });
 
     render(<ConsoleInsertPanel initialMode="live_edit" />);
-    await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledTimes(2));
+    const selector = screen.getByRole("combobox", { name: "选择要编辑的 Live" });
+    await screen.findByRole("option", { name: /#55/ });
+    expect(selector).toHaveValue("");
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "   ");
+    await user.click(screen.getByRole("button", { name: "查询" }));
+    await waitFor(() => expect(selector).toBeEnabled());
+    expect(selector).toHaveValue("");
+    expect(apiMocks.getConsoleLive).not.toHaveBeenCalled();
+    await user.clear(screen.getByPlaceholderText("输入 Live ID 或标题"));
     await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "Event Live");
     await user.click(screen.getByRole("button", { name: "查询" }));
 
-    const selector = screen.getByRole("combobox", { name: "选择要编辑的 Live" });
     await waitFor(() => expect(selector).toHaveValue("55"));
     expect(apiMocks.getConsoleLive).toHaveBeenCalledWith(55);
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live");
@@ -1846,7 +1853,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByLabelText("歌曲组名称")).toHaveValue("改名曲");
   });
 
-  // 测试点：歌曲显式查询重新选中首项，其他命中可切换，翻页沿用条件并保留编辑对象。
+  // 测试点：歌曲空条件不选中，有条件查询选中首项，翻页沿用条件并保留编辑对象。
   test("歌曲管理显式查询并在翻页时保留条件和已选版本", async () => {
     const user = userEvent.setup();
     const song = catalogSongFixture(902, "搜索命中曲");
@@ -1860,14 +1867,20 @@ describe("ConsoleInsertPanel", () => {
       : path === "/members" ? { items: [] } : { items: path.includes("page=2") ? [] : [song, second], page: path.includes("page=2") ? 2 : 1, total_pages: 2 });
     render(<ConsoleInsertPanel />);
     await user.click(screen.getByRole("tab", { name: "歌曲管理" }));
-    await screen.findByLabelText("歌曲组名称");
+    await screen.findByRole("option", { name: /#902/ });
     const selector = screen.getByLabelText("选择要编辑的歌曲");
-    expect(selector).toHaveValue("902");
+    expect(selector).toHaveValue("");
+    const searchRegion = screen.getByRole("search", { name: "查询已有歌曲" });
+    await user.type(screen.getByRole("textbox", { name: "搜索歌曲" }), "   ");
+    await user.click(within(searchRegion).getByRole("button", { name: "查询" }));
+    await waitFor(() => expect(selector).toBeEnabled());
+    expect(selector).toHaveValue("");
+    expect(screen.queryByLabelText("歌曲组名称")).not.toBeInTheDocument();
+    await user.clear(screen.getByRole("textbox", { name: "搜索歌曲" }));
     await user.selectOptions(selector, "903");
     await waitFor(() => expect(screen.getByLabelText("歌曲组名称")).toHaveValue("第二命中曲"));
     const query = screen.getByRole("textbox", { name: "搜索歌曲" });
     const filter = screen.getByRole("combobox", { name: "筛选归属乐队" });
-    const searchRegion = screen.getByRole("search", { name: "查询已有歌曲" });
     apiMocks.getCatalogConsole.mockClear();
     await user.type(query, "Song");
     await user.selectOptions(filter, "2");
@@ -1903,7 +1916,7 @@ describe("ConsoleInsertPanel", () => {
     expect(selector).toHaveValue("902");
   });
 
-  // 测试点：歌单未变不能提交，离开保护草稿，失败可重试且下次预览以已保存内容为原值。
+  // 测试点：歌单空条件不选中，有条件查询加载首项；保存与离开保护草稿，失败可重试。
   test("Setlist管理加载并更新既有Setlist", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -1954,6 +1967,16 @@ describe("ConsoleInsertPanel", () => {
     render(<ConsoleInsertPanel initialMode="live_create" />);
     await user.click(screen.getByRole("tab", { name: "歌单管理" }));
     await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledWith("", 1, 100, "", true));
+    const selector = screen.getByRole("combobox", { name: "选择要编辑的 Setlist" });
+    await waitFor(() => expect(selector).toBeEnabled());
+    expect(selector).toHaveValue("");
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "   ");
+    await user.click(screen.getByRole("button", { name: "查询" }));
+    await waitFor(() => expect(selector).toBeEnabled());
+    expect(selector).toHaveValue("");
+    expect(apiMocks.getConsoleLiveSetlist).not.toHaveBeenCalled();
+    await user.clear(screen.getByPlaceholderText("输入 Live ID 或标题"));
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "55{Enter}");
     await waitFor(() => expect(apiMocks.getConsoleLiveSetlist).toHaveBeenCalledWith(55));
     expect(screen.getByRole("combobox", { name: "选择要编辑的 Setlist" })).toHaveValue("55");
     expect(screen.getByPlaceholderText("请输入歌曲名")).toHaveValue("BLACK SHOUT");
