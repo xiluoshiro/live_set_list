@@ -1,7 +1,7 @@
 import { ConsoleEditorLock } from "./ConsoleEditorLock";
 import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
 import { useConsoleDraftGuard } from "./ConsoleDraftGuard";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { getCatalogConsole, songCatalogWrite, type CatalogPage, type AlbumDetail, type AlbumDraft, type AlbumSummary, type AlbumTrackWrite, type ConsoleSongItem } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
@@ -12,7 +12,7 @@ import { CoverEditor } from "./CoverEditor";
 import { coverChanges } from "./confirmationFields";
 import { albumLinksError, coverPayload, filledCovers } from "../../albumLinks";
 import { getTodayDateInputValue } from "./helpers";
-import { AlbumTrackPaste } from "./AlbumTrackPaste";
+import { AlbumTrackCreateEditor } from "./AlbumTrackCreateEditor";
 import { albumSongLabel as songLabel } from "./albumTracks";
 
 const emptyAlbum = (): AlbumDraft => ({ album_name: "", release_label: "", release_date: getTodayDateInputValue(), album_url: null, cover_urls: [{ url: "", name: "" }], tracks: [] });
@@ -64,11 +64,16 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
   const [songLabels, setSongLabels] = useState<Record<number, string>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [clearAfterCreate, setClearAfterCreate] = useState(true);
+  const [tracksReady, setTracksReady] = useState(true);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [batchLocked, setBatchLocked] = useState(false);
   const [batchReset, setBatchReset] = useState(0);
+  const updateCreateTracks = useCallback((tracks: AlbumTrackWrite[], songs: ConsoleSongItem[], ready: boolean) => {
+    setCreateDraft(current => ({ ...current, tracks }));
+    setSongLabels(current => ({ ...current, ...Object.fromEntries(songs.map(song => [song.song_id, songLabel(song)])) }));
+    setTracksReady(ready);
+  }, []);
   const batchDiscardGuard = useRef<((proceed: () => void) => void) | null>(null);
   const [loadingAlbum, setLoadingAlbum] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -113,7 +118,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     return () => { current = false; };
   }, [active, creating, albumSearch]);
   useEffect(() => {
-    if (!active || (!creating && !original)) return;
+    if (!active || creating || !original) return;
     let current = true;
     setSongsLoading(true); setSongsError(""); setSongResults(null);
     const loadSongs = async () => {
@@ -150,7 +155,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
       setHistory(value => [...value, { album, action: creating ? "create" : "update" }]);
       setMessage(`已${creating ? "新增" : "更新"}专辑 #${album.album_id} ${albumTitle(album)}`);
       if (creating) {
-        if (clearAfterCreate) { setCreateDraft(emptyAlbum()); setSelectedSong(""); setBatchReset(value => value + 1); }
+        setCreateDraft(emptyAlbum()); setSelectedSong(""); setBatchReset(value => value + 1);
       } else {
         setOriginal(album); setEditDraft(fields(album));
       }
@@ -167,13 +172,15 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     const problem = albumLinksError(draft.album_url, filledCovers(draft.cover_urls));
     setError(problem);
     if (!problem) {
-      if (creating && clearAfterCreate && batchDiscardGuard.current) batchDiscardGuard.current(() => setConfirm(true));
+      if (creating && batchDiscardGuard.current) batchDiscardGuard.current(() => setConfirm(true));
       else setConfirm(true);
     }
   };
   const visibleHistory = history.filter(entry => entry.action === (creating ? "create" : "update"));
   const originalTracks = creating ? [] : original?.tracks ?? [];
-  const batchSection = draft.tracks[draft.tracks.length - 1]?.section_name ?? "";
+  const submitButton = <button type="button" className="console-submit-btn"
+    disabled={locked || !dirty || !draft.album_name.trim() || draft.release_date === "" || (creating && !tracksReady)}
+    onClick={review}>{creating ? "提交插入" : "保存修改"}</button>;
   const albumNameInput = <input aria-label="专辑名称" placeholder="请输入专辑名称" disabled={locked} value={draft.album_name} onChange={e => setDraft({ ...draft, album_name: e.target.value })} />;
   const releaseLabelInput = <input aria-label="发行标识" disabled={locked} value={draft.release_label} placeholder="10th single / best album" onChange={e => setDraft({ ...draft, release_label: e.target.value })} />;
   const albumUrlInput = <input aria-label="专辑页面" type="url" maxLength={2048} disabled={locked} value={draft.album_url ?? ""} placeholder="https://" onChange={e => setDraft({ ...draft, album_url: e.target.value || null })} />;
@@ -245,13 +252,8 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     <CoverEditor title="专辑封面" covers={draft.cover_urls} locked={locked}
       onChange={cover_urls => setDraft({ ...draft, cover_urls })} />
     <section aria-label="收录曲目">
-    {creating && <AlbumTrackPaste key={batchReset} locked={busy || confirm} csrfToken={csrfToken} discardGuard={batchDiscardGuard}
-      section={batchSection} startOrder={draft.tracks.filter(track => (track.section_name ?? "") === batchSection).length + 1} onLock={setBatchLocked}
-      onAppend={(tracks, addedSongs) => {
-        setCreateDraft(current => ({ ...current, tracks: numberTracks([...current.tracks, ...tracks]) }));
-        setSongLabels(current => ({ ...current, ...Object.fromEntries(addedSongs.map(song => [song.song_id, songLabel(song)])) }));
-        setSongResults(current => [...new Map([...(current ?? []), ...addedSongs].map(song => [song.song_id, song])).values()]);
-      }} />}
+    {creating ? <AlbumTrackCreateEditor key={batchReset} locked={busy || confirm} csrfToken={csrfToken}
+      onChange={updateCreateTracks} onLock={setBatchLocked} discardGuard={batchDiscardGuard} submitButton={submitButton} /> : <>
       <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar" role="search" aria-label="查询收录歌曲">
         <label className="live-management-label" htmlFor={`${formId}-song-select`}>收录歌曲</label>
         <input id={`${formId}-song-query`} className="venue-query-input live-management-primary-control" disabled={locked}
@@ -282,16 +284,14 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
           <button type="button" className="console-ghost-btn" disabled={locked} onClick={() => setDraft({ ...draft, tracks: numberTracks(draft.tracks.filter((_, i) => i !== index)) })}>移除</button>
         </div></td></tr>)}
     </tbody></table></div>
+    </>}
     </section>
-      <div className="console-submit-row live-admin-insert-row venue-create-actions">
-        {creating && <label className="live-clear-after-create-option"><input type="checkbox" disabled={locked}
-          checked={clearAfterCreate} onChange={e => setClearAfterCreate(e.target.checked)} />新增后清空数据</label>}
+      {!creating && <div className="console-submit-row live-admin-insert-row venue-create-actions">
         <button type="button" className="console-ghost-btn" disabled={locked} onClick={() => {
-          const reset = () => { setDraft(creating ? emptyAlbum() : fields(original!)); setSelectedSong(""); setError(""); setMessage(""); setBatchReset(value => value + 1); };
-          if (creating && batchDiscardGuard.current) batchDiscardGuard.current(reset); else reset();
-        }}>{creating ? "清空数据" : "恢复原值"}</button>
-        <button type="button" className="console-submit-btn" disabled={locked || !dirty || !draft.album_name.trim() || draft.release_date === ""} onClick={review}>{creating ? "提交插入" : "保存修改"}</button>
-      </div>
+          setEditDraft(fields(original!)); setSelectedSong(""); setError(""); setMessage("");
+        }}>恢复原值</button>
+        {submitButton}
+      </div>}
     {!creating && dirty && <p className="console-admin-hint" role="status">专辑 #{original!.album_id} 有未保存修改</p>}
     </>}
     <div className="console-table-wrap live-history-wrap">

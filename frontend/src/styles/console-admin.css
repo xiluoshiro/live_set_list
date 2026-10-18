@@ -1367,6 +1367,8 @@
 .album-release-date > input { flex: 0 1 160px; min-width: 0; }
 .album-release-date .live-clear-after-create-option { display: inline-flex; white-space: nowrap; }
 .album-track-editor { table-layout: fixed; }
+.album-track-create-table { min-width: 860px; }
+.album-track-song-id-column { width: 112px; }
 .album-track-editor td { overflow-wrap: anywhere; }
 .album-track-section-column { width: 180px; }
 .album-track-order-column { width: 72px; }

@@ -1,5 +1,6 @@
 import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
 import { CompactConfirmationTable } from "./CompactConfirmationTable";
+import { ConsolePastePreview, ConsolePastePreviewDetails } from "./ConsolePastePreview";
 import { useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
 
 import type { ConsoleBandHistory, ConsoleLiveBandLineupContext } from "../../api";
@@ -374,41 +375,11 @@ export function LiveInsertTab({
           onChange={(event) => onSetlistPasteTextChange(event.target.value)}
           placeholder="例如：&#10;＜Roselia×愛美 from Poppin'Party＞&#10;M1. BLACK SHOUT&#10;EN1. BRAVE JEWEL"
         />
-        {(setlistParsePreviewRows.length > 0 || setlistParseWarnings.length > 0) && (
-          <div className="setlist-paste-preview">
-            <p className="setlist-paste-summary">
-              预览：{setlistParsePreviewRows.length} 行，提示 {setlistParseWarnings.length} 条
-            </p>
-            {setlistParseWarnings.length > 0 && (
-              <ul className="setlist-paste-warnings">
-                {setlistParseWarnings.slice(0, 6).map((warning, index) => (
-                  <li key={`${warning.line}-${index}`}>
-                    第 {warning.line} 行：{warning.message}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {setlistParsePreviewRows.length > 0 && (
-              <div className="setlist-paste-preview-list">
-                {setlistParsePreviewRows.slice(0, 3).map((row, index) => (
-                  <span key={row.row_key}>
-                    {index + 1}. {row.segment_start_type || "-"} {row.song_name} / {summarizeBandMember(row)}
-                  </span>
-                ))}
-                {setlistParsePreviewRows.length > 3 && (
-                  <button type="button" className="setlist-preview-more-btn" onClick={onOpenFullSetlistPreview}>
-                    ... 还有 {setlistParsePreviewRows.length - 3} 行，查看全部
-                  </button>
-                )}
-                {setlistParsePreviewRows.length <= 3 && (
-                  <button type="button" className="setlist-preview-more-btn" onClick={onOpenFullSetlistPreview}>
-                    显示详情
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        <ConsolePastePreview
+          rows={setlistParsePreviewRows.map((row, index) => ({ key: row.row_key,
+            summary: `${index + 1}. ${row.segment_start_type || "-"} ${row.song_name} / ${summarizeBandMember(row)}` }))}
+          warnings={setlistParseWarnings.map(warning => `第 ${warning.line} 行：${warning.message}`)}
+          onOpenDetails={onOpenFullSetlistPreview} />
       </section>
 
       <div className="console-table-wrap setlist-input-wrap">
@@ -915,29 +886,9 @@ export function LiveInsertTab({
                 </ul>
               )}      </ConsoleConfirmDialog>}
 
-      {setlistParsePreviewOpen && (
-        <div className="song-modal-backdrop" role="presentation" onClick={onCloseFullSetlistPreview}>
-          <div
-            className="song-modal setlist-full-preview-modal"
-            role="dialog"
-            aria-label="完整 Setlist 解析预览"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="song-modal-header">
-              <strong>完整 Setlist 解析预览</strong>
-              <button
-                type="button"
-                className="modal-action-btn close"
-                aria-label="关闭完整预览"
-                onClick={onCloseFullSetlistPreview}
-              >
-                <span className="modal-action-glyph close">✕</span>
-              </button>
-            </div>
-            {renderPreviewTable()}
-          </div>
-        </div>
-      )}
+      {setlistParsePreviewOpen && <ConsolePastePreviewDetails title="完整 Setlist 解析预览" onClose={onCloseFullSetlistPreview}>
+        {renderPreviewTable()}
+      </ConsolePastePreviewDetails>}
     </>
   );
 }

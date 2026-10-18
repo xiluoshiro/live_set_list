@@ -1,9 +1,13 @@
-import type { CatalogMember, ConsoleSongItem, SongOwnership } from "../../api";
+import type { AlbumTrackWrite, CatalogMember, ConsoleSongItem, SongOwnership } from "../../api";
 import { parse } from "./setlistParser/generatedParser.js";
 import { emptyOwnership } from "./OwnershipFields";
 import type { BandOption } from "./types";
 
 export type ParsedAlbumTrack = { song_name: string; ownership: SongOwnership; tag: string };
+export type AlbumTrackDraft = Omit<AlbumTrackWrite, "song_id"> & {
+  row_key: number; song_name: string; ownership: SongOwnership;
+  song: ConsoleSongItem | null; candidates: ConsoleSongItem[]; queried: boolean;
+};
 export const albumSongLabel = (song: Pick<ConsoleSongItem, "song_id" | "song_name" | "version_label" | "band_name">) =>
   `#${song.song_id} ${song.song_name} / ${song.version_label || "默认版本"} / ${song.band_name ?? "待回填"}`;
 
