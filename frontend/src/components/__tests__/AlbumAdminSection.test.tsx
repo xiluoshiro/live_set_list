@@ -2,8 +2,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { AlbumAdminSection } from "../console/AlbumAdminSection";
+import { parseAlbumTrackText } from "../console/albumTracks";
 
-const api = vi.hoisted(() => ({ getCatalogConsole: vi.fn(), songCatalogWrite: vi.fn() }));
+const api = vi.hoisted(() => ({ getCatalogConsole: vi.fn(), songCatalogWrite: vi.fn(), getConsoleBands: vi.fn(), createConsoleSongsBatch: vi.fn() }));
 const pageOf = (items: unknown[], page = 1, total = items.length) => ({ items, page, total, page_size: 20, total_pages: Math.max(1, Math.ceil(total / 20)) });
 vi.mock("../../api", () => api);
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ csrfToken: "csrf" }) }));
@@ -17,6 +18,95 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.useRealTimers());
+
+// 测试点：组合标签保留乐队与成员归属，未完整识别的标签整行待回填并提示，避免误写部分归属。
+test("album paste ownership requires the complete tag to resolve", () => {
+  const parsed = parseAlbumTrackText("<A × 成员甲 from B>\n1. 新曲\n<A × 未知乐队>\n2. 另一曲", [
+    { band_id: 1, band_name: "乐队 A", band_abbr: "A", band_members: [] },
+    { band_id: 2, band_name: "乐队 B", band_abbr: "B", band_members: ["成员甲"] },
+  ], [{ member_id: 7, display_name: "成员甲", revision: 1 }]);
+  expect(parsed.rows[0].ownership).toEqual({ mode: "mixed", band_ids: [1], member_groups: [{ band_id: 2, member_ids: [7] }] });
+  expect(parsed.rows[1].ownership).toEqual({ mode: "pending", band_ids: [], member_groups: [] });
+  expect(parsed.warnings).toEqual([expect.stringContaining("A × 未知乐队")]);
+});
+
+// 测试点：批量收录复用已有版本，多版本由用户选择，只有未匹配歌曲按标签新增，最终保留输入顺序。
+test("batch tracks match versions and create only missing songs using tag ownership", async () => {
+  const user = userEvent.setup();
+  const song = { song_id: 1, group_id: 1, song_name: "已有曲", version_label: "", band_name: "乐队 A", owner_mode: "bands" };
+  api.getConsoleBands.mockResolvedValue({ items: [{ band_id: 3, band_name: "乐队 A", band_abbr: "A", band_members: ["成员甲"] }] });
+  api.getCatalogConsole.mockImplementation(async (path: string) => {
+    if (path === "/members") return { items: [{ member_id: 7, display_name: "成员甲" }] };
+    if (path.includes(encodeURIComponent("已有曲"))) return pageOf([song, { ...song, song_id: 2, version_label: "Acoustic" }]);
+    if (path.includes(encodeURIComponent("新曲"))) return pageOf([]);
+    return pageOf([song]);
+  });
+  api.createConsoleSongsBatch.mockResolvedValue({ ok: true, results: [{ index: 0, created: true, item: {
+    song_id: 10, group_id: 10, song_name: "新曲", version_label: "", ownership: { mode: "members", bands: [], groups: [{ band_id: 3, band_name: "乐队 A" }] },
+  } }] });
+  api.songCatalogWrite.mockRejectedValue(new Error("保留专辑草稿"));
+  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
+  await user.type(screen.getByLabelText("专辑名称"), "批量盘");
+  await screen.findByRole("option", { name: "#1 已有曲 / 默认版本 / 乐队 A" });
+  await user.selectOptions(screen.getByLabelText("收录歌曲"), "1");
+  await user.click(screen.getByRole("button", { name: "添加收录" }));
+  fireEvent.change(screen.getByLabelText("第 1 曲碟号/发行版"), { target: { value: "Disc1" } });
+  fireEvent.change(screen.getByLabelText("批量粘贴收录歌曲文本"), { target: { value: "<成员甲 from A>\nM1. 新曲\n<A>\nM2. 已有曲" } });
+  await user.click(screen.getByRole("button", { name: "解析并查询" }));
+  await screen.findByLabelText("第 2 行歌曲版本");
+  expect(screen.getByRole("button", { name: "批量插入" })).toBeDisabled();
+  await user.selectOptions(screen.getByLabelText("第 2 行歌曲版本"), "2");
+  await user.click(screen.getByRole("button", { name: "批量插入" }));
+  let dialog = within(screen.getByRole("dialog", { name: "确认批量收录歌曲" }));
+  expect(dialog.getByLabelText("归属模式")).toHaveValue("members");
+  expect(screen.getByLabelText("专辑名称")).toBeDisabled();
+  await user.click(dialog.getByRole("button", { name: "取消" }));
+  expect(api.createConsoleSongsBatch).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "批量插入" }));
+  dialog = within(screen.getByRole("dialog", { name: "确认批量收录歌曲" }));
+  await user.click(dialog.getByRole("button", { name: "确认提交" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(api.createConsoleSongsBatch).toHaveBeenCalledWith([{ group_name: "新曲", version_label: "", cover_urls: [],
+    ownership: { mode: "members", band_ids: [], member_groups: [{ band_id: 3, member_ids: [7] }] } }], "csrf");
+  expect(screen.getByLabelText("批量粘贴收录歌曲文本")).toHaveValue("");
+  await user.click(screen.getByRole("button", { name: "提交插入" }));
+  await user.click(within(screen.getByRole("dialog", { name: "确认新增专辑" })).getByRole("button", { name: "确认提交" }));
+  expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums", "POST", expect.objectContaining({ tracks: [
+    { song_id: 1, section_name: "Disc1", track_order: 1, edition_label: "" },
+    { song_id: 10, section_name: "Disc1", track_order: 2, edition_label: "" },
+    { song_id: 2, section_name: "Disc1", track_order: 3, edition_label: "" },
+  ] }), "csrf");
+});
+
+// 测试点：批量部分成功保留已建歌曲，重试只提交失败项，所有歌曲就绪后才按原顺序追加。
+test("batch track retries retain successful creations without duplicate collection", async () => {
+  const user = userEvent.setup();
+  api.getConsoleBands.mockResolvedValue({ items: [{ band_id: 3, band_name: "乐队 A", band_abbr: "A", band_members: [] }] });
+  api.getCatalogConsole.mockResolvedValue(pageOf([]));
+  const saved = { song_id: 11, group_id: 11, song_name: "新曲甲", version_label: "", ownership: { mode: "bands", bands: [{ band_id: 3, band_name: "乐队 A" }], groups: [] } };
+  api.createConsoleSongsBatch.mockResolvedValueOnce({ ok: false, results: [
+    { index: 0, item: saved, created: true }, { index: 1, error: "暂时无法创建" },
+  ] }).mockRejectedValueOnce(new Error("连接中断"))
+    .mockResolvedValueOnce({ ok: true, results: [{ index: 0, item: { ...saved, song_id: 12, song_name: "新曲乙" }, created: true }] });
+  render(<AlbumAdminSection variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
+  fireEvent.change(screen.getByLabelText("批量粘贴收录歌曲文本"), { target: { value: "<A>\n1. 新曲甲\n2. 新曲乙" } });
+  await user.click(screen.getByRole("button", { name: "解析并查询" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "批量插入" })).toBeEnabled());
+  await user.click(screen.getByRole("button", { name: "批量插入" }));
+  const dialog = within(screen.getByRole("dialog", { name: "确认批量收录歌曲" }));
+  expect(dialog.getAllByLabelText("归属模式")[0]).toHaveValue("bands");
+  await user.click(dialog.getByRole("button", { name: "确认提交" }));
+  expect(await dialog.findByRole("alert")).toHaveTextContent("暂时无法创建");
+  expect(screen.getByRole("table", { name: "专辑收录曲目" })).toHaveTextContent("暂无收录曲目");
+  await user.click(dialog.getByRole("button", { name: "确认提交" }));
+  await waitFor(() => expect(dialog.getByRole("alert")).toHaveTextContent("连接中断"));
+  await user.click(dialog.getByRole("button", { name: "确认提交" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(api.createConsoleSongsBatch.mock.calls[1][0]).toEqual([{ group_name: "新曲乙", version_label: "", cover_urls: [], ownership: { mode: "bands", band_ids: [3], member_groups: [] } }]);
+  const trackRows = within(screen.getByRole("table", { name: "专辑收录曲目" })).getAllByRole("row");
+  expect(trackRows[1]).toHaveTextContent("#11 新曲甲");
+  expect(trackRows[2]).toHaveTextContent("#12 新曲乙");
+});
 
 // 测试点：管理候选和资料表显示专辑 ID，选择后保留原始名称、发行说明及未知日期。
 test("album selection displays the release title without changing stored fields", async () => {
