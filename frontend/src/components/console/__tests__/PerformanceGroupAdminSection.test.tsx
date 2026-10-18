@@ -465,7 +465,8 @@ describe("PerformanceGroupAdminSection", () => {
     const dialog = await screen.findByRole("dialog", { name: /确认更新活动组 #/ });
     const diffTable = within(dialog).getByRole("table", { name: "活动组修改内容" });
     expect(within(diffTable).getByText("group_title")).toBeInTheDocument();
-    expect(within(diffTable).getByText("live_ids[live_id=12]")).toBeInTheDocument();
+    const changedLives = within(dialog).getByRole("table", { name: "活动组修改内容 · live_ids" });
+    expect(changedLives).toHaveTextContent("New Stop Day 3");
     expect(within(dialog).queryByText("Existing Group Day 1")).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("活动组写入失败");

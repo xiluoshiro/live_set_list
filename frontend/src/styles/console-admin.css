@@ -841,6 +841,32 @@
   overflow-wrap: anywhere;
 }
 
+.console-confirm-records-table {
+  width: 100%;
+}
+
+.console-confirm-records-table caption {
+  padding-bottom: 8px;
+  color: var(--text-heading);
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+}
+
+.console-confirm-records-table th,
+.console-confirm-records-table td {
+  width: auto;
+  min-width: 160px;
+  max-width: 360px;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.console-confirm-records-table th:first-child {
+  min-width: 48px;
+}
+
 .live-update-diff-table {
   width: 100%;
   table-layout: fixed;

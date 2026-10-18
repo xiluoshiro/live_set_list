@@ -235,7 +235,7 @@ test("new song cover validation and creation", async () => {
   await user.type(screen.getByLabelText("第 2 张封面 URL"), "https://example.test/b.png");
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   const dialog = within(screen.getByRole("dialog"));
-  expect(dialog.getByRole("table")).toHaveTextContent("https://example.test/b.png");
+  expect(dialog.getByRole("table", { name: "新增歌曲确认 · 封面" })).toHaveTextContent("https://example.test/b.png");
   await user.click(dialog.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/song-groups", "POST", expect.objectContaining({ cover_urls: [{ url: "https://example.test/a.png", name: "正面" }, { url: "https://example.test/b.png", name: "" }] }), "csrf");
 });
@@ -283,7 +283,7 @@ test("mixed ownership submits bands and selected members", async () => {
   await user.keyboard("{Escape}");
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   const dialog = screen.getByRole("dialog", { name: "确认新增歌曲" });
-  for (const name of ["乐队甲", "乐队乙", "成员乙"]) expect(within(dialog).getByRole("table")).toHaveTextContent(name);
+  for (const name of ["乐队甲", "乐队乙", "成员乙"]) expect(dialog).toHaveTextContent(name);
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
   await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/song-groups", "POST", expect.objectContaining({
@@ -736,7 +736,7 @@ test("one save reviews the complete song and group draft", async () => {
   expect(next).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   let dialog = within(screen.getByRole("dialog", { name: /确认更新歌曲 #/ }));
-  for (const value of ["新组名", "待回填"]) expect(dialog.getByRole("table")).toHaveTextContent(value);
+  for (const value of ["新组名", "待回填"]) expect(dialog.getByRole("table", { name: "歌曲修改内容" })).toHaveTextContent(value);
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
   expect(screen.getByLabelText("选择要编辑的歌曲")).toBeDisabled();
   await user.click(dialog.getByRole("button", { name: "取消" }));

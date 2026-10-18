@@ -141,7 +141,8 @@ export function AlbumTrackPaste({ locked, csrfToken, section, startOrder, onAppe
       onClose={() => { if (!busy) { setConfirm(false); onLock(false); } }} onConfirm={apply}>
       {missing.length ? <BatchSongConfirmation rows={newRows} bands={bands} members={members} busy={busy}
         onOwnershipChange={updateOwnership} /> : <CompactConfirmationTable ariaLabel="批量收录歌曲确认"
-          rows={rows.map((row, index) => [`曲目 ${startOrder + index}`, albumSongLabel(row.song!)] as const)} />}
+          changes={rows.map((row, index) => ({ field: `曲目 ${startOrder + index}`, before: "", after: albumSongLabel(row.song!),
+            table: { source: "曲目", row: String(startOrder + index), column: "歌曲" } }))} />}
     </ConsoleConfirmDialog>}
   </section>;
 }

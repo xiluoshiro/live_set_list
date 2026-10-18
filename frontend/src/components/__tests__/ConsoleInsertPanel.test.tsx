@@ -2001,10 +2001,9 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "保存修改" })).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "保存修改" }));
     const dialog = screen.getByRole("dialog", { name: /确认更新 Setlist · Live #/ });
-    const diffTable = within(dialog).getByRole("table", { name: "Setlist 修改内容" });
-    expect(within(diffTable).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual([
-      "setlist_rows[abs=1].comment-Encore note",
-    ]);
+    const diffTable = within(dialog).getByRole("table", { name: "Setlist 修改内容 · setlist_rows" });
+    expect(diffTable).toHaveTextContent("Encore note");
+    expect(within(diffTable).getByRole("rowheader", { name: "abs=1" })).toBeInTheDocument();
     expect(within(dialog).queryByRole("table", { name: "确认场次" })).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("歌单写入失败");

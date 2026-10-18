@@ -227,7 +227,7 @@ test("cover edits are reviewed, retained on failure and restored", async () => {
   expect(screen.getByLabelText("第 2 张封面 URL")).toHaveValue(covers[1].url);
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   const dialog = screen.getByRole("dialog", { name: /确认更新专辑 #/ });
-  expect(within(dialog).getByRole("table")).toHaveTextContent(covers[2].url);
+  expect(within(dialog).getByRole("table", { name: "专辑修改内容 · 封面" })).toHaveTextContent(covers[2].url);
   expect(screen.getByLabelText("第 1 张封面 URL")).toBeDisabled();
   expect(screen.getByLabelText("第 1 张封面名称")).toBeDisabled();
   await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新)$/ }));
@@ -498,8 +498,9 @@ test("version labels survive editing and successful updates are recorded", async
   expect(screen.getByText("专辑 #1 有未保存修改")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   const dialog = screen.getByRole("dialog", { name: /确认更新专辑 #/ });
-  expect(within(dialog).getByRole("row", { name: /曲目 1/ })).toHaveTextContent("Instrumental");
-  expect(within(dialog).queryByRole("row", { name: /曲目 2/ })).not.toBeInTheDocument();
+  const changedTracks = within(dialog).getByRole("table", { name: "专辑修改内容 · 曲目" });
+  expect(changedTracks).toHaveTextContent("Instrumental");
+  expect(within(changedTracks).queryByRole("rowheader", { name: "2" })).not.toBeInTheDocument();
   await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新)$/ }));
   await screen.findByText("已更新专辑 #1 更新后的盘");
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/albums/1", "PUT", expect.objectContaining({ expected_revision: 1, tracks: [

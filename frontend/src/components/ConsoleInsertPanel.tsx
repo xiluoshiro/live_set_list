@@ -2604,10 +2604,10 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
             null
           ) : (
             <CompactConfirmationTable
-              rows={[
-              ...liveConfirmationFields(null, payload).map(({ field, after }) => [field, field === "live_type" ? formatLiveType(payload.live_type) : after] as const),
-              ["时间基准", currentTimezoneLabel],
-              ["venue_name", pendingConfirmation.venueName],
+              changes={[
+              ...liveConfirmationFields(null, payload).map(change => ({ ...change, after: change.field === "live_type" ? formatLiveType(payload.live_type) : change.after })),
+              { field: "时间基准", before: "", after: currentTimezoneLabel },
+              { field: "venue_name", before: "", after: pendingConfirmation.venueName },
               ]}
             />
           )}
@@ -2651,13 +2651,13 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
             ["setlist_rows", pendingConfirmation.previewRows.length],
           ]}
         />
-        <CompactConfirmationTable ariaLabel="新增 Setlist 确认" rows={[
+        <CompactConfirmationTable ariaLabel="新增 Setlist 确认" changes={[
           ...bandFieldChanges("band_lineup_contexts", [], pendingConfirmation.payload.band_lineup_contexts ?? []),
           ...pendingConfirmation.previewRows.flatMap(({ band_performances, ...row }) => [
             ...confirmationFieldChanges(`setlist_rows[abs=${row.absolute_order}]`, undefined, row),
             ...bandFieldChanges(`setlist_rows[abs=${row.absolute_order}].band_performances`, [], band_performances),
           ]),
-        ].map(({ field, after }) => [field, after] as const)} />
+        ]} />
       </>
     );
   };

@@ -196,7 +196,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
         { field: `${prefix} 碟号/发行版`, before: before?.section_name ?? "", after: after?.section_name ?? "" },
         { field: `${prefix} 曲序`, before: before ? String(before.track_order) : "", after: after ? String(after.track_order) : "" },
         { field: `${prefix} 器乐`, before: before ? before.edition_label || "否" : "", after: after ? after.edition_label || "否" : "" },
-      ];
+      ].map(change => ({ ...change, table: { source: "曲目", row: String(index + 1), column: change.field.slice(prefix.length + 1) } }));
     }).flat(),
   ];
   if (!active) return null;
@@ -309,7 +309,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     {confirm && <ConsoleConfirmDialog title={creating ? "确认新增专辑" : `确认更新专辑 #${original!.album_id}`}
       changes={creating ? undefined : changes} changesLabel="专辑修改内容" busy={busy} error={error} confirmLabel={creating ? "确认提交" : "确认更新"}
       onClose={closeConfirmation} onConfirm={save}>
-      {creating ? <CompactConfirmationTable rows={changes.map(({ field, after }) => [field, after] as const)} /> :
+      {creating ? <CompactConfirmationTable changes={changes} /> :
         null}
     </ConsoleConfirmDialog>}
   </ConsoleEditorLock>

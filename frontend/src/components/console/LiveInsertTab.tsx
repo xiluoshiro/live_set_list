@@ -208,8 +208,9 @@ export function LiveInsertTab({
               <td>{row.song_name}</td>
               <td>{row.is_short ? "true" : "false"}</td>
               <td>{Object.keys(row.band_member).length ? <CompactConfirmationTable rows={Object.entries(row.band_member).map(([band, members]) => [band, members.join(" / ")] as const)} /> : "-"}</td>
-              <td>{otherMembers.length ? <CompactConfirmationTable rows={otherMembers.flatMap((entry, index) => [
-                [`${index + 1}. key`, entry.member_key] as const, [`${index + 1}. value`, entry.member_value] as const,
+              <td>{otherMembers.length ? <CompactConfirmationTable changes={otherMembers.flatMap((entry, index) => [
+                { field: `${index + 1}. key`, before: "", after: entry.member_key, table: { source: "other_member", row: String(index + 1), column: "key" } },
+                { field: `${index + 1}. value`, before: "", after: entry.member_value, table: { source: "other_member", row: String(index + 1), column: "value" } },
               ])} /> : "-"}</td>
               <td>{row.comment || "-"}</td>
             </tr>

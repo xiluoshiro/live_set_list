@@ -6,7 +6,7 @@
 - `ConsoleEditorLock`：用 `locked={loading || submitting || confirming}` 包住编辑内容，阻止在加载旧对象、确认或提交期间改动。确认框通过 portal 显示，不受后台表单的锁定影响。
 - `useConsoleDraftGuard`：传入当前 `dirty`、`busy`、对象 `label` 和 `onDiscard`；渲染返回的 `dialog`，对象切换、清空或其他丢弃操作经过返回的 `guard`。组件隐藏时传 `active={false}`。
 - `ConsoleDraftProvider`：控制台根节点已有 provider。控制台模式切换通过 `useConsoleLeaveGuard`，离开控制台由 `onLeaveGuard` 接入应用导航；刷新／关闭页面通过 `beforeunload` 保护。
-- `CompactConfirmationTable`：只用于新增摘要或必要的业务后果说明。更新原／新值由 `changes` 展示，不另列未变化字段。
+- `CompactConfirmationTable`：只用于新增摘要或必要的业务后果说明。传 `changes` 时与更新确认复用 `ConfirmationTables`，同一来源的列表按条目成行、字段成列；`table` 指定来源、条目与列，结构化路径中的列表按相同规则分组。更新原／新值由 `changes` 展示，不另列未变化字段。
 - `refreshConsoleAfterSave`：写入已成功后刷新候选，并区分写入成功与刷新失败；传入的刷新函数应把读取失败抛出，避免吞掉异常后误报刷新成功。
 
 保存失败保留确认框和草稿，成功后更新原值基准及并发令牌。写入成功与候选刷新分开处理，刷新失败不能提示重新保存。确认明细按可独立编辑的字段逐项列出，嵌套对象及列表中的对象也逐字段展开，不把模式与归属、名称与 URL、曲目属性或阵容属性合并成摘要。新增／删除整条关联时同样列出各项资料；单个字段的多选值可保留为一个列表。

@@ -188,6 +188,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     { field: "歌曲组名称（整组）", before: originalGroup?.group_name ?? "", after: editGroup?.group_name.trim() ?? "" },
     ...(editGroup?.versions ?? []).map((version, index) => ({
       field: `版本 #${version.song_id} ${version.version_label || "默认版本"} 顺序`,
+      table: { source: "版本顺序", row: `#${version.song_id} ${version.version_label || "默认版本"}`, column: "顺序" },
       before: String((originalGroup?.versions.findIndex(item => item.song_id === version.song_id) ?? -1) + 1), after: String(index + 1),
     })),
   ].filter(change => change.before !== change.after));
@@ -330,13 +331,12 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
     {confirm && <ConsoleConfirmDialog title={creating ? "确认新增歌曲" : `确认更新歌曲 #${original!.song_id}`}
       changes={creating ? undefined : changes} changesLabel="歌曲修改内容" busy={busy} error={error} confirmLabel={creating ? "确认提交" : "确认更新"}
       onClose={() => setConfirm(false)} onConfirm={submit}>
-      {creating ? <CompactConfirmationTable ariaLabel="新增歌曲确认" rows={[
-        ["歌曲名称", newGroup ? groupName.trim() : selectedGroupName],
-        ["版本标识", newGroup ? "默认版本" : draft.version_label || "默认版本"],
-        ...coverChanges([], songPayload(draft).cover_urls).map(({ field, after }) => [field, after] as const),
+      {creating ? <CompactConfirmationTable ariaLabel="新增歌曲确认" changes={[
+        { field: "歌曲名称", before: "", after: newGroup ? groupName.trim() : selectedGroupName },
+        { field: "版本标识", before: "", after: newGroup ? "默认版本" : draft.version_label || "默认版本" },
+        ...coverChanges([], songPayload(draft).cover_urls),
         ...ownershipChanges(emptyOwner(), ownership, bands, members)
-          .filter(change => change.field === "归属模式" || change.after !== "无")
-          .map(({ field, after }) => [field, after] as const),
+          .filter(change => change.field === "归属模式" || change.after !== "无"),
       ]} /> : null}
     </ConsoleConfirmDialog>}
   </ConsoleEditorLock>

@@ -14,7 +14,7 @@ export function ownershipChanges(before: SongOwnership, after: SongOwnership, ba
     { field: "归属模式", before: ownershipModeLabels[before.mode], after: ownershipModeLabels[after.mode] },
     { field: "归属乐队", before: listValue(before.band_ids.map(bandName)), after: listValue(after.band_ids.map(bandName)) },
     { field: "成员所属乐队", before: listValue(before.member_groups.map(group => bandName(group.band_id))), after: listValue(after.member_groups.map(group => bandName(group.band_id))) },
-    ...groupIds.map(id => ({ field: `${bandName(id)} 固定成员`,
+    ...groupIds.map(id => ({ field: `${bandName(id)} 固定成员`, table: { source: "固定成员", row: `#${id} ${bandName(id)}`, column: "成员" },
       before: listValue((before.member_groups.find(group => group.band_id === id)?.member_ids ?? []).map(memberName)),
       after: listValue((after.member_groups.find(group => group.band_id === id)?.member_ids ?? []).map(memberName)),
     })),
@@ -23,8 +23,8 @@ export function ownershipChanges(before: SongOwnership, after: SongOwnership, ba
 
 export function coverChanges(before: CoverEntry[], after: CoverEntry[]): UpdateChange[] {
   return Array.from({ length: Math.max(before.length, after.length) }, (_, index) => [
-    { field: `封面 ${index + 1} 名称`, before: before[index]?.name ?? "", after: after[index]?.name ?? "" },
-    { field: `封面 ${index + 1} URL`, before: before[index]?.url ?? "", after: after[index]?.url ?? "" },
+    { field: `封面 ${index + 1} 名称`, table: { source: "封面", row: String(index + 1), column: "名称" }, before: before[index]?.name ?? "", after: after[index]?.name ?? "" },
+    { field: `封面 ${index + 1} URL`, table: { source: "封面", row: String(index + 1), column: "URL" }, before: before[index]?.url ?? "", after: after[index]?.url ?? "" },
   ]).flat();
 }
 
