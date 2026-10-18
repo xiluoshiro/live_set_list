@@ -909,7 +909,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
     await user.selectOptions(screen.getByLabelText("归属模式"), "bands");
     await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
-    expect(await screen.findByRole("checkbox", { name: "Real Band" })).toBeInTheDocument();
+    expect(await screen.findByRole("checkbox", { name: "9 - Real Band" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "新增歌单" }));
     await user.type(screen.getByPlaceholderText("请输入歌曲名"), "春日序曲");
@@ -1132,7 +1132,7 @@ describe("ConsoleInsertPanel", () => {
     await user.selectOptions(screen.getByLabelText("归属模式"), "bands");
     await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
     const bandOptions = within(screen.getByRole("group", { name: "归属乐队选项" })).getAllByRole("checkbox").map(node => node.closest("label")?.textContent);
-    expect(bandOptions).toEqual(["Early Band", "Later Band"]);
+    expect(bandOptions).toEqual(["2 - Early Band", "9 - Later Band"]);
 
     await user.click(screen.getByRole("tab", { name: "新增演出" }));
     await user.click(screen.getByRole("button", { name: "请选择场馆" }));
@@ -2579,14 +2579,14 @@ describe("ConsoleInsertPanel", () => {
     const dialog = await screen.findByRole("dialog", { name: "确认批量新增歌曲" });
     expect(within(dialog).getByText("Requiem for Fate")).toBeInTheDocument();
     expect(within(dialog).queryByText("BLACK SHOUT")).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("combobox", { name: "归属模式" })).toHaveValue("pending");
+    expect(within(dialog).getByRole("combobox", { name: "归属模式" })).toHaveValue("bands");
     await user.selectOptions(within(dialog).getByRole("combobox", { name: "归属模式" }), "mixed");
     expect(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ })).toBeDisabled();
     await user.click(within(dialog).getByRole("button", { name: "选择归属乐队" }));
-    await user.click(screen.getByRole("checkbox", { name: "Roselia" }));
+    expect(screen.getByRole("checkbox", { name: "2 - Roselia" })).toBeChecked();
     await user.keyboard("{Escape}");
     await user.click(within(dialog).getByRole("button", { name: "选择成员所属乐队" }));
-    await user.click(screen.getByRole("checkbox", { name: "Poppin'Party" }));
+    await user.click(screen.getByRole("checkbox", { name: "1 - Poppin'Party" }));
     await user.keyboard("{Escape}");
     await user.click(within(dialog).getByRole("button", { name: "选择Poppin'Party 固定成员" }));
     await user.click(screen.getByRole("checkbox", { name: "固定成员甲" }));
@@ -2639,7 +2639,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(dialog).queryByText("Candidate Song")).not.toBeInTheDocument();
   });
 
-  // 测试点：批量新增歌曲失败时，共享日志应覆盖旧值并完整显示后端错误原因。
+  // 测试点：批量新增失败完整展示后端原因，并保留标签预填的归属供重试。
   test("批量插入失败时会在共享日志显示后端错误原因", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -2672,7 +2672,8 @@ describe("ConsoleInsertPanel", () => {
     await screen.findByText("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
     expect(screen.getByRole("status")).toHaveTextContent("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
     const retained = screen.getByRole("dialog", { name: "确认批量新增歌曲" });
-    expect(within(retained).getByRole("combobox", { name: "归属模式" })).toHaveValue("pending");
+    expect(within(retained).getByRole("combobox", { name: "归属模式" })).toHaveValue("bands");
+    expect(within(retained).getByRole("button", { name: "选择归属乐队" })).toHaveTextContent("Roselia");
     await user.click(within(retained).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "确认批量新增歌曲" })).not.toBeInTheDocument());
     expect(screen.getByText("902")).toBeInTheDocument();
@@ -2881,14 +2882,14 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("tab", { name: "新增歌曲" }));
     await user.selectOptions(screen.getByLabelText("归属模式"), "bands");
     await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
-    await user.click(await screen.findByRole("checkbox", { name: "甲" }));
-    await user.click(screen.getByRole("checkbox", { name: "乙" }));
-    expect(screen.getByRole("checkbox", { name: "甲" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "乙" })).toBeChecked();
+    await user.click(await screen.findByRole("checkbox", { name: "1 - 甲" }));
+    await user.click(screen.getByRole("checkbox", { name: "2 - 乙" }));
+    expect(screen.getByRole("checkbox", { name: "1 - 甲" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "2 - 乙" })).toBeChecked();
     await user.selectOptions(screen.getByLabelText("归属模式"), "members");
     await user.click(screen.getByRole("button", { name: "选择成员所属乐队" }));
-    expect(screen.getByRole("checkbox", { name: "甲" })).not.toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "乙" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "1 - 甲" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "2 - 乙" })).not.toBeChecked();
   });
 
 

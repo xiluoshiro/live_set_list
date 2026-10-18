@@ -877,24 +877,9 @@
 }
 
 .console-confirm-batch-song-table {
-  width: 100%;
-  min-width: 540px;
-  table-layout: fixed;
-}
-
-.console-confirm-batch-song-table th:nth-child(1),
-.console-confirm-batch-song-table td:nth-child(1) {
-  width: 30%;
-}
-
-.console-confirm-batch-song-table th:nth-child(2),
-.console-confirm-batch-song-table td:nth-child(2) {
-  width: 20%;
-}
-
-.console-confirm-batch-song-table th:nth-child(3),
-.console-confirm-batch-song-table td:nth-child(3) {
-  width: 50%;
+  width: max-content;
+  min-width: max(100%, 660px);
+  table-layout: auto;
 }
 
 .console-confirm-setlist-table code {

@@ -9,6 +9,7 @@ import type {
 } from "../../api";
 import { DATE_PHASE_LABELS } from "../../liveStatus";
 import { ChoiceMenu } from "./ChoiceMenu";
+import { ConsoleCheckOption } from "./ConsoleCheckOption";
 import { Collapsible } from "../ui/Collapsible";
 import { formatLiveType } from "./constants";
 import { ConsoleEditSelect } from "./ConsoleEditSelect";
@@ -668,15 +669,8 @@ export function LiveAdminSection({
                 )?.members ?? []
               : band.band_members ?? [];
             return (
-              <div key={band.band_id} className="band-member-block">
-                <label className="band-member-main">
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={() => onToggleDefaultBand(band.band_id)}
-                  />
-                  <span>{band.band_id} - {displayName}</span>
-                </label>
+              <ConsoleCheckOption key={band.band_id} label={`${band.band_id} - ${displayName}`}
+                checked={selected} onChange={() => onToggleDefaultBand(band.band_id)}>
                 {selected && history && context && (
                   <p className="console-admin-hint">
                     {history.lineup_versions.find(
@@ -698,7 +692,7 @@ export function LiveAdminSection({
                     ))}
                   </div>
                 )}
-              </div>
+              </ConsoleCheckOption>
             );
           })}
         </div>

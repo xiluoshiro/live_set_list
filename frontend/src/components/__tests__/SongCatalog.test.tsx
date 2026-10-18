@@ -268,11 +268,11 @@ test("mixed ownership submits bands and selected members", async () => {
   await user.type(screen.getByLabelText("歌曲名称"), "合作曲");
   await user.selectOptions(screen.getByLabelText("归属模式"), "mixed");
   await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
-  await user.click(within(screen.getByRole("group", { name: "归属乐队选项" })).getByLabelText("乐队甲"));
+  await user.click(within(screen.getByRole("group", { name: "归属乐队选项" })).getByLabelText("1 - 乐队甲"));
   await user.keyboard("{Escape}");
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
   await user.click(screen.getByRole("button", { name: "选择成员所属乐队" }));
-  await user.click(within(screen.getByRole("group", { name: "成员所属乐队选项" })).getByLabelText("乐队乙"));
+  await user.click(within(screen.getByRole("group", { name: "成员所属乐队选项" })).getByLabelText("2 - 乐队乙"));
   await user.keyboard("{Escape}");
   await user.click(screen.getByRole("button", { name: "选择乐队乙 固定成员" }));
   await user.click(screen.getByRole("checkbox", { name: "成员乙" }));
@@ -519,7 +519,7 @@ test("create keeps its mode and uses creation requests", async () => {
   await user.type(screen.getByLabelText("歌曲名称"), "合唱曲");
   await user.selectOptions(screen.getByLabelText("归属模式"), "bands");
   await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
-  await user.click(screen.getByRole("checkbox", { name: "乐队甲" }));
+  await user.click(screen.getByRole("checkbox", { name: "1 - 乐队甲" }));
   await user.keyboard("{Escape}");
   await user.click(screen.getByRole("checkbox", { name: "新增后清空数据" }));
   for (let index = 0; index < 2; index += 1) {

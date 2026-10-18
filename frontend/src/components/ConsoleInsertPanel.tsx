@@ -55,7 +55,8 @@ import { MemberStatusTable } from "./DetailMemberTable";
 import { LiveAdminSection } from "./console/LiveAdminSection";
 import { PageTitle } from "./PageTitle";
 import { LiveInsertTab } from "./console/LiveInsertTab";
-import { emptyOwnership, ownershipFields, ownershipValid } from "./console/OwnershipFields";
+import { emptyOwnership, ownershipFromPerformers, ownershipValid } from "./console/OwnershipFields";
+import { BatchSongConfirmation, type BatchSongConfirmRow } from "./console/BatchSongConfirmation";
 import { SongCatalogAdmin } from "./console/SongCatalogAdmin";
 import { BandAdminSection } from "./console/BandAdminSection";
 import { CompactConfirmationTable } from "./console/CompactConfirmationTable";
@@ -133,13 +134,6 @@ const CONSOLE_MODE_COLUMNS: { title: string; create?: { value: ConsoleMode; labe
 
 type SetlistConfirmRow = ConsoleLiveSetlistRowPayload & {
   song_name: string;
-};
-
-type BatchSongConfirmRow = {
-  row_key: number;
-  song_name: string;
-  performers: string;
-  ownership: SongOwnership;
 };
 
 type PendingConfirmation =
@@ -2494,7 +2488,6 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
       confirmRows.push({
         row_key: row.row_key,
         song_name: row.song_name.trim(),
-        performers: Object.keys(row.band_member).join(" / "),
         ownership: emptyOwnership(),
       });
     });
@@ -2507,6 +2500,9 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
     try {
       const response = await getCatalogConsole<{ items: CatalogMember[] }>("/members");
       setBatchMembers(response.items);
+      confirmRows.forEach(row => {
+        row.ownership = ownershipFromPerformers(rows.find(source => source.row_key === row.row_key)!.band_member, bands, response.items);
+      });
     } catch (error) {
       setMessage(`加载成员失败：${errorMessage(error)}`);
       return;
@@ -2548,9 +2544,9 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
     }
   };
 
-  const updateBatchOwnership = (rowIndex: number, ownership: SongOwnership) => {
+  const updateBatchOwnership = (rowKey: number, ownership: SongOwnership) => {
     setPendingConfirmation(current => current?.kind === "batch_song" ? { ...current,
-      rows: current.rows.map((row, index) => index === rowIndex ? { ...row, ownership } : row),
+      rows: current.rows.map(row => row.row_key === rowKey ? { ...row, ownership } : row),
     } : current);
   };
 
@@ -2637,39 +2633,8 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
     }
 
     if (pendingConfirmation.kind === "batch_song") {
-      return (
-        <>
-          {pendingConfirmation.errors.length > 0 && (
-            <ul className="setlist-paste-warnings" style={{ marginBottom: 12 }}>
-              {pendingConfirmation.errors.map((error, index) => (
-                <li key={index}>{error}</li>
-              ))}
-            </ul>
-          )}
-          <div className="console-table-wrap console-confirm-setlist-wrap">
-            <table className="console-admin-table console-confirm-setlist-table console-confirm-batch-song-table">
-              <thead>
-                <tr>
-                  <th>歌曲名称</th><th>演出乐队</th><th>版本归属</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingConfirmation.rows.map((row, index) => {
-                  const fields = ownershipFields(row.ownership, bands, batchMembers, confirmationSubmitting, owner => updateBatchOwnership(index, owner));
-                  return <tr key={row.row_key}>
-                    <td>{row.song_name}</td><td>{row.performers || "—"}</td>
-                    <td><div role="group" aria-label={`${row.song_name}版本归属`}>
-                      {fields.ownershipModeField}
-                      {fields.hasBands && fields.bandPicker}
-                      {fields.hasMembers && <>{fields.memberBandPicker}{fields.memberPickers}</>}
-                    </div></td>
-                  </tr>;
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
-      );
+      return <BatchSongConfirmation rows={pendingConfirmation.rows} bands={bands} members={batchMembers}
+        busy={confirmationSubmitting} errors={pendingConfirmation.errors} onOwnershipChange={updateBatchOwnership} />;
     }
 
     if (pendingConfirmation.action === "update") {

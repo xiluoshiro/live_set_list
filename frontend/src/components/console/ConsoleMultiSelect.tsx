@@ -1,13 +1,15 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Position } from "./types";
+import { ConsoleCheckOption } from "./ConsoleCheckOption";
 
-export function ConsoleMultiSelect({ label, options, value, disabled = false, hideLabel = false, onChange }: {
+export function ConsoleMultiSelect({ label, options, value, disabled = false, hideLabel = false, showIds = false, onChange }: {
   label: string;
   options: { id: number; label: string }[];
   value: number[];
   disabled?: boolean;
   hideLabel?: boolean;
+  showIds?: boolean;
   onChange: (value: number[]) => void;
 }) {
   const menuId = useId();
@@ -23,7 +25,7 @@ export function ConsoleMultiSelect({ label, options, value, disabled = false, hi
     const place = () => {
       const rect = trigger.current?.getBoundingClientRect();
       if (!rect) return;
-      const width = Math.min(Math.max(rect.width, 240), window.innerWidth - 24);
+      const width = Math.min(Math.max(rect.width, 320), window.innerWidth - 24);
       const height = menu.current?.getBoundingClientRect().height ?? 0;
       const below = rect.bottom + 6;
       setPosition({
@@ -62,13 +64,13 @@ export function ConsoleMultiSelect({ label, options, value, disabled = false, hi
     <button ref={trigger} type="button" className="bands-picker-trigger tour-band-trigger default-band-picker-trigger"
       aria-label={`选择${label}`} aria-expanded={open} aria-controls={open ? menuId : undefined}
       title={summary} onClick={() => setOpen(current => !current)}>{summary}</button>
-    {open && !disabled && createPortal(<div ref={menu} id={menuId} data-console-popover className="bands-floating-menu console-multiselect-menu"
-      role="group" aria-label={`${label}选项`} style={position}>
-      {options.map(option => <label key={option.id}>
-        <input type="checkbox" checked={value.includes(option.id)} onChange={event => onChange(event.target.checked
+    {open && !disabled && createPortal(<div ref={menu} id={menuId} data-console-popover className="bands-floating-menu default-band-menu console-multiselect-menu"
+      role="group" aria-label={`${label}选项`} style={position}
+      onMouseDown={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}>
+      {options.map(option => <ConsoleCheckOption key={option.id} label={showIds ? `${option.id} - ${option.label}` : option.label}
+        checked={value.includes(option.id)} onChange={checked => onChange(checked
           ? [...value, option.id] : value.filter(id => id !== option.id))} />
-        <span>{option.label}</span>
-      </label>)}
+      )}
       {options.length === 0 && <p className="console-admin-hint">没有匹配的结果</p>}
     </div>, trigger.current?.closest('[role="dialog"]') ?? document.body)}
   </fieldset>;

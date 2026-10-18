@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { createConsoleSongsBatch, getCatalogConsole, getConsoleBands, type AlbumTrackWrite, type CatalogMember, type CatalogPage, type ConsoleSongItem, type SongOwnership } from "../../api";
 import { albumSongLabel, parseAlbumTrackText, type ParsedAlbumTrack } from "./albumTracks";
 import { normalizeSongLookupText } from "./helpers";
-import { ownershipFields, ownershipValid } from "./OwnershipFields";
+import { ownershipValid } from "./OwnershipFields";
+import { BatchSongConfirmation } from "./BatchSongConfirmation";
+import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
 import { ConsoleEditorLock } from "./ConsoleEditorLock";
 import type { BandOption } from "./types";
@@ -70,6 +72,8 @@ export function AlbumTrackPaste({ locked, csrfToken, section, startOrder, onAppe
     finally { processing.current = false; if (mounted.current) { setBusy(false); onLock(false); } }
   };
   const missing = rows.filter(row => !row.song && !row.candidates.length);
+  const newRows = rows.flatMap((row, index) => !row.song && !row.candidates.length
+    ? [{ row_key: index, song_name: row.song_name, ownership: row.ownership }] : []);
   const updateOwnership = (index: number, ownership: SongOwnership) => setRows(current => current.map((row, i) => i === index ? { ...row, ownership } : row));
   const apply = async () => {
     if (processing.current || (missing.length > 0 && !csrfToken)) return;
@@ -131,18 +135,13 @@ export function AlbumTrackPaste({ locked, csrfToken, section, startOrder, onAppe
       </table></div>}
     </ConsoleEditorLock>
     {discardDialog}
-    {confirm && <ConsoleConfirmDialog title="确认批量收录歌曲" size="wide" busy={busy} error={error}
+    {confirm && <ConsoleConfirmDialog title={missing.length ? "确认批量新增歌曲" : "确认批量收录歌曲"}
+      className={missing.length ? "batch_song" : ""} busy={busy} error={error}
       confirmLabel={missing.length ? "确认提交" : "确认应用"} disabled={missing.some(row => !ownershipValid(row.ownership)) || (missing.length > 0 && !csrfToken)}
       onClose={() => { if (!busy) { setConfirm(false); onLock(false); } }} onConfirm={apply}>
-      <div className="console-table-wrap"><table className="console-admin-table" aria-label="批量收录歌曲确认">
-        <thead><tr><th>曲序</th><th>歌曲</th><th>碟号/发行版</th><th>器乐</th><th>归属模式</th><th>归属乐队</th><th>成员所属乐队</th><th>固定成员</th></tr></thead>
-        <tbody>{rows.map((row, index) => {
-          const fields = ownershipFields(row.ownership, bands, members, busy, owner => updateOwnership(index, owner));
-          return <tr key={index}><td>{startOrder + index}</td><td>{row.song ? albumSongLabel(row.song) : `${row.song_name} / 默认版本（新增）`}</td><td>{section || "—"}</td><td>否</td>
-            <td>{!row.song ? fields.ownershipModeField : "—"}</td><td>{!row.song && fields.hasBands ? fields.bandPicker : "—"}</td>
-            <td>{!row.song && fields.hasMembers ? fields.memberBandPicker : "—"}</td><td>{!row.song && fields.hasMembers ? fields.memberPickers : "—"}</td></tr>;
-        })}</tbody>
-      </table></div>
+      {missing.length ? <BatchSongConfirmation rows={newRows} bands={bands} members={members} busy={busy}
+        onOwnershipChange={updateOwnership} /> : <CompactConfirmationTable ariaLabel="批量收录歌曲确认"
+          rows={rows.map((row, index) => [`曲目 ${startOrder + index}`, albumSongLabel(row.song!)] as const)} />}
     </ConsoleConfirmDialog>}
   </section>;
 }

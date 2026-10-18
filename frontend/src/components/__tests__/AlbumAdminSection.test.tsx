@@ -34,7 +34,10 @@ test("album paste ownership requires the complete tag to resolve", () => {
 test("batch tracks match versions and create only missing songs using tag ownership", async () => {
   const user = userEvent.setup();
   const song = { song_id: 1, group_id: 1, song_name: "已有曲", version_label: "", band_name: "乐队 A", owner_mode: "bands" };
-  api.getConsoleBands.mockResolvedValue({ items: [{ band_id: 3, band_name: "乐队 A", band_abbr: "A", band_members: ["成员甲"] }] });
+  api.getConsoleBands.mockResolvedValue({ items: [
+    { band_id: 3, band_name: "乐队 A", band_abbr: "A", band_members: ["成员甲"] },
+    { band_id: 1, band_name: "乐队 Z", band_abbr: "Z", band_members: [] },
+  ] });
   api.getCatalogConsole.mockImplementation(async (path: string) => {
     if (path === "/members") return { items: [{ member_id: 7, display_name: "成员甲" }] };
     if (path.includes(encodeURIComponent("已有曲"))) return pageOf([song, { ...song, song_id: 2, version_label: "Acoustic" }]);
@@ -57,17 +60,22 @@ test("batch tracks match versions and create only missing songs using tag owners
   expect(screen.getByRole("button", { name: "批量插入" })).toBeDisabled();
   await user.selectOptions(screen.getByLabelText("第 2 行歌曲版本"), "2");
   await user.click(screen.getByRole("button", { name: "批量插入" }));
-  let dialog = within(screen.getByRole("dialog", { name: "确认批量收录歌曲" }));
+  let dialog = within(screen.getByRole("dialog", { name: "确认批量新增歌曲" }));
   expect(dialog.getByLabelText("归属模式")).toHaveValue("members");
   expect(screen.getByLabelText("专辑名称")).toBeDisabled();
   await user.click(dialog.getByRole("button", { name: "取消" }));
   expect(api.createConsoleSongsBatch).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "批量插入" }));
-  dialog = within(screen.getByRole("dialog", { name: "确认批量收录歌曲" }));
+  dialog = within(screen.getByRole("dialog", { name: "确认批量新增歌曲" }));
+  const ownership = within(dialog.getByRole("row", { name: /新曲/ }));
+  await user.selectOptions(ownership.getByLabelText("归属模式"), "mixed");
+  await user.click(ownership.getByRole("button", { name: "选择归属乐队" }));
+  await user.click(dialog.getByRole("checkbox", { name: "1 - 乐队 Z" }));
+  await user.keyboard("{Escape}");
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(api.createConsoleSongsBatch).toHaveBeenCalledWith([{ group_name: "新曲", version_label: "", cover_urls: [],
-    ownership: { mode: "members", band_ids: [], member_groups: [{ band_id: 3, member_ids: [7] }] } }], "csrf");
+    ownership: { mode: "mixed", band_ids: [1], member_groups: [{ band_id: 3, member_ids: [7] }] } }], "csrf");
   expect(screen.getByLabelText("批量粘贴收录歌曲文本")).toHaveValue("");
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   await user.click(within(screen.getByRole("dialog", { name: "确认新增专辑" })).getByRole("button", { name: "确认提交" }));
@@ -78,10 +86,13 @@ test("batch tracks match versions and create only missing songs using tag owners
   ] }), "csrf");
 });
 
-// 测试点：批量部分成功保留已建歌曲，重试只提交失败项，所有歌曲就绪后才按原顺序追加。
+// 测试点：归属候选按乐队 ID 排序；部分成功保留已建歌曲，重试只提交失败项并按原顺序追加。
 test("batch track retries retain successful creations without duplicate collection", async () => {
   const user = userEvent.setup();
-  api.getConsoleBands.mockResolvedValue({ items: [{ band_id: 3, band_name: "乐队 A", band_abbr: "A", band_members: [] }] });
+  api.getConsoleBands.mockResolvedValue({ items: [
+    { band_id: 3, band_name: "乐队 A", band_abbr: "A", band_members: [] },
+    { band_id: 1, band_name: "乐队 Z", band_abbr: "Z", band_members: [] },
+  ] });
   api.getCatalogConsole.mockResolvedValue(pageOf([]));
   const saved = { song_id: 11, group_id: 11, song_name: "新曲甲", version_label: "", ownership: { mode: "bands", bands: [{ band_id: 3, band_name: "乐队 A" }], groups: [] } };
   api.createConsoleSongsBatch.mockResolvedValueOnce({ ok: false, results: [
@@ -93,8 +104,13 @@ test("batch track retries retain successful creations without duplicate collecti
   await user.click(screen.getByRole("button", { name: "解析并查询" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "批量插入" })).toBeEnabled());
   await user.click(screen.getByRole("button", { name: "批量插入" }));
-  const dialog = within(screen.getByRole("dialog", { name: "确认批量收录歌曲" }));
+  const dialog = within(screen.getByRole("dialog", { name: "确认批量新增歌曲" }));
   expect(dialog.getAllByLabelText("归属模式")[0]).toHaveValue("bands");
+  await user.click(dialog.getAllByRole("button", { name: "选择归属乐队" })[0]);
+  const bandOptions = within(screen.getByRole("group", { name: "归属乐队选项" })).getAllByRole("checkbox");
+  expect(bandOptions[0]).toHaveAccessibleName("1 - 乐队 Z");
+  expect(bandOptions[1]).toHaveAccessibleName("3 - 乐队 A");
+  await user.click(dialog.getAllByRole("button", { name: "选择归属乐队" })[0]);
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
   expect(await dialog.findByRole("alert")).toHaveTextContent("暂时无法创建");
   expect(screen.getByRole("table", { name: "专辑收录曲目" })).toHaveTextContent("暂无收录曲目");
