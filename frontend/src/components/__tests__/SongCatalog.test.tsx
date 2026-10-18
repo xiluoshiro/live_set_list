@@ -178,7 +178,7 @@ test("song cover editor saves ordering and protects the draft", async () => {
   const song = { ...version(), cover_urls: urls };
   api.getCatalogConsole.mockImplementation(async (path: string) => path === "/songs/1" ? song : path === "/members" ? { items: [] } : page([song]));
   let leave: ((next: () => void) => void) | null = null;
-  render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={guard => { leave = guard; }} onManage={() => {}} />);
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="edit" active bands={[]} registerLeaveGuard={guard => { leave = guard; }} onManage={() => {}} />);
   await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
   await screen.findByDisplayValue(urls[0].url);
   fireEvent.change(screen.getByLabelText("第 1 张封面名称"), { target: { value: "通常盤" } });
@@ -221,7 +221,7 @@ test("song cover editor saves ordering and protects the draft", async () => {
 // 测试点：新增歌曲拦截非法封面，修正后支持命名与未命名封面混合提交。
 test("new song cover validation and creation", async () => {
   const user = userEvent.setup();
-  render(<SongCatalogAdmin variant="create" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="create" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.type(screen.getByLabelText("歌曲名称"), "新曲");
   await user.click(screen.getByRole("button", { name: "添加封面" }));
   await user.type(screen.getByLabelText("第 1 张封面 URL"), "http://example.test/a.png");
@@ -264,7 +264,7 @@ test.each([
 test("mixed ownership submits bands and selected members", async () => {
   const user = userEvent.setup();
   api.getCatalogConsole.mockResolvedValue({ items: [{ member_id: 68, display_name: "成员乙", revision: 1 }] });
-  render(<SongCatalogAdmin variant="create" active bands={[{ band_id: 1, band_name: "乐队甲" }, { band_id: 2, band_name: "乐队乙" }]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="create" active bands={[{ band_id: 1, band_name: "乐队甲" }, { band_id: 2, band_name: "乐队乙" }]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.type(screen.getByLabelText("歌曲名称"), "合作曲");
   await user.selectOptions(screen.getByLabelText("归属模式"), "mixed");
   await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
@@ -514,7 +514,7 @@ test.each(["members", "mixed", "pending"] as const)("detail ownership %s", async
 // 测试点：新增页直接填写，确认后 POST 创建；保留草稿连续提交也不会切换为 PUT。
 test("create keeps its mode and uses creation requests", async () => {
   const user = userEvent.setup();
-  render(<SongCatalogAdmin variant="create" active bands={[{ band_id: 1, band_name: "乐队甲" }]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="create" active bands={[{ band_id: 1, band_name: "乐队甲" }]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   expect(screen.queryByLabelText("选择要编辑的歌曲")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("歌曲名称"), "合唱曲");
   await user.selectOptions(screen.getByLabelText("归属模式"), "bands");
@@ -539,7 +539,7 @@ test("create keeps its mode and uses creation requests", async () => {
 test("create adds a version to the selected song group", async () => {
   const user = userEvent.setup();
   api.getSongGroup.mockResolvedValue({ group_id: 1, group_name: "合唱曲", revision: 7, versions: [version()] });
-  render(<SongCatalogAdmin variant="create" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="create" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   expect(screen.getByLabelText("版本标识")).toBeDisabled();
   await user.selectOptions(screen.getByLabelText("歌曲组", { exact: true }), "existing");
   await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("", 1));
@@ -573,7 +573,7 @@ test("manage loads details and protects unsaved changes", async () => {
   const user = userEvent.setup();
   let guard: ((proceed: () => void) => void) | null = null;
   const leave = vi.fn();
-  render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={value => { guard = value; }} onManage={() => {}} />);
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="edit" active bands={[]} registerLeaveGuard={value => { guard = value; }} onManage={() => {}} />);
   expect(screen.queryByLabelText("歌曲组名称")).not.toBeInTheDocument();
   await screen.findByRole("option", { name: /#1 合唱曲/ });
   await user.selectOptions(screen.getByLabelText("选择要编辑的歌曲"), "1");
@@ -606,7 +606,7 @@ test("automatic query selection protects the unsaved song draft", async () => {
   api.getCatalogConsole.mockImplementation(async (path: string) => path === "/members" ? { items: [] }
     : path === "/songs/1" ? version() : path === "/songs/2" ? second
       : path.includes("q=next") ? queryResult : page([version()]));
-  render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   await screen.findByRole("option", { name: /#1 合唱曲/ });
   await user.selectOptions(screen.getByLabelText("选择要编辑的歌曲"), "1");
   const name = await screen.findByLabelText("歌曲组名称");
@@ -633,7 +633,7 @@ test("empty song queries do not select a nonexistent match", async () => {
   const user = userEvent.setup();
   api.getCatalogConsole.mockImplementation(async (path: string) => path === "/members" ? { items: [] }
     : path === "/songs/1" ? version() : page(path.includes("q=hit") ? [version()] : []));
-  render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   await screen.findByText("没有匹配的歌曲。");
   expect(screen.getByLabelText("选择要编辑的歌曲")).toHaveValue("");
   expect(screen.queryByLabelText("歌曲组名称")).not.toBeInTheDocument();
@@ -690,7 +690,7 @@ test("group picker exposes every page and retains the selection", async () => {
     items: [{ group_id: index, group_name: `${q || "歌曲组"} ${index}`, version_count: 1 }],
     page: index, page_size: 20, total: 41, total_pages: 3,
   }));
-  render(<SongCatalogAdmin variant="create" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="create" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.selectOptions(screen.getByLabelText("歌曲组", { exact: true }), "existing");
   await screen.findByText("第 1 / 3 页，共 41 条");
   expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
@@ -719,7 +719,7 @@ test("group picker exposes every page and retains the selection", async () => {
 test("one save reviews the complete song and group draft", async () => {
   const user = userEvent.setup();
   let leave: ((next: () => void) => void) | null = null;
-  render(<SongCatalogAdmin variant="edit" active bands={[{ band_id: 1, band_name: "乐队甲" }, { band_id: 2, band_name: "乐队乙" }]}
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="edit" active bands={[{ band_id: 1, band_name: "乐队甲" }, { band_id: 2, band_name: "乐队乙" }]}
     registerLeaveGuard={guard => { leave = guard; }} onManage={() => {}} />);
   await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
   const name = await screen.findByLabelText("歌曲组名称");
@@ -788,7 +788,7 @@ test("group correction joins the unified save across target pages", async () => 
   }));
   api.getSongGroup.mockImplementation(async (id: number) => ({ group_id: id, group_name: id === 21 ? "目标组" : "合唱曲",
     revision: id === 21 ? 7 : 1, versions: [version(), version(2)], display_cover: null }));
-  render(<SongCatalogAdmin variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.selectOptions(await screen.findByLabelText("选择要编辑的歌曲"), "1");
   await user.click(await screen.findByText("更正当前版本归组"));
   const section = within(screen.getByRole("region", { name: "歌曲组与版本" }));

@@ -5,7 +5,7 @@ import { bandFieldChanges, confirmationFieldChanges } from "./console/confirmati
 import { ConsoleDraftProvider, useConsoleDraftGuard, useConsoleLeaveGuard, type ConsoleLeaveGuard } from "./console/ConsoleDraftGuard";
 import { AlbumAdminSection } from "./console/AlbumAdminSection";
 import { previewConsoleLiveClock } from "../api";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../auth/AuthProvider";
 import {
@@ -557,8 +557,15 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
   const [venues, setVenues] = useState<VenueOption[]>([]);
   const [submittedBundles, setSubmittedBundles] = useState<LiveInsertBundle[]>([]);
   const [displayedBundle, setDisplayedBundle] = useState<LiveInsertBundle | null>(null);
-  const [message, setMessage] = useState<string>("");
-  const [transientNotice, setTransientNotice] = useState<string | null>(null);
+  const messageScope = useMemo(() => ({}), [mode]);
+  const activeMessageScope = useRef(messageScope);
+  useLayoutEffect(() => { activeMessageScope.current = messageScope; }, [messageScope]);
+  const [feedback, setFeedback] = useState<{ scope: object; text: string } | null>(null);
+  const setMessage = useCallback((text: string) => {
+    // Requests from a page that has been left cannot replace the current feedback.
+    if (activeMessageScope.current === messageScope) setFeedback({ scope: messageScope, text });
+  }, [messageScope]);
+  const message = feedback?.scope === messageScope ? feedback.text : "";
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [confirmationSubmitting, setConfirmationSubmitting] = useState(false);
   const [confirmationError, setConfirmationError] = useState("");
@@ -1098,16 +1105,6 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
     };
   }, [editingOtherRowKey]);
 
-  useEffect(() => {
-    if (transientNotice === null) return;
-    const timer = window.setTimeout(() => setTransientNotice(null), 2600);
-    return () => window.clearTimeout(timer);
-  }, [transientNotice]);
-
-  const showTransientNotice = (notice: string) => {
-    setTransientNotice(notice);
-  };
-
   const resetLiveForm = () => {
     setLiveDate(getTodayDateInputValue());
     setLiveTitle("");
@@ -1545,7 +1542,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
     setDidSongLookup(false);
     setSetlistRows((prev) => {
       if (prev.length <= 1) {
-        showTransientNotice("至少保留一行 setlist 草稿。");
+        setMessage("至少保留一行 setlist 草稿。");
         return prev;
       }
       return prev.slice(0, -1);
@@ -2107,6 +2104,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
     setSetlistDetailLoading(true);
     setSetlistDetailError(null);
     setSetlistDetailData(null);
+    setMessage("");
     try {
       const detail = await getLiveDetail(selectedLiveId);
       setSetlistDetailData(detail);
@@ -2114,7 +2112,6 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
     } catch (error) {
       const message = errorMessage(error);
       setSetlistDetailError(message === "Request timeout" ? "请求超时，请稍后重试" : message);
-      setMessage(`加载Live #${selectedLiveId} 详细信息失败：${message}`);
     } finally {
       setSetlistDetailLoading(false);
     }
@@ -2527,19 +2524,19 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
       const added = saved.map(result => ({ song_id: result.item!.song_id, group_id: result.item!.group_id, song_name: result.item!.song_name }));
       setSongs(current => sortById([...added, ...current.filter(song => !added.some(item => item.song_id === song.song_id))], song => song.song_id));
       const failures = response.results.filter(result => result.error).map(result => `${rows[result.index]?.song_name}：${result.error}`).join("；");
-      setMessage(`批量新增完成：新增 ${saved.filter(result => result.created).length} 首，复用 ${saved.filter(result => !result.created).length} 首，失败 ${response.results.length - saved.length} 首。${failures}`);
+      const summary = `批量新增完成：新增 ${saved.filter(result => result.created).length} 首，复用 ${saved.filter(result => !result.created).length} 首，失败 ${response.results.length - saved.length} 首。${failures}`;
       if (failures) {
         const failedIndices = new Set(response.results.filter(result => result.error).map(result => result.index));
         setPendingConfirmation(current => current?.kind === "batch_song" ? { ...current,
-          rows: rows.filter((_, index) => failedIndices.has(index)), errors: [failures],
+          rows: rows.filter((_, index) => failedIndices.has(index)), errors: [summary],
         } : current);
         return false;
       }
+      setMessage(summary);
       return true;
     } catch (error) {
       const detail = backendFailureDetail(error);
-      setMessage(`批量新增失败：${detail}`);
-      setPendingConfirmation(current => current?.kind === "batch_song" ? { ...current, errors: [detail] } : current);
+      setPendingConfirmation(current => current?.kind === "batch_song" ? { ...current, errors: [`批量新增失败：${detail}`] } : current);
       return false;
     }
   };
@@ -2685,7 +2682,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
         const proceed = () => setSongModalVariant(value => value === "create" ? "edit" : "create");
         if (modalSongLeaveGuard.current) modalSongLeaveGuard.current(proceed); else proceed();
       }}>{songModalVariant === "create" ? "管理已有歌曲" : "新增歌曲"}</button>
-      <SongCatalogAdmin key={songModalRowKey} variant={songModalVariant} active bands={bands}
+      <SongCatalogAdmin key={songModalRowKey} variant={songModalVariant} active bands={bands} onMessage={setMessage}
         initialSongName={setlistRows.find(row => row.row_key === songModalRowKey)?.song_name}
         registerLeaveGuard={guard => { modalSongLeaveGuard.current = guard; }} onManage={() => setSongModalVariant("edit")}
         onSaved={song => {
@@ -2697,11 +2694,6 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
 
   return (
     <>
-      {transientNotice && (
-        <div className="console-toast" role="alert" aria-live="assertive">
-          {transientNotice}
-        </div>
-      )}
       <section className="console-admin"><ConsoleEditorLock locked={confirmationSubmitting || pendingConfirmation !== null || (mode === "setlist_edit" && isLiveLoading) || (mode === "live_edit" && liveCandidateLoading)}>
       <PageTitle title="控制台" />
       {message && <p className="console-admin-hint" role="status" aria-live="polite">{message}</p>}
@@ -2941,9 +2933,11 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
 
       <AlbumAdminSection variant={mode === "album_create" ? "create" : "edit"}
         active={mode === "album_create" || mode === "album_edit"}
+        onMessage={setMessage}
         registerLeaveGuard={() => {}}
         onManage={() => setMode("album_edit")} />
       <SongCatalogAdmin
+        onMessage={setMessage}
         active={mode === "song_create" || mode === "song_edit" || mode === "song"}
         variant={mode === "song_create" ? "create" : "edit"}
         bands={bands}

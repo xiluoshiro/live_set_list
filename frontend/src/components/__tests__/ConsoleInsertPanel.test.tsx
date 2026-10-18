@@ -381,7 +381,7 @@ describe("ConsoleInsertPanel", () => {
     expect(apiMocks.songCatalogWrite).not.toHaveBeenCalled();
   });
 
-  // 测试点：新增专辑记录可直接进入管理，随后返回新增仍保留下一张草稿和本次新增记录。
+  // 测试点：新增专辑反馈只显示一次，进入管理清除反馈，返回新增保留下一张草稿和操作记录。
   test("专辑操作记录连接新增与管理", async () => {
     const user = userEvent.setup();
     const album = { album_id: 12, album_name: "新盘", release_label: "", release_date: null, album_url: null, cover_urls: [], revision: 1, tracks: [] };
@@ -394,12 +394,14 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     await user.click(within(screen.getByRole("dialog", { name: "确认新增专辑" })).getByRole("button", { name: /^(确认提交|确认更新)$/ }));
     await screen.findByText("已新增专辑 #12 新盘");
+    expect(screen.getAllByText("已新增专辑 #12 新盘")).toHaveLength(1);
     expect(screen.getByLabelText("专辑名称")).toHaveValue("");
     await user.type(screen.getByLabelText("专辑名称"), "下一张草稿");
     const history = within(screen.getByRole("table", { name: "专辑操作记录" }));
     expect(history.getByRole("cell", { name: "新盘" })).toBeInTheDocument();
     await user.click(history.getByRole("button", { name: "编辑" }));
     expect(screen.getByRole("tab", { name: "专辑管理" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("已新增专辑 #12 新盘")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("textbox", { name: "专辑名称" })).toHaveValue("新盘"));
     expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
     await user.click(screen.getByRole("tab", { name: "新增专辑" }));
@@ -1141,7 +1143,7 @@ describe("ConsoleInsertPanel", () => {
     expect(venueOptions).toEqual(["101 - Early Venue", "301 - Later Venue"]);
   });
 
-  // 测试点：新增 Live 成功后应重置表单，并让共享日志在切换标签页后继续显示最新结果。
+  // 测试点：新增 Live 成功重置表单，进入歌单重新加载候选并清除旧反馈。
   test("新增Live会调用真实写入接口并使用后端返回的live_id", async () => {
     const user = userEvent.setup();
     const onLiveDataChanged = vi.fn();
@@ -1242,7 +1244,7 @@ describe("ConsoleInsertPanel", () => {
     });
     const callsBeforeSwitch = apiMocks.getLives.mock.calls.length;
     await user.click(screen.getByRole("tab", { name: "新增歌单" }));
-    expect(screen.getByRole("status")).toHaveTextContent("已新增Live #39（Inserted Live）");
+    expect(screen.queryByText("已新增Live #39（Inserted Live）")).not.toBeInTheDocument();
     await waitFor(() => expect(apiMocks.getLives.mock.calls.length).toBeGreaterThan(callsBeforeSwitch));
     expect(await screen.findByText("第 1 / 1 页，共 2 条")).toBeInTheDocument();
   });
@@ -2050,26 +2052,33 @@ describe("ConsoleInsertPanel", () => {
 
   });
 
-  test("新增Setlist只剩一行时删除末行会显示自动消失提示", async () => {
-    // 测试点：最后一行草稿不能删除，错误提示随后自动消失。
+  // 测试点：删除末行保留草稿并通过控制台统一反馈，切换栏目清除旧操作提示。
+  test("新增Setlist保留末行并在切换栏目时清除反馈", async () => {
+    const user = userEvent.setup();
     render(<ConsoleInsertPanel />);
     await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalledWith(undefined, 100));
+    await user.click(screen.getByRole("button", { name: "删除末行" }));
+    expect(screen.getByRole("status")).toHaveTextContent("至少保留一行 setlist 草稿。");
+    expect(screen.getAllByPlaceholderText("请输入歌曲名")).toHaveLength(1);
+    await user.click(screen.getByRole("tab", { name: "新增专辑" }));
+    expect(screen.queryByText("至少保留一行 setlist 草稿。")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "新增歌单" }));
+    expect(screen.queryByText("至少保留一行 setlist 草稿。")).not.toBeInTheDocument();
+  });
 
-    vi.useFakeTimers();
-    try {
-      act(() => {
-        fireEvent.click(screen.getByRole("button", { name: "删除末行" }));
-      });
-
-      const alert = screen.getByRole("alert");
-      expect(alert).toHaveTextContent("至少保留一行 setlist 草稿。");
-      act(() => {
-        vi.advanceTimersByTime(2600);
-      });
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
+  // 测试点：离开后重新进入同一栏目，旧请求失败不能覆盖新操作的反馈。
+  test("过期请求不覆盖重新进入栏目的操作反馈", async () => {
+    const user = userEvent.setup();
+    let rejectLookup!: (reason: Error) => void;
+    apiMocks.getConsoleSongs.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectLookup = reject; }));
+    render(<ConsoleInsertPanel initialMode="setlist" />);
+    await waitFor(() => expect(apiMocks.getConsoleSongs).toHaveBeenCalled());
+    await user.click(screen.getByRole("tab", { name: "新增专辑" }));
+    await user.click(screen.getByRole("tab", { name: "新增歌单" }));
+    await user.click(screen.getByRole("button", { name: "删除末行" }));
+    await act(async () => { rejectLookup(new Error("旧查询失败")); });
+    expect(screen.getByRole("status")).toHaveTextContent("至少保留一行 setlist 草稿。");
+    expect(screen.queryByText(/旧查询失败/)).not.toBeInTheDocument();
   });
 
   // 测试点：切换候选页或重新进入 Setlist 页时，应回到目标页首条且不保留上次 live_id。
@@ -2639,7 +2648,7 @@ describe("ConsoleInsertPanel", () => {
   });
 
   // 测试点：批量新增失败完整展示后端原因，并保留标签预填的归属供重试。
-  test("批量插入失败时会在共享日志显示后端错误原因", async () => {
+  test("批量插入失败时在确认框显示后端错误原因", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [{ band_id: 2, band_name: "Roselia", band_abbr: "ロゼリア", band_members: ["湊友希那"] }],
@@ -2668,8 +2677,8 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "批量插入" }));
     await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
-    await screen.findByText("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
-    expect(screen.getByRole("status")).toHaveTextContent("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
+    const failureDialog = within(screen.getByRole("dialog", { name: "确认批量新增歌曲" }));
+    await failureDialog.findByText("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
     const retained = screen.getByRole("dialog", { name: "确认批量新增歌曲" });
     expect(within(retained).getByRole("combobox", { name: "归属模式" })).toHaveValue("bands");
     expect(within(retained).getByRole("button", { name: "选择归属乐队" })).toHaveTextContent("Roselia");

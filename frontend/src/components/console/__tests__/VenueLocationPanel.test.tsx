@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../../../api", () => api);
 vi.mock("../../../auth/AuthProvider", () => ({ useAuth: () => ({ csrfToken: "csrf" }) }));
 
+const onMessage = vi.fn();
 const city = { id: 5, country_code: "JP", admin_area: "東京都", locality_name: "検証市", timezone_id: "Asia/Tokyo", area_level: "locality" as const, state_token: "1".repeat(64) };
 const location: VenueLocation = {
   venue_id: 1, locality: city, address: "Saved address", latitude: null, longitude: null,
@@ -34,14 +35,14 @@ beforeEach(() => {
 
 async function openPanel(onOpenLive?: (liveId: number) => void) {
   const user = userEvent.setup();
-  render(<VenueLocationPanel venueId={1} venueName="Test Venue" venueKind="physical" onOpenLive={onOpenLive} />);
+  render(<VenueLocationPanel onMessage={onMessage} venueId={1} venueName="Test Venue" venueKind="physical" onOpenLive={onOpenLive} />);
   await screen.findByLabelText("纬度（WGS84）");
   return user;
 }
 
 // 测试点：线上场馆说明活动时间基准由关联 Live 分别维护。
 test("online venues explain how event timezones are maintained", async () => {
-  render(<VenueLocationPanel venueId={1} venueName="Online" venueKind="online" />);
+  render(<VenueLocationPanel onMessage={onMessage} venueId={1} venueName="Online" venueKind="online" />);
   expect(await screen.findByText(/活动时间基准由每场 Live 单独维护/)).toBeInTheDocument();
 });
 
@@ -104,7 +105,7 @@ test("keeps an empty location pristine until the editor changes a field", async 
 
 // 测试点：未公开具体场馆只开放地区选择，不向编辑者暴露门牌、精确点位和地图关联操作。
 test("limits undisclosed venues to the published locality", async () => {
-  render(<VenueLocationPanel venueId={1} venueName="未公布会场" venueKind="undisclosed" />);
+  render(<VenueLocationPanel onMessage={onMessage} venueId={1} venueName="未公布会场" venueKind="undisclosed" />);
   await screen.findByLabelText("已公布地区");
 
   expect(screen.getByLabelText("已公布地区")).toBeEnabled();
@@ -160,7 +161,7 @@ test("previews and saves a venue timezone change", async () => {
   expect(within(dialog).getByText("America/New_York")).toBeInTheDocument();
   expect(api.saveConsoleVenueLocation).not.toHaveBeenCalled();
   await user.click(within(dialog).getByRole("button", { name: "确认更新" }));
-  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("所在地已保存"));
+  await waitFor(() => expect(onMessage).toHaveBeenCalledWith(expect.stringContaining("所在地已保存")));
   expect(api.saveConsoleVenueLocation).toHaveBeenCalledWith(1, expect.objectContaining({
     timezone_id: "America/New_York", latitude: 40.7, longitude: -74,
   }), "csrf");
@@ -246,9 +247,9 @@ test("toggles the manual map link fields from the candidate action row", async (
 test("ignores an old venue response after unmount", async () => {
   let resolveOld!: (value: typeof location) => void;
   api.getConsoleVenueLocation.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }));
-  const rendered = render(<VenueLocationPanel key={1} venueId={1} venueName="First" venueKind="physical" />);
+  const rendered = render(<VenueLocationPanel onMessage={onMessage} key={1} venueId={1} venueName="First" venueKind="physical" />);
   api.getConsoleVenueLocation.mockResolvedValue({ ...location, venue_id: 2, address: "Second" });
-  rendered.rerender(<VenueLocationPanel key={2} venueId={2} venueName="Second" venueKind="physical" />);
+  rendered.rerender(<VenueLocationPanel onMessage={onMessage} key={2} venueId={2} venueName="Second" venueKind="physical" />);
   await waitFor(() => expect(screen.getByLabelText("公开门牌地址")).toHaveValue("Second"));
   resolveOld({ ...location, address: "Old response" });
   await waitFor(() => expect(screen.getByLabelText("公开门牌地址")).toHaveValue("Second"));
@@ -273,7 +274,7 @@ test("requires physical address and keeps established locality", async () => {
 // 测试点：未公开和线上场馆不要求填写实体地址。
 test.each(["undisclosed", "online"])("does not require address for %s venues", async venueKind => {
   api.getConsoleVenueLocation.mockResolvedValue({ ...location, address: null });
-  render(<VenueLocationPanel venueId={1} venueName="Venue" venueKind={venueKind} />);
+  render(<VenueLocationPanel onMessage={onMessage} venueId={1} venueName="Venue" venueKind={venueKind} />);
   const address = await screen.findByLabelText("公开门牌地址");
   expect(address).toBeDisabled();
   expect(address).not.toBeRequired();

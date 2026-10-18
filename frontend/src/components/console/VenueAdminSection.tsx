@@ -155,6 +155,7 @@ export function VenueAdminSection({ variant, onMessage, onVenuesChanged, onOpenL
       {variant === "edit" && detail && (
         <>
           <VenueLocationPanel
+            onMessage={onMessage}
             key={`${detail.venue_id}:${detailGeneration}`}
             venueId={detail.venue_id}
             venueName={detail.venue_name}

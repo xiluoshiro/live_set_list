@@ -375,37 +375,6 @@
   }
 }
 
-.console-toast {
-  position: fixed;
-  top: 24px;
-  left: 50%;
-  z-index: 10000;
-  width: max-content;
-  max-width: min(520px, calc(100vw - 32px));
-  border: 1px solid color-mix(in srgb, var(--accent-warning-strip) 36%, var(--border-normal));
-  border-radius: var(--radius-control);
-  padding: 10px 16px;
-  background: var(--surface-overlay);
-  color: var(--text-main);
-  box-shadow: var(--shadow-popover);
-  font-size: 13px;
-  pointer-events: none;
-  transform: translateX(-50%);
-  animation: console-toast-pop 180ms ease-out;
-}
-
-@keyframes console-toast-pop {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-}
-
 .console-admin-table {
   width: 100%;
   min-width: 860px;

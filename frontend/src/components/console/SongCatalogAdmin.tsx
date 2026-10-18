@@ -27,10 +27,11 @@ const ownerFields = (song: SongVersion): SongOwnership => ({ mode: song.ownershi
 const groupFields = (group: SongGroup) => ({ group_name: group.group_name.trim(), song_ids: group.versions.map(v => v.song_id) });
 type HistoryEntry = { song: SongVersion; action: "create" | "update"; summary: string };
 
-export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, onManage, onSaved, initialSongName }: {
+export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, onManage, onSaved, initialSongName, onMessage }: {
   variant: "create" | "edit"; active: boolean; bands: BandOption[];
   registerLeaveGuard: (guard: ((proceed: () => void) => void) | null) => void;
   onManage: () => void; onSaved?: (song: SongVersion) => void; initialSongName?: string;
+  onMessage: (message: string) => void;
 }) {
   const { csrfToken } = useAuth();
   const formId = useId();
@@ -65,7 +66,6 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [clearAfterCreate, setClearAfterCreate] = useState(true);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const loadGeneration = useRef(0);
@@ -80,7 +80,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const dirty = changed || !!moveTarget.reason.trim();
   const { guard, dialog: discardDialog } = useConsoleDraftGuard({ active, dirty: !creating && dirty, busy: busy || confirm,
     label: `歌曲 #${original?.song_id}`, onDiscard: () => { if (original) restore(original); } });
-  useEffect(() => { setConfirm(false); }, [active, variant]);
+  useEffect(() => { setConfirm(false); setError(""); }, [active, variant]);
   useEffect(() => {
     registerLeaveGuard(active ? guard : null);
     return () => registerLeaveGuard(null);
@@ -137,7 +137,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   };
   const loadSong = async (id: number) => {
     const generation = ++loadGeneration.current;
-    setBusy(true); setError(""); setMessage("");
+    setBusy(true); setError("");
     try {
       const song = await getCatalogConsole<SongVersion>(`/songs/${id}`);
       const group = await getSongGroup(song.group_id);
@@ -165,7 +165,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       const result = await songCatalogWrite<SongEditMutation>(path, creating ? "POST" : "PUT", payload, csrfToken);
       setHistory(value => [...value, { song: result.item, action: creating ? "create" : "update", summary: creating ? "新增歌曲" : changes.map(change => change.field).join("、") }]);
       if (creating) { if (!newGroup) setGroupRevision(value => value === null ? null : value + 1); if (clearAfterCreate) clear(); } else restore(result.item, result.group);
-      setMessage(`已${creating ? "新增" : "更新"}歌曲 #${result.item.song_id} ${result.item.song_name}`);
+      onMessage(`已${creating ? "新增" : "更新"}歌曲 #${result.item.song_id} ${result.item.song_name}`);
       setConfirm(false);
       onSaved?.(result.item);
     } catch (e) { setError(String(e)); }
@@ -206,7 +206,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   const formActions = <div className={`console-submit-row ${creating ? "live-admin-insert-row" : "song-submit-row"} venue-create-actions`}>
     {creating && <label className="live-clear-after-create-option"><input type="checkbox" disabled={busy}
       checked={clearAfterCreate} onChange={event => setClearAfterCreate(event.target.checked)} />新增后清空数据</label>}
-    <button type="button" className="console-ghost-btn" disabled={fieldsDisabled} onClick={() => { creating ? clear() : restore(original!); setError(""); setMessage(""); }}>{creating ? "清空数据" : "恢复原值"}</button>
+    <button type="button" className="console-ghost-btn" disabled={fieldsDisabled} onClick={() => { creating ? clear() : restore(original!); setError(""); onMessage(""); }}>{creating ? "清空数据" : "恢复原值"}</button>
     <button type="button" className="console-submit-btn" disabled={fieldsDisabled || (creating && newGroup && !groupName.trim()) || !ownerValid ||
       (!creating && (!changed || !editGroup?.group_name.trim() ||
         (!!moveTarget.group_id && (!moveTarget.expected_revision || !moveTarget.reason.trim())))) || (creating && !newGroup && (!groupId || !groupRevision))}
@@ -218,8 +218,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
   if (!active) return null;
   return <section className="tour-admin-section" aria-label={creating ? "新增歌曲" : "歌曲管理"}>
     <ConsoleEditorLock locked={fieldsDisabled}>
-    {error && <p role="alert">{error}</p>}
-    {message && <p className="console-admin-hint" role="status">{message}</p>}
+    {error && !confirm && <p role="alert">{error}</p>}
     {!creating && <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar" role="search" aria-label="查询已有歌曲">
       <span className="live-management-label">已有歌曲</span>
       <input className="venue-query-input live-management-primary-control" aria-label="搜索歌曲" placeholder="歌曲名称"

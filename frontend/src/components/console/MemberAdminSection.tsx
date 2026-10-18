@@ -35,7 +35,7 @@ export function MemberAdminSection() {
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   };
   return <details onToggle={e => setOpen(e.currentTarget.open)}><summary>成员管理</summary>
-    {error && <p role="alert">{error}</p>}
+    {error && !confirm && <p role="alert">{error}</p>}
     <ConsoleEditorLock locked={busy || confirm}><div className="tour-admin-fields">
       <label>成员<select value={selected?.member_id ?? ""} disabled={busy} onChange={e => { const m = members.find(m => m.member_id === Number(e.target.value)) ?? null; guard(() => { setSelected(m); setName(m?.display_name ?? ""); }); }}><option value="">新增成员</option>{members.map(m => <option key={m.member_id} value={m.member_id}>#{m.member_id} {m.display_name}</option>)}</select></label>
       <label>姓名<input value={name} disabled={busy} onChange={e => setName(e.target.value)} /></label>

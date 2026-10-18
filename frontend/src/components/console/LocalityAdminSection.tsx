@@ -49,7 +49,7 @@ export function LocalityAdminSection({ onMessage }: { onMessage: (message: strin
       setConfirm(false);
       if (clearAfter) clear();
       const success = `已新增地区 #${created.id} ${localityLabel(created)}。`;
-      setMessage(success); onMessage(success);
+      onMessage(success);
     } catch (error) {
       setMessage(`新增地区失败，已保留填写内容：${errorText(error)}`);
     } finally {
@@ -73,7 +73,6 @@ export function LocalityAdminSection({ onMessage }: { onMessage: (message: strin
         </table>
       </div>
       {validation && (country || region || cityName) && <p className="console-admin-hint" role="status">{validation}</p>}
-      {message && <p className="console-admin-hint" role="status">{message}</p>}
       <div className="console-submit-row live-admin-insert-row venue-create-actions">
         <label className="live-clear-after-create-option"><input type="checkbox" checked={clearAfter} disabled={submitting} onChange={event => setClearAfter(event.target.checked)} />新增成功后清空表单</label>
         <button type="button" className="console-ghost-btn" disabled={submitting} onClick={clear}>清空</button>

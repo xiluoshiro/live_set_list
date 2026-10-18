@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -37,7 +37,7 @@ test("creates a locality and clears the form after confirmation", async () => {
   expect(api.createConsoleLocality).toHaveBeenCalledWith({
     country_code: "JP", admin_area: "神奈川県", locality_name: "横浜市", area_level: "locality",
   }, "csrf");
-  expect(await screen.findByText("已新增地区 #6 JP / 神奈川県 / 横浜市。")).toBeInTheDocument();
+  await waitFor(() => expect(onMessage).toHaveBeenCalledWith("已新增地区 #6 JP / 神奈川県 / 横浜市。"));
   expect(table.getByLabelText("国家／地区代码")).toHaveValue("");
   expect(onMessage).toHaveBeenCalledWith("已新增地区 #6 JP / 神奈川県 / 横浜市。");
 });
@@ -45,7 +45,8 @@ test("creates a locality and clears the form after confirmation", async () => {
 // 测试点：用户关闭自动清空后，新增成功仍保留当前地区资料，便于连续录入相近地区。
 test("keeps the form after creation when clear-after-create is disabled", async () => {
   const user = userEvent.setup();
-  render(<LocalityAdminSection onMessage={vi.fn()} />);
+  const onMessage = vi.fn();
+  render(<LocalityAdminSection onMessage={onMessage} />);
   api.createConsoleLocality.mockResolvedValue({ id: 7, country_code: "JP", admin_area: "東京都", locality_name: null, area_level: "admin_area", state_token: "3".repeat(64) });
 
   await user.selectOptions(screen.getByLabelText("地区层级"), "admin_area");
@@ -55,7 +56,7 @@ test("keeps the form after creation when clear-after-create is disabled", async 
   await user.click(screen.getByRole("button", { name: "提交插入" }));
   await user.click(within(await screen.findByRole("dialog", { name: "确认新增地区" })).getByRole("button", { name: "确认提交" }));
 
-  expect(await screen.findByText("已新增地区 #7 JP / 東京都。")).toBeInTheDocument();
+  await waitFor(() => expect(onMessage).toHaveBeenCalledWith("已新增地区 #7 JP / 東京都。"));
   expect(screen.getByLabelText("国家／地区代码")).toHaveValue("JP");
   expect(screen.getByLabelText("都道府县／省／州")).toHaveValue("東京都");
 });

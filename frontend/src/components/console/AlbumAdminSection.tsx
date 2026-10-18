@@ -33,11 +33,12 @@ const numberTracks = (tracks: AlbumTrackWrite[]) => {
     return { ...track, section_name: section, track_order: order };
   });
 };
-export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManage }: {
+export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManage, onMessage }: {
   variant: "create" | "edit";
   active: boolean;
   registerLeaveGuard: (guard: ((proceed: () => void) => void) | null) => void;
   onManage: () => void;
+  onMessage: (message: string) => void;
 }) {
   const creating = variant === "create";
   const { csrfToken } = useAuth();
@@ -63,7 +64,6 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
   const [selectedSong, setSelectedSong] = useState("");
   const [songLabels, setSongLabels] = useState<Record<number, string>>({});
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [tracksReady, setTracksReady] = useState(true);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -89,7 +89,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     setSelectedSong("");
     setSongSearch(value => ({ query: songQuery.trim(), refresh: value.refresh + 1 }));
   };
-  useEffect(() => { setConfirm(false); setMessage(""); setError(""); }, [active, creating]);
+  useEffect(() => { setConfirm(false); setError(""); }, [active, creating]);
   useEffect(() => {
     if (!active || creating) return;
     registerLeaveGuard(guard);
@@ -137,7 +137,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
   }, [active, creating, original?.album_id, songSearch]);
   const load = async (id: number) => {
     const generation = ++loadGeneration.current;
-    setBusy(true); setLoadingAlbum(true); setError(""); setMessage("");
+    setBusy(true); setLoadingAlbum(true); setError("");
     try {
       const album = await getCatalogConsole<AlbumDetail>(`/albums/${id}`);
       if (generation !== loadGeneration.current) return;
@@ -153,7 +153,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
       const album = await songCatalogWrite<AlbumDetail>(creating ? "/albums" : `/albums/${original!.album_id}`, creating ? "POST" : "PUT",
         { ...payload, ...(!creating ? { expected_revision: original!.revision } : {}) }, csrfToken);
       setHistory(value => [...value, { album, action: creating ? "create" : "update" }]);
-      setMessage(`已${creating ? "新增" : "更新"}专辑 #${album.album_id} ${albumTitle(album)}`);
+      onMessage(`已${creating ? "新增" : "更新"}专辑 #${album.album_id} ${albumTitle(album)}`);
       if (creating) {
         setCreateDraft(emptyAlbum()); setSelectedSong(""); setBatchReset(value => value + 1);
       } else {
@@ -209,8 +209,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
   if (!active) return null;
   return <section className="tour-admin-section" aria-label={creating ? "新增专辑" : "专辑管理"}>
     <ConsoleEditorLock locked={locked}>
-    {error && <p role="alert">{error}</p>}
-    {message && <p className="console-admin-hint" role="status">{message}</p>}
+    {error && !confirm && <p role="alert">{error}</p>}
     {!creating && <div>
     <div className="tour-admin-toolbar live-admin-toolbar venue-admin-toolbar" role="search" aria-label="查询专辑">
       <label className="live-management-label" htmlFor={`${formId}-album`}>已有专辑</label>
@@ -288,7 +287,7 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
     </section>
       {!creating && <div className="console-submit-row live-admin-insert-row venue-create-actions">
         <button type="button" className="console-ghost-btn" disabled={locked} onClick={() => {
-          setEditDraft(fields(original!)); setSelectedSong(""); setError(""); setMessage("");
+          setEditDraft(fields(original!)); setSelectedSong(""); setError(""); onMessage("");
         }}>恢复原值</button>
         {submitButton}
       </div>}
