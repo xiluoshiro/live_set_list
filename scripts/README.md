@@ -35,6 +35,31 @@ python scripts/run_dev.py --test-db
 
 按 `Ctrl+C` 可同时关闭前后端，并清理本次启动的进程树。
 
+## 本机生产模式
+
+域名通过本机 Cloudflare 隧道访问时，使用生产构建而不是 Vite 开发服务器：
+
+```powershell
+cd frontend
+npm run build
+cd ..
+backend\.venv\Scripts\pythonw.exe scripts\run_prod.py
+```
+
+- `run_prod.py`：启动 FastAPI（不带 `--reload`）与前端静态服务；登录后 Docker 尚未就绪时会重试等待；5173 已有旧服务时会先清理再启动（与 `run_dev.py` 处理 8000 端口的方式一致）
+- `serve_frontend.py`：托管 `frontend/dist`，提供 SPA 回退、`/assets/*` 一年 immutable、`index.html` `no-cache`、`/icons/*` 一天缓存，并把 `/api/*` 转发到 `127.0.0.1:8000`
+- `start_prod.cmd`：同一启动入口；已复制到当前用户启动目录，登录时自动运行
+
+只改前端时重新 `npm run build` 即可，静态服务按请求读取 `dist`；改后端后重新执行一次启动命令即可接管 5173。生产模式占用 `[::1]:5173`，此时再运行 `run_dev.py`，Vite 会自动改用 5174。
+
+需要彻底停止生产栈时（启动器是 `pythonw.exe`，按命令行匹配，不按进程名）：
+
+```powershell
+Get-CimInstance Win32_Process |
+  Where-Object { $_.CommandLine -match 'run_prod\.py|serve_frontend\.py' } |
+  ForEach-Object { taskkill /PID $_.ProcessId /T /F }
+```
+
 ## 一键检查
 
 在项目根目录执行：
@@ -54,7 +79,7 @@ python scripts/run_checks.py <arguments>
 - `functional`：运行功能测试集，包含 `scripts + frontend + backend + recovery-unit`
 - `full`：运行全部检查，等于 `scripts + frontend + backend + recovery`
 
-脚本测试位于 `scripts/tests/`：`test_apply_remote_sql.py`、`test_sync_production_db.py`、`test_run_dev.py`、`test_run_checks.py`、`test_production_assets.py`。`scripts`、`functional`、`full` 均执行它们，`backend` 和 `backend-unit` 不再执行。
+脚本测试位于 `scripts/tests/`：`test_apply_remote_sql.py`、`test_sync_production_db.py`、`test_run_dev.py`、`test_run_prod.py`、`test_serve_frontend.py`、`test_run_checks.py`、`test_production_assets.py`。`scripts`、`functional`、`full` 均执行它们，`backend` 和 `backend-unit` 不再执行。
 
 使用 `python scripts/run_checks.py functional --backend-workers 1` 可退回 unit 串行模式；`--backend-workers 4` 可提高并发上限。每个文件仍启动全新进程，使用独立临时目录和应用日志，禁用共享 pytest cache 写入，完成后整块输出日志及耗时。mypy 先完成，所有 unit 文件完成后才串行执行 integration；不改变每例 seed 和文件级白名单重试。
 

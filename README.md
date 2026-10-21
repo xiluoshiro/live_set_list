@@ -50,6 +50,49 @@ python scripts/run_dev.py --test-db
 
 `--test-db` 连接测试库，适合日常开发；不带参数时连接 `APP_DB`。数据库配置来自 `infra/postgres/.env.pg-migrate`。启动脚本的端口清理、代理和数据库选择规则见 [scripts/README.md](scripts/README.md)。
 
+## 本机生产模式（Cloudflare 隧道）
+
+域名由本机 Cloudflare 隧道提供，源站监听 `[::1]:5173`。生产模式不运行 Vite 开发服务器，而是托管 `frontend/dist` 构建产物，并由 FastAPI 提供 `/api`。
+
+前端代码变更后重新构建：
+
+```powershell
+cd frontend
+npm run build
+```
+
+启动生产栈（后端 + 静态服务）：
+
+```powershell
+backend\.venv\Scripts\pythonw.exe scripts\run_prod.py
+```
+
+也可以直接运行 `scripts\start_prod.cmd`；该入口已放入当前用户启动目录，登录时自动执行。
+
+后端代码变更后重启（直接再执行一次启动命令即可，它会先接管 5173）：
+
+```powershell
+backend\.venv\Scripts\pythonw.exe scripts\run_prod.py
+```
+
+需要彻底停止（例如长时间停机）时：
+
+```powershell
+Get-CimInstance Win32_Process |
+  Where-Object { $_.CommandLine -match 'run_prod\.py|serve_frontend\.py' } |
+  ForEach-Object { taskkill /PID $_.ProcessId /T /F }
+```
+
+注意：启动器使用 `pythonw.exe`，进程名不是 `python.exe`，所以停止时按命令行匹配，不要按进程名过滤。
+
+要点：
+
+- 只改前端时，重新 `npm run build` 即可，静态服务按请求读取 `dist`，无需重启；浏览器刷新即可拿到新哈希资源。
+- 只改后端时，重新执行启动命令即可：`run_prod.py` 会先清理 5173 上的旧服务再启动，和 `run_dev.py` 处理 8000 端口的方式一致，不需要手动先停。
+- 生产 uvicorn 不带 `--reload`，避免 Windows 上 reload 信号影响自动化宿主。
+- 生产模式占用 `[::1]:5173`。再执行 `python scripts/run_dev.py` 时，Vite 会自动改用 5174，开发和线上互不影响。
+- Cloudflare 隧道使用 token 模式，入口规则在 Cloudflare 侧维护，本机不需要也不应该修改隧道配置。
+
 ## 验证
 
 业务代码修改后的统一检查：

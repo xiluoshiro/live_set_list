@@ -1,8 +1,7 @@
 import type { ConsoleLeaveGuard } from "./components/console/ConsoleDraftGuard";
-import { SongCatalog } from "./components/SongCatalog";
 import { normalizeSongBrowse, songBrowseFromSearch, songCatalogHref, type SongBrowseState } from "./songCatalogNavigation";
 import { SONG_CATALOG_STORAGE_KEY, SONG_CATALOG_WRITE_EVENT } from "./songCatalogSync";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   clearLiveDataCaches,
@@ -37,20 +36,15 @@ import {
   type CatalogLiveRow,
   SearchResultsPanel,
 } from "./components/CatalogPanels";
-import { ConsoleInsertPanel } from "./components/ConsoleInsertPanel";
+import { ContentState } from "./components/ContentState";
 import { HomeDashboard, type HomeLiveRow } from "./components/HomeDashboard";
 import { PageTitle } from "./components/PageTitle";
 import { LiveCardGrid, type LiveRow } from "./components/LiveCardGrid";
-import { StageLedgerPage } from "./components/StageLedgerPage";
 import { LiveListFiltersToolbar, LiveListSearch } from "./components/LiveListFilters";
 import { ListScopeToggle } from "./components/ListScopeToggle";
 import { LoginDialog } from "./components/LoginDialog";
-import { StatisticsPanel } from "./components/StatisticsPanel";
-import { TourArchivePage } from "./components/TourArchivePage";
-import { TourDetailPage, type TourDetailFallback } from "./components/TourDetailPage";
-import { PerformanceGroupDetailPage } from "./components/PerformanceGroupDetailPage";
+import type { TourDetailFallback } from "./components/TourDetailPage";
 import { DEFAULT_TOUR_FILTERS, type TourFilters } from "./components/TourListFilters";
-import { VenueDetailPage } from "./components/VenueDetailPage";
 import { useFavorites } from "./favorites/FavoriteProvider";
 import {
   DEFAULT_LIVE_LIST_FILTERS,
@@ -72,6 +66,29 @@ import {
 } from "./prefetch/liveDetailsPrefetch";
 import { useTheme, type ThemeMode } from "./theme/ThemeProvider";
 import "./styles/index.css";
+
+const SongCatalog = lazy(() => import("./components/SongCatalog").then((m) => ({ default: m.SongCatalog })));
+const ConsoleInsertPanel = lazy(() =>
+  import("./components/ConsoleInsertPanel").then((m) => ({ default: m.ConsoleInsertPanel })),
+);
+const StageLedgerPage = lazy(() =>
+  import("./components/StageLedgerPage").then((m) => ({ default: m.StageLedgerPage })),
+);
+const StatisticsPanel = lazy(() =>
+  import("./components/StatisticsPanel").then((m) => ({ default: m.StatisticsPanel })),
+);
+const TourArchivePage = lazy(() =>
+  import("./components/TourArchivePage").then((m) => ({ default: m.TourArchivePage })),
+);
+const TourDetailPage = lazy(() =>
+  import("./components/TourDetailPage").then((m) => ({ default: m.TourDetailPage })),
+);
+const PerformanceGroupDetailPage = lazy(() =>
+  import("./components/PerformanceGroupDetailPage").then((m) => ({ default: m.PerformanceGroupDetailPage })),
+);
+const VenueDetailPage = lazy(() =>
+  import("./components/VenueDetailPage").then((m) => ({ default: m.VenueDetailPage })),
+);
 
 type DisplayRow = LiveRow & {
   groupDisplayType: "single_day_multi_show" | "multi_day" | null;
@@ -1471,6 +1488,7 @@ function App() {
         )}
         {favorites.favoriteSyncWarning && <p className="favorite-sync-warning">{favorites.favoriteSyncWarning}</p>}
 
+        <Suspense fallback={<ContentState kind="loading" title="页面加载中" layout="rows" compact />}>
         {tab === "detail" && detailLiveId !== null && detailFallback !== null ? (
           <StageLedgerPage
             key={`live-${detailLiveId}-${liveDataRevision}`}
@@ -1670,6 +1688,7 @@ function App() {
         ) : (
           <AboutPanel />
         )}
+        </Suspense>
       </section>
 
       <LoginDialog

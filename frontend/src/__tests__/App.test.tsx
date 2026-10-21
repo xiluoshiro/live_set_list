@@ -1,4 +1,4 @@
-﻿import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { fireEvent } from "@testing-library/react";
@@ -964,7 +964,7 @@ describe("App", () => {
 
     const consoleButton = await screen.findByRole("button", { name: "控制台" });
     await userEvent.setup().click(consoleButton);
-    expect(screen.getByRole("heading", { name: "控制台" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "控制台" })).toBeInTheDocument();
   });
 
   // 测试点：离开控制台的主导航与浏览器后退都保护修改，取消恢复历史位置，确认后才离开。
@@ -980,7 +980,7 @@ describe("App", () => {
       venue_name_version_id: null, timezone: null, default_band_ids: [], event_attendees: [], band_lineup_contexts: [] } });
     renderApp({ withAuthProvider: true });
     await user.click(await screen.findByRole("button", { name: "控制台" }));
-    await user.click(screen.getByRole("tab", { name: "演出管理" }));
+    await user.click(await screen.findByRole("tab", { name: "演出管理" }));
     await user.selectOptions(await screen.findByLabelText("选择要编辑的 Live"), "55");
     await waitFor(() => expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Draft Live"));
     await user.type(screen.getByPlaceholderText("请输入Live标题"), " Changed");
