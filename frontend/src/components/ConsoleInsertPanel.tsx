@@ -2989,7 +2989,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
 
       {liveDraft.dialog}{setlistDraft.dialog}
       {pendingConfirmation && <ConsoleConfirmDialog title={pendingConfirmation.title}
-        size={pendingConfirmation.kind === "setlist" ? "wide" : "compact"} className={pendingConfirmation.kind}
+        size={pendingConfirmation.kind === "setlist" || pendingConfirmation.kind === "live" ? "wide" : "compact"} className={pendingConfirmation.kind}
         changes={(pendingConfirmation.kind === "live" || pendingConfirmation.kind === "setlist") && pendingConfirmation.action === "update" ? pendingConfirmation.changes : undefined}
         changesLabel={pendingConfirmation.kind === "live" ? "Live 修改内容" : "Setlist 修改内容"}
         busy={confirmationSubmitting} error={confirmationError} onClose={closePendingConfirmation} onConfirm={confirmPendingInsert}

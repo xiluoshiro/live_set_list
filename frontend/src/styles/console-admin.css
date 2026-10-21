@@ -763,10 +763,6 @@
   max-width: min(900px, calc(100vw - 40px));
 }
 
-.console-confirm-modal.live {
-  width: min(680px, calc(100vw - 40px));
-}
-
 .console-confirm-modal.wide {
   width: min(1080px, calc(100vw - 40px));
   max-width: min(1080px, calc(100vw - 40px));
@@ -834,6 +830,18 @@
 
 .console-confirm-records-table th:first-child {
   min-width: 48px;
+}
+
+.console-confirm-modal.live .console-confirm-records-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.console-confirm-modal.live .console-confirm-records-table th,
+.console-confirm-modal.live .console-confirm-records-table td {
+  max-width: none;
+  white-space: pre;
+  overflow-wrap: normal;
 }
 
 .live-update-diff-table {
