@@ -2,6 +2,7 @@ import { refreshConsoleAfterSave } from "./console/consoleSave";
 import { ConsoleEditorLock } from "./console/ConsoleEditorLock";
 import { ConsoleConfirmDialog } from "./console/ConsoleConfirmDialog";
 import { bandFieldChanges, confirmationFieldChanges } from "./console/confirmationFields";
+import { describeLiveBandChanges } from "./console/liveConfirmationFields";
 import { ConsoleDraftProvider, useConsoleDraftGuard, useConsoleLeaveGuard, type ConsoleLeaveGuard } from "./console/ConsoleDraftGuard";
 import { AlbumAdminSection } from "./console/AlbumAdminSection";
 import { previewConsoleLiveClock } from "../api";
@@ -2602,7 +2603,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
           ) : (
             <CompactConfirmationTable
               changes={[
-              ...liveConfirmationFields(null, payload).map(change => ({ ...change, after: change.field === "live_type" ? formatLiveType(payload.live_type) : change.after })),
+              ...describeLiveBandChanges(liveConfirmationFields(null, payload), bands, bandHistories).map(change => ({ ...change, after: change.field === "live_type" ? formatLiveType(payload.live_type) : change.after })),
               { field: "时间基准", before: "", after: currentTimezoneLabel },
               { field: "venue_name", before: "", after: pendingConfirmation.venueName },
               ]}
@@ -2990,7 +2991,9 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
       {liveDraft.dialog}{setlistDraft.dialog}
       {pendingConfirmation && <ConsoleConfirmDialog title={pendingConfirmation.title}
         size={pendingConfirmation.kind === "setlist" || pendingConfirmation.kind === "live" ? "wide" : "compact"} className={pendingConfirmation.kind}
-        changes={(pendingConfirmation.kind === "live" || pendingConfirmation.kind === "setlist") && pendingConfirmation.action === "update" ? pendingConfirmation.changes : undefined}
+        changes={(pendingConfirmation.kind === "live" || pendingConfirmation.kind === "setlist") && pendingConfirmation.action === "update"
+          ? pendingConfirmation.kind === "live" ? describeLiveBandChanges(pendingConfirmation.changes, bands, bandHistories) : pendingConfirmation.changes
+          : undefined}
         changesLabel={pendingConfirmation.kind === "live" ? "Live 修改内容" : "Setlist 修改内容"}
         busy={confirmationSubmitting} error={confirmationError} onClose={closePendingConfirmation} onConfirm={confirmPendingInsert}
         disabled={pendingConfirmation.kind === "batch_song" && (pendingConfirmation.rows.length === 0 || pendingConfirmation.rows.some(row => !ownershipValid(row.ownership)))}
