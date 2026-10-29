@@ -754,6 +754,7 @@ tr.is-cancelled {
 .live-catalog .list-scope-toggle button.active { border-bottom-color: var(--accent-primary); }
 .live-catalog-summary { padding: 14px 0; color: var(--text-muted); font-size: 13px; }
 .live-filter-panel { margin: 12px 0 0; padding: 0; border: 0; }
+.live-filter-panel .list-active-filters { padding-bottom: 12px; }
 .live-filter-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; margin-bottom: 12px; color: var(--text-muted); font-size: 13px; }
 .live-filter-toolbar > span { white-space: nowrap; }
 .live-filter-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 5px 11px; border: 1px solid var(--border-normal); border-radius: var(--radius-control); background: transparent; color: var(--text-secondary); font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }

@@ -521,7 +521,8 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
                     </table>
                   </div>
                   <div className="console-confirm-table-wrap">
-                    <table className="console-admin-table console-confirm-table console-confirm-records-table" aria-label="确认场次">
+                    <table className="console-admin-table console-confirm-table console-confirm-records-table console-confirm-stops-table" aria-label="确认场次">
+                      <colgroup><col span={4} style={{ width: "25%" }} /></colgroup>
                       <thead><tr><th>live_date</th><th>live_id</th><th>short_title</th><th>stop_label</th></tr></thead>
                       <tbody>{stops.map((stop) => <tr key={stop.live_id}><td>{stop.live_date}</td><td>{stop.live_id}</td><td>{getTourStopShortTitle(stop.live_title, payload.tour_title)}</td><td>{stop.stop_label || "-"}</td></tr>)}</tbody>
                     </table>

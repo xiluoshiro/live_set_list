@@ -563,9 +563,10 @@ export function PerformanceGroupAdminSection({
                   </div>
                   <div className="console-confirm-table-wrap">
                     <table
-                      className="console-admin-table console-confirm-table console-confirm-records-table"
+                      className="console-admin-table console-confirm-table console-confirm-records-table console-confirm-stops-table"
                       aria-label="确认场次"
                     >
+                      <colgroup><col span={3} style={{ width: "33.333333%" }} /></colgroup>
                       <thead>
                         <tr>
                           <th>live_date</th>

@@ -809,6 +809,17 @@
   width: max-content;
 }
 
+/* Fill spare space below the summary, while retaining each cell's readable width. */
+.console-confirm-modal .console-confirm-stops-table {
+  width: 100%;
+}
+
+.console-confirm-modal .console-confirm-stops-table td {
+  max-width: none;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
 .console-confirm-records-table caption {
   padding-bottom: 8px;
   color: var(--text-heading);

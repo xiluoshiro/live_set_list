@@ -150,9 +150,18 @@ def get_console_performance_groups(
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT id, group_title
-                    FROM performance_group_attrs
-                    ORDER BY group_title ASC, id ASC
+                    SELECT pg.id, pg.group_title
+                    FROM performance_group_attrs pg
+                    LEFT JOIN LATERAL (
+                        SELECT l.live_date, l.start_time
+                        FROM performance_group_lives pgl
+                        JOIN live_attrs l ON l.id = pgl.live_id
+                        WHERE pgl.group_id = pg.id
+                        ORDER BY l.live_date DESC, l.start_time DESC NULLS LAST, l.id DESC
+                        LIMIT 1
+                    ) boundary_live ON true
+                    ORDER BY boundary_live.live_date DESC NULLS LAST,
+                             boundary_live.start_time DESC NULLS LAST, pg.id DESC
                     """
                 )
                 rows = cur.fetchall()
