@@ -49,9 +49,11 @@ export function ConfirmationTables({ changes, ariaLabel, updating = false }: {
       <table className="console-admin-table console-confirm-table console-confirm-records-table" aria-label={ariaLabel ? `${ariaLabel} · ${source}` : source}>
         <caption>{source}</caption>
         <thead>
-          <tr><th scope="col" rowSpan={updating ? 2 : 1}>{rowHeading}</th>{columns.map(column =>
+          {updating && columns.length === 1 && columns[0] === "值" ? (
+            <tr><th scope="col">{rowHeading}</th><th scope="col">原值</th><th scope="col">新值</th></tr>
+          ) : <><tr><th scope="col" rowSpan={updating ? 2 : 1}>{rowHeading}</th>{columns.map(column =>
             <th key={column} scope={updating ? "colgroup" : "col"} colSpan={updating ? 2 : 1}>{column}</th>)}</tr>
-          {updating && <tr>{columns.map(column => <Fragment key={column}><th scope="col">原值</th><th scope="col">新值</th></Fragment>)}</tr>}
+          {updating && <tr>{columns.map(column => <Fragment key={column}><th scope="col">原值</th><th scope="col">新值</th></Fragment>)}</tr>}</>}
         </thead>
         <tbody>{[...rows].map(([id, cells]) => <tr key={id}><th scope="row">{id}</th>{columns.map(column => {
           const change = cells.get(column);

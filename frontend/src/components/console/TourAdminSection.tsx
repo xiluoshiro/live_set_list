@@ -285,6 +285,9 @@ export function TourAdminSection({ bands, onMessage, onTourDataChanged }: TourAd
     setCandidateLoading(true);
     try {
       const response = await getConsoleTourLiveCandidates(candidateQuery, 1, 500);
+      setCandidates(response.items.slice(0, 20));
+      setCandidatePage(1);
+      setCandidateTotalPages(Math.max(1, Math.ceil(response.total / 20)));
       if (response.total > 500) {
         onMessage("筛选结果超过 500 场，请缩小查询范围后再一键添加。");
         return;

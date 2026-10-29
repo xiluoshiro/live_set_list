@@ -173,7 +173,7 @@ describe("PerformanceGroupAdminSection", () => {
     });
   });
 
-  // 测试点："一键添加筛选结果"批量添加候选到已选列表
+  // 测试点：一键添加使用输入的筛选词，同步候选表并跳过已选场次
   test("one-click add filtered results batch adds candidates to selected list", async () => {
     getConsolePerformanceGroupLiveCandidatesMock.mockReset();
     getConsolePerformanceGroupLiveCandidatesMock
@@ -206,10 +206,13 @@ describe("PerformanceGroupAdminSection", () => {
 
     await user.click(screen.getAllByRole("button", { name: "添加" })[0]);
 
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "Tour");
     await user.click(screen.getByRole("button", { name: "一键添加筛选结果" }));
 
     await waitFor(() => {
       expect(screen.getByText(/已添加 2 场，跳过 1 场已选 Live。/)).toBeInTheDocument();
+      expect(getConsolePerformanceGroupLiveCandidatesMock).toHaveBeenCalledWith("Tour", 1, 500);
+      expect(screen.getAllByText(/Tour Stop C/)).toHaveLength(2);
     });
   });
 
