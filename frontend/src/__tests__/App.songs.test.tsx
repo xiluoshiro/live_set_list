@@ -3,11 +3,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import App from "../App";
-import { getAlbumDetail, getSongGroup, getSongGroups, getSongPerformances, getSongVersion, type SongVersion } from "../api";
+import { getAlbums, getAlbumDetail, getSongGroup, getSongGroups, getSongPerformances, getSongVersion, type SongVersion } from "../api";
 
 vi.mock("../api", async importOriginal => ({ ...await importOriginal<typeof import("../api")>(),
   getSongGroups: vi.fn(), getSongGroup: vi.fn(), getSongVersion: vi.fn(),
-  getSongPerformances: vi.fn(), getAlbumDetail: vi.fn(),
+  getSongPerformances: vi.fn(), getAlbumDetail: vi.fn(), getAlbums: vi.fn(),
 }));
 
 const album = { album_id: 9, album_name: "多盘唱片", release_label: "", release_date: null,
@@ -28,6 +28,35 @@ beforeEach(() => {
   vi.mocked(getSongPerformances).mockResolvedValue({ items: [], page: 1, page_size: 8, total: 0, total_pages: 1, available_years: [] });
   vi.mocked(getAlbumDetail).mockResolvedValue({ ...album, tracks: [{ album_track_id: 1, song_id: 72, group_id: 7,
     song_name: "合唱曲", version_label: "合唱版", edition_label: "Instrumental", section_name: "Disc 2", track_order: 1, band_name: "待回填" }] });
+  vi.mocked(getAlbums).mockImplementation(async (_q, page = 1) => ({ items: [{ ...album, track_count: 1 }],
+    page, page_size: 10, total: 12, total_pages: 2, facets: { total: 12, bands: [{ band_id: 3, band_name: "乐队", album_count: 12 }] } }));
+});
+
+// 测试点：专辑子视图可搜索筛选排序翻页，刷新和详情往返保留专辑浏览上下文，歌曲切换恢复歌曲排序。
+test("album directory keeps its view through refresh and detail navigation", async () => {
+  const user = userEvent.setup();
+  window.history.replaceState(null, "", "/songs?sort=release&size=10");
+  let view = render(<App />);
+  await user.click(await screen.findByRole("tab", { name: "专辑" }));
+  await screen.findByRole("link", { name: "多盘唱片" });
+  await user.type(screen.getByRole("textbox", { name: "搜索专辑、乐队" }), "唱片");
+  await user.click(screen.getByRole("button", { name: "搜索" }));
+  await user.click(await screen.findByRole("button", { name: "乐队 12" }));
+  await user.selectOptions(screen.getByRole("combobox", { name: "专辑排序" }), "name");
+  await user.click(await screen.findByRole("button", { name: "第 2 页" }));
+  await waitFor(() => expect(getAlbums).toHaveBeenLastCalledWith("唱片", 2, 3, { sort: "name", pageSize: 10 }));
+  expect(new URLSearchParams(window.location.search).get("view")).toBe("albums");
+  view.unmount(); view = render(<App />);
+  expect(await screen.findByRole("tab", { name: "专辑" })).toHaveAttribute("aria-selected", "true");
+  await user.click(await screen.findByRole("link", { name: "多盘唱片" }));
+  await screen.findByRole("heading", { name: "多盘唱片", level: 1 });
+  await user.click(screen.getByRole("link", { name: "← 歌曲资料" }));
+  expect(await screen.findByRole("textbox", { name: "搜索专辑、乐队" })).toHaveValue("唱片");
+  expect(screen.getByRole("combobox", { name: "专辑排序" })).toHaveValue("name");
+  await screen.findByRole("link", { name: "多盘唱片" });
+  await user.click(screen.getByRole("tab", { name: "歌曲" }));
+  expect(screen.getByRole("combobox", { name: "歌曲排序" })).toHaveValue("release");
+  await waitFor(() => expect(getSongGroups).toHaveBeenLastCalledWith("唱片", 1, 3, undefined, { sort: "release", pageSize: 10 }));
 });
 
 // 测试点：真实 App 路由保留目录第 2 页筛选、排序和页大小，详情和唱片往返及重新挂载后仍定位具体版本。

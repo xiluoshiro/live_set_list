@@ -32,6 +32,10 @@
 .song-directory { width: min(var(--page-max), calc(100% - 2 * var(--page-gutter))); padding: 24px 0; line-height: 1.5; }
 .page-song-directory .song-directory { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .song-directory-heading { flex: none; margin-bottom: 20px; }
+.song-directory-heading-title .section-tabs { flex-wrap: nowrap; gap: 4px; margin: 0; padding: 4px; border-radius: var(--radius-pill); background: var(--surface-2); }
+.song-directory-heading-title .section-tab-btn { border: 0; border-radius: var(--radius-pill); padding: 7px 18px; font-size: 13px; line-height: 1.5; white-space: nowrap; }
+.song-directory-heading-title .section-tab-btn:hover { color: var(--text-link); }
+.song-directory-heading-title .section-tab-btn.active { background: var(--text-heading); color: var(--bg-body); }
 .song-directory-layout { display: grid; flex: 1; min-height: 0; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; }
 .song-band-directory { display: flex; flex-direction: column; min-height: 0; padding-right: 12px; }
 .song-band-directory h2 { font-size: 12px; font-weight: 500; color: var(--text-muted); padding: 8px 0 15px; }
@@ -78,6 +82,8 @@
 .song-directory-table td:nth-child(4) { font-size: 13px; font-weight: 600; }
 .song-directory-table td:first-child, .song-directory-table th:first-child { padding-left: 0; }
 .song-directory-table td:last-child, .song-directory-table th:last-child { padding-right: 0; }
+.album-directory-table th:nth-child(3), .album-directory-table td:nth-child(3) { text-align: right; font-variant-numeric: tabular-nums; }
+.album-directory-table td:nth-child(3) { font-size: 13px; font-weight: 600; }
 .song-directory-title { display: flex; align-items: center; gap: 11px; min-height: 32px; }
 .song-directory-title > .album-cover-image, .song-directory-title > .song-art-empty, .song-directory-title > .album-cover-error { flex: 0 0 32px; width: 32px; height: 32px; object-fit: contain; font-size: 20px; border-radius: 3px; }
 .song-directory-title > .album-cover-error { font-size: 9px; display: grid; place-items: center; }
@@ -216,4 +222,13 @@
   .song-album-art .album-cover-controls button { padding: 4px 2px; font-size: 11px; }
   .song-album-tracks li a { grid-template-columns: 23px minmax(0, 1fr); gap: 10px; min-height: 44px; padding-block: 10px; font-size: 13px; }
   .song-album-tracks small { font-size: 10px; }
+}
+
+/* Keep album totals visible when the song table hides its release-album column. */
+.song-directory .album-directory-table th:first-child { width: auto; }
+.song-directory .album-directory-table th:nth-child(3), .song-directory .album-directory-table td:nth-child(3) { display: table-cell; width: 80px; }
+@media (max-width: 760px) {
+  .song-directory-heading-title { gap: 12px; }
+  .song-directory-heading-title .section-tab-btn { padding: 6px 16px; }
+  .song-directory .album-directory-table th:nth-child(3), .song-directory .album-directory-table td:nth-child(3) { width: 66px; }
 }

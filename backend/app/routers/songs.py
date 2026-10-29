@@ -2,7 +2,8 @@ from typing import Literal
 from fastapi import APIRouter, Path, Query
 
 from app.db import get_db_connection
-from app.schemas.song_catalog import AlbumDetail, GroupPage, PerformancePage, SongGroup, SongVersion
+from app.schemas.song_catalog import AlbumDetail, AlbumDirectoryPage, GroupPage, PerformancePage, SongGroup, SongVersion
+from app.album_catalog_directory import AlbumSort, read_album_page
 from app.song_catalog import (
     VALID_PERFORMANCE_SQL, catalog_errors, classify_live_cover, read_album,
     read_song, read_song_group, rows,
@@ -39,6 +40,18 @@ def song_group(group_id: int = Path(ge=1)):
 def song_detail(song_id: int = Path(ge=1)):
     with catalog_errors(), get_db_connection() as conn, conn.cursor() as cur:
         return read_song(cur, song_id)
+
+
+@router.get("/albums", response_model=AlbumDirectoryPage)
+def list_albums(
+    q: str = Query(default="", max_length=255),
+    band_id: int | None = Query(default=None, ge=1),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    sort: AlbumSort = "recent",
+):
+    with catalog_errors(), get_db_connection() as conn, conn.cursor() as cur:
+        return read_album_page(cur, q=q, band_id=band_id, sort=sort, page=page, page_size=page_size)
 
 
 @router.get("/albums/{album_id}", response_model=AlbumDetail)

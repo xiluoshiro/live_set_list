@@ -322,6 +322,25 @@ class GroupPage(BaseModel):
     facets: SongFacets
 
 
+class AlbumDirectoryItem(AlbumSummary):
+    track_count: int
+
+
+class BandAlbumCount(BandRef):
+    album_count: int
+
+
+class AlbumFacets(BaseModel):
+    total: int
+    bands: list[BandAlbumCount]
+
+
+class AlbumDirectoryPage(BaseModel):
+    items: list[AlbumDirectoryItem]
+    pagination: CatalogPagination
+    facets: AlbumFacets
+
+
 class AlbumPage(CatalogPagination):
     items: list[AlbumSummary]
 

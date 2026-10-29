@@ -30,7 +30,7 @@ export function SongCatalog({ songId, albumId = null, onSongSelect, onAlbumSelec
     window.addEventListener(SONG_CATALOG_CHANGE, refresh);
     return () => window.removeEventListener(SONG_CATALOG_CHANGE, refresh);
   }, []);
-  useEffect(() => { generation.current += 1; setError(""); }, [songId, albumId, browse.query, browse.bandId, browse.page]);
+  useEffect(() => { generation.current += 1; setError(""); }, [songId, albumId, browse.view, browse.query, browse.bandId, browse.page]);
   useEffect(() => () => { generation.current += 1; }, []);
   const selectGroup = async (item: SongGroupSummary) => {
     const request = ++generation.current;

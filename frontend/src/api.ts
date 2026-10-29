@@ -2371,6 +2371,10 @@ export type SongSort = "name" | "plays" | "recent" | "release";
 export type SongFacets = { total: number; bands: { band_id: number; band_name: string; song_count: number }[] };
 export type CatalogPage<T> = { items: T[]; page: number; page_size: number; total: number; total_pages: number };
 export type SongDirectoryPage = CatalogPage<SongGroupSummary> & { facets: SongFacets };
+export type AlbumSort = "name" | "recent" | "release";
+export type AlbumDirectoryItem = AlbumSummary & { track_count: number };
+export type AlbumFacets = { total: number; bands: { band_id: number; band_name: string; album_count: number }[] };
+export type AlbumDirectoryPage = CatalogPage<AlbumDirectoryItem> & { facets: AlbumFacets };
 export type SongPerformancePage = CatalogPage<SongPerformance> & { available_years: number[] };
 export type SongPerformance = {
   setlist_id: string; live_id: number; live_title: string; live_date: string;
@@ -2446,6 +2450,14 @@ export const getSongPerformances = (id: number, page = 1, options: { year?: numb
     .then(result => ({ items: result.items, ...result.pagination, available_years: result.available_years }));
 };
 export const getAlbumDetail = (id: number) => catalogGet<AlbumDetail>(`/albums/${id}`);
+export const getAlbums = (q = "", page = 1, bandId?: number, options: { sort?: AlbumSort; pageSize?: number } = {}) => {
+  const query = new URLSearchParams({ q, page: String(page) });
+  if (bandId) query.set("band_id", String(bandId));
+  if (options.sort) query.set("sort", options.sort);
+  if (options.pageSize) query.set("page_size", String(options.pageSize));
+  return catalogGet<{ items: AlbumDirectoryItem[]; pagination: Omit<CatalogPage<AlbumDirectoryItem>, "items">; facets: AlbumFacets }>(`/albums?${query}`)
+    .then(result => ({ items: result.items, ...result.pagination, facets: result.facets }));
+};
 export async function getCatalogConsole<T>(path: string): Promise<T> {
   const response = await fetchWithTimeout(`${BASE_URL}/api/console${path}`, undefined, { requestKind: "song_catalog_console" });
   return expectJsonResponse<T>(response);

@@ -7,7 +7,7 @@ import { SongCatalogAdmin } from "../console/SongCatalogAdmin";
 import type { SongVersion } from "../../api";
 
 const api = vi.hoisted(() => ({ getSongGroups: vi.fn(), getSongGroup: vi.fn(), getSongVersion: vi.fn(),
-  getSongPerformances: vi.fn(), getAlbumDetail: vi.fn(), getCatalogConsole: vi.fn(), songCatalogWrite: vi.fn() }));
+  getSongPerformances: vi.fn(), getAlbumDetail: vi.fn(), getAlbums: vi.fn(), getCatalogConsole: vi.fn(), songCatalogWrite: vi.fn() }));
 vi.mock("../../api", () => ({ ...api, SONG_CATALOG_CHANGE: "song-catalog-change" }));
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ csrfToken: "csrf" }) }));
 
@@ -357,6 +357,28 @@ test("directory retains band controls while filtering", async () => {
   await act(async () => finish(result));
   expect(screen.getByRole("button", { name: "乐队甲 1" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("region", { name: "歌曲列表" })).toHaveAttribute("aria-busy", "false");
+});
+
+// 测试点：专辑加载失败可重试，切换回歌曲后迟到的专辑结果不覆盖当前视图。
+test("album directory retry and late responses respect the selected view", async () => {
+  const user = userEvent.setup();
+  const result = { ...page([{ ...version().albums[0], track_count: 1 }]), facets: { total: 1, bands: [] } };
+  let finish!: (value: typeof result) => void;
+  api.getAlbums.mockRejectedValueOnce(new Error("目录暂不可用"))
+    .mockImplementationOnce(() => new Promise<typeof result>(resolve => { finish = resolve; }))
+    .mockResolvedValueOnce({ ...page([]), facets: { total: 0, bands: [] } });
+  render(<SongCatalog songId={null} onSongSelect={vi.fn()} onLiveSelect={vi.fn()} />);
+  await screen.findByRole("link", { name: "合唱曲" });
+  await user.click(screen.getByRole("tab", { name: "专辑" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("目录暂不可用");
+  await user.click(screen.getByRole("button", { name: "重试" }));
+  expect(screen.getByRole("region", { name: "专辑列表" })).toHaveAttribute("aria-busy", "true");
+  await user.click(screen.getByRole("tab", { name: "歌曲" }));
+  await screen.findByRole("link", { name: "合唱曲" });
+  await act(async () => finish(result));
+  expect(screen.getByRole("region", { name: "歌曲列表" })).toHaveTextContent("合唱曲");
+  await user.click(screen.getByRole("tab", { name: "专辑" }));
+  expect(await screen.findByText("暂无专辑")).toBeInTheDocument();
 });
 
 // 测试点：桌面缩放保留阅读位置，手机整页滚动时分页稳定且仍能翻页与筛选。
