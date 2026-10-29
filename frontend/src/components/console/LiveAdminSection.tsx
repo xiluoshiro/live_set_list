@@ -437,10 +437,10 @@ export function LiveAdminSection({
                 <input value={liveUrl} onChange={(e) => onLiveUrlChange(e.target.value)} placeholder="https://..." />
               </td>
               <td>
-                <input type="time" aria-label="opening_time" value={openingTime} disabled={!openingTimeAnnounced} onChange={(e) => onOpeningTimeChange(e.target.value)} />
+                <input className="live-schedule-time-input" type={openingTimeAnnounced ? "time" : "text"} aria-label="opening_time" value={openingTimeAnnounced ? openingTime : "未公布"} disabled={!openingTimeAnnounced} onChange={(e) => onOpeningTimeChange(e.target.value)} />
               </td>
               <td>
-                <input type="time" aria-label="start_time" value={startTime} disabled={!startTimeAnnounced} onChange={(e) => onStartTimeChange(e.target.value)} />
+                <input className="live-schedule-time-input" type={startTimeAnnounced ? "time" : "text"} aria-label="start_time" value={startTimeAnnounced ? startTime : "未公布"} disabled={!startTimeAnnounced} onChange={(e) => onStartTimeChange(e.target.value)} />
               </td>
               <td>
                 <div className={`console-focus-group timezone-input-group${venueAnnounced ? " timezone-source-copy" : ""}`}>

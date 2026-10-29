@@ -947,6 +947,12 @@
   color: var(--text-muted);
 }
 
+.console-admin-table input.live-schedule-time-input:disabled {
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .live-page-status {
   color: var(--text-muted);
   font-size: 12px;
