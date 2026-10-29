@@ -1236,7 +1236,9 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
       if (selectFirstLiveCandidateAfterQueryRef.current) {
         selectFirstLiveCandidateAfterQueryRef.current = false;
         const nextId = resolveConsoleEditSelection(response.items, live => live.live_id, editingLiveId);
-        if (response.items.length && nextId !== null && nextId !== editingLiveId) {
+        if (nextId === null) {
+          liveDraft.guard(() => { setEditingLiveId(null); setOriginalLivePayload(null); resetLiveForm(); });
+        } else if (nextId !== editingLiveId) {
           requestLiveForEdit(nextId);
         }
       }
@@ -1369,6 +1371,9 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
         selectFirst && setlistEditQuery.trim() ? "query" : "preserve");
       if (nextId !== null && selectFirst && setlistEditQuery.trim() && candidates.length) await loadSetlistForEdit(nextId);
       else if (!candidates.length) {
+        setOriginalSetlistPayload(null);
+        setOriginalSetlistSongNames({});
+        setSetlistRows(INITIAL_SETLIST_ROWS.map(row => ({ ...row })));
         setSelectedLiveId(0);
         setMessage("没有符合条件的 Setlist。");
       }

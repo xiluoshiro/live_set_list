@@ -1604,7 +1604,7 @@ describe("ConsoleInsertPanel", () => {
     await waitFor(() => expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledWith("", 1, 20, "event"));
   });
 
-  // 测试点：Live 管理空条件查询不选中，有条件查询才选中首个真实候选并加载编辑表单。
+  // 测试点：Live 管理空条件查询不选中，有条件查询加载首项，无结果查询经草稿确认后清空编辑表单。
   test("Live管理查询命中后自动选中首个Live", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleLiveCandidates.mockResolvedValue({
@@ -1620,17 +1620,30 @@ describe("ConsoleInsertPanel", () => {
     await screen.findByRole("option", { name: /#55/ });
     expect(selector).toHaveValue("");
     await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "   ");
-    await user.click(screen.getByRole("button", { name: "查询" }));
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "{Enter}");
     await waitFor(() => expect(selector).toBeEnabled());
     expect(selector).toHaveValue("");
     expect(apiMocks.getConsoleLive).not.toHaveBeenCalled();
     await user.clear(screen.getByPlaceholderText("输入 Live ID 或标题"));
     await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "Event Live");
-    await user.click(screen.getByRole("button", { name: "查询" }));
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "{Enter}");
 
     await waitFor(() => expect(selector).toHaveValue("55"));
     expect(apiMocks.getConsoleLive).toHaveBeenCalledWith(55);
     expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live");
+    await user.type(screen.getByPlaceholderText("请输入Live标题"), " draft");
+    apiMocks.getConsoleLiveCandidates.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0, total_pages: 1 });
+    await user.clear(screen.getByPlaceholderText("输入 Live ID 或标题"));
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "missing");
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "{Enter}");
+    let discard = within(await screen.findByRole("dialog", { name: "未保存的修改" }));
+    await user.click(discard.getByRole("button", { name: "继续编辑" }));
+    expect(screen.getByPlaceholderText("请输入Live标题")).toHaveValue("Event Live draft");
+    await user.type(screen.getByPlaceholderText("输入 Live ID 或标题"), "{Enter}");
+    discard = within(await screen.findByRole("dialog", { name: "未保存的修改" }));
+    await user.click(discard.getByRole("button", { name: "放弃修改" }));
+    expect(selector).toHaveValue("");
+    expect(screen.queryByPlaceholderText("请输入Live标题")).not.toBeInTheDocument();
   });
 
   // 测试点：活动 Live 应把默认乐队 下勾选的完整成员名单提交给后端，不在前端写入 mode。

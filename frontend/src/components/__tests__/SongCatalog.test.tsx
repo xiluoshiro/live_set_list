@@ -650,7 +650,7 @@ test("automatic query selection protects the unsaved song draft", async () => {
   expect(screen.getByLabelText("选择要编辑的歌曲")).toHaveValue("2");
 });
 
-// 测试点：无结果时不加载详情，单项命中自动打开，后续空查询保留已有编辑对象。
+// 测试点：无结果时不加载详情，单项命中自动打开，后续无结果查询清空编辑对象。
 test("empty song queries do not select a nonexistent match", async () => {
   const user = userEvent.setup();
   api.getCatalogConsole.mockImplementation(async (path: string) => path === "/members" ? { items: [] }
@@ -668,8 +668,8 @@ test("empty song queries do not select a nonexistent match", async () => {
   await user.clear(query);
   await user.type(query, "missing{Enter}");
   await screen.findByText("没有匹配的歌曲。");
-  expect(screen.getByLabelText("歌曲组名称")).toHaveValue("合唱曲");
-  expect(screen.getByLabelText("选择要编辑的歌曲")).toHaveValue("1");
+  expect(screen.queryByLabelText("歌曲组名称")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("选择要编辑的歌曲")).toHaveValue("");
 });
 
 // 测试点：独立唱片页本地切图遵守边界，坏图仍可切换及访问来源，离开再进入恢复默认图。

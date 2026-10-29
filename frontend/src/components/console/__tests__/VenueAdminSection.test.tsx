@@ -154,6 +154,27 @@ describe("VenueAdminSection", () => {
     expect(apiMocks.getConsoleVenue).toHaveBeenLastCalledWith(2);
   });
 
+  // 测试点：无匹配场馆时清空选择、位置和历史，不再加载旧场馆详情，并可重新查询命中。
+  test("clears the previous Venue when a query has no matches", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole("option", { name: "#1 First Hall" });
+    await user.selectOptions(screen.getByLabelText("已有 Venue"), "1");
+    await screen.findByRole("table", { name: "Venue 历史名称" });
+    const calls = apiMocks.getConsoleVenue.mock.calls.length;
+    apiMocks.getConsoleVenuePage.mockResolvedValueOnce({ items: [], page: 1, total: 0, total_pages: 1 });
+    await user.type(screen.getByLabelText("搜索场馆"), "missing{Enter}");
+    await screen.findByText("暂无可管理的 Venue。");
+    expect(screen.getByLabelText("已有 Venue")).toHaveValue("");
+    expect(screen.queryByRole("table", { name: "Venue 历史名称" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("名称")).not.toBeInTheDocument();
+    expect(screen.queryByText("所在地与地图")).not.toBeInTheDocument();
+    expect(apiMocks.getConsoleVenue).toHaveBeenCalledTimes(calls);
+    await user.clear(screen.getByLabelText("搜索场馆"));
+    await user.type(screen.getByLabelText("搜索场馆"), "First{Enter}");
+    expect(await screen.findByRole("table", { name: "Venue 历史名称" })).toHaveTextContent("First Hall");
+  });
+
   // 测试点：新增场馆是独立页面，确认前不写入，提交后刷新其它场馆候选数据。
   test("creates only after confirmation in the create variant", async () => {
     const user = userEvent.setup();

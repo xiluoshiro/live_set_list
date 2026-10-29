@@ -108,7 +108,10 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
         selectedSearch.current = search;
         const nextId = resolveConsoleEditSelection(result.items, song => song.song_id, original?.song_id ?? null,
           search.selectFirst ? "query" : "preserve");
-        if (search.selectFirst && !manuallyOpened && result.items.length && nextId !== null && selectionGeneration === loadGeneration.current) void loadSong(nextId);
+        if (search.selectFirst && !manuallyOpened && selectionGeneration === loadGeneration.current) {
+          if (nextId === null) { setOriginal(null); setOriginalGroup(null); setEditGroup(null); setEditDraft(emptyFields()); setOwner(emptyOwner()); setMoveTarget(emptySongMove()); setError(""); }
+          else void loadSong(nextId);
+        }
       }
     })
       .catch(e => { if (current) setError(String(e)); })

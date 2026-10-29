@@ -7,7 +7,7 @@ export function resolveConsoleEditSelection<T>(
 ): number | null {
   if (policy === "preserve") return selectedId;
   if (policy === "prefer-match" && items.some(item => getId(item) === selectedId)) return selectedId;
-  return items[0] ? getId(items[0]) : policy === "prefer-match" ? null : selectedId;
+  return items[0] ? getId(items[0]) : null;
 }
 
 export function ConsoleEditSelect({ id, className, label, placeholder, options, value, selectedOption, disabled, onSelect }: {

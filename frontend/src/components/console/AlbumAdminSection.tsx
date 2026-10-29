@@ -109,8 +109,10 @@ export function AlbumAdminSection({ variant, active, registerLeaveGuard, onManag
           selectedSearch.current = albumSearch;
           const nextId = resolveConsoleEditSelection(result.items, album => album.album_id, original?.album_id ?? null,
             albumSearch.selectFirst ? "query" : "preserve");
-          if (albumSearch.selectFirst && !manuallyOpened && result.items.length && nextId !== null &&
-            nextId !== original?.album_id && selectionGeneration === loadGeneration.current) guard(() => void load(nextId));
+          if (albumSearch.selectFirst && !manuallyOpened && selectionGeneration === loadGeneration.current) {
+            if (nextId === null) guard(() => { setOriginal(null); setEditDraft(emptyAlbum()); setSelectedSong(""); setError(""); });
+            else if (nextId !== original?.album_id) guard(() => void load(nextId));
+          }
         }
       })
       .catch(e => { if (current) setAlbumsError(String(e)); })
