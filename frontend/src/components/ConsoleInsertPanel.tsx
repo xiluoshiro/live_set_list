@@ -2654,13 +2654,36 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
             ["setlist_rows", pendingConfirmation.previewRows.length],
           ]}
         />
-        <CompactConfirmationTable ariaLabel="新增 Setlist 确认" changes={[
-          ...bandFieldChanges("band_lineup_contexts", [], pendingConfirmation.payload.band_lineup_contexts ?? []),
-          ...pendingConfirmation.previewRows.flatMap(({ band_performances, ...row }) => [
-            ...confirmationFieldChanges(`setlist_rows[abs=${row.absolute_order}]`, undefined, row),
-            ...bandFieldChanges(`setlist_rows[abs=${row.absolute_order}].band_performances`, [], band_performances),
-          ]),
-        ]} />
+        <div className="console-table-wrap console-confirm-setlist-wrap">
+          <table className="console-admin-table console-confirm-setlist-table">
+            <thead>
+              <tr>
+                <th>abs</th>
+                <th>song_group_id</th>
+                <th>song_name</th>
+                <th>seg</th>
+                <th>sub</th>
+                <th>short</th>
+                <th>band_member</th>
+                <th>other_member</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingConfirmation.previewRows.map((row) => (
+                <tr key={row.absolute_order}>
+                  <td>{row.absolute_order}</td>
+                  <td>{row.song_group_id}</td>
+                  <td>{row.song_name}</td>
+                  <td>{row.segment_type}</td>
+                  <td>{row.sub_order}</td>
+                  <td>{row.is_short ? "true" : "false"}</td>
+                  <td><code>{JSON.stringify(row.band_member)}</code></td>
+                  <td><code>{JSON.stringify(row.other_member ?? {})}</code></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </>
     );
   };

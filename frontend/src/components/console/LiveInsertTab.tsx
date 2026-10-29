@@ -1,5 +1,4 @@
 import { ConsoleConfirmDialog } from "./ConsoleConfirmDialog";
-import { CompactConfirmationTable } from "./CompactConfirmationTable";
 import { ConsolePastePreview, ConsolePastePreviewDetails } from "./ConsolePastePreview";
 import { useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
 
@@ -208,11 +207,12 @@ export function LiveInsertTab({
               <td>{row.sub_order}</td>
               <td>{row.song_name}</td>
               <td>{row.is_short ? "true" : "false"}</td>
-              <td>{Object.keys(row.band_member).length ? <CompactConfirmationTable rows={Object.entries(row.band_member).map(([band, members]) => [band, members.join(" / ")] as const)} /> : "-"}</td>
-              <td>{otherMembers.length ? <CompactConfirmationTable changes={otherMembers.flatMap((entry, index) => [
-                { field: `${index + 1}. key`, before: "", after: entry.member_key, table: { source: "other_member", row: String(index + 1), column: "key" } },
-                { field: `${index + 1}. value`, before: "", after: entry.member_value, table: { source: "other_member", row: String(index + 1), column: "value" } },
-              ])} /> : "-"}</td>
+              <td>{Object.entries(row.band_member).map(([band, members]) => (
+                <div key={band}>{band}: {members.join(" / ")}</div>
+              ))}{Object.keys(row.band_member).length === 0 && "-"}</td>
+              <td>{otherMembers.length ? otherMembers.map((entry, index) => (
+                <div key={index}>{entry.member_key}: {entry.member_value}</div>
+              )) : "-"}</td>
               <td>{row.comment || "-"}</td>
             </tr>
             );
@@ -877,7 +877,7 @@ export function LiveInsertTab({
 
               {renderPreviewTable()}
               {setlistParseWarnings.length > 0 && (
-                <ul className="setlist-paste-warnings" style={{ marginTop: 12 }}>
+                <ul className="setlist-paste-warnings" style={{ margin: 0 }}>
                   {setlistParseWarnings.map((warning, index) => (
                     <li key={`${warning.line}-${index}`}>
                       第 {warning.line} 行：{warning.message}
