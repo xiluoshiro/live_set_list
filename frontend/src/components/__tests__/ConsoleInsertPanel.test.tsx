@@ -1702,7 +1702,7 @@ describe("ConsoleInsertPanel", () => {
     ));
   });
 
-  // 测试点：无 Setlist 活动确认所用的当前名称、阵容和成员，并提交对应版本。
+  // 测试点：无 Setlist 活动回显出演成员，并提交默认乐队的当前名称和阵容版本。
   test("无Setlist活动只提交默认Band当前版本", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleVenues.mockResolvedValue({ items: [{ venue_id: 88, venue_name: "New Venue", venue_name_version_id: 188 }] });
@@ -1785,10 +1785,7 @@ describe("ConsoleInsertPanel", () => {
     await user.type(screen.getByPlaceholderText("https://..."), "https://example.com/current-event");
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     const confirmation = screen.getByRole("dialog", { name: "确认新增 Live" });
-    const versions = within(confirmation).getByRole("table", { name: "乐队版本" });
-    expect(within(versions).getByText("MyGO!!!!!（#20）")).toBeInTheDocument();
-    expect(within(versions).getByText("MyGO V2（#22）")).toBeInTheDocument();
-    expect(within(confirmation).getByRole("table", { name: "出演成员" })).toHaveTextContent("Current Vocal");
+    expect(confirmation).toHaveTextContent("3: Current Vocal");
     await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.createConsoleLive).toHaveBeenCalledWith(

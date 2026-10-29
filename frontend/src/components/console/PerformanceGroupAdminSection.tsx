@@ -563,7 +563,7 @@ export function PerformanceGroupAdminSection({
                   </div>
                   <div className="console-confirm-table-wrap">
                     <table
-                      className="console-admin-table console-confirm-table"
+                      className="console-admin-table console-confirm-table console-confirm-records-table"
                       aria-label="确认场次"
                     >
                       <thead>

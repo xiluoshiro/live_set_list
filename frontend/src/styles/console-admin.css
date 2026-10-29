@@ -702,11 +702,6 @@
   margin-top: 10px;
 }
 
-.console-confirm-modal.tour .console-confirm-setlist-table {
-  width: 100%;
-  min-width: 0;
-}
-
 @media (max-width: 720px) {
   .tour-admin-fields {
     grid-template-columns: 1fr;
@@ -743,7 +738,7 @@
 }
 
 .console-confirm-modal.compact {
-  width: min(680px, calc(100vw - 40px));
+  width: fit-content;
   min-width: min(320px, calc(100vw - 40px));
   max-width: min(720px, calc(100vw - 40px));
 }
@@ -759,12 +754,12 @@
 }
 
 .console-confirm-modal.batch_song {
-  width: min(900px, calc(100vw - 40px));
+  width: fit-content;
   max-width: min(900px, calc(100vw - 40px));
 }
 
 .console-confirm-modal.wide {
-  width: min(1080px, calc(100vw - 40px));
+  width: fit-content;
   max-width: min(1080px, calc(100vw - 40px));
   height: auto;
 }
@@ -790,9 +785,12 @@
   overflow-x: auto;
 }
 
+/* Confirmation tables size to their content, not the management table's viewport. */
+.console-confirm-modal .console-admin-table,
 .console-confirm-table {
   width: auto;
   min-width: 0;
+  table-layout: auto;
 }
 
 .console-confirm-table th {
@@ -806,8 +804,9 @@
   overflow-wrap: anywhere;
 }
 
-.console-confirm-records-table {
-  width: 100%;
+.console-confirm-modal .console-confirm-records-table,
+.console-confirm-modal .live-update-diff-table {
+  width: max-content;
 }
 
 .console-confirm-records-table caption {
@@ -821,7 +820,7 @@
 .console-confirm-records-table th,
 .console-confirm-records-table td {
   width: auto;
-  min-width: 160px;
+  min-width: 0;
   max-width: 360px;
   vertical-align: top;
   white-space: pre-wrap;
@@ -829,12 +828,12 @@
 }
 
 .console-confirm-records-table th:first-child {
-  min-width: 48px;
+  white-space: nowrap;
 }
 
 .console-confirm-modal.live .console-confirm-records-table {
   width: max-content;
-  min-width: 100%;
+  min-width: 0;
 }
 
 .console-confirm-modal.live .console-confirm-records-table th,
@@ -842,11 +841,6 @@
   max-width: none;
   white-space: pre;
   overflow-wrap: normal;
-}
-
-.live-update-diff-table {
-  width: 100%;
-  table-layout: fixed;
 }
 
 .live-update-diff-table th {
@@ -861,27 +855,13 @@
 }
 
 .live-update-diff-table td {
-  max-width: none;
+  max-width: 360px;
   white-space: pre-wrap;
 }
 
-.live-update-diff-table th:first-child {
-  width: 140px;
-}
-
-@media (max-width: 600px) {
-  .live-update-diff-table th:first-child {
-    width: 28%;
-  }
-}
-
-.console-confirm-setlist-table {
-  min-width: 960px;
-}
-
-.console-confirm-batch-song-table {
+.console-confirm-modal .console-confirm-batch-song-table {
   width: max-content;
-  min-width: max(100%, 660px);
+  min-width: 660px;
   table-layout: auto;
 }
 

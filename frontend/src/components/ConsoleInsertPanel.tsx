@@ -2607,10 +2607,25 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
             null
           ) : (
             <CompactConfirmationTable
-              changes={[
-              ...describeLiveBandChanges(liveConfirmationFields(null, payload), bands, bandHistories).map(change => ({ ...change, after: change.field === "live_type" ? formatLiveType(payload.live_type) : change.after })),
-              { field: "时间基准", before: "", after: currentTimezoneLabel },
-              { field: "venue_name", before: "", after: pendingConfirmation.venueName },
+              rows={[
+              ["live_date", payload.live_date],
+              ["live_title", payload.live_title],
+              ["live_type", formatLiveType(payload.live_type)],
+              ["url", payload.url],
+              ["opening_time", payload.opening_time ?? "未公布"],
+              ["start_time", payload.start_time ?? "未公布"],
+              ["timezone", currentTimezoneLabel],
+              ["venue_id", payload.venue_id ?? "未公布"],
+              ["venue_name", pendingConfirmation.venueName],
+              ["default_band_ids", payload.default_band_ids.join(", ") || "-"],
+              [
+                "event_attendees",
+                payload.event_attendees
+                  .map((attendee) => `${attendee.band_id}: ${attendee.members.join(" / ")}`)
+                  .join("; ") || "-",
+              ],
+              ["event_status", EVENT_STATUS_LABELS[payload.event_status ?? "scheduled"]],
+              ["status_note", payload.status_note],
               ]}
             />
           )}
@@ -3018,7 +3033,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
 
       {liveDraft.dialog}{setlistDraft.dialog}
       {pendingConfirmation && <ConsoleConfirmDialog title={pendingConfirmation.title}
-        size={pendingConfirmation.kind === "setlist" || pendingConfirmation.kind === "live" ? "wide" : "compact"} className={pendingConfirmation.kind}
+        size={pendingConfirmation.kind === "setlist" || (pendingConfirmation.kind === "live" && pendingConfirmation.action === "update") ? "wide" : "compact"} className={pendingConfirmation.kind}
         changes={(pendingConfirmation.kind === "live" || pendingConfirmation.kind === "setlist") && pendingConfirmation.action === "update"
           ? pendingConfirmation.kind === "live" ? describeLiveBandChanges(pendingConfirmation.changes, bands, bandHistories) : pendingConfirmation.changes
           : undefined}
