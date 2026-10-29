@@ -187,8 +187,32 @@ python scripts/apply_remote_sql.py path/to/change.sql --ssh-host livesetlist-sql
 
 可直接挂 `scripts/backup_app_auto.ps1` 到 Windows Task Scheduler。
 
-- 脚本会调用 `python scripts/recovery_db.py backup-app-auto`
-- 结束后会提取最后一条摘要，发送一条 Windows 系统通知
+- 脚本先调用 `python scripts/recovery_db.py backup-app-auto`，备份阶段结束后再调用 `python scripts/bang_dream_monitor.py`；备份失败也继续查询官网，但任一阶段失败时整个任务返回非零退出码。
+- 备份结果发送 Windows 通知；官网有新增、变化或检查失败时另发汇总通知，无变化时只写报告。
 - 若希望看到通知，任务需要运行在当前已登录用户会话中；如果任务配置成“无论用户是否登录都运行”，通常拿不到桌面通知
+- 沿用现有计划任务的时间、登录条件和补跑设置。脚本本身不注册或修改任务；监控另有进程锁防止手动执行与计划任务同时写基线。
+
+### BanG Dream 官网监控
+
+监控 `https://bang-dream.com/events/` 和 `https://bang-dream.com/discographies/` ，使用 Python 标准库，无额外安装依赖。
+
+- 首次建立所有条目的概览和详情基线，不把现有内容通知为新增。逐条落盘，初始化中断后继续补齐。
+- 首次完整扫描概览；后续遇到整页条目均未变化即停止翻页，未访问分页保留基线（这些分页的概览变动不会在当次发现）；新增条目读取详情。概览字段变化的已知条目，无论是否过期都重新比较详情。共用专题 URL 的多场活动保留全部概览记录。
+- 概览未变时，读取未开始、当前、日期未定条目的详情；日期到期后再完成一次收尾对比。多场活动保留至最后一场活动日结束，日期只按日判断，不把售票或发行特典日期当活动日期。模糊、异常、跨年不明确的日期持续监控。
+- 发行日期按日本日期判断；活动支持日本及常见东亚/东南亚地点的日期边界。识别出的欧美/未知海外时区使用保守的 UTC-12 日期边界，不会据此声称精确开演时间。
+- 正文、链接、封面和正文图片均比较；图片只比较网址，不下载图片或比较文件指纹。公共导航、分享区、主题脚本等不参与比较。外部链接只比较引用，目录直接指向的专题页属于详情抓取目标。
+- HTTP 错误、结构异常和资源获取失败保留旧基线，报告失败并重试；概览扫描不完整时不推断移除。目录移除不等于活动取消。
+- 用户指定排除 Galaxy×BanG Dream 联动、ANIMAX MUSIX 2021 ONLINE、BanG Dream! Museum 三项历史详情（脚本 `DETAIL_EXCLUSIONS` 中的精确地址）。这些条目保留概览比较，详情不请求、不重试，也不计入待初始化或异常；报告显示为已排除。
+- `state.sqlite3` 保存基线和待通知变更；发送接口调用成功后才确认通知。Windows 气泡接口没有用户已读回执，因此确认只代表已提交给通知接口。
+
+状态目录是项目根目录的 `.tmp/bang-dream-monitor/`，报告位于其中的 `reports/`，每次生成 UTF-8 HTML 和 JSON。报告按文件生成时间保留七天；数据库、锁文件和未发送通知不参与轮转。保留状态数据库才能延续比较，删除整个状态目录将重新初始化。
+
+手动只运行官网检查（不触发备份、不弹窗、也不确认通知）：
+
+```powershell
+python -X utf8 scripts/bang_dream_monitor.py
+```
+
+脚本最后一行输出供 PowerShell 读取的 JSON 摘要，包含报告路径；之前的行是抓取进度。`--state-dir` 可选择隔离的验证目录。`--ack-report` 是通知成功后的确认入口，不应在未发送通知时手动使用。详情采用 12 路并发，请求启动间隔至少 0.1 秒；页面请求有超时与有限重试，首次全量初始化耗时显著高于后续每日检查。
 
 Linux 生产环境使用 `infra/production/livesetlist-backup.service` 和 `infra/production/livesetlist-backup.timer`，并通过 `LIVESETLIST_BACKUP_ROOT=/var/backups/livesetlist` 指定备份根目录。
