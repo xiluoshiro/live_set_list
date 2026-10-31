@@ -122,6 +122,8 @@
 .song-album-content { grid-area: tracks; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .song-album-heading { grid-area: identity; min-width: 0; padding-bottom: 16px; border-bottom: var(--rule-heading); }
 .song-album-heading h1 { font-size: clamp(32px, 3.6vw, 48px); font-weight: 760; letter-spacing: -.035em; line-height: 1.24; }
+/* Opaque system colors prevent overlapping selection backgrounds from darkening. */
+.song-album-heading h1::selection { background-color: Highlight; color: HighlightText; }
 .song-album-heading p { margin-top: 10px; color: var(--text-secondary); line-height: 1.5; }
 .song-album-content > .song-section-heading { flex: none; min-height: 42px; border-bottom: 1px solid var(--border-normal); }
 .song-album-content .song-section-heading > span { font-size: 11px; }
