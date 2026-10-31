@@ -533,7 +533,6 @@ class Monitor:
         for change in notifications:
             sections.append(f"<h2>{escape(change['type'])}{'（收尾）' if change.get('closing') else ''}：{escape(change['title'])}</h2>")
             sections.append(f"<p><a href='{escape(change['url'], quote=True)}'>{escape(change['url'])}</a></p>")
-            sections.append(f"<pre>{escape(change.get('diff') or json.dumps(change.get('overview', {}), ensure_ascii=False, indent=2))}</pre>")
         if not notifications:
             sections.append("<p>本次没有待通知的新增或变化。</p>")
         for error in self.errors:

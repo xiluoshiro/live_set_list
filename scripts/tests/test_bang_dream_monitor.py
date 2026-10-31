@@ -296,6 +296,34 @@ def test_lock_exclusion_and_release(tmp_path):
         assert (tmp_path / "monitor.lock").exists()
 
 
+# 测试点：多个 Python 候选时只启动优先解释器，真实子进程的参数、输出和退出状态保持正确。
+@pytest.mark.parametrize("exit_code,stream", [(0, False), (7, True)])
+def test_powershell_python_launch_with_multiple_candidates(tmp_path, exit_code, stream):
+    shell = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if not shell:
+        pytest.skip("PowerShell unavailable on this platform")
+    child = tmp_path / "child.py"
+    child.write_text("import json, sys\nprint(json.dumps(sys.argv[1:]))\nsys.exit(int(sys.argv[1]))\n", encoding="utf-8")
+    script = tmp_path / "launch.ps1"
+    entry = str(ROOT / "scripts/backup_app_auto.ps1").replace("'", "''")
+    interpreter = sys.executable.replace("'", "''")
+    child_path = str(child).replace("'", "''")
+    script.write_text(f"""
+    . '{entry}'
+    function Get-Command {{
+        param($Name, $CommandType, $ErrorAction)
+        [pscustomobject]@{{Source='{interpreter}'}}
+        [pscustomobject]@{{Source='C:\\unavailable-python\\python.exe'}}
+    }}
+    Invoke-PythonCommand -Arguments @('{child_path}', '{exit_code}', 'two words') -StreamProgress:${str(stream).lower()} | ConvertTo-Json -Depth 4 -Compress
+    """, encoding="utf-8-sig")
+    process = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(script)], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+    assert process.returncode == 0, process.stderr
+    actual = json.loads(process.stdout.strip().splitlines()[-1])
+    assert actual["ExitCode"] == exit_code
+    assert json.loads(actual["Output"][-1]) == [str(exit_code), "two words"]
+
+
 # 测试点：Windows 编排在备份失败后仍按顺序查询，通知失败不确认变化，查询失败不能返回成功。
 @pytest.mark.parametrize("backup_code,monitor_code,shown,expected,acknowledged", [
     (0, 0, True, 0, True), (1, 0, True, 1, True), (-1, 0, True, 1, True),

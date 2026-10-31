@@ -58,17 +58,20 @@ function Show-BackupNotification {
 
 function Invoke-PythonCommand {
     param([string[]]$Arguments, [switch]$StreamProgress)
-    $pythonPath = (Get-Command python -CommandType Application -ErrorAction Stop).Source
+    # Windows PowerShell can return every matching application on PATH.
+    $pythonPath = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     # Windows PowerShell 5 treats native stderr as ErrorRecord; collect it without
     # aborting before the native process has completed and supplied its exit code.
     $ErrorActionPreference = "Continue"
-    $LASTEXITCODE = -1
+    # Native commands update the global automatic variable; a local sentinel
+    # would shadow the real exit code and report -1 even after successful runs.
+    $global:LASTEXITCODE = -1
     $lines = @(& $pythonPath -X utf8 @Arguments 2>&1 | ForEach-Object {
         $line = $_.ToString()
         if ($StreamProgress) { Write-Host $line }
         $line
     })
-    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $lines }
+    return [pscustomobject]@{ ExitCode = $global:LASTEXITCODE; Output = $lines }
 }
 
 function Write-MonitorFailureReport {

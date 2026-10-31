@@ -207,6 +207,8 @@ python scripts/apply_remote_sql.py path/to/change.sql --ssh-host livesetlist-sql
 
 状态目录是项目根目录的 `.tmp/bang-dream-monitor/`，报告位于其中的 `reports/`，每次生成 UTF-8 HTML 和 JSON。报告按文件生成时间保留七天；数据库、锁文件和未发送通知不参与轮转。保留状态数据库才能延续比较，删除整个状态目录将重新初始化。
 
+HTML 显示变化类型、条目名称、链接与检查结果，不展开原始 diff 或概览 JSON；完整差异保存在同名 JSON 报告中。
+
 手动只运行官网检查（不触发备份、不弹窗、也不确认通知）：
 
 ```powershell
