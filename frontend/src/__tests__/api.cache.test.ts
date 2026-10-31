@@ -92,6 +92,20 @@ describe("api cache behavior", () => {
     expect(new Set(fetchMock.mock.calls.map(call => call[0])).size).toBe(8);
   });
 
+  // 测试点：歌曲和专辑的其他乐队筛选传递 0，并与全部资料使用独立的请求与缓存。
+  test.each(["getSongGroups", "getAlbums"] as const)("%s keeps other bands separate from all", async method => {
+    fetchMock.mockResolvedValue(makeJsonResponse({ items: [],
+      pagination: { page: 1, page_size: 20, total: 0, total_pages: 1 }, facets: { total: 0, bands: [] } }));
+    const api = await import("../api");
+    await api[method]("", 1);
+    expect(new URL(fetchMock.mock.calls[0][0], "https://example.test").searchParams.has("band_id")).toBe(false);
+    await api[method]("", 1, 0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new URL(fetchMock.mock.calls[1][0], "https://example.test").searchParams.get("band_id")).toBe("0");
+    await api[method]("", 1, 0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   // 测试点：歌曲封面、唱片、归属及 Live 变更均刷新目录派生资料，失效前的摘要响应不能污染新缓存。
   test("catalog and live writes invalidate directory summaries including in-flight results", async () => {
     const api = await import("../api");

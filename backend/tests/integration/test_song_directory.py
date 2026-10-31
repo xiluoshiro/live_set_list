@@ -71,7 +71,7 @@ def test_directory_release_and_cover_across_versions(integration_test_client):
                                                  "album_id": earliest["album_id"]}).json()["items"] == []
 
 
-# 测试点：成员与混合归属进入乐队目录，pending 留在全部歌曲，数量不随翻页或选中乐队变化。
+# 测试点：成员与混合归属进入对应乐队，其他乐队仅匹配未归属版本，分面数量不随选中项或翻页变化。
 def test_directory_facets_band_search_and_pending(integration_test_client):
     client = integration_test_client
     headers = auth(client)
@@ -82,21 +82,30 @@ def test_directory_facets_band_search_and_pending(integration_test_client):
     create_group(client, headers, "分面 B", {"mode": "members", "member_groups": [{"band_id": 2, "member_ids": [member_id]}]})
     create_group(client, headers, "分面 C", {"mode": "mixed", "band_ids": [1],
                  "member_groups": [{"band_id": 3, "member_ids": [member_id]}]})
-    create_group(client, headers, "分面 D")
+    pending = create_group(client, headers, "分面 D")
+    add_version(client, headers, pending["group_id"], "乐队版", 2)
     all_page = client.get("/api/song-groups", params={"q": "分面", "page_size": 1}).json()
     assert all_page["pagination"]["total"] == all_page["facets"]["total"] == 4
     counts = {b["band_id"]: b["song_count"] for b in all_page["facets"]["bands"]}
-    assert counts == {1: 2, 2: 2, 3: 1}
+    assert counts == {1: 2, 2: 3, 3: 1, 0: 1}
     for band_id, expected in counts.items():
         page = client.get("/api/song-groups", params={"q": "分面", "band_id": band_id,
                                                      "page_size": 1, "page": 2}).json()
         assert page["facets"] == all_page["facets"]
         assert page["pagination"]["total"] == expected
+    other = client.get("/api/song-groups", params={"q": "分面", "band_id": 0}).json()
+    assert [(item["group_id"], item["matched_song_ids"]) for item in other["items"]] == [
+        (pending["group_id"], [pending["song_id"]]),
+    ]
+    assert client.get("/api/song-groups", params={"q": "分面", "band_id": 0,
+                                                 "owner_mode": "bands"}).json()["items"] == []
     band_name = joint["ownership"]["bands"][0]["band_name"]
     found = client.get("/api/song-groups", params={"q": band_name, "page_size": 100}).json()
     assert joint["group_id"] in [g["group_id"] for g in found["items"]]
     missing = client.get("/api/song-groups", params={"q": "绝不会命中的歌曲目录测试"}).json()
-    assert missing["items"] == [] and missing["facets"] == {"total": 0, "bands": []}
+    assert missing["items"] == [] and missing["facets"] == {
+        "total": 0, "bands": [{"band_id": 0, "band_name": "其他乐队", "song_count": 0}],
+    }
 
 
 # 测试点：四种排序先作用于整个命中集合再分页，空日期最后，相同值有稳定次序。
@@ -182,12 +191,12 @@ def test_directory_refreshes_after_catalog_and_setlist_writes(integration_test_c
     assert changed["first_release_date"] is None and changed["first_release_albums"] == []
     assert changed["display_cover"] is None
     assert client.get(f"/api/songs/{sid}").json()["albums"] == []
-    assert [b["band_id"] for b in summary()["facets"]["bands"]] == [1]
+    assert [b["band_id"] for b in summary()["facets"]["bands"]] == [1, 0]
     owner = client.put(f"/api/console/songs/{sid}/ownership", headers=headers, json={
         "expected_revision": song["revision"], "ownership": {"mode": "bands", "band_ids": [2]},
     })
     assert owner.status_code == 200, owner.text
-    assert [b["band_id"] for b in summary()["facets"]["bands"]] == [2]
+    assert [b["band_id"] for b in summary()["facets"]["bands"]] == [2, 0]
     assert client.get("/api/song-groups", params={"q": "变更验收", "band_id": 1}).json()["pagination"]["total"] == 0
     assert client.get(f"/api/songs/{sid}").json()["ownership"]["band_ids"] == [2]
     with integration_admin_connection.cursor() as cur:

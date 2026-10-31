@@ -84,7 +84,7 @@ export function SongCatalogOverview({ browse, onBrowseChange, onSelectGroup, onA
         </div>
       </aside>
       <section className="song-directory-results" aria-label={`${noun}列表`} aria-busy={!data && !error}>
-        <div className="song-section-heading"><div className="song-directory-scope"><h2>{selectedBand?.band_name ?? (browse.bandId ? "筛选结果" : `全部${noun}`)} <small>{data?.total ?? "—"}</small></h2>
+        <div className="song-section-heading"><div className="song-directory-scope"><h2>{selectedBand?.band_name ?? (browse.bandId === 0 ? "其他乐队" : browse.bandId !== null ? "筛选结果" : `全部${noun}`)} <small>{data?.total ?? "—"}</small></h2>
           {(browse.query || browse.bandId !== null) && <button type="button" className="all-lives-button"
             onClick={() => changeBrowse({ ...browse, query: "", bandId: null, page: 1 })}>清除筛选</button>}</div>
           {albums ? <label className="song-sort-label">排序 <select aria-label="专辑排序" value={browse.albumSort}

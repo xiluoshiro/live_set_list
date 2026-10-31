@@ -2433,7 +2433,7 @@ export async function songCatalogWrite<T>(path: string, method: "POST" | "PUT", 
 export const getSongGroups = (q = "", page = 1, bandId?: number, albumId?: number,
   options: { sort?: SongSort; pageSize?: number } = {}) => {
   const query = new URLSearchParams({ q, page: String(page) });
-  if (bandId) query.set("band_id", String(bandId));
+  if (bandId !== undefined) query.set("band_id", String(bandId));
   if (albumId) query.set("album_id", String(albumId));
   if (options.sort) query.set("sort", options.sort);
   if (options.pageSize) query.set("page_size", String(options.pageSize));
@@ -2452,7 +2452,7 @@ export const getSongPerformances = (id: number, page = 1, options: { year?: numb
 export const getAlbumDetail = (id: number) => catalogGet<AlbumDetail>(`/albums/${id}`);
 export const getAlbums = (q = "", page = 1, bandId?: number, options: { sort?: AlbumSort; pageSize?: number } = {}) => {
   const query = new URLSearchParams({ q, page: String(page) });
-  if (bandId) query.set("band_id", String(bandId));
+  if (bandId !== undefined) query.set("band_id", String(bandId));
   if (options.sort) query.set("sort", options.sort);
   if (options.pageSize) query.set("page_size", String(options.pageSize));
   return catalogGet<{ items: AlbumDirectoryItem[]; pagination: Omit<CatalogPage<AlbumDirectoryItem>, "items">; facets: AlbumFacets }>(`/albums?${query}`)

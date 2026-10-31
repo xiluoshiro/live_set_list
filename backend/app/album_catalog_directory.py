@@ -33,17 +33,21 @@ def read_album_page(cur: Any, *, q: str, band_id: int | None, sort: AlbumSort,
     ), matched AS (
         SELECT a.* FROM albums a WHERE {' OR '.join(predicates)}
     ), selected AS (
-        SELECT a.* FROM matched a WHERE %s::int IS NULL OR EXISTS(
-            SELECT 1 FROM album_owners o WHERE o.album_id = a.id AND o.band_id = %s)
+        SELECT a.* FROM matched a WHERE %s::int IS NULL OR CASE WHEN %s = 0 THEN NOT EXISTS(
+            SELECT 1 FROM album_owners o WHERE o.album_id = a.id)
+            ELSE EXISTS(SELECT 1 FROM album_owners o WHERE o.album_id = a.id AND o.band_id = %s) END
     )"""
-    params.extend((band_id, band_id))
+    params.extend((band_id, band_id, band_id))
     cur.execute(base + """ SELECT
         (SELECT count(*) FROM selected) AS total,
         (SELECT count(*) FROM matched) AS facet_total,
-        COALESCE((SELECT jsonb_agg(to_jsonb(f) ORDER BY f.band_id) FROM (
+        COALESCE((SELECT jsonb_agg(to_jsonb(f) ORDER BY f.band_id = 0, f.band_id) FROM (
             SELECT o.band_id, b.band_name, count(*) AS album_count
             FROM matched a JOIN album_owners o ON o.album_id = a.id JOIN band_attrs b ON b.id = o.band_id
             GROUP BY o.band_id, b.band_name
+            UNION ALL
+            SELECT 0, '其他乐队', count(*)
+            FROM matched a WHERE NOT EXISTS(SELECT 1 FROM album_owners o WHERE o.album_id = a.id)
         ) f), '[]'::jsonb) AS bands""", params)
     counts = one(cur)
     total_pages = max(1, (counts["total"] + page_size - 1) // page_size)

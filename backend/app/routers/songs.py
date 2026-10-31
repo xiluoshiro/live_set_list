@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api", tags=["songs"])
 @router.get("/song-groups", response_model=GroupPage)
 def list_song_groups(
     q: str = Query(default="", max_length=255),
-    band_id: int | None = Query(default=None, ge=1),
+    band_id: int | None = Query(default=None, ge=0, description="0 selects other bands (no band ownership)"),
     album_id: int | None = Query(default=None, ge=1),
     page: int = Query(default=1, ge=1),
     owner_mode: Literal["bands", "members", "mixed", "pending"] | None = None,
@@ -45,7 +45,7 @@ def song_detail(song_id: int = Path(ge=1)):
 @router.get("/albums", response_model=AlbumDirectoryPage)
 def list_albums(
     q: str = Query(default="", max_length=255),
-    band_id: int | None = Query(default=None, ge=1),
+    band_id: int | None = Query(default=None, ge=0, description="0 selects other bands (no band ownership)"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     sort: AlbumSort = "recent",

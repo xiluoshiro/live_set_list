@@ -42,11 +42,12 @@ def directory_matches(
         AND (%s::int IS NULL OR EXISTS(SELECT 1 FROM song_members m WHERE m.song_id = s.id AND m.member_id = %s))
     ), selected_groups AS (
         SELECT m.group_id, array_agg(m.song_id ORDER BY m.version_order, m.song_id) AS matched_song_ids
-        FROM matched m WHERE %s::int IS NULL OR EXISTS(
-            SELECT 1 FROM owners o WHERE o.song_id = m.song_id AND o.band_id = %s)
+        FROM matched m WHERE %s::int IS NULL OR CASE WHEN %s = 0 THEN NOT EXISTS(
+            SELECT 1 FROM owners o WHERE o.song_id = m.song_id)
+            ELSE EXISTS(SELECT 1 FROM owners o WHERE o.song_id = m.song_id AND o.band_id = %s) END
         GROUP BY m.group_id
     )"""
-    params.extend((album_id, album_id, owner_mode, owner_mode, member_id, member_id, band_id, band_id))
+    params.extend((album_id, album_id, owner_mode, owner_mode, member_id, member_id, band_id, band_id, band_id))
     return base, params
 
 
@@ -58,10 +59,13 @@ def read_group_page(
     cur.execute(base + """ SELECT
         (SELECT count(*) FROM selected_groups) AS total,
         (SELECT count(DISTINCT group_id) FROM matched) AS facet_total,
-        COALESCE((SELECT jsonb_agg(to_jsonb(f) ORDER BY f.band_id) FROM (
+        COALESCE((SELECT jsonb_agg(to_jsonb(f) ORDER BY f.band_id = 0, f.band_id) FROM (
             SELECT o.band_id, b.band_name, count(DISTINCT m.group_id) AS song_count
             FROM matched m JOIN owners o ON o.song_id = m.song_id JOIN band_attrs b ON b.id = o.band_id
             GROUP BY o.band_id, b.band_name
+            UNION ALL
+            SELECT 0, '其他乐队', count(DISTINCT m.group_id)
+            FROM matched m WHERE NOT EXISTS(SELECT 1 FROM owners o WHERE o.song_id = m.song_id)
         ) f), '[]'::jsonb) AS bands""", params)
     counts = one(cur)
     cur.execute(base + f""", group_albums AS (
