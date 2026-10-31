@@ -124,7 +124,7 @@ export function TourDetailPage({
   const selectedStop = detail?.stops.find((stop) => stop.live_id === selectedLiveId) ?? null;
 
   return (
-    <div className="tour-detail-page performance-detail-page" data-stage-ledger>
+    <div className={`tour-detail-page performance-detail-page${activeTab === "statistics" ? " has-tour-statistics" : ""}`} data-stage-ledger>
       <header className="stage-masthead">
         <div className="stage-masthead-main">
           <MastheadTitle as="h1" title={detail?.tour_title ?? fallback.tourTitle} naturalWrap />

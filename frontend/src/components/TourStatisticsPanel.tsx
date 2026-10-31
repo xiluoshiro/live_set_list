@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { getTourStatisticsComparison, type TourStatisticsResponse, type TourStatisticsSongStatus, type TourStatisticsTransition, type TourStopItem } from "../api";
 import { ContentState } from "./ContentState";
@@ -54,8 +54,12 @@ function TourTransitionExplorer({
   onSelectTransition,
 }: TourTransitionExplorerProps) {
   const [selectedIndex, setSelectedIndex] = useState(() => getDefaultTransitionIndex(transitions));
+  const detailRef = useRef<HTMLElement>(null);
   const resolvedSelectedIndex = transitions[selectedIndex] ? selectedIndex : getDefaultTransitionIndex(transitions);
   const selectedTransition = detailTransition ?? transitions[resolvedSelectedIndex];
+  useLayoutEffect(() => {
+    if (detailRef.current) detailRef.current.scrollTop = 0;
+  }, [selectedTransition]);
   if (!selectedTransition) return null;
 
   const firstTransition = transitions[0];
@@ -124,7 +128,7 @@ function TourTransitionExplorer({
         </ol>
       </nav>
 
-      <section className="tour-transition-detail" aria-label="歌单变化" aria-live="polite">
+      <section ref={detailRef} className="tour-transition-detail" aria-label="歌单变化" aria-live="polite" tabIndex={0}>
         <header className="tour-transition-detail-head">
           <div>
             <h3>
@@ -216,6 +220,31 @@ export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenSto
   const [customTransition, setCustomTransition] = useState<TourStatisticsTransition | null>(null);
   const [customLoading, setCustomLoading] = useState(false);
   const [customError, setCustomError] = useState<string | null>(null);
+  const transitionSectionRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const section = transitionSectionRef.current;
+    const progress = section?.querySelector<HTMLElement>(".tour-transition-progress");
+    if (!section || !progress) return;
+    let frame = 0;
+    const measure = () => {
+      const headingHeight = progress.getBoundingClientRect().top - section.getBoundingClientRect().top;
+      section.style.setProperty("--tour-transition-heading-height", `${Math.ceil(headingHeight)}px`);
+    };
+    const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure); };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
+    observer?.observe(section);
+    Array.from(section.children).forEach((child) => {
+      if (!child.contains(progress)) observer?.observe(child);
+    });
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("resize", schedule);
+    };
+  });
 
   useEffect(() => {
     setFromLiveId(comparableStops[0]?.live_id ?? null);
@@ -257,7 +286,7 @@ export function TourStatisticsPanel({ tourTitle, data, loading, error, onOpenSto
         )}
       </section>
 
-      <section className="statistics-card">
+      <section className="statistics-card" ref={transitionSectionRef}>
         <h2>场次变化</h2>
         {comparableStops.length >= 3 && (
           <div className="tour-custom-comparison">

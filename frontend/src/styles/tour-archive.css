@@ -13,6 +13,7 @@
 .tour-card-stops { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 .tour-detail-page { width: min(var(--page-max), calc(100% - var(--page-gutter) * 2)); margin: 28px auto 0; padding: 0 0 64px; }
+.tour-detail-page.has-tour-statistics { padding-bottom: 0; }
 .tour-detail-page > .section-tabs { margin-top: 14px; }
 
 [data-stage-ledger] .section-tabs {
@@ -88,7 +89,10 @@
 .tour-statistics-table th:nth-child(2), .tour-statistics-table td:nth-child(2),
 .tour-statistics-table th:nth-child(3), .tour-statistics-table td:nth-child(3) { width: 140px; }
 .tour-statistics-table td:nth-child(2) { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tour-transition-explorer { display: grid; grid-template-columns: minmax(220px, .72fr) minmax(0, 1.7fr); gap: 22px; align-items: start; }
+.tour-transition-explorer { --tour-transition-pane-height: calc(100dvh - var(--stage-topbar-offset) - 12px - var(--tour-transition-heading-height, 0px)); display: grid; grid-template-columns: minmax(220px, .72fr) minmax(0, 1.7fr); gap: 22px; align-items: start; }
+.tour-transition-progress, .tour-transition-detail { min-width: 0; max-height: var(--tour-transition-pane-height); }
+.tour-transition-progress { display: flex; flex-direction: column; }
+.tour-transition-progress > .tour-transition-section-head { flex: none; }
 .tour-transition-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .tour-transition-section-head h3,
 .tour-transition-detail h3,
@@ -99,7 +103,8 @@
 .tour-transition-date,
 .tour-transition-detail-head p,
 .tour-transition-unchanged p { color: var(--text-muted); font-size: 13px; }
-.tour-transition-timeline { margin: 0; padding: 0; list-style: none; }
+.tour-transition-timeline, .tour-transition-detail { min-height: 0; padding-right: 8px; overflow-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--border-normal) transparent; }
+.tour-transition-timeline { margin: 0; padding-block: 0; padding-left: 0; list-style: none; }
 .tour-transition-timeline-stop { position: relative; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 9px; min-height: 70px; }
 .tour-transition-timeline-stop:not(:last-child)::after { content: ""; position: absolute; left: 11px; top: 22px; bottom: -2px; width: 2px; background: var(--border-strong); }
 .tour-transition-dot { position: relative; z-index: var(--z-base); width: 12px; height: 12px; margin: 6px auto 0; border: 2px solid var(--accent-primary); border-radius: 50%; background: var(--surface-1); }
@@ -114,7 +119,6 @@
 .tour-transition-selector[aria-pressed="true"] { border-color: var(--accent-primary); background: var(--surface-chip-soft); color: var(--text-heading); }
 .tour-transition-selector[aria-pressed="true"] strong { color: var(--accent-primary); }
 .tour-transition-selector:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-.tour-transition-detail { min-width: 0; }
 .tour-transition-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 13px; border-bottom: 1px solid var(--border-table-row); }
 .tour-transition-detail-head h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .tour-transition-detail-head p { margin: 5px 0 0; }
@@ -148,7 +152,7 @@
 
 @media (max-width: 900px) {
   .list-filter-form.tour-filter-form { grid-template-columns: 1fr; }
-  .tour-transition-explorer { grid-template-columns: 1fr; }
+  .tour-transition-explorer { --tour-transition-pane-height: calc((100dvh - var(--stage-topbar-offset) - 12px - var(--tour-transition-heading-height, 0px) - 22px) / 2); grid-template-columns: 1fr; }
 }
 
 @media (max-width: 620px) {
