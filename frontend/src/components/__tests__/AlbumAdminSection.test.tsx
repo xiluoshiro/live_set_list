@@ -54,7 +54,7 @@ test("album paste ownership requires the complete tag to resolve", () => {
   expect(parsed.warnings).toEqual([expect.stringContaining("A × 未知乐队")]);
 });
 
-// 测试点：预览不修改草稿，批量收录保留已有版本和顺序，仅补建未匹配歌曲。
+// 测试点：预览不修改草稿，批量收录保留已有版本和顺序，仅按归属及翻唱选择补建未匹配歌曲。
 test("batch tracks match versions and create only missing songs using tag ownership", async () => {
   const user = userEvent.setup();
   const song = { song_id: 1, group_id: 1, song_name: "已有曲", version_label: "", band_name: "乐队 A", owner_mode: "bands" };
@@ -69,7 +69,7 @@ test("batch tracks match versions and create only missing songs using tag owners
     return pageOf([song]);
   });
   api.createConsoleSongsBatch.mockResolvedValue({ ok: true, results: [{ index: 0, created: true, item: {
-    song_id: 10, group_id: 10, song_name: "新曲", version_label: "", ownership: { mode: "members", bands: [], groups: [{ band_id: 3, band_name: "乐队 A" }] },
+    song_id: 10, group_id: 10, song_name: "新曲", version_label: "", legacy_cover: true, ownership: { mode: "members", bands: [], groups: [{ band_id: 3, band_name: "乐队 A" }] },
   } }] });
   api.songCatalogWrite.mockRejectedValue(new Error("保留专辑草稿"));
   render(<AlbumAdminSection onMessage={onMessage} variant="create" active registerLeaveGuard={() => {}} onManage={() => {}} />);
@@ -103,13 +103,14 @@ test("batch tracks match versions and create only missing songs using tag owners
   await user.click(screen.getByRole("button", { name: "批量插入" }));
   dialog = within(screen.getByRole("dialog", { name: "确认批量新增歌曲" }));
   const ownership = within(dialog.getByRole("row", { name: /新曲/ }));
+  await user.click(ownership.getByRole("checkbox", { name: "新曲 翻唱" }));
   await user.selectOptions(ownership.getByLabelText("归属模式"), "mixed");
   await user.click(ownership.getByRole("button", { name: "选择归属乐队" }));
   await user.click(dialog.getByRole("checkbox", { name: "1 - 乐队 Z" }));
   await user.keyboard("{Escape}");
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  expect(api.createConsoleSongsBatch).toHaveBeenCalledWith([{ group_name: "新曲", version_label: "", cover_urls: [],
+  expect(api.createConsoleSongsBatch).toHaveBeenCalledWith([{ group_name: "新曲", version_label: "", cover_urls: [], is_cover: true,
     ownership: { mode: "mixed", band_ids: [1], member_groups: [{ band_id: 3, member_ids: [7] }] } }], "csrf");
   expect(screen.getByLabelText("批量粘贴收录歌曲文本")).toHaveValue("");
   await user.click(screen.getByRole("button", { name: "提交插入" }));
@@ -121,7 +122,7 @@ test("batch tracks match versions and create only missing songs using tag owners
   ] }), "csrf");
 });
 
-// 测试点：归属候选按乐队 ID 排序；部分成功保留已建歌曲，重试只提交失败项并按原顺序追加。
+// 测试点：归属候选按乐队 ID 排序；部分成功后重试保留翻唱选择，只提交失败项并按原顺序收录。
 test("batch track retries retain successful creations without duplicate collection", async () => {
   const user = userEvent.setup();
   api.getConsoleBands.mockResolvedValue({ items: [
@@ -129,7 +130,7 @@ test("batch track retries retain successful creations without duplicate collecti
     { band_id: 1, band_name: "乐队 Z", band_abbr: "Z", band_members: [] },
   ] });
   api.getCatalogConsole.mockResolvedValue(pageOf([]));
-  const saved = { song_id: 11, group_id: 11, song_name: "新曲甲", version_label: "", ownership: { mode: "bands", bands: [{ band_id: 3, band_name: "乐队 A" }], groups: [] } };
+  const saved = { song_id: 11, group_id: 11, song_name: "新曲甲", version_label: "", legacy_cover: false, ownership: { mode: "bands", bands: [{ band_id: 3, band_name: "乐队 A" }], groups: [] } };
   api.createConsoleSongsBatch.mockResolvedValueOnce({ ok: false, results: [
     { index: 0, item: saved, created: true }, { index: 1, error: "暂时无法创建" },
   ] }).mockRejectedValueOnce(new Error("连接中断"))
@@ -142,6 +143,7 @@ test("batch track retries retain successful creations without duplicate collecti
   await waitFor(() => expect(screen.getByRole("button", { name: "批量插入" })).toBeEnabled());
   await user.click(screen.getByRole("button", { name: "批量插入" }));
   const dialog = within(screen.getByRole("dialog", { name: "确认批量新增歌曲" }));
+  await user.click(dialog.getByRole("checkbox", { name: "新曲乙 翻唱" }));
   expect(dialog.getAllByLabelText("归属模式")[0]).toHaveValue("bands");
   await user.click(dialog.getAllByRole("button", { name: "选择归属乐队" })[0]);
   const bandOptions = within(screen.getByRole("group", { name: "归属乐队选项" })).getAllByRole("checkbox");
@@ -150,13 +152,16 @@ test("batch track retries retain successful creations without duplicate collecti
   await user.click(dialog.getAllByRole("button", { name: "选择归属乐队" })[0]);
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
   expect(await dialog.findByRole("alert")).toHaveTextContent("暂时无法创建");
+  expect(dialog.getByRole("checkbox", { name: "新曲乙 翻唱" })).toBeChecked();
   expect(screen.getByLabelText("第 1 曲歌曲名称")).toHaveValue("新曲甲");
   expect(screen.getByLabelText("第 2 曲歌曲名称")).toHaveValue("新曲乙");
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(dialog.getByRole("alert")).toHaveTextContent("连接中断"));
   await user.click(dialog.getByRole("button", { name: "确认提交" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  expect(api.createConsoleSongsBatch.mock.calls[1][0]).toEqual([{ group_name: "新曲乙", version_label: "", cover_urls: [], ownership: { mode: "bands", band_ids: [3], member_groups: [] } }]);
+  expect(api.createConsoleSongsBatch.mock.calls[0][0].map((song: { is_cover: boolean }) => song.is_cover)).toEqual([false, true]);
+  expect(api.createConsoleSongsBatch.mock.calls[1][0]).toEqual([{ group_name: "新曲乙", version_label: "", cover_urls: [], is_cover: true, ownership: { mode: "bands", band_ids: [3], member_groups: [] } }]);
+  expect(api.createConsoleSongsBatch.mock.calls[2][0]).toEqual(api.createConsoleSongsBatch.mock.calls[1][0]);
   const trackRows = within(screen.getByRole("table", { name: "专辑收录曲目" })).getAllByRole("row");
   expect(within(trackRows[1]).getByRole("cell", { name: "11" })).toBeInTheDocument();
   expect(within(trackRows[2]).getByRole("cell", { name: "12" })).toBeInTheDocument();

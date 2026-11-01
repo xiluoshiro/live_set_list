@@ -37,6 +37,7 @@ class ConsoleSongItem(BaseModel):
     version_label: str
     owner_mode: Literal["bands", "members", "mixed"] | None
     band_name: str
+    is_cover: bool
 
 
 ConsoleSongLookupItem = ConsoleSongItem

@@ -504,6 +504,7 @@ export type ConsoleSongItem = {
   song_id: number;
   song_name: string;
   band_name: string;
+  is_cover: boolean;
 };
 
 export type ConsoleSongListResponse = {
@@ -2351,7 +2352,7 @@ export type AlbumSummary = {
 };
 export type AlbumTrackWrite = { album_track_id?: number | null; song_id: number; track_order: number; edition_label: string; section_name?: string };
 export type AlbumDetail = AlbumSummary & { tracks: (AlbumTrackWrite & {
-  album_track_id: number; song_name: string; version_label: string; group_id: number; band_name: string;
+  album_track_id: number; song_name: string; version_label: string; group_id: number; band_name: string; is_cover: boolean;
 })[] };
 export type SongVersion = {
   song_id: number; song_name: string; group_id: number; group_name: string;
@@ -2382,7 +2383,7 @@ export type SongPerformance = {
   live_cover: "original" | "cover" | "unknown";
 };
 export type CatalogMember = { member_id: number; display_name: string; revision: number };
-export type SongVersionDraft = { version_label: string; cover_urls: CoverEntry[] };
+export type SongVersionDraft = { version_label: string; cover_urls: CoverEntry[]; is_cover: boolean };
 export type SongEditUpdate = SongVersionDraft & {
   expected_revision: number;
   group: { group_id: number; expected_revision: number; group_name: string; song_ids: number[] };

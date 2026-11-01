@@ -93,18 +93,22 @@ class VersionFields(CoverFields):
     version_label: str = Field(default="", max_length=255)
 
 
-class VersionCreate(VersionFields):
+class VersionWriteFields(VersionFields):
+    is_cover: bool = False
+
+
+class VersionCreate(VersionWriteFields):
     group_id: int = Field(ge=1)
     expected_group_revision: int = Field(ge=1)
     ownership: Ownership
 
 
-class GroupCreate(VersionFields):
+class GroupCreate(VersionWriteFields):
     group_name: str = Field(min_length=1, max_length=255)
     ownership: Ownership
 
 
-class VersionUpdate(VersionFields):
+class VersionUpdate(VersionWriteFields):
     expected_revision: int = Field(ge=1)
 
 
@@ -352,6 +356,7 @@ class AlbumTrack(AlbumTrackWrite):
     version_label: str
     group_id: int
     band_name: str
+    is_cover: bool
 
 
 class AlbumDetail(AlbumSummary):

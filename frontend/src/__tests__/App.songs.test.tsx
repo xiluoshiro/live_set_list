@@ -27,7 +27,7 @@ beforeEach(() => {
     facets: { total: 12, bands: [{ band_id: 3, band_name: "乐队", song_count: 12 }, { band_id: 0, band_name: "其他乐队", song_count: 12 }] } });
   vi.mocked(getSongPerformances).mockResolvedValue({ items: [], page: 1, page_size: 8, total: 0, total_pages: 1, available_years: [] });
   vi.mocked(getAlbumDetail).mockResolvedValue({ ...album, tracks: [{ album_track_id: 1, song_id: 72, group_id: 7,
-    song_name: "合唱曲", version_label: "合唱版", edition_label: "Instrumental", section_name: "Disc 2", track_order: 1, band_name: "待回填" }] });
+    song_name: "合唱曲", version_label: "合唱版", edition_label: "Instrumental", section_name: "Disc 2", track_order: 1, band_name: "待回填", is_cover: false }] });
   vi.mocked(getAlbums).mockImplementation(async (_q, page = 1) => ({ items: [{ ...album, track_count: 1 }],
     page, page_size: 10, total: 12, total_pages: 2, facets: { total: 12, bands: [{ band_id: 3, band_name: "乐队", album_count: 12 }, { band_id: 0, band_name: "其他乐队", album_count: 12 }] } }));
 });
@@ -74,7 +74,7 @@ test.each([3, 0])("song album history and refresh preserve band %s context", asy
   await screen.findByRole("heading", { name: "多盘唱片", level: 1 });
   expect(window.location.pathname).toBe("/albums/9");
   view.unmount(); view = render(<App />);
-  await user.click(await screen.findByRole("link", { name: "合唱曲 · 合唱版 · Instrumental" }));
+  await user.click(await screen.findByRole("link", { name: "合唱曲 · 合唱版 · Instrumental · 原创" }));
   await screen.findByRole("heading", { name: "合唱曲", level: 1 });
   expect(getSongVersion).toHaveBeenLastCalledWith(72);
   expect(getSongGroup).toHaveBeenLastCalledWith(7);

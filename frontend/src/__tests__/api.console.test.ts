@@ -148,13 +148,13 @@ describe("console lookup api", () => {
     }));
   });
 
-  // 测试点：批量新增透传完整归属与 CSRF，并通知资料缓存刷新。
+  // 测试点：批量新增透传翻唱状态、完整归属与 CSRF，并通知资料缓存刷新。
   test("批量新增歌曲携带归属并发出写入通知", async () => {
     fetchMock.mockResolvedValueOnce(makeJsonResponse({ ok: true, results: [] }, true, 201));
     const { createConsoleSongsBatch, SONG_CATALOG_CHANGE } = await import("../api");
     const listener = vi.fn();
     window.addEventListener(SONG_CATALOG_CHANGE, listener);
-    const songs = [{ group_name: "合唱曲", version_label: "", cover_urls: [], ownership: { mode: "bands" as const, band_ids: [1, 2], member_groups: [] } }];
+    const songs = [{ group_name: "合唱曲", version_label: "", cover_urls: [], is_cover: true, ownership: { mode: "bands" as const, band_ids: [1, 2], member_groups: [] } }];
     try {
       await createConsoleSongsBatch(songs, "csrf-token");
       expect(fetchMock.mock.calls[0][0]).toBe("/api/console/songs:batch");

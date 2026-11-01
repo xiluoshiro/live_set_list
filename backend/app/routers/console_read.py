@@ -586,7 +586,7 @@ def list_songs(
         pages = max(1, ceil(total / limit))
         safe_page = min(page, pages)
         cur.execute(f"""SELECT s.id AS song_id, s.group_id, {name} AS song_name,
-            s.version_label, s.owner_mode, {SONG_OWNERSHIP_LABEL_SQL} AS band_name
+            s.version_label, s.owner_mode, s.is_cover, {SONG_OWNERSHIP_LABEL_SQL} AS band_name
             {source} WHERE {where}
             ORDER BY CASE WHEN {name} ILIKE %s ESCAPE '\\' THEN 0
                 WHEN {expression} ILIKE %s ESCAPE '\\' THEN 1 ELSE 2 END, {name}, s.id

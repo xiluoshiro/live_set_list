@@ -2492,6 +2492,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
         row_key: row.row_key,
         song_name: row.song_name.trim(),
         ownership: emptyOwnership(),
+        is_cover: false,
       });
     });
 
@@ -2520,7 +2521,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
 
   const executeBatchSongInsert = async (rows: BatchSongConfirmRow[], csrfToken: string) => {
     try {
-      const payload = rows.map(row => ({ group_name: row.song_name, version_label: "", cover_urls: [], ownership: row.ownership }));
+      const payload = rows.map(row => ({ group_name: row.song_name, version_label: "", cover_urls: [], ownership: row.ownership, is_cover: row.is_cover }));
       const response = await createConsoleSongsBatch(payload, csrfToken);
       const saved = response.results.filter(result => result.item !== null);
       setSetlistRows(current => current.map(row => {
@@ -2550,6 +2551,12 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
   const updateBatchOwnership = (rowKey: number, ownership: SongOwnership) => {
     setPendingConfirmation(current => current?.kind === "batch_song" ? { ...current,
       rows: current.rows.map(row => row.row_key === rowKey ? { ...row, ownership } : row),
+    } : current);
+  };
+
+  const updateBatchCover = (rowKey: number, is_cover: boolean) => {
+    setPendingConfirmation(current => current?.kind === "batch_song" ? { ...current,
+      rows: current.rows.map(row => row.row_key === rowKey ? { ...row, is_cover } : row),
     } : current);
   };
 
@@ -2652,7 +2659,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
 
     if (pendingConfirmation.kind === "batch_song") {
       return <BatchSongConfirmation rows={pendingConfirmation.rows} bands={bands} members={batchMembers}
-        busy={confirmationSubmitting} errors={pendingConfirmation.errors} onOwnershipChange={updateBatchOwnership} />;
+        busy={confirmationSubmitting} errors={pendingConfirmation.errors} onOwnershipChange={updateBatchOwnership} onCoverChange={updateBatchCover} />;
     }
 
     if (pendingConfirmation.action === "update") {

@@ -51,7 +51,7 @@ export function AlbumTrackCreateEditor({ locked, csrfToken, onChange, onLock, di
   const section = rows[rows.length - 1]?.section_name ?? "";
   const append = (parsed: ParsedAlbumTrack[]) => {
     setRows(current => [...current, ...parsed.map(row => ({ row_key: nextKey.current++, song_name: row.song_name,
-      ownership: row.ownership, song: null, candidates: [], queried: false,
+      ownership: row.ownership, is_cover: false, song: null, candidates: [], queried: false,
       track_order: 1, edition_label: "", section_name: section }))]);
     setError("");
   };
@@ -111,13 +111,14 @@ export function AlbumTrackCreateEditor({ locked, csrfToken, onChange, onLock, di
       for (let offset = 0; offset < batchRows.length; offset += 100) {
         const batch = batchRows.slice(offset, offset + 100);
         const result = await createConsoleSongsBatch(batch.map(row => ({ group_name: row.song_name.trim(),
-          version_label: "", cover_urls: [], ownership: row.ownership })), csrfToken);
+          version_label: "", cover_urls: [], ownership: row.ownership, is_cover: row.is_cover })), csrfToken);
         if (!mounted.current) return;
         const saved = new Map<number, ConsoleSongItem>();
         batch.forEach((row, index) => {
           const outcome = result.results.find(item => item.index === index);
           const item = outcome?.item;
           if (item) saved.set(row.row_key, { song_id: item.song_id, group_id: item.group_id, song_name: item.song_name,
+            is_cover: item.legacy_cover,
             version_label: item.version_label, owner_mode: item.ownership.mode === "pending" ? null : item.ownership.mode,
             band_name: [...item.ownership.bands.map(band => band.band_name), ...item.ownership.groups.map(group => group.band_name)].join(" / ") || "待回填" });
           else failures.push(`${row.song_name}：${outcome?.error ?? "未返回歌曲"}`);
@@ -134,9 +135,9 @@ export function AlbumTrackCreateEditor({ locked, csrfToken, onChange, onLock, di
     {error && !confirm && <p role="alert">{error}</p>}
     {busy && !confirm && <p role="status">正在查询歌曲…</p>}
     <div className="console-table-wrap setlist-input-wrap"><table className="console-admin-table album-track-editor album-track-create-table" aria-label="专辑收录曲目">
-      <colgroup><col className="album-track-section-column" /><col className="album-track-order-column" /><col /><col className="album-track-song-id-column" /><col className="album-track-edition-column" /></colgroup>
-      <thead><tr><th scope="col">碟号/发行版</th><th scope="col">曲序</th><th scope="col">歌曲</th><th scope="col">歌曲 ID</th><th scope="col">器乐</th></tr></thead>
-      <tbody>{!rows.length && <tr><td colSpan={5} className="empty-cell">暂无收录曲目</td></tr>}
+      <colgroup><col className="album-track-section-column" /><col className="album-track-order-column" /><col /><col className="album-track-song-id-column" /><col className="song-cover-column" /><col className="album-track-edition-column" /></colgroup>
+      <thead><tr><th scope="col">碟号/发行版</th><th scope="col">曲序</th><th scope="col">歌曲</th><th scope="col">歌曲 ID</th><th scope="col">翻唱</th><th scope="col">器乐</th></tr></thead>
+      <tbody>{!rows.length && <tr><td colSpan={6} className="empty-cell">暂无收录曲目</td></tr>}
         {numbered.map((row, index) => <tr key={row.row_key}>
           <td><input aria-label={`第 ${index + 1} 曲碟号/发行版`} placeholder="Disc1/限定版" disabled={disabled}
             value={row.section_name ?? ""} onChange={e => update(row.row_key, { section_name: e.target.value })} /></td>
@@ -152,6 +153,7 @@ export function AlbumTrackCreateEditor({ locked, csrfToken, onChange, onLock, di
                 onClick={() => void reviewBatch(row.row_key)}>未匹配</button>
               : <span className="readonly-cell">-</span>}
           </td>
+          <td>{row.song ? row.song.is_cover ? "是" : "否" : "—"}</td>
           <td><input className="is-short-check" type="checkbox" aria-label={`第 ${index + 1} 曲器乐`} disabled={disabled}
             checked={row.edition_label === "Instrumental"} onChange={e => update(row.row_key, { edition_label: e.target.checked ? "Instrumental" : "" })} /></td>
         </tr>)}
@@ -172,7 +174,7 @@ export function AlbumTrackCreateEditor({ locked, csrfToken, onChange, onLock, di
       confirmLabel="确认提交" disabled={!batchRows.length || batchRows.some(row => !ownershipValid(row.ownership)) || !csrfToken}
       onClose={() => { if (!busy) { setConfirm(false); setError(""); onLock(false); } }} onConfirm={insert}>
       <BatchSongConfirmation rows={batchRows} bands={bands} members={members} busy={busy}
-        onOwnershipChange={(key, ownership) => update(key, { ownership })} />
+        onOwnershipChange={(key, ownership) => update(key, { ownership })} onCoverChange={(key, is_cover) => update(key, { is_cover })} />
     </ConsoleConfirmDialog>}
     {candidateRow && <ConsoleConfirmDialog title="选择歌曲版本" size="wide" confirmLabel="确认应用"
       disabled={candidateSongId === null} onClose={closeCandidates}
@@ -182,9 +184,9 @@ export function AlbumTrackCreateEditor({ locked, csrfToken, onChange, onLock, di
         closeCandidates();
       }}>
       <div className="console-table-wrap"><table className="console-admin-table" aria-label="歌曲版本候选">
-        <thead><tr><th>歌曲 ID</th><th>歌曲名称</th><th>版本名称</th><th>归属</th><th>选择</th></tr></thead>
+        <thead><tr><th>歌曲 ID</th><th>歌曲名称</th><th>版本名称</th><th>翻唱</th><th>归属</th><th>选择</th></tr></thead>
         <tbody>{candidateRow.candidates.map(song => <tr key={song.song_id}>
-          <td>{song.song_id}</td><td>{song.song_name}</td><td>{song.version_label || "默认版本"}</td><td>{song.band_name ?? "待回填"}</td>
+          <td>{song.song_id}</td><td>{song.song_name}</td><td>{song.version_label || "默认版本"}</td><td>{song.is_cover ? "是" : "否"}</td><td>{song.band_name ?? "待回填"}</td>
           <td><input type="radio" name="album-song-version" aria-label={`选择歌曲版本 #${song.song_id}`}
             checked={candidateSongId === song.song_id} onChange={() => setCandidateSongId(song.song_id)} /></td>
         </tr>)}</tbody>

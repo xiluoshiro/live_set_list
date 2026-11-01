@@ -174,7 +174,7 @@ def read_album(cur: Any, album_id: int) -> dict[str, Any]:
         revision FROM albums WHERE id = %s""", (album_id,))
     album = one(cur)
     cur.execute(f"""SELECT t.id AS album_track_id, t.song_id, t.track_order, t.edition_label, section.section_name,
-        g.group_name AS song_name, s.version_label, s.group_id,
+        g.group_name AS song_name, s.version_label, s.group_id, s.is_cover,
         {SONG_OWNERSHIP_LABEL_SQL} AS band_name
         FROM album_tracks t
         JOIN song_list s ON s.id = t.song_id

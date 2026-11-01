@@ -5,11 +5,11 @@ import type { BandOption } from "./types";
 
 export type ParsedAlbumTrack = { song_name: string; ownership: SongOwnership; tag: string };
 export type AlbumTrackDraft = Omit<AlbumTrackWrite, "song_id"> & {
-  row_key: number; song_name: string; ownership: SongOwnership;
+  row_key: number; song_name: string; ownership: SongOwnership; is_cover: boolean;
   song: ConsoleSongItem | null; candidates: ConsoleSongItem[]; queried: boolean;
 };
-export const albumSongLabel = (song: Pick<ConsoleSongItem, "song_id" | "song_name" | "version_label" | "band_name">) =>
-  `#${song.song_id} ${song.song_name} / ${song.version_label || "默认版本"} / ${song.band_name ?? "待回填"}`;
+export const albumSongLabel = (song: Pick<ConsoleSongItem, "song_id" | "song_name" | "version_label" | "band_name" | "is_cover">) =>
+  `#${song.song_id} ${song.song_name} / ${song.version_label || "默认版本"} / ${song.band_name ?? "待回填"} / ${song.is_cover ? "翻唱" : "原创"}`;
 
 export function parseAlbumTrackText(text: string, bands: BandOption[], members: CatalogMember[]) {
   // Album lists also commonly use plain names or 1. numbering instead of M1.

@@ -1321,7 +1321,7 @@
 .venue-create-coordinate-column { width: 132px; }
 .venue-create-timezone-column { width: 220px; }
 
-.song-create-form-table { table-layout: fixed; }
+.song-create-form-table { min-width: 640px; table-layout: fixed; }
 .song-create-form > .live-id-selector { margin: 4px 0 12px; }
 .song-create-form > .live-id-selector > .tour-candidate-pager { margin-top: 0; }
 .song-create-form > section { margin-top: 16px; }
@@ -1330,6 +1330,7 @@
 .song-create-form-table[data-ownership="mixed"] { min-width: 1340px; }
 .song-create-version-column,
 .song-create-mode-column { width: 152px; }
+.song-cover-column { width: 80px; }
 .song-create-band-column,
 .song-create-members-column { width: 240px; }
 .song-create-member-fields { margin-top: 10px; align-items: flex-end; }

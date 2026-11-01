@@ -84,7 +84,7 @@ def test_whole_page_save_updates_public_references_once(integration_test_client,
     assert audit_count(integration_admin_connection, sid) == 1
 
 
-# 测试点：归属引用、版本标识、revision 或组成员校验失败时整页数据与审计一起回滚。
+# 测试点：归属引用、版本标识、revision 或组成员校验失败时翻唱状态、整页数据与审计一起回滚。
 @pytest.mark.parametrize('failure', ['ownership_fk', 'duplicate_label', 'group_revision', 'song_revision', 'members_missing'])
 def test_failed_combined_save_leaves_no_partial_changes(integration_test_client, integration_admin_connection, failure):
     client = integration_test_client
@@ -94,7 +94,7 @@ def test_failed_combined_save_leaves_no_partial_changes(integration_test_client,
     sid = song['song_id']
     before = client.get(f"/api/song-groups/{song['group_id']}").json()
     payload = edit_payload(client, sid)
-    payload.update(ownership={'mode': 'bands', 'band_ids': [2]})
+    payload.update(ownership={'mode': 'bands', 'band_ids': [2]}, is_cover=True)
     payload['group']['group_name'] = '不应保存的组名'
     payload['group']['song_ids'].reverse()
     status = 422

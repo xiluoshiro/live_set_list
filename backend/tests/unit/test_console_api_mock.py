@@ -160,14 +160,14 @@ def test_console_lookup_mock_requires_authenticated_editor_role():
     assert viewer_response.json()["detail"]["code"] == "AUTH_FORBIDDEN"
 
 
-# 测试点：只读查询无需 CSRF，Venue 响应保留真实 IANA 时区，歌曲返回分页信息。
+# 测试点：只读查询无需 CSRF，Venue 响应保留真实 IANA 时区，歌曲返回翻唱状态及分页信息。
 def test_console_lookup_mock_returns_items_without_csrf_for_editor():
     _set_authenticated_role("editor")
     songs_conn, songs_cur = _build_connection_mock(
         fetchone_side_effect=[(1,)],
-        fetchall_side_effect=[[(1, 1, "Yes! BanG_Dream!", "", "bands", "Poppin'Party")]],
+        fetchall_side_effect=[[(1, 1, "Yes! BanG_Dream!", "", "bands", False, "Poppin'Party")]],
     )
-    songs_cur.description = [type("Column", (), {"name": name})() for name in ("song_id", "group_id", "song_name", "version_label", "owner_mode", "band_name")]
+    songs_cur.description = [type("Column", (), {"name": name})() for name in ("song_id", "group_id", "song_name", "version_label", "owner_mode", "is_cover", "band_name")]
     bands_conn, _ = _build_connection_mock(
         fetchall_side_effect=[[(2, "Roselia", "rsl", ["Yukina", "Sayo"])]],
     )
@@ -193,6 +193,7 @@ def test_console_lookup_mock_returns_items_without_csrf_for_editor():
                 "group_id": 1,
                 "version_label": "",
                 "owner_mode": "bands",
+                "is_cover": False,
                 "band_name": "Poppin'Party",
             }
         ],

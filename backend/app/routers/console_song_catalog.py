@@ -32,9 +32,9 @@ def insert_version(cur: Any, payload: VersionCreate | GroupCreate, group_id: int
         lock_revision(cur, "song_groups", group_id, payload.expected_group_revision)
     cur.execute("SELECT COALESCE(max(version_order), 0) + 1 FROM song_list WHERE group_id = %s", (group_id,))
     version_order = cur.fetchone()[0]
-    cur.execute("""INSERT INTO song_list(group_id, version_label, version_order, cover_urls)
-        VALUES (%s, %s, %s, %s) RETURNING id""",
-                (group_id, payload.version_label, version_order,
+    cur.execute("""INSERT INTO song_list(group_id, version_label, version_order, is_cover, cover_urls)
+        VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                (group_id, payload.version_label, version_order, payload.is_cover,
                  Json(payload.model_dump(mode="json")["cover_urls"])))
     song_id = cur.fetchone()[0]
     save_ownership(cur, song_id, payload.ownership)
@@ -59,11 +59,12 @@ def update_version(payload: VersionUpdate, song_id: int, request: Request, conte
         if before["version_label"] == "" and payload.version_label:
             raise HTTPException(409, "歌曲组必须保留空版本的默认项")
         cover_urls = payload.model_dump(mode="json")["cover_urls"] if "cover_urls" in payload.model_fields_set else before["cover_urls"]
-        cur.execute("""UPDATE song_list SET version_label = %s, cover_urls = %s,
+        is_cover = payload.is_cover if "is_cover" in payload.model_fields_set else before["legacy_cover"]
+        cur.execute("""UPDATE song_list SET version_label = %s, cover_urls = %s, is_cover = %s,
             revision = revision + 1 WHERE id = %s""",
-                    (payload.version_label, Json(cover_urls), song_id))
+                    (payload.version_label, Json(cover_urls), is_cover, song_id))
         audit(cur, context, "song_update", "song", song_id,
-              {"before": before, "after": {**payload.model_dump(mode="json"), "cover_urls": cover_urls}})
+              {"before": before, "after": {**payload.model_dump(mode="json"), "cover_urls": cover_urls, "is_cover": is_cover}})
         return {"ok": True, "item": read_song(cur, song_id)}
 
 
@@ -110,6 +111,10 @@ def create_groups_batch(payload: ConsoleSongBatchCreateRequest, request: Request
                     if song.version_label:
                         raise HTTPException(422, "新歌曲组的首个版本必须为默认项")
                     existing_id = find_default_version(cur, song)
+                    if existing_id is not None and "is_cover" in song.model_fields_set:
+                        cur.execute("SELECT is_cover FROM song_list WHERE id = %s FOR UPDATE", (existing_id,))
+                        if cur.fetchone()[0] != song.is_cover:
+                            raise HTTPException(409, f"已有歌曲 #{existing_id} 的翻唱状态与本行不同，请选择已有歌曲或到歌曲管理修改")
                     song_id = existing_id if existing_id is not None else insert_group(cur, song)
                     if existing_id is None:
                         audit(cur, context, "song_create", "song", song_id, song.model_dump(mode="json"))
@@ -200,12 +205,14 @@ def edit_song_catalog(payload: SongEditUpdate, request: Request, song_id: int = 
         old_ownership = {key: before["ownership"][key] for key in ("mode", "band_ids", "member_groups")}
         ownership_changed = old_ownership != payload.ownership.model_dump()
         cover_urls = payload.model_dump(mode="json")["cover_urls"] if "cover_urls" in payload.model_fields_set else before["cover_urls"]
+        is_cover = payload.is_cover if "is_cover" in payload.model_fields_set else before["legacy_cover"]
         old_order = sorted(existing, key=lambda item: (existing[item], item))
         order_changed = source.song_ids != old_order or target is not None
         group_changed = source.group_name != before["group_name"] or order_changed
         song_changed = ownership_changed or target is not None or any((
             payload.version_label != before["version_label"],
             cover_urls != before["cover_urls"],
+            is_cover != before["legacy_cover"],
         ))
         if ownership_changed:
             save_ownership(cur, song_id, payload.ownership)
@@ -216,9 +223,9 @@ def edit_song_catalog(payload: SongEditUpdate, request: Request, song_id: int = 
             cur.execute("SELECT COALESCE(max(version_order), 0) + 1 FROM song_list WHERE group_id = %s", (destination,))
             new_order[song_id] = cur.fetchone()[0]
         if song_changed or group_changed:
-            cur.execute("""UPDATE song_list SET version_label = %s, cover_urls = %s,
+            cur.execute("""UPDATE song_list SET version_label = %s, cover_urls = %s, is_cover = %s,
                 group_id = %s, version_order = %s, revision = revision + 1 WHERE id = %s""",
-                        (payload.version_label, Json(cover_urls), destination, new_order[song_id], song_id))
+                        (payload.version_label, Json(cover_urls), is_cover, destination, new_order[song_id], song_id))
         if group_changed:
             for other_id in remaining:
                 if other_id != song_id:
@@ -232,7 +239,7 @@ def edit_song_catalog(payload: SongEditUpdate, request: Request, song_id: int = 
             audit(cur, context, "song_edit", "song", song_id, {
                 "before": {"song": before, "group": {"group_id": source.group_id,
                     "group_name": before["group_name"], "song_ids": old_order, "revision": source.expected_revision}},
-                "after": {**payload.model_dump(mode="json"), "cover_urls": cover_urls},
+                "after": {**payload.model_dump(mode="json"), "cover_urls": cover_urls, "is_cover": is_cover},
             })
         return {"ok": True, "item": read_song(cur, song_id), "group": read_song_group(cur, destination)}
 

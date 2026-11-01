@@ -47,7 +47,7 @@ export function AlbumDetailPage({ albumId, selectedSongId, browse, revision, onS
           <li key={track.album_track_id} value={track.track_order} aria-current={track.song_id === selectedSongId ? "true" : undefined}>
             <CatalogLink href={songCatalogHref(track.song_id, null, browse)} onNavigate={() => onSongSelect(track.song_id)}>
               <span className="song-track-order" aria-hidden="true">{String(track.track_order).padStart(2, "0")}</span>
-              <span className="song-track-copy"><span>{track.song_name}{track.version_label && <small> · {track.version_label}</small>}{track.edition_label && <small> · {track.edition_label}</small>}</span>
+              <span className="song-track-copy"><span>{track.song_name}{track.version_label && <small> · {track.version_label}</small>}{track.edition_label && <small> · {track.edition_label}</small>}<small> · {track.is_cover ? "翻唱" : "原创"}</small></span>
                 {showTrackOwners && track.band_name && <small className="song-track-owner">{track.band_name}</small>}</span>
             </CatalogLink>
           </li>)}</ol>

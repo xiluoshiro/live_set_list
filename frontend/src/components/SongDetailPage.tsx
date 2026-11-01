@@ -76,7 +76,7 @@ export function SongDetailPage({ songId, browse, revision, onSongSelect, onAlbum
       <strong>{album.album_name}</strong>{album.release_label && <small>{album.release_label.replace(`${ownershipLabel(song)} `, "")}</small>}</span>
   </CatalogLink>);
   return <article className="song-detail" aria-label="歌曲详情" ref={layoutRef}>
-      <header className="song-detail-heading"><p className="song-owner">{ownershipLabel(song)}</p><h1>{group.group_name}</h1>
+      <header className="song-detail-heading"><p className="song-owner"><span>{ownershipLabel(song)}</span><small className="song-record-flags">{song.legacy_cover ? "翻唱" : "原创"}</small></p><h1>{group.group_name}</h1>
         {(group.versions.length > 1 || song.cover_urls.length > 0) && <div className="song-detail-options">
         {group.versions.length > 1 && <div className="song-catalog-versions" role="group" aria-label="歌曲版本">
           {group.versions.map(version => <button key={version.song_id} type="button" className="section-tab-btn" aria-pressed={version.song_id === songId}

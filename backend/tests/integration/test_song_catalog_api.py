@@ -12,6 +12,116 @@ def auth(client):
     return {"X-CSRF-Token": response.json()["csrf_token"]}
 
 
+# 测试点：翻唱和原创可经新组或新版本插入，经两条更新路径双向修改，省略字段保留原值及归属。
+@pytest.mark.parametrize("initial_cover", [False, True])
+@pytest.mark.parametrize("new_version", [False, True])
+def test_song_cover_create_update_and_read_roundtrip(integration_test_client, integration_admin_connection, initial_cover, new_version):
+    client = integration_test_client
+    headers = auth(client)
+    result = client.post("/api/console/song-groups", headers=headers, json={
+        "group_name": "翻唱状态验证曲", "is_cover": not initial_cover if new_version else initial_cover,
+        "ownership": {"mode": "bands", "band_ids": [1]},
+    })
+    assert result.status_code == 201, result.text
+    default = result.json()["item"]
+    song = default
+    if new_version:
+        result = client.post("/api/console/songs", headers=headers, json={
+            "group_id": default["group_id"], "expected_group_revision": 1, "version_label": "独立版本",
+            "is_cover": initial_cover, "ownership": {"mode": "bands", "band_ids": [2]},
+        })
+        assert result.status_code == 201, result.text
+        song = result.json()["item"]
+    sid = song["song_id"]
+    owner = song["ownership"]
+    assert song["legacy_cover"] is initial_cover
+    album = client.post("/api/console/albums", headers=headers, json={
+        "album_name": "状态验证盘", "tracks": [{"song_id": sid}],
+    }).json()
+
+    def check_reads(expected):
+        assert client.get(f"/api/songs/{sid}").json()["legacy_cover"] is expected
+        assert client.get(f"/api/console/songs/{sid}").json()["legacy_cover"] is expected
+        group = client.get(f"/api/song-groups/{song['group_id']}").json()
+        assert next(v for v in group["versions"] if v["song_id"] == sid)["legacy_cover"] is expected
+        candidate = next(v for v in client.get("/api/console/songs?q=翻唱状态验证曲").json()["items"] if v["song_id"] == sid)
+        assert candidate["is_cover"] is expected
+        for prefix in ("/api", "/api/console"):
+            assert client.get(f"{prefix}/albums/{album['album_id']}").json()["tracks"][0]["is_cover"] is expected
+        with integration_admin_connection.cursor() as cur:
+            cur.execute("SELECT is_cover FROM song_list WHERE id = %s", (sid,))
+            assert cur.fetchone()[0] is expected
+
+    check_reads(initial_cover)
+    for suffix, action in (("", "song_update"), ("/edit", "song_edit")):
+        def update_payload():
+            current = client.get(f"/api/songs/{sid}").json()
+            payload = {"version_label": current["version_label"], "expected_revision": current["revision"]}
+            if suffix:
+                group = client.get(f"/api/song-groups/{song['group_id']}").json()
+                payload.update(ownership={key: owner[key] for key in ("mode", "band_ids", "member_groups")}, group={
+                    "group_id": group["group_id"], "expected_revision": group["revision"],
+                    "group_name": group["group_name"], "song_ids": [v["song_id"] for v in group["versions"]],
+                })
+            return payload
+
+        for value in (not initial_cover, initial_cover):
+            payload = {**update_payload(), "is_cover": value}
+            result = client.put(f"/api/console/songs/{sid}{suffix}", headers=headers, json=payload)
+            assert result.status_code == 200, result.text
+            saved = result.json()["item"]
+            assert saved["revision"] == payload["expected_revision"] + 1
+            assert saved["ownership"] == owner
+            check_reads(value)
+            assert client.put(f"/api/console/songs/{sid}{suffix}", headers=headers, json=payload).status_code == 409
+            with integration_admin_connection.cursor() as cur:
+                cur.execute("SELECT payload_json FROM audit_logs WHERE action = %s AND resource_id = %s ORDER BY id DESC LIMIT 1", (action, str(sid)))
+                assert cur.fetchone()[0]["after"]["is_cover"] is value
+        payload = update_payload()
+        payload["cover_urls"] = [{"url": f"https://example.test/{action}.png", "name": "封面"}]
+        result = client.put(f"/api/console/songs/{sid}{suffix}", headers=headers, json=payload)
+        assert result.status_code == 200, result.text
+        check_reads(initial_cover)
+        with integration_admin_connection.cursor() as cur:
+            cur.execute("SELECT payload_json FROM audit_logs WHERE action = %s AND resource_id = %s ORDER BY id DESC LIMIT 1", (action, str(sid)))
+            assert cur.fetchone()[0]["after"]["is_cover"] is initial_cover
+    if new_version:
+        assert client.get(f"/api/songs/{default['song_id']}").json() == default
+
+
+# 测试点：混合批量保存翻唱/原创，冲突不改已有歌曲，省略字段可复用旧记录，失败项可独立重试。
+def test_batch_cover_conflicts_and_partial_retry(integration_test_client, integration_admin_connection):
+    client = integration_test_client
+    headers = auth(client)
+    songs = [{"group_name": name, "is_cover": flag, "ownership": {"mode": "bands", "band_ids": [band]}}
+             for name, flag, band in (("批量翻唱", True, 1), ("批量原创", False, 2), ("待重试翻唱", True, 999999))]
+    result = client.post("/api/console/songs:batch", headers=headers, json={"songs": songs})
+    assert result.status_code == 201, result.text
+    entries = result.json()["results"]
+    assert result.json()["ok"] is False and entries[2]["error"]
+    saved = [entry["item"] for entry in entries[:2]]
+    assert [item["legacy_cover"] for item in saved] == [True, False]
+    conflict = client.post("/api/console/songs:batch", headers=headers, json={"songs": [
+        {**songs[0], "is_cover": False}, songs[1],
+    ]}).json()
+    assert conflict["ok"] is False and conflict["results"][0]["error"]
+    assert conflict["results"][1]["created"] is False
+    for item in saved:
+        assert client.get(f"/api/songs/{item['song_id']}").json() == item
+    omitted = {key: value for key, value in songs[0].items() if key != "is_cover"}
+    reused = client.post("/api/console/songs:batch", headers=headers, json={"songs": [omitted]}).json()["results"][0]
+    assert reused["created"] is False and reused["item"] == saved[0]
+    songs[2]["ownership"]["band_ids"] = [1]
+    retry = client.post("/api/console/songs:batch", headers=headers, json={"songs": songs}).json()
+    assert retry["ok"] is True
+    assert [entry["created"] for entry in retry["results"]] == [False, False, True]
+    assert [entry["item"]["legacy_cover"] for entry in retry["results"]] == [True, False, True]
+    with integration_admin_connection.cursor() as cur:
+        cur.execute("SELECT count(*) FROM audit_logs WHERE action = 'song_create' AND resource_id = ANY(%s)",
+                    ([str(entry["item"]["song_id"]) for entry in retry["results"]],))
+        assert cur.fetchone()[0] == 3
+
+
 # 测试点：候选、详情、搜索与专辑曲目使用同一正式归属及顺序，旧乐队提示不冒充归属或污染乐队筛选。
 @pytest.mark.parametrize("mode", ["pending", "bands", "members", "mixed"])
 def test_song_ownership_is_consistent_across_catalog_surfaces(integration_test_client, integration_admin_connection, mode):

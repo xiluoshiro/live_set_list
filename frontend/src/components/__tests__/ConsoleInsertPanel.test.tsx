@@ -1839,7 +1839,7 @@ describe("ConsoleInsertPanel", () => {
     const dialog = screen.getByRole("dialog", { name: "确认新增歌曲" });
     await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(apiMocks.songCatalogWrite).toHaveBeenCalledWith("/song-groups", "POST", {
-      group_name: "新曲", version_label: "", cover_urls: [], ownership: { mode: "pending", band_ids: [], member_groups: [] },
+      group_name: "新曲", version_label: "", cover_urls: [], is_cover: false, ownership: { mode: "pending", band_ids: [], member_groups: [] },
     }, "csrf-token"));
     expect(screen.getByRole("tab", { name: "新增歌曲" })).toHaveAttribute("aria-selected", "true");
     const table = screen.getByRole("table", { name: "歌曲操作记录" });
@@ -1916,7 +1916,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "下一页" }));
     await waitFor(() => expect(apiMocks.getCatalogConsole).toHaveBeenCalledWith("/songs?q=Song&page=2&limit=20&band_id=2"));
     expect(selector).toHaveValue("902");
-    expect(within(selector).getByRole("option", { name: "#902 搜索命中曲 / 普通版 / 待回填" })).toBeInTheDocument();
+    expect(within(selector).getByRole("option", { name: "#902 搜索命中曲 / 普通版 / 待回填 / 原创" })).toBeInTheDocument();
     expect(screen.getByLabelText("歌曲组名称")).toHaveValue("搜索命中曲");
     await user.type(query, "{Enter}");
     await waitFor(() => expect(apiMocks.getCatalogConsole).toHaveBeenCalledWith("/songs?q=Next&page=1&limit=20"));
@@ -2569,7 +2569,7 @@ describe("ConsoleInsertPanel", () => {
     expect(inputs[0]).toHaveValue("");
   });
 
-  // 测试点：批量新增排除已匹配行，固定成员按乐队过滤，混合归属提交后准确回填歌曲组。
+  // 测试点：批量新增排除已匹配行，翻唱和混合归属独立提交，固定成员按乐队过滤并回填歌曲组。
   test("批量插入弹出确认窗口，已有 sid 的行被忽略，仅创建 sid 为空的行", async () => {
     const user = userEvent.setup();
     apiMocks.getCatalogConsole.mockResolvedValue({ items: [
@@ -2606,6 +2606,7 @@ describe("ConsoleInsertPanel", () => {
     const dialog = await screen.findByRole("dialog", { name: "确认批量新增歌曲" });
     expect(within(dialog).getByText("Requiem for Fate")).toBeInTheDocument();
     expect(within(dialog).queryByText("BLACK SHOUT")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("checkbox", { name: "Requiem for Fate 翻唱" }));
     expect(within(dialog).getByRole("combobox", { name: "归属模式" })).toHaveValue("bands");
     await user.selectOptions(within(dialog).getByRole("combobox", { name: "归属模式" }), "mixed");
     expect(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ })).toBeDisabled();
@@ -2623,7 +2624,7 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     await waitFor(() => expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledWith(
-      [{ group_name: "Requiem for Fate", version_label: "", cover_urls: [], ownership: { mode: "mixed", band_ids: [2], member_groups: [{ band_id: 1, member_ids: [68] }] } }],
+      [{ group_name: "Requiem for Fate", version_label: "", cover_urls: [], is_cover: true, ownership: { mode: "mixed", band_ids: [2], member_groups: [{ band_id: 1, member_ids: [68] }] } }],
       "csrf-token",
     ));
     expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledTimes(1);
@@ -2667,7 +2668,7 @@ describe("ConsoleInsertPanel", () => {
     expect(within(dialog).queryByText("Candidate Song")).not.toBeInTheDocument();
   });
 
-  // 测试点：批量新增失败完整展示后端原因，并保留标签预填的归属供重试。
+  // 测试点：批量新增失败完整展示后端原因，并保留翻唱选择及标签预填的归属供重试。
   test("批量插入失败时在确认框显示后端错误原因", async () => {
     const user = userEvent.setup();
     apiMocks.getConsoleBands.mockResolvedValue({
@@ -2695,11 +2696,13 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("button", { name: "查询歌曲" }));
     await screen.findByText("查询歌曲完成：匹配 0 行，未匹配 1 行。");
     await user.click(screen.getByRole("button", { name: "批量插入" }));
+    await user.click(screen.getByRole("checkbox", { name: "Requiem for Fate 翻唱" }));
     await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
 
     const failureDialog = within(screen.getByRole("dialog", { name: "确认批量新增歌曲" }));
     await failureDialog.findByText("批量新增失败：HTTP 403 / AUTH_CSRF_INVALID / CSRF Token 校验失败");
     const retained = screen.getByRole("dialog", { name: "确认批量新增歌曲" });
+    expect(within(retained).getByRole("checkbox", { name: "Requiem for Fate 翻唱" })).toBeChecked();
     expect(within(retained).getByRole("combobox", { name: "归属模式" })).toHaveValue("bands");
     expect(within(retained).getByRole("button", { name: "选择归属乐队" })).toHaveTextContent("Roselia");
     await user.click(within(retained).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
@@ -2734,7 +2737,7 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ })).not.toBeDisabled();
     await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(apiMocks.createConsoleSongsBatch).toHaveBeenCalledWith([
-      { group_name: "未确认归属新曲", version_label: "", cover_urls: [], ownership: { mode: "pending", band_ids: [], member_groups: [] } },
+      { group_name: "未确认归属新曲", version_label: "", cover_urls: [], is_cover: false, ownership: { mode: "pending", band_ids: [], member_groups: [] } },
     ], "csrf-token"));
   });
 

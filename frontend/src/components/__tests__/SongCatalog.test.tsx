@@ -311,7 +311,7 @@ test("song group list, version counts and instrumental target", async () => {
   await user.click(within(detail).getByRole("button", { name: "合唱版" }));
   expect(await screen.findByText("短版")).toBeInTheDocument();
   await user.click(await screen.findByRole("link", { name: "查看唱片 收录盘" }));
-  await user.click(await screen.findByRole("link", { name: "合唱曲 · 普通版 · Instrumental" }));
+  await user.click(await screen.findByRole("link", { name: "合唱曲 · 普通版 · Instrumental · 原创" }));
   await within(await screen.findByRole("article", { name: "歌曲详情" })).findByRole("heading", { name: "演出记录 2 次 · 全部版本" });
   expect(api.getSongPerformances).toHaveBeenLastCalledWith(1, 1, { year: undefined, pageSize: 8 });
 });
@@ -508,8 +508,8 @@ test("album exposes every section and repeated track in release order", async ()
   expect(within(album).getAllByRole("heading", { level: 3 }).map(item => item.textContent)).toEqual(["Disc 2", "Disc 1", "限定版"]);
   expect(within(album).getAllByRole("listitem")).toHaveLength(3);
   expect(within(album).getByText("3 首")).toBeInTheDocument();
-  expect(within(album).getByRole("link", { name: "附加曲 乐队乙" })).toHaveAttribute("href", "/songs/1");
-  const instrumental = within(album).getByRole("link", { name: "合唱曲 · 合唱版 · Instrumental 乐队甲" });
+  expect(within(album).getByRole("link", { name: "附加曲 · 原创 乐队乙" })).toHaveAttribute("href", "/songs/1");
+  const instrumental = within(album).getByRole("link", { name: "合唱曲 · 合唱版 · Instrumental · 原创 乐队甲" });
   expect(instrumental).toHaveAttribute("href", "/songs/2");
   await userEvent.click(instrumental);
   expect(select).toHaveBeenCalledWith(2);
@@ -526,7 +526,7 @@ test("album track scroll survives a song round trip", async () => {
   await user.click(await screen.findByRole("link", { name: "查看唱片 收录盘" }));
   const tracks = await screen.findByRole("region", { name: "完整曲目列表" });
   fireEvent.scroll(tracks, { target: { scrollTop: 600 } });
-  await user.click(within(tracks).getByRole("link", { name: "曲目 30" }));
+  await user.click(within(tracks).getByRole("link", { name: "曲目 30 · 原创" }));
   await screen.findByRole("article", { name: "歌曲详情" });
   await user.click(screen.getByRole("link", { name: "← 返回" }));
   expect(await screen.findByRole("region", { name: "完整曲目列表" })).toHaveProperty("scrollTop", 600);
@@ -543,7 +543,7 @@ test.each(["members", "mixed", "pending"] as const)("detail ownership %s", async
   await screen.findByText("短版");
 });
 
-// 测试点：新增页直接填写，确认后 POST 创建；保留草稿连续提交也不会切换为 PUT。
+// 测试点：新增页可分别提交翻唱和原创，保留草稿连续创建不切换为 PUT，确认包含翻唱状态。
 test("create keeps its mode and uses creation requests", async () => {
   const user = userEvent.setup();
   render(<SongCatalogAdmin onMessage={vi.fn()} variant="create" active bands={[{ band_id: 1, band_name: "乐队甲" }]} registerLeaveGuard={() => {}} onManage={() => {}} />);
@@ -555,19 +555,22 @@ test("create keeps its mode and uses creation requests", async () => {
   await user.keyboard("{Escape}");
   await user.click(screen.getByRole("checkbox", { name: "新增后清空数据" }));
   for (let index = 0; index < 2; index += 1) {
+    await user.click(screen.getByRole("checkbox", { name: "翻唱" }));
     await user.click(screen.getByRole("button", { name: "提交插入" }));
     const dialog = screen.getByRole("dialog", { name: "确认新增歌曲" });
+    expect(within(dialog).getByRole("row", { name: `翻唱 ${index === 0 ? "是" : "否"}` })).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   }
   expect(api.songCatalogWrite).toHaveBeenCalledTimes(2);
   expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/song-groups", "POST", {
-    group_name: "合唱曲", version_label: "", cover_urls: [], ownership: { mode: "bands", band_ids: [1], member_groups: [] },
+    group_name: "合唱曲", version_label: "", cover_urls: [], is_cover: false, ownership: { mode: "bands", band_ids: [1], member_groups: [] },
   }, "csrf");
   expect(screen.getByLabelText("歌曲名称")).toHaveValue("合唱曲");
+  expect(api.songCatalogWrite.mock.calls[0][2].is_cover).toBe(true);
 });
 
-// 测试点：已有歌曲组点击查询后选择；确认保留版本资料，提交携带组 ID 和已加载的修订号。
+// 测试点：已有歌曲组的新版本可独立设置翻唱，提交携带组 ID 和已加载的修订号。
 test("create adds a version to the selected song group", async () => {
   const user = userEvent.setup();
   api.getSongGroup.mockResolvedValue({ group_id: 1, group_name: "合唱曲", revision: 7, versions: [version()] });
@@ -581,6 +584,7 @@ test("create adds a version to the selected song group", async () => {
   await user.click(screen.getByRole("button", { name: "查询" }));
   await waitFor(() => expect(api.getSongGroups).toHaveBeenLastCalledWith("合唱", 1));
   await user.type(screen.getByLabelText("版本标识"), "新版");
+  await user.click(screen.getByRole("checkbox", { name: "翻唱" }));
   expect(screen.getByRole("button", { name: "提交插入" })).toBeDisabled();
   await user.click(screen.getByRole("button", { name: "选择歌曲组" }));
   await user.click(await screen.findByRole("radio", { name: "合唱曲" }));
@@ -592,12 +596,69 @@ test("create adds a version to the selected song group", async () => {
   expect(api.songCatalogWrite).not.toHaveBeenCalled();
   await user.click(within(dialog).getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));
   expect(api.songCatalogWrite).toHaveBeenCalledWith("/songs", "POST", {
-    group_id: 1, expected_group_revision: 7, version_label: "新版", cover_urls: [],
+    group_id: 1, expected_group_revision: 7, version_label: "新版", cover_urls: [], is_cover: true,
     ownership: { mode: "pending", band_ids: [], member_groups: [] },
   }, "csrf");
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(screen.getByLabelText("歌曲组", { exact: true })).toHaveValue("new");
   expect(screen.getByLabelText("歌曲名称")).toHaveValue("");
+});
+
+// 测试点：仅切换翻唱即可保存，恢复原值还原勾选，失败重试及连续双向修改使用新基准。
+test.each([false, true])("manage changes cover flag from %s and back", async initialCover => {
+  const user = userEvent.setup();
+  let saved = { ...version(), legacy_cover: initialCover };
+  const group = () => ({ group_id: 1, group_name: "合唱曲", revision: 1, versions: [saved, version(2)], display_cover: null });
+  api.getCatalogConsole.mockImplementation(async (path: string) => path === "/members" ? { items: [] }
+    : path === "/songs/1" ? saved : page([saved]));
+  api.getSongGroup.mockImplementation(async () => group());
+  api.songCatalogWrite.mockImplementation(async (_path, _method, payload) => {
+    saved = { ...saved, legacy_cover: payload.is_cover, revision: saved.revision + 1 };
+    return { item: saved, group: group() };
+  });
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="edit" active bands={[]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  await screen.findByRole("option", { name: /#1 合唱曲/ });
+  await user.selectOptions(screen.getByLabelText("选择要编辑的歌曲"), "1");
+  const checkbox = await screen.findByRole("checkbox", { name: "翻唱" });
+  expect(checkbox).toHaveProperty("checked", initialCover);
+  await user.click(checkbox);
+  await user.click(screen.getByRole("button", { name: "恢复原值" }));
+  expect(checkbox).toHaveProperty("checked", initialCover);
+  expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+  for (const target of [!initialCover, initialCover]) {
+    await user.click(checkbox);
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+    const dialog = within(screen.getByRole("dialog", { name: "确认更新歌曲 #1" }));
+    expect(dialog.getByRole("row", { name: `翻唱 ${target ? "否 是" : "是 否"}` })).toBeInTheDocument();
+    if (target !== initialCover) {
+      api.songCatalogWrite.mockRejectedValueOnce(new Error("暂时无法保存"));
+      await user.click(dialog.getByRole("button", { name: "确认更新" }));
+      expect(await dialog.findByRole("alert")).toHaveTextContent("暂时无法保存");
+      expect(checkbox).toHaveProperty("checked", target);
+    }
+    await user.click(dialog.getByRole("button", { name: "确认更新" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.songCatalogWrite).toHaveBeenLastCalledWith("/songs/1/edit", "PUT", expect.objectContaining({ is_cover: target, expected_revision: target !== initialCover ? 1 : 2 }), "csrf");
+    expect(checkbox).toHaveProperty("checked", target);
+    expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+  }
+});
+
+// 测试点：歌曲及专辑曲目显示各版本的翻唱/原创属性，与演出阵容判定独立。
+test.each([false, true])("public song and album display cover flag %s", async isCover => {
+  const user = userEvent.setup();
+  api.getSongVersion.mockResolvedValue({ ...version(), legacy_cover: isCover });
+  api.getAlbumDetail.mockResolvedValue({ ...version().albums[0], tracks: [{
+    album_track_id: 1, song_id: 1, group_id: 1, song_name: "合唱曲", version_label: "普通版",
+    track_order: 1, edition_label: "", section_name: "", band_name: "乐队甲", is_cover: isCover,
+  }] });
+  render(<PublicPage />);
+  const article = within(await screen.findByRole("article", { name: "歌曲详情" }));
+  await article.findByText(isCover ? "翻唱" : "原创");
+  expect(within(article.getByRole("table", { name: "演出记录" })).queryByText("翻唱")).not.toBeInTheDocument();
+  await user.click(article.getByRole("link", { name: "查看唱片 收录盘" }));
+  const tracks = within(await screen.findByRole("region", { name: "完整曲目列表" }));
+  expect(tracks.getByRole("link", { name: `合唱曲 · 普通版 · ${isCover ? "翻唱" : "原创"}` })).toBeInTheDocument();
 });
 
 // 测试点：管理手动选择后加载版本，恢复保留对象，放弃确认取消后保留草稿；409 保留输入。

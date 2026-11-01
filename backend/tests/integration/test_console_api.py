@@ -111,6 +111,7 @@ def test_console_lookup_endpoints_return_seeded_options(
                 "group_id": 1,
                 "version_label": "",
                 "owner_mode": None,
+                "is_cover": False,
                 "band_name": "待回填",
             }
         ],
@@ -180,7 +181,7 @@ def test_console_song_lookup_prioritizes_exact_title_match(
 
     assert response.status_code == 200
     assert response.json()["items"] == [
-        {"song_id": song_id, "group_id": song_id, "song_name": "R", "version_label": "", "owner_mode": None, "band_name": "待回填"}
+        {"song_id": song_id, "group_id": song_id, "song_name": "R", "version_label": "", "owner_mode": None, "band_name": "待回填", "is_cover": False}
     ]
 
 
@@ -217,6 +218,7 @@ def test_console_song_lookup_supports_server_side_pagination(
                 "group_id": inserted_ids[1],
                 "version_label": "",
                 "owner_mode": None,
+                "is_cover": False,
                 "band_name": "待回填",
             }
         ],
@@ -311,6 +313,7 @@ def test_console_song_lookup_only_matches_title_prefix(
             "group_id": prefix_song_id,
             "version_label": "",
             "owner_mode": None,
+            "is_cover": False,
             "band_name": "待回填",
         }
     ]
@@ -346,6 +349,7 @@ def test_console_song_lookup_matches_punctuation_equivalent_title(
             "group_id": song_id,
             "version_label": "",
             "owner_mode": None,
+            "is_cover": False,
             "band_name": "待回填",
         }
     ]
@@ -377,6 +381,7 @@ def test_console_song_lookup_matches_modifier_apostrophe_pair(
             "group_id": song_id,
             "version_label": "",
             "owner_mode": None,
+            "is_cover": False,
             "band_name": "待回填",
         }
     ]
@@ -419,6 +424,7 @@ def test_console_song_lookup_ignores_only_whitespace_adjacent_to_punctuation(
             "group_id": song_id,
             "version_label": "",
             "owner_mode": None,
+            "is_cover": False,
             "band_name": "待回填",
         }
     ]
