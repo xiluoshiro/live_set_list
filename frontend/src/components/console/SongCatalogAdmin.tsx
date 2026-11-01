@@ -330,7 +330,7 @@ export function SongCatalogAdmin({ variant, active, bands, registerLeaveGuard, o
       </table>
     </div>
     {discardDialog}
-    {confirm && <ConsoleConfirmDialog title={creating ? "确认新增歌曲" : `确认更新歌曲 #${original!.song_id}`}
+    {confirm && <ConsoleConfirmDialog title={creating ? "确认新增歌曲" : `确认更新歌曲 #${original!.song_id}`} className="song-confirm"
       changes={creating ? undefined : changes} changesLabel="歌曲修改内容" busy={busy} error={error} confirmLabel={creating ? "确认提交" : "确认更新"}
       onClose={() => setConfirm(false)} onConfirm={submit}>
       {creating ? <CompactConfirmationTable ariaLabel="新增歌曲确认" changes={[

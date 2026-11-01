@@ -39,7 +39,6 @@ export function ownershipFields(owner: SongOwnership, bands: BandOption[], membe
   { hideMemberLabels = false }: { hideMemberLabels?: boolean } = {}) {
   const bandOptions = bands.filter(band => band.band_id > 0).sort((left, right) => left.band_id - right.band_id)
     .map(band => ({ id: band.band_id, label: band.band_name }));
-  const memberOptions = members.map(member => ({ id: member.member_id, label: member.display_name }));
   const hasBands = owner.mode === "bands" || owner.mode === "mixed";
   const hasMembers = owner.mode === "members" || owner.mode === "mixed";
   const ownershipModeField = <select aria-label="归属模式" disabled={disabled} value={owner.mode} onChange={event => {
@@ -53,9 +52,14 @@ export function ownershipFields(owner: SongOwnership, bands: BandOption[], membe
   const memberBandPicker = <ConsoleMultiSelect label="成员所属乐队" options={bandOptions} hideLabel showIds
     value={owner.member_groups.map(group => group.band_id)} disabled={disabled}
     onChange={ids => onChange({ ...owner, member_groups: ids.sort((left, right) => left - right).map(id => owner.member_groups.find(group => group.band_id === id) ?? { band_id: id, member_ids: [] }) })} />;
-  const memberPickers = owner.member_groups.map(group => <ConsoleMultiSelect key={group.band_id}
-    label={`${bands.find(band => band.band_id === group.band_id)?.band_name ?? `#${group.band_id}`} 固定成员`}
-    options={memberOptions} value={group.member_ids} disabled={disabled} hideLabel={hideMemberLabels}
-    onChange={member_ids => onChange({ ...owner, member_groups: owner.member_groups.map(item => item.band_id === group.band_id ? { ...item, member_ids } : item) })} />);
+  const memberPickers = owner.member_groups.map(group => {
+    const band = bands.find(band => band.band_id === group.band_id);
+    const memberOptions = members.filter(member => band?.band_members?.includes(member.display_name))
+      .map(member => ({ id: member.member_id, label: member.display_name }));
+    return <ConsoleMultiSelect key={group.band_id}
+      label={`${band?.band_name ?? `#${group.band_id}`} 固定成员`}
+      options={memberOptions} value={group.member_ids} disabled={disabled} hideLabel={hideMemberLabels}
+      onChange={member_ids => onChange({ ...owner, member_groups: owner.member_groups.map(item => item.band_id === group.band_id ? { ...item, member_ids } : item) })} />;
+  });
   return { bandOptions, hasBands, hasMembers, ownershipModeField, bandPicker, memberBandPicker, memberPickers };
 }

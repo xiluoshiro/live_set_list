@@ -2569,10 +2569,13 @@ describe("ConsoleInsertPanel", () => {
     expect(inputs[0]).toHaveValue("");
   });
 
-  // 测试点：批量新增排除已匹配行，支持混合归属并准确回填返回的歌曲组。
+  // 测试点：批量新增排除已匹配行，固定成员按乐队过滤，混合归属提交后准确回填歌曲组。
   test("批量插入弹出确认窗口，已有 sid 的行被忽略，仅创建 sid 为空的行", async () => {
     const user = userEvent.setup();
-    apiMocks.getCatalogConsole.mockResolvedValue({ items: [{ member_id: 68, display_name: "固定成员甲", revision: 1 }] });
+    apiMocks.getCatalogConsole.mockResolvedValue({ items: [
+      { member_id: 68, display_name: "愛美", revision: 1 },
+      { member_id: 69, display_name: "湊友希那", revision: 1 },
+    ] });
     apiMocks.getConsoleBands.mockResolvedValue({
       items: [
         { band_id: 1, band_name: "Poppin'Party", band_abbr: "ポピパ", band_members: ["愛美"] },
@@ -2613,7 +2616,8 @@ describe("ConsoleInsertPanel", () => {
     await user.click(screen.getByRole("checkbox", { name: "1 - Poppin'Party" }));
     await user.keyboard("{Escape}");
     await user.click(within(dialog).getByRole("button", { name: "选择Poppin'Party 固定成员" }));
-    await user.click(screen.getByRole("checkbox", { name: "固定成员甲" }));
+    expect(screen.queryByRole("checkbox", { name: "湊友希那" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "愛美" }));
     await user.keyboard("{Escape}");
 
     await user.click(screen.getByRole("button", { name: /^(确认提交|确认更新|确认应用)$/ }));

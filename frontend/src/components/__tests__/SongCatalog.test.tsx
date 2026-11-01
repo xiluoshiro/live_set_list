@@ -260,11 +260,18 @@ test.each([
   if (release_label) expect(screen.getByText(release_label, { exact: true })).toBeInTheDocument();
 });
 
-// 测试点：整队与固定成员可同时选择，确认和提交保留两类归属。
+// 测试点：固定成员候选限于所属乐队，混合归属确认和提交保留整队及所选成员。
 test("mixed ownership submits bands and selected members", async () => {
   const user = userEvent.setup();
-  api.getCatalogConsole.mockResolvedValue({ items: [{ member_id: 68, display_name: "成员乙", revision: 1 }] });
-  render(<SongCatalogAdmin onMessage={vi.fn()} variant="create" active bands={[{ band_id: 1, band_name: "乐队甲" }, { band_id: 2, band_name: "乐队乙" }]} registerLeaveGuard={() => {}} onManage={() => {}} />);
+  api.getCatalogConsole.mockResolvedValue({ items: [
+    { member_id: 67, display_name: "成员甲", revision: 1 },
+    { member_id: 68, display_name: "成员乙", revision: 1 },
+    { member_id: 69, display_name: "其他成员", revision: 1 },
+  ] });
+  render(<SongCatalogAdmin onMessage={vi.fn()} variant="create" active bands={[
+    { band_id: 1, band_name: "乐队甲", band_members: ["成员甲"] },
+    { band_id: 2, band_name: "乐队乙", band_members: ["成员乙"] },
+  ]} registerLeaveGuard={() => {}} onManage={() => {}} />);
   await user.type(screen.getByLabelText("歌曲名称"), "合作曲");
   await user.selectOptions(screen.getByLabelText("归属模式"), "mixed");
   await user.click(screen.getByRole("button", { name: "选择归属乐队" }));
@@ -275,6 +282,9 @@ test("mixed ownership submits bands and selected members", async () => {
   await user.click(within(screen.getByRole("group", { name: "成员所属乐队选项" })).getByLabelText("2 - 乐队乙"));
   await user.keyboard("{Escape}");
   await user.click(screen.getByRole("button", { name: "选择乐队乙 固定成员" }));
+  const memberOptions = within(screen.getByRole("group", { name: "乐队乙 固定成员选项" })).getAllByRole("checkbox");
+  expect(memberOptions).toHaveLength(1);
+  expect(memberOptions[0]).toHaveAccessibleName("成员乙");
   await user.click(screen.getByRole("checkbox", { name: "成员乙" }));
   await user.keyboard("{Escape}");
   expect(screen.getByRole("button", { name: "选择乐队乙 固定成员" })).toHaveTextContent("成员乙");

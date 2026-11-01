@@ -870,6 +870,27 @@
   white-space: pre-wrap;
 }
 
+.song-confirm > .modal-head {
+  margin-bottom: 0;
+}
+
+.console-confirm-modal.song-confirm .console-confirm-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.song-confirm .console-confirm-table th,
+.song-confirm .console-confirm-table td {
+  padding-block: 8px;
+  max-width: none;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.song-confirm .console-confirm-records-table tbody th {
+  font-weight: 500;
+}
+
 .console-confirm-modal .console-confirm-batch-song-table {
   width: max-content;
   min-width: 660px;
