@@ -87,6 +87,9 @@ type LiveAdminSectionProps = {
   scheduleAttentionCounts?: { upcoming: number; today: number; overdue: number };
   scheduleAttentionFilter?: "" | "upcoming" | "today" | "overdue";
   scheduleAttentionLoading?: boolean;
+  scheduleAttentionPage?: number;
+  scheduleAttentionTotal?: number;
+  scheduleAttentionTotalPages?: number;
   onLiveDateChange: (value: string) => void;
   onLiveTitleChange: (value: string) => void;
   onLiveTypeChange: (value: string) => void;
@@ -110,6 +113,7 @@ type LiveAdminSectionProps = {
   onLiveCandidatePageChange: (page: number) => void;
   onSelectLiveForEdit: (liveId: number) => void;
   onScheduleAttentionFilterChange?: (value: "" | "upcoming" | "today" | "overdue") => void;
+  onScheduleAttentionPageChange?: (page: number) => void;
   onClearAfterCreateChange: (checked: boolean) => void;
   onOpenVenueMenu: () => void;
   onOpenDefaultBandMenu: () => void;
@@ -178,6 +182,9 @@ export function LiveAdminSection({
   scheduleAttentionCounts = { upcoming: 0, today: 0, overdue: 0 },
   scheduleAttentionFilter = "",
   scheduleAttentionLoading = false,
+  scheduleAttentionPage = 1,
+  scheduleAttentionTotal = 0,
+  scheduleAttentionTotalPages = 1,
   onLiveDateChange,
   onLiveTitleChange,
   onLiveTypeChange,
@@ -201,6 +208,7 @@ export function LiveAdminSection({
   onLiveCandidatePageChange,
   onSelectLiveForEdit,
   onScheduleAttentionFilterChange = () => undefined,
+  onScheduleAttentionPageChange = () => undefined,
   onClearAfterCreateChange,
   onOpenVenueMenu,
   onOpenDefaultBandMenu,
@@ -233,6 +241,7 @@ export function LiveAdminSection({
   })();
   const selectedCandidateMissing = editingLiveId !== null && !liveCandidates.some((live) => live.live_id === editingLiveId);
   const normalizedLiveCandidateTotalPages = Math.max(1, liveCandidateTotalPages);
+  const normalizedScheduleAttentionTotalPages = Math.max(1, scheduleAttentionTotalPages);
   const visibleHistory = insertedLives.filter((row) => row.action === (variant === "create" ? "create" : "update"));
   const showEditor = variant === "create" || editingLiveId !== null;
 
@@ -273,24 +282,33 @@ export function LiveAdminSection({
             {scheduleAttentionItems.length === 0 ? (
               <p className="console-admin-hint">当前筛选下没有待补活动。</p>
             ) : (
-              <div className="live-schedule-attention-list">
-                {scheduleAttentionItems.map((live) => (
-                  <article key={live.live_id} data-attention={live.schedule_attention}>
-                    <div>
-                      <time>{live.live_date}</time>
-                      <strong>{live.live_title}</strong>
-                      <span className="live-schedule-missing-tags">
-                        {(live.missing_schedule_fields ?? []).map((field) => (
-                          <small key={field}>{field === "venue" ? "场馆" : field === "opening_time" ? "开场" : "开演"}未公布</small>
-                        ))}
-                      </span>
-                      {live.schedule_attention === "today" && <em>今日活动仍有资料未公布</em>}
-                      {live.schedule_attention === "overdue" && <em>活动已结束，资料仍未补全</em>}
-                    </div>
-                    <button type="button" className="console-ghost-btn" onClick={() => onSelectLiveForEdit(live.live_id)}>编辑</button>
-                  </article>
-                ))}
-              </div>
+              <>
+                <div className="live-schedule-attention-list">
+                  {scheduleAttentionItems.map((live) => (
+                    <article key={live.live_id} data-attention={live.schedule_attention}>
+                      <div>
+                        <time>{live.live_date}</time>
+                        <strong>{live.live_title}</strong>
+                        <span className="live-schedule-missing-tags">
+                          {(live.missing_schedule_fields ?? []).map((field) => (
+                            <small key={field}>{field === "venue" ? "场馆" : field === "opening_time" ? "开场" : "开演"}未公布</small>
+                          ))}
+                        </span>
+                        {live.schedule_attention === "today" && <em>今日活动仍有资料未公布</em>}
+                        {live.schedule_attention === "overdue" && <em>活动已结束，资料仍未补全</em>}
+                      </div>
+                      <button type="button" className="console-ghost-btn" onClick={() => onSelectLiveForEdit(live.live_id)}>编辑</button>
+                    </article>
+                  ))}
+                </div>
+                {scheduleAttentionFilter !== "" && normalizedScheduleAttentionTotalPages > 1 && (
+                  <div className="tour-candidate-pager live-schedule-attention-pager" role="group" aria-label="待补排期分页">
+                    <button type="button" className="console-ghost-btn" disabled={scheduleAttentionLoading || scheduleAttentionPage <= 1} onClick={() => onScheduleAttentionPageChange(scheduleAttentionPage - 1)}>上一页</button>
+                    <span>第 {scheduleAttentionPage} / {normalizedScheduleAttentionTotalPages} 页，共 {scheduleAttentionTotal} 条</span>
+                    <button type="button" className="console-ghost-btn" disabled={scheduleAttentionLoading || scheduleAttentionPage >= normalizedScheduleAttentionTotalPages} onClick={() => onScheduleAttentionPageChange(scheduleAttentionPage + 1)}>下一页</button>
+                  </div>
+                )}
+              </>
             )}
           </Collapsible.Content>
         </Collapsible.Root>

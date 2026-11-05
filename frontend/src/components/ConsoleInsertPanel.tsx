@@ -621,6 +621,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
   const [scheduleAttentionCounts, setScheduleAttentionCounts] = useState({ upcoming: 0, today: 0, overdue: 0 });
   const [scheduleAttentionFilter, setScheduleAttentionFilter] = useState<"" | "upcoming" | "today" | "overdue">("");
   const [scheduleAttentionLoading, setScheduleAttentionLoading] = useState(false);
+  const [scheduleAttentionPagination, setScheduleAttentionPagination] = useState({ page: 1, total: 0, total_pages: 1 });
   const selectFirstLiveCandidateAfterQueryRef = useRef(false);
   const [editingLiveId, setEditingLiveId] = useState<number | null>(null);
   const [originalLivePayload, setOriginalLivePayload] = useState<ConsoleLiveUpsertPayload | null>(null);
@@ -1498,10 +1499,14 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
     void querySetlistEditLives();
   }, [mode]);
 
-  const loadScheduleAttention = async (attention: "" | "upcoming" | "today" | "overdue" = scheduleAttentionFilter, reportFailure = true) => {
+  const loadScheduleAttention = async (
+    attention: "" | "upcoming" | "today" | "overdue" = scheduleAttentionFilter,
+    reportFailure = true,
+    page = 1,
+  ) => {
     setScheduleAttentionLoading(true);
     try {
-      const response = await getConsoleLiveCandidates("", 1, 10, "", undefined, "scheduled", false, attention);
+      const response = await getConsoleLiveCandidates("", page, 10, "", undefined, "scheduled", false, attention);
       const counts = response.attention_counts ?? { upcoming: 0, today: 0, overdue: 0 };
       const defaultUrgentItems = response.items.filter((item) => (
         item.schedule_attention === "today" || item.schedule_attention === "overdue"
@@ -1511,13 +1516,20 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
         : response.items);
       setScheduleAttentionCounts(counts);
       setScheduleAttentionFilter(attention);
+      setScheduleAttentionPagination({ page: response.page, total: response.total, total_pages: response.total_pages });
     } catch (error) {
       if (!reportFailure) throw error;
       setScheduleAttentionItems([]);
+      setScheduleAttentionPagination({ page: 1, total: 0, total_pages: 1 });
       setMessage(`加载待补排期失败：${errorMessage(error)}`);
     } finally {
       setScheduleAttentionLoading(false);
     }
+  };
+
+  const changeScheduleAttentionPage = (page: number) => {
+    if (scheduleAttentionFilter === "") return;
+    void loadScheduleAttention(scheduleAttentionFilter, true, page);
   };
 
   useEffect(() => {
@@ -2453,7 +2465,8 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
       const refreshers: Array<() => Promise<unknown>> = [];
       if (action === "update") refreshers.push(() => loadLiveCandidatePage(
         liveCandidateQuery, liveCandidatePage, liveCandidateType, liveCandidateEventStatus, false));
-      if (mode === "live_edit") refreshers.push(() => loadScheduleAttention(scheduleAttentionFilter, false));
+      if (mode === "live_edit") refreshers.push(() => loadScheduleAttention(
+        scheduleAttentionFilter, false, scheduleAttentionPagination.page));
       await refreshConsoleAfterSave(refreshers, `已${action === "create" ? "新增" : "更新"}Live #${inserted.live_id}（${inserted.live_title}）`, setMessage);
     } catch (error) {
       throw new Error(`${action === "create" ? "新增" : "更新"}Live失败：${errorMessage(error)}`);
@@ -2822,6 +2835,9 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
           scheduleAttentionCounts={scheduleAttentionCounts}
           scheduleAttentionFilter={scheduleAttentionFilter}
           scheduleAttentionLoading={scheduleAttentionLoading}
+          scheduleAttentionPage={scheduleAttentionPagination.page}
+          scheduleAttentionTotal={scheduleAttentionPagination.total}
+          scheduleAttentionTotalPages={scheduleAttentionPagination.total_pages}
           onLiveDateChange={(value) => {
             setLiveDate(value);
           }}
@@ -2873,6 +2889,7 @@ function ConsoleInsertPanelContent({ onLiveDataChanged, initialMode = "setlist" 
           onLiveCandidatePageChange={setLiveCandidatePage}
           onSelectLiveForEdit={requestLiveForEdit}
           onScheduleAttentionFilterChange={(value) => { void loadScheduleAttention(value); }}
+          onScheduleAttentionPageChange={changeScheduleAttentionPage}
           onClearAfterCreateChange={setClearLiveAfterCreate}
           onOpenVenueMenu={openVenueMenu}
           onOpenDefaultBandMenu={openDefaultBandMenu}

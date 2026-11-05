@@ -610,6 +610,54 @@ describe("ConsoleInsertPanel", () => {
     expect(screen.queryByText("Today TBA Live")).not.toBeInTheDocument();
   });
 
+  // 测试点：待补排期分类超过一页时显示页码摘要，翻页按页码重新请求并可看到剩余活动。
+  test("待补排期分类超过一页时可翻页查看剩余活动", async () => {
+    const user = userEvent.setup();
+    const upcomingPage = (page: number) => {
+      const ids = page === 1 ? [11, 12] : [21, 22];
+      return {
+        items: ids.map((id) => ({
+          live_id: id,
+          live_date: `2027-01-${String(id).padStart(2, "0")}`,
+          live_title: `Upcoming TBA Live ${id}`,
+          live_type: "oneman",
+          venue_name: null,
+          event_status: "scheduled",
+          date_phase: "upcoming",
+          missing_schedule_fields: ["venue"],
+          schedule_attention: "upcoming",
+        })),
+        page,
+        page_size: 10,
+        total: 12,
+        total_pages: 2,
+        attention_counts: { upcoming: 12, today: 0, overdue: 0 },
+      };
+    };
+    apiMocks.getConsoleLiveCandidates.mockImplementation(
+      (_query: string, page: number) => Promise.resolve(upcomingPage(page)),
+    );
+
+    render(<ConsoleInsertPanel initialMode="live_edit" />);
+
+    const categories = await screen.findByRole("group", { name: "待补排期分类" });
+    await user.click(within(categories).getByRole("button", { name: /未来待公布.*12/ }));
+
+    expect(await screen.findByText("Upcoming TBA Live 11")).toBeInTheDocument();
+    expect(screen.queryByText("Upcoming TBA Live 21")).not.toBeInTheDocument();
+    const pager = screen.getByRole("group", { name: "待补排期分页" });
+    expect(pager).toHaveTextContent("第 1 / 2 页，共 12 条");
+    expect(within(pager).getByRole("button", { name: "上一页" })).toBeDisabled();
+
+    await user.click(within(pager).getByRole("button", { name: "下一页" }));
+
+    expect(await screen.findByText("Upcoming TBA Live 21")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("group", { name: "待补排期分页" }))
+      .toHaveTextContent("第 2 / 2 页，共 12 条"));
+    expect(within(screen.getByRole("group", { name: "待补排期分页" })).getByRole("button", { name: "下一页" })).toBeDisabled();
+    expect(apiMocks.getConsoleLiveCandidates).toHaveBeenCalledWith("", 2, 10, "", undefined, "scheduled", false, "upcoming");
+  });
+
   // 测试点：写请求响应超时后若后端已持久化完全一致的数据，应按成功收口而不是诱导重复提交。
   test("Setlist提交超时后会读取后端结果并确认已写入", async () => {
     const user = userEvent.setup();

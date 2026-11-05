@@ -239,6 +239,10 @@
   font-weight: 600;
 }
 
+.live-schedule-attention-pager {
+  margin-top: 8px;
+}
+
 .live-schedule-missing-tags {
   display: inline-flex;
   flex-wrap: wrap;
